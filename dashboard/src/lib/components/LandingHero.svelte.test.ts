@@ -53,7 +53,7 @@ describe('LandingHero', () => {
 			screen.getByRole('heading', { name: /need the full 12-month roi planner/i })
 		).toBeTruthy();
 		expect(
-			screen.getByRole('heading', { name: /proof from teams reducing spend waste/i })
+			screen.getByRole('heading', { name: /proof framework for reducing spend waste/i })
 		).toBeTruthy();
 		expect(screen.getByText(/Valdrics helps teams catch overspend early/i)).toBeTruthy();
 		expect(
@@ -205,8 +205,12 @@ describe('LandingHero', () => {
 		expect(
 			screen.queryByText(/go deeper without turning the homepage into an audit log/i)
 		).toBeNull();
-		const namedReferenceLink = screen.getByRole('link', { name: /request named references/i });
-		expect(namedReferenceLink.getAttribute('href') || '').toContain('intent=named_references');
+		const validationBriefingLink = screen.getByRole('link', {
+			name: /book executive briefing/i
+		});
+		expect(validationBriefingLink.getAttribute('href') || '').toContain(
+			'intent=executive_briefing'
+		);
 		const onePagerLink = screen.getByRole('link', { name: /download executive one-pager/i });
 		expect(onePagerLink.getAttribute('href')).toBe('/resources/valdrics-enterprise-one-pager.md');
 		expect(screen.queryByRole('link', { name: /explore docs/i })).toBeNull();
@@ -248,6 +252,32 @@ describe('LandingHero', () => {
 		const declineButton = screen.getByRole('button', { name: /decline analytics/i });
 		await fireEvent.click(declineButton);
 		expect(window.localStorage.getItem('valdrics.cookie_consent.v1')).toBe('rejected');
+	});
+
+	it('disables auto-rotation when reduced motion is preferred', () => {
+		vi.useFakeTimers();
+		const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+		const originalMatchMedia = window.matchMedia;
+		const matchMediaStub = vi.fn().mockReturnValue({
+			matches: true,
+			addEventListener: vi.fn(),
+			removeEventListener: vi.fn()
+		});
+		Object.defineProperty(window, 'matchMedia', {
+			writable: true,
+			value: matchMediaStub
+		});
+
+		const { unmount } = render(LandingHero);
+		expect(setIntervalSpy).not.toHaveBeenCalled();
+
+		unmount();
+		setIntervalSpy.mockRestore();
+		Object.defineProperty(window, 'matchMedia', {
+			writable: true,
+			value: originalMatchMedia
+		});
+		vi.useRealTimers();
 	});
 
 	it('cleans rotating intervals on unmount for concurrency safety', () => {

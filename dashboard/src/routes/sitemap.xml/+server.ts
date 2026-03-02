@@ -11,6 +11,7 @@ const PUBLIC_ENTRIES: SitemapEntry[] = [
 	{ path: '/docs', changefreq: 'weekly', priority: 0.8 },
 	{ path: '/docs/api', changefreq: 'weekly', priority: 0.7 },
 	{ path: '/docs/technical-validation', changefreq: 'weekly', priority: 0.7 },
+	{ path: '/blog', changefreq: 'weekly', priority: 0.75 },
 	{ path: '/insights', changefreq: 'weekly', priority: 0.75 },
 	{ path: '/resources', changefreq: 'weekly', priority: 0.75 },
 	{ path: '/talk-to-sales', changefreq: 'weekly', priority: 0.8 },

@@ -80,6 +80,8 @@ export const HERO_OUTCOME_CHIPS = Object.freeze([
 export const ABOVE_FOLD_TRUST_BADGES = Object.freeze([
 	'SOC 2 program alignment',
 	'GDPR data-rights support',
+	'DPA-ready procurement support',
+	'BAA review support',
 	'SSO + SCIM access controls',
 	'Tenant-isolated workspaces'
 ]);
@@ -290,17 +292,17 @@ export const CUSTOMER_QUOTES = Object.freeze([
 	{
 		quote:
 			'We stopped debating whose queue a cost issue belongs to. Ownership is now explicit in the workflow.',
-		attribution: 'Head of FinOps, Growth-stage SaaS'
+		attribution: 'Design-partner workshop, Head of FinOps'
 	},
 	{
 		quote:
 			'The value is not another dashboard. It is moving from signal to controlled action without drama.',
-		attribution: 'VP Engineering, Multi-cloud Platform'
+		attribution: 'Design-partner workshop, VP Engineering'
 	},
 	{
 		quote:
 			'Leadership reviews got shorter because the economic story is consistent from platform to finance.',
-		attribution: 'CFO, Digital Services Organization'
+		attribution: 'Design-partner workshop, CFO'
 	}
 ]);
 
@@ -309,6 +311,7 @@ export const COMPLIANCE_FOUNDATION_BADGES = Object.freeze([
 	'SCIM user provisioning',
 	'Role-based approvals',
 	'Decision history logs',
+	'DPA and BAA review support',
 	'Export-ready records',
 	'Tenant isolation'
 ]);

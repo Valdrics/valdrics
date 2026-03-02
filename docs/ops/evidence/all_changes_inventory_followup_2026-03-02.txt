@@ -1,0 +1,16 @@
+ M dashboard/src/lib/components/LandingHero.svelte
+ M dashboard/src/lib/components/LandingHero.svelte.test.ts
+ M dashboard/src/lib/components/landing/LandingRoiPlannerCta.svelte
+ M dashboard/src/lib/components/landing/LandingTrustSection.svelte
+ M dashboard/src/lib/components/landing/landing_decomposition.svelte.test.ts
+ M dashboard/src/lib/landing/heroContent.ts
+ M dashboard/src/lib/landing/publicNav.ts
+ M dashboard/src/lib/routeProtection.test.ts
+ M dashboard/src/lib/routeProtection.ts
+ M dashboard/src/routes/sitemap.xml/+server.ts
+ M dashboard/src/routes/sitemap.xml/sitemap.server.test.ts
+ M docs/ops/landing_page_audit_closure_2026-03-02.md
+?? dashboard/src/lib/landing/reducedMotion.test.ts
+?? dashboard/src/lib/landing/reducedMotion.ts
+?? dashboard/src/routes/blog/
+?? docs/ops/evidence/all_changes_inventory_followup_2026-03-02.txt

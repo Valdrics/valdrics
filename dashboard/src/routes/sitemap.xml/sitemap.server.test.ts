@@ -31,6 +31,7 @@ describe('sitemap.xml route', () => {
 		expect(xml).toContain('https://example.com/docs');
 		expect(xml).toContain('https://example.com/docs/api');
 		expect(xml).toContain('https://example.com/docs/technical-validation');
+		expect(xml).toContain('https://example.com/blog');
 		expect(xml).toContain('https://example.com/insights');
 		expect(xml).toContain('https://example.com/resources');
 		expect(xml).toContain('https://example.com/talk-to-sales');
