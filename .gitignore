@@ -240,3 +240,8 @@ reports/acceptance/**
 
 # Local scratch/image dump folders
 khafdee/
+
+# Root accidental npm artifacts
+/node_modules/
+/package-lock.json
+/pnpm-lock.yaml

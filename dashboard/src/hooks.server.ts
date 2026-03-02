@@ -47,42 +47,44 @@ function buildE2EBypassAuth(): { session: Session; user: User } {
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
+	const isPublic = isPublicPath(event.url.pathname);
 	const isHttps = shouldUseSecureCookies(event.url, env.NODE_ENV || '');
 	const publicSupabaseUrl = String(publicEnv.PUBLIC_SUPABASE_URL || '').trim();
 	const publicSupabaseAnonKey = String(publicEnv.PUBLIC_SUPABASE_ANON_KEY || '').trim();
+	const hasSupabasePublicConfig = !!(publicSupabaseUrl && publicSupabaseAnonKey);
 
-	if (!publicSupabaseUrl || !publicSupabaseAnonKey) {
-		throw new Error(
-			'Supabase public environment is not configured. Set PUBLIC_SUPABASE_URL and PUBLIC_SUPABASE_ANON_KEY.'
-		);
+	if (hasSupabasePublicConfig) {
+		// Create a Supabase client with cookie handling
+		event.locals.supabase = createServerClient(publicSupabaseUrl, publicSupabaseAnonKey, {
+			cookies: {
+				get: (key) => event.cookies.get(key),
+				set: (key, value, options) => {
+					event.cookies.set(key, value, {
+						path: '/',
+						httpOnly: true,
+						secure: isHttps,
+						sameSite: 'strict',
+						...options
+					});
+				},
+				remove: (key, options) => {
+					event.cookies.delete(key, {
+						path: '/',
+						httpOnly: true,
+						secure: isHttps,
+						sameSite: 'strict',
+						...options
+					});
+				}
+			}
+		});
 	}
 
-	// Create a Supabase client with cookie handling
-	event.locals.supabase = createServerClient(publicSupabaseUrl, publicSupabaseAnonKey, {
-		cookies: {
-			get: (key) => event.cookies.get(key),
-			set: (key, value, options) => {
-				event.cookies.set(key, value, {
-					path: '/',
-					httpOnly: true,
-					secure: isHttps,
-					sameSite: 'strict',
-					...options
-				});
-			},
-			remove: (key, options) => {
-				event.cookies.delete(key, {
-					path: '/',
-					httpOnly: true,
-					secure: isHttps,
-					sameSite: 'strict',
-					...options
-				});
-			}
-		}
-	});
-
 	event.locals.safeGetSession = async () => {
+		if (!hasSupabasePublicConfig) {
+			return { session: null, user: null };
+		}
+
 		const testingMode = env.TESTING === 'true';
 		const allowProdPreviewBypass = env.E2E_ALLOW_PROD_PREVIEW === 'true';
 		const canUseBypass = canUseE2EAuthBypass({
@@ -124,7 +126,13 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// Auth Guard: Protect all application routes by default.
 	// Only allow public access to explicit public paths (auth, pricing, landing, assets).
-	if (!isPublicPath(event.url.pathname)) {
+	if (!isPublic) {
+		if (!hasSupabasePublicConfig) {
+			return new Response('Service temporarily unavailable. Authentication is not configured.', {
+				status: 503,
+				headers: { 'Cache-Control': 'no-store' }
+			});
+		}
 		const { session } = await event.locals.safeGetSession();
 		if (!session) {
 			return new Response(null, {
@@ -143,7 +151,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	// Security: prevent intermediary caching of authenticated HTML responses.
 	const contentType = response.headers.get('content-type') || '';
-	if (contentType.startsWith('text/html') && !isPublicPath(event.url.pathname)) {
+	if (contentType.startsWith('text/html') && !isPublic) {
 		response.headers.set('Cache-Control', 'no-store');
 	}
 
