@@ -1,4 +1,5 @@
 import type { BuyerPersona } from '$lib/landing/landingExperiment';
+import { getPublicCustomerCommentsFeed } from '$lib/landing/customerCommentsFeed';
 
 export const HERO_ROLE_CONTEXT: Record<
 	BuyerPersona,
@@ -288,23 +289,12 @@ export const CUSTOMER_PROOF_STORIES = Object.freeze([
 	}
 ]);
 
-export const CUSTOMER_QUOTES = Object.freeze([
-	{
-		quote:
-			'We stopped debating whose queue a cost issue belongs to. Ownership is now explicit in the workflow.',
-		attribution: 'Design-partner workshop, Head of FinOps'
-	},
-	{
-		quote:
-			'The value is not another dashboard. It is moving from signal to controlled action without drama.',
-		attribution: 'Design-partner workshop, VP Engineering'
-	},
-	{
-		quote:
-			'Leadership reviews got shorter because the economic story is consistent from platform to finance.',
-		attribution: 'Design-partner workshop, CFO'
-	}
-]);
+export const CUSTOMER_QUOTES = Object.freeze(
+	getPublicCustomerCommentsFeed().map((record) => ({
+		quote: record.quote,
+		attribution: record.attribution
+	}))
+);
 
 export const COMPLIANCE_FOUNDATION_BADGES = Object.freeze([
 	'Single sign-on (SAML)',

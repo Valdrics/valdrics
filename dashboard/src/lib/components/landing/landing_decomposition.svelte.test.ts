@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/svelte';
+import { fireEvent, render, screen, within } from '@testing-library/svelte';
 import LandingHeroCopy from '$lib/components/landing/LandingHeroCopy.svelte';
 import LandingSignalMapCard from '$lib/components/landing/LandingSignalMapCard.svelte';
 import LandingRoiSimulator from '$lib/components/landing/LandingRoiSimulator.svelte';
@@ -167,6 +167,82 @@ describe('Landing component decomposition', () => {
 
 		await fireEvent.click(screen.getByRole('link', { name: /download executive one-pager/i }));
 		expect(onTrackCta).toHaveBeenCalledWith('download_executive_one_pager');
+	});
+
+	it('rotates customer comments with navigation controls', async () => {
+		const trust = render(LandingTrustSection, {
+			props: {
+				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
+				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+				onTrackCta: vi.fn()
+			}
+		});
+		const trustView = within(trust.container);
+
+		expect(
+			trustView.getByText(/we stopped debating whose queue a cost issue belongs to/i)
+		).toBeTruthy();
+		await fireEvent.click(trustView.getByRole('button', { name: /next customer comment/i }));
+		expect(
+			trustView.getByText(
+				/the value is not another dashboard\. it is moving from signal to controlled action/i
+			)
+		).toBeTruthy();
+		await fireEvent.click(trustView.getByRole('button', { name: /show customer comment 3/i }));
+		expect(trustView.getByText(/leadership reviews got shorter/i)).toBeTruthy();
+	});
+
+	it('refreshes customer comments periodically from the feed', async () => {
+		vi.useFakeTimers();
+		const fetchMock = vi
+			.spyOn(globalThis, 'fetch')
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						items: [
+							{
+								quote: 'Initial streamed quote for trust section.',
+								attribution: 'First source'
+							}
+						]
+					}),
+					{ status: 200, headers: { 'content-type': 'application/json' } }
+				)
+			)
+			.mockResolvedValueOnce(
+				new Response(
+					JSON.stringify({
+						items: [
+							{
+								quote: 'Updated streamed quote after polling refresh.',
+								attribution: 'Second source'
+							}
+						]
+					}),
+					{ status: 200, headers: { 'content-type': 'application/json' } }
+				)
+			);
+
+		try {
+			const trust = render(LandingTrustSection, {
+				props: {
+					requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
+					onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+					onTrackCta: vi.fn()
+				}
+			});
+			const trustView = within(trust.container);
+
+			expect(await trustView.findByText(/initial streamed quote for trust section/i)).toBeTruthy();
+			await vi.advanceTimersByTimeAsync(20_500);
+			expect(
+				await trustView.findByText(/updated streamed quote after polling refresh/i)
+			).toBeTruthy();
+			expect(fetchMock).toHaveBeenCalledTimes(2);
+		} finally {
+			fetchMock.mockRestore();
+			vi.useRealTimers();
+		}
 	});
 
 	it('updates ROI controls and CTA callback from calculator component', async () => {

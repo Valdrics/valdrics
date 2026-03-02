@@ -269,7 +269,9 @@ describe('LandingHero', () => {
 		});
 
 		const { unmount } = render(LandingHero);
-		expect(setIntervalSpy).not.toHaveBeenCalled();
+		const intervalDurationsMs = setIntervalSpy.mock.calls.map((call) => Number(call[1]));
+		expect(intervalDurationsMs).not.toContain(4400);
+		expect(intervalDurationsMs).not.toContain(3200);
 
 		unmount();
 		setIntervalSpy.mockRestore();

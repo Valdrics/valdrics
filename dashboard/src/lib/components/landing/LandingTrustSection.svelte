@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { base } from '$app/paths';
+	import { onDestroy, onMount } from 'svelte';
 	import {
 		COMPLIANCE_FOUNDATION_BADGES,
 		CUSTOMER_PROOF_STORIES,
@@ -7,6 +9,113 @@
 		TRUST_BENCHMARK_OUTCOMES,
 		TRUST_ECOSYSTEM_BADGES
 	} from '$lib/landing/heroContent';
+	import { getReducedMotionPreference, observeReducedMotionPreference } from '$lib/landing/reducedMotion';
+
+	const QUOTE_ROTATION_MS = 6500;
+	const CUSTOMER_COMMENTS_POLL_MS = 20_000;
+	const CUSTOMER_COMMENTS_FEED_HREF = `${base}/api/marketing/customer-comments`;
+	let activeQuoteIndex = $state(0);
+	let prefersReducedMotion = $state(false);
+	let quoteRotationInterval: ReturnType<typeof setInterval> | null = null;
+	let customerCommentsPollInterval: ReturnType<typeof setInterval> | null = null;
+	let customerCommentsFetchInFlight = false;
+	let customerQuotes = $state([...CUSTOMER_QUOTES]);
+	let activeQuote = $derived(customerQuotes[activeQuoteIndex] ?? customerQuotes[0]);
+
+	function stopQuoteRotation(): void {
+		if (!quoteRotationInterval) return;
+		clearInterval(quoteRotationInterval);
+		quoteRotationInterval = null;
+	}
+
+	function startQuoteRotation(): void {
+		if (quoteRotationInterval || prefersReducedMotion || customerQuotes.length < 2) return;
+		quoteRotationInterval = setInterval(() => {
+			activeQuoteIndex = (activeQuoteIndex + 1) % customerQuotes.length;
+		}, QUOTE_ROTATION_MS);
+	}
+
+	function setCustomerQuotes(quotes: Array<{ quote: string; attribution: string }>): void {
+		if (quotes.length === 0) return;
+		const unchanged =
+			quotes.length === customerQuotes.length &&
+			quotes.every(
+				(quote, index) =>
+					quote.quote === customerQuotes[index]?.quote &&
+					quote.attribution === customerQuotes[index]?.attribution
+			);
+		if (unchanged) return;
+		customerQuotes = quotes;
+		if (activeQuoteIndex >= quotes.length) {
+			activeQuoteIndex = 0;
+		}
+		stopQuoteRotation();
+		startQuoteRotation();
+	}
+
+	async function loadCustomerComments(signal?: AbortSignal): Promise<void> {
+		if (customerCommentsFetchInFlight) return;
+		customerCommentsFetchInFlight = true;
+		try {
+			const response = await fetch(CUSTOMER_COMMENTS_FEED_HREF, {
+				method: 'GET',
+				headers: { accept: 'application/json' },
+				cache: 'no-store',
+				signal
+			});
+			if (!response.ok) return;
+			const payload = (await response.json()) as {
+				items?: Array<{ quote?: string; attribution?: string }>;
+			};
+			const quotes = (payload.items ?? [])
+				.map((item) => ({
+					quote: (item.quote ?? '').trim(),
+					attribution: (item.attribution ?? '').trim()
+				}))
+				.filter((item) => item.quote && item.attribution)
+				.slice(0, 8);
+			setCustomerQuotes(quotes);
+		} catch {
+			// Keep local fallback quotes if feed is unavailable.
+		} finally {
+			customerCommentsFetchInFlight = false;
+		}
+	}
+
+	function stopCustomerCommentsPolling(): void {
+		if (!customerCommentsPollInterval) return;
+		clearInterval(customerCommentsPollInterval);
+		customerCommentsPollInterval = null;
+	}
+
+	function startCustomerCommentsPolling(): void {
+		if (customerCommentsPollInterval) return;
+		customerCommentsPollInterval = setInterval(() => {
+			if (document.visibilityState !== 'visible') return;
+			void loadCustomerComments();
+		}, CUSTOMER_COMMENTS_POLL_MS);
+	}
+
+	function selectQuote(index: number): void {
+		if (index < 0 || index >= customerQuotes.length) return;
+		activeQuoteIndex = index;
+		stopQuoteRotation();
+		startQuoteRotation();
+	}
+
+	function showPreviousQuote(): void {
+		if (customerQuotes.length < 2) return;
+		activeQuoteIndex = (activeQuoteIndex - 1 + customerQuotes.length) % customerQuotes.length;
+		stopQuoteRotation();
+		startQuoteRotation();
+	}
+
+	function showNextQuote(): void {
+		if (customerQuotes.length < 2) return;
+		activeQuoteIndex = (activeQuoteIndex + 1) % customerQuotes.length;
+		stopQuoteRotation();
+		startQuoteRotation();
+	}
 
 	let {
 		onTrackCta,
@@ -17,6 +126,40 @@
 		requestValidationBriefingHref: string;
 		onePagerHref: string;
 	} = $props();
+
+	onMount(() => {
+		const customerCommentsController = new AbortController();
+		void loadCustomerComments(customerCommentsController.signal);
+		const onVisibilityChange = () => {
+			if (document.visibilityState === 'visible') {
+				void loadCustomerComments();
+			}
+		};
+		document.addEventListener('visibilitychange', onVisibilityChange);
+		startCustomerCommentsPolling();
+		prefersReducedMotion = getReducedMotionPreference(window);
+		const stopReducedMotionObservation = observeReducedMotionPreference(window, (value) => {
+			prefersReducedMotion = value;
+			if (value) {
+				stopQuoteRotation();
+				return;
+			}
+			startQuoteRotation();
+		});
+		startQuoteRotation();
+		return () => {
+			customerCommentsController.abort();
+			document.removeEventListener('visibilitychange', onVisibilityChange);
+			stopCustomerCommentsPolling();
+			stopReducedMotionObservation();
+			stopQuoteRotation();
+		};
+	});
+
+	onDestroy(() => {
+		stopCustomerCommentsPolling();
+		stopQuoteRotation();
+	});
 </script>
 
 <section id="trust" class="container mx-auto px-6 pb-16 landing-section-lazy" data-landing-section="proof">
@@ -70,13 +213,48 @@
 		{/each}
 	</div>
 
-	<div class="landing-testimonial-grid">
-		{#each CUSTOMER_QUOTES as quote (quote.quote)}
-			<blockquote class="glass-panel landing-testimonial-card">
-				<p class="landing-testimonial-quote">"{quote.quote}"</p>
-				<cite class="landing-testimonial-cite">{quote.attribution}</cite>
+	<div class="landing-testimonial-rotator glass-panel" aria-live="polite" aria-atomic="true">
+		<div class="landing-testimonial-head">
+			<p class="landing-proof-k">Customer Comments</p>
+			<p class="landing-testimonial-counter">{activeQuoteIndex + 1}/{customerQuotes.length}</p>
+		</div>
+		{#if activeQuote}
+			<blockquote class="landing-testimonial-card">
+				<p class="landing-testimonial-quote">"{activeQuote.quote}"</p>
+				<cite class="landing-testimonial-cite">{activeQuote.attribution}</cite>
 			</blockquote>
-		{/each}
+		{/if}
+		<div class="landing-testimonial-controls">
+			<button
+				type="button"
+				class="landing-testimonial-nav"
+				aria-label="Previous customer comment"
+				disabled={customerQuotes.length < 2}
+				onclick={showPreviousQuote}
+			>
+				Prev
+			</button>
+			<div class="landing-testimonial-dots" role="group" aria-label="Customer comment selector">
+				{#each customerQuotes as quote, index (quote.quote)}
+					<button
+						type="button"
+						class="landing-testimonial-dot"
+						aria-label={`Show customer comment ${index + 1}`}
+						aria-pressed={activeQuoteIndex === index}
+						onclick={() => selectQuote(index)}
+					></button>
+				{/each}
+			</div>
+			<button
+				type="button"
+				class="landing-testimonial-nav"
+				aria-label="Next customer comment"
+				disabled={customerQuotes.length < 2}
+				onclick={showNextQuote}
+			>
+				Next
+			</button>
+		</div>
 	</div>
 
 	<div class="landing-compliance-block">
