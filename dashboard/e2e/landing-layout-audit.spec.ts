@@ -80,6 +80,20 @@ test.describe('Landing layout audit regressions', () => {
 				expect(toggleBounds.x).toBeGreaterThanOrEqual(0);
 				expect(toggleBounds.x + toggleBounds.width).toBeLessThanOrEqual(390);
 			}
+
+			await page.evaluate(() => {
+				window.scrollTo({ top: Math.round(document.documentElement.scrollHeight * 0.35) });
+			});
+			await page.waitForTimeout(120);
+
+			const backToTop = page.getByRole('link', { name: /back to top/i });
+			await expect(backToTop).toBeVisible();
+
+			const progressWidthPx = await page.locator('.landing-scroll-progress > span').evaluate((element) => {
+				const rect = (element as HTMLElement).getBoundingClientRect();
+				return rect.width;
+			});
+			expect(progressWidthPx).toBeGreaterThan(0);
 		});
 	});
 

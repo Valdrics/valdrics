@@ -7,30 +7,33 @@ export interface PublicNavLink {
 export const PUBLIC_PRIMARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/#benefits', label: 'Outcomes' },
 	{ href: '/#workflow', label: 'How It Works' },
-	{ href: '/#personas', label: "Who It's For" },
-	{ href: '/#trust', label: 'Proof' },
-	{ href: '/resources', label: 'Resources' },
-	{ href: '/pricing', label: 'Pricing' }
+	{ href: '/#signal-map', label: 'See It In Action' },
+	{ href: '/pricing', label: 'Pricing' },
+	{ href: '/resources', label: 'Resources' }
+]);
+
+export const PUBLIC_RESOURCES_DROPDOWN_LINKS: readonly PublicNavLink[] = Object.freeze([
+	{ href: '/resources', label: 'Resource Hub' },
+	{ href: '/docs', label: 'Docs' },
+	{ href: '/blog', label: 'Blog' },
+	{ href: '/insights', label: 'Insights' },
+	{ href: '/#trust', label: 'Proof' }
 ]);
 
 export const PUBLIC_SECONDARY_LINKS: readonly PublicNavLink[] = Object.freeze([
-	{ href: '/talk-to-sales', label: 'Talk to Sales' },
-	{ href: '/blog', label: 'Blog' },
-	{ href: '/insights', label: 'Insights' },
-	{ href: '/docs', label: 'Docs' }
+	{ href: '/talk-to-sales', label: 'Talk to Sales' }
 ]);
 
 export const PUBLIC_MOBILE_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/#benefits', label: 'Outcomes' },
 	{ href: '/#workflow', label: 'How It Works' },
-	{ href: '/#personas', label: "Who It's For" },
-	{ href: '/#trust', label: 'Proof' },
+	{ href: '/#signal-map', label: 'See It In Action' },
+	{ href: '/pricing', label: 'Pricing' },
 	{ href: '/resources', label: 'Resources' },
-	{ href: '/blog', label: 'Blog' },
-	{ href: '/insights', label: 'Insights' },
 	{ href: '/talk-to-sales', label: 'Talk to Sales' },
 	{ href: '/docs', label: 'Docs' },
-	{ href: '/pricing', label: 'Pricing' }
+	{ href: '/blog', label: 'Blog' },
+	{ href: '/insights', label: 'Insights' }
 ]);
 
 export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze([

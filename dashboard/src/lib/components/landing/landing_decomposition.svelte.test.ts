@@ -15,37 +15,26 @@ describe('Landing component decomposition', () => {
 	it('renders hero copy and keeps CTA tracking callbacks wired', async () => {
 		const onPrimaryCta = vi.fn();
 		const onSecondaryCta = vi.fn();
-		const onSimulatorCta = vi.fn();
-		const onTalkToSalesCta = vi.fn();
 
 		render(LandingHeroCopy, {
 			props: {
 				heroTitle: 'Control every dollar in your cloud and software stack.',
 				heroSubtitle: 'From signal to owner and approved action in one loop.',
-				heroQuantPromise: 'Target 10-18% controllable spend opportunity.',
 				primaryCtaLabel: 'Start Free',
 				secondaryCtaLabel: 'See Plans',
 				secondaryCtaHref: '#plans',
 				primaryCtaHref: '/auth/login',
-				talkToSalesHref: '/talk-to-sales',
-				plainLanguageMode: false,
 				onPrimaryCta,
-				onSecondaryCta,
-				onSimulatorCta,
-				onTalkToSalesCta,
-				onTogglePlainLanguage: vi.fn()
+				onSecondaryCta
 			}
 		});
 
 		expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
 		await fireEvent.click(screen.getByRole('link', { name: /start free/i }));
 		await fireEvent.click(screen.getByRole('link', { name: /see plans/i }));
-		await fireEvent.click(screen.getByRole('link', { name: /run the spend scenario simulator/i }));
-		await fireEvent.click(screen.getByRole('link', { name: /talk to sales/i }));
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
-		expect(onSimulatorCta).toHaveBeenCalledTimes(1);
-		expect(onTalkToSalesCta).toHaveBeenCalledTimes(1);
+		expect(screen.getByText(/one control loop/i)).toBeTruthy();
 	});
 
 	it('renders signal map card and propagates interactions', async () => {

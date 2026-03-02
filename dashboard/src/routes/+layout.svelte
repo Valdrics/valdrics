@@ -32,7 +32,7 @@
 		PUBLIC_FOOTER_SUBTITLE,
 		PUBLIC_MOBILE_LINKS,
 		PUBLIC_PRIMARY_LINKS,
-		PUBLIC_SECONDARY_LINKS,
+		PUBLIC_RESOURCES_DROPDOWN_LINKS,
 		PUBLIC_SIGNAL_STRIP
 	} from '$lib/landing/publicNav';
 	import {
@@ -85,6 +85,9 @@
 	let publicMenuPanel = $state<HTMLDivElement | null>(null);
 	let publicMenuButton = $state<HTMLButtonElement | null>(null);
 	let publicMenuRestoreFocus = $state<HTMLElement | null>(null);
+	let publicResourcesMenuOpen = $state(false);
+	let publicResourcesPanel = $state<HTMLDivElement | null>(null);
+	let publicResourcesButton = $state<HTMLButtonElement | null>(null);
 
 	$effect(() => {
 		if (!browser) return;
@@ -185,6 +188,7 @@
 	$effect(() => {
 		$page.url.pathname;
 		publicMenuOpen = false;
+		publicResourcesMenuOpen = false;
 	});
 
 	$effect(() => {
@@ -236,12 +240,46 @@
 		};
 	});
 
+	$effect(() => {
+		if (!browser || !publicResourcesMenuOpen) return;
+
+		const handlePointerDown = (event: PointerEvent) => {
+			const target = event.target;
+			if (!(target instanceof Node)) return;
+			if (publicResourcesPanel?.contains(target)) return;
+			if (publicResourcesButton?.contains(target)) return;
+			publicResourcesMenuOpen = false;
+		};
+
+		const handleKeydown = (event: KeyboardEvent) => {
+			if (event.key !== 'Escape') return;
+			event.preventDefault();
+			publicResourcesMenuOpen = false;
+			publicResourcesButton?.focus();
+		};
+
+		document.addEventListener('pointerdown', handlePointerDown);
+		window.addEventListener('keydown', handleKeydown);
+		return () => {
+			document.removeEventListener('pointerdown', handlePointerDown);
+			window.removeEventListener('keydown', handleKeydown);
+		};
+	});
+
 	function togglePublicMenu(): void {
 		publicMenuOpen = !publicMenuOpen;
 	}
 
 	function closePublicMenu(): void {
 		publicMenuOpen = false;
+	}
+
+	function togglePublicResourcesMenu(): void {
+		publicResourcesMenuOpen = !publicResourcesMenuOpen;
+	}
+
+	function closePublicResourcesMenu(): void {
+		publicResourcesMenuOpen = false;
 	}
 </script>
 
@@ -448,19 +486,58 @@
 
 				<div class="public-nav-primary items-center gap-5 text-sm text-ink-300">
 					{#each PUBLIC_PRIMARY_LINKS as link (link.href)}
-						<a href={toAppPath(link.href)} class="hover:text-ink-100">{link.label}</a>
+						{#if link.href === '/resources'}
+							<div class="public-nav-dropdown">
+								<button
+									type="button"
+									class="public-nav-dropdown-trigger"
+									bind:this={publicResourcesButton}
+									aria-haspopup="menu"
+									aria-expanded={publicResourcesMenuOpen}
+									aria-controls="public-resources-menu"
+									onclick={togglePublicResourcesMenu}
+								>
+									<span>{link.label}</span>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="14"
+										height="14"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										class:rotate-180={publicResourcesMenuOpen}
+									>
+										<polyline points="6 9 12 15 18 9"></polyline>
+									</svg>
+								</button>
+								{#if publicResourcesMenuOpen}
+									<div
+										id="public-resources-menu"
+										class="public-nav-dropdown-panel"
+										role="menu"
+										aria-label="Resources"
+										bind:this={publicResourcesPanel}
+									>
+										{#each PUBLIC_RESOURCES_DROPDOWN_LINKS as resourceLink (resourceLink.href)}
+											<a
+												href={toAppPath(resourceLink.href)}
+												role="menuitem"
+												class="public-nav-dropdown-item"
+												onclick={closePublicResourcesMenu}
+											>
+												{resourceLink.label}
+											</a>
+										{/each}
+									</div>
+								{/if}
+							</div>
+						{:else}
+							<a href={toAppPath(link.href)} class="hover:text-ink-100">{link.label}</a>
+						{/if}
 					{/each}
-				</div>
-
-				<div class="public-nav-secondary items-center gap-2">
-					{#each PUBLIC_SECONDARY_LINKS as link (link.href)}
-						<a
-							href={toAppPath(link.href)}
-							class={link.href === '/talk-to-sales' ? 'btn btn-secondary' : 'btn btn-ghost'}
-							>{link.label}</a
-						>
-					{/each}
-					<a href={toAppPath('/auth/login')} class="btn btn-primary">Start Free</a>
 				</div>
 
 				<div class="public-nav-mobile flex items-center gap-2">
@@ -663,6 +740,54 @@
 	.public-nav-primary,
 	.public-nav-secondary {
 		display: none;
+	}
+	.public-nav-dropdown {
+		position: relative;
+	}
+	.public-nav-dropdown-trigger {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		color: var(--color-ink-300);
+		transition: color var(--duration-fast) var(--ease-out);
+	}
+	.public-nav-dropdown-trigger:hover {
+		color: var(--color-ink-100);
+	}
+	.public-nav-dropdown-trigger svg {
+		transition: transform var(--duration-fast) var(--ease-out);
+	}
+	.public-nav-dropdown-panel {
+		position: absolute;
+		top: calc(100% + 0.65rem);
+		left: 0;
+		z-index: 80;
+		min-width: 12rem;
+		padding: 0.45rem;
+		border-radius: 0.75rem;
+		border: 1px solid rgb(255 255 255 / 0.12);
+		background: rgb(7 12 20 / 0.96);
+		box-shadow: 0 12px 30px rgb(0 0 0 / 0.45);
+		backdrop-filter: blur(10px);
+		-webkit-backdrop-filter: blur(10px);
+	}
+	.public-nav-dropdown-item {
+		display: block;
+		padding: 0.5rem 0.6rem;
+		border-radius: 0.45rem;
+		color: var(--color-ink-200);
+		transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast)
+			var(--ease-out);
+	}
+	.public-nav-dropdown-item:hover {
+		background: rgb(255 255 255 / 0.08);
+		color: var(--color-ink-100);
+	}
+	.public-nav-dropdown-item:focus-visible,
+	.public-nav-dropdown-trigger:focus-visible {
+		outline: 2px solid var(--color-accent-500);
+		outline-offset: 2px;
+		border-radius: 0.45rem;
 	}
 	.public-nav-mobile {
 		display: flex;

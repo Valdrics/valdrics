@@ -117,7 +117,7 @@ describe('public layout mobile menu', () => {
 		await fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
 		await waitFor(() => {
 			const active = document.activeElement as HTMLElement | null;
-			expect(active?.textContent?.trim()).toMatch(/^pricing$/i);
+			expect(active?.textContent?.trim()).toMatch(/insights/i);
 		});
 
 		await fireEvent.keyDown(window, { key: 'Tab' });
@@ -150,6 +150,32 @@ describe('public layout mobile menu', () => {
 		mocks.pageStore.set({ url: new URL('https://example.com/pricing') });
 		await waitFor(() => {
 			expect(screen.queryByRole('dialog', { name: /public navigation menu/i })).toBeNull();
+		});
+	});
+
+	it('opens desktop resources dropdown and closes with escape or outside click', async () => {
+		renderPublicLayout();
+
+		const resourcesTrigger = screen.getAllByRole('button', { name: /^resources$/i })[0];
+		expect(resourcesTrigger).toBeTruthy();
+		if (!resourcesTrigger) {
+			return;
+		}
+		await fireEvent.click(resourcesTrigger);
+		expect(await screen.findByRole('menu', { name: /^resources$/i })).toBeTruthy();
+		expect(screen.getByRole('menuitem', { name: /docs/i })).toBeTruthy();
+		expect(screen.getByRole('menuitem', { name: /blog/i })).toBeTruthy();
+
+		await fireEvent.keyDown(window, { key: 'Escape' });
+		await waitFor(() => {
+			expect(screen.queryByRole('menu', { name: /^resources$/i })).toBeNull();
+		});
+
+		await fireEvent.click(resourcesTrigger);
+		expect(await screen.findByRole('menu', { name: /^resources$/i })).toBeTruthy();
+		await fireEvent.pointerDown(document.body);
+		await waitFor(() => {
+			expect(screen.queryByRole('menu', { name: /^resources$/i })).toBeNull();
 		});
 	});
 
