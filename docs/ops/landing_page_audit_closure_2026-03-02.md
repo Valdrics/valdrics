@@ -50,8 +50,10 @@ Source report:
   - above-fold trust badges:
     - `dashboard/src/lib/landing/heroContent.ts`
     - `dashboard/src/lib/components/landing/LandingHeroCopy.svelte`
+    - includes procurement-facing language (`DPA-ready procurement support`, `BAA review support`)
   - trust/compliance section:
     - `dashboard/src/lib/components/landing/LandingTrustSection.svelte`
+    - compliance badges include `DPA and BAA review support`
 
 7. Missing canonical + robots meta (`Medium`)
 - Status: `CLOSED`
@@ -66,15 +68,23 @@ Source report:
     - `dashboard/src/routes/api/marketing/subscribe/+server.ts`
   - content hub:
     - `dashboard/src/routes/insights/+page.svelte`
+    - `dashboard/src/routes/blog/+page.server.ts` (public redirect path to insights)
+    - `dashboard/src/routes/blog/blog-page.server.test.ts`
     - nav/footer links: `dashboard/src/lib/landing/publicNav.ts`
+    - sitemap + route protection:
+      - `dashboard/src/routes/sitemap.xml/+server.ts`
+      - `dashboard/src/lib/routeProtection.ts`
 
 9. Anonymized case studies (`Medium`)
 - Status: `MITIGATED`
 - Evidence:
   - strengthened case-study specificity:
     - `dashboard/src/lib/landing/heroContent.ts` (`CUSTOMER_PROOF_STORIES`)
-  - named references path for diligence:
+  - pre-customer validation briefing path for diligence:
     - `dashboard/src/lib/components/landing/LandingTrustSection.svelte`
+  - customer-proof copy now explicitly pre-customer-safe (no named reference claims):
+    - `dashboard/src/lib/components/landing/LandingTrustSection.svelte`
+    - `dashboard/src/lib/components/LandingHero.svelte`
 
 10. Missing downloadable sales collateral (`Medium`)
 - Status: `CLOSED`
@@ -111,6 +121,9 @@ Source report:
   - bounded animation controls, in-view rotation gating, reduced-motion handling:
     - `dashboard/src/lib/components/LandingHero.svelte`
     - `dashboard/src/lib/components/LandingHero.css`
+    - `dashboard/src/lib/landing/reducedMotion.ts`
+    - explicit reduced-motion unit coverage:
+      - `dashboard/src/lib/components/LandingHero.svelte.test.ts`
   - layout stability checks:
     - `dashboard/e2e/landing-layout-audit.spec.ts`
 
@@ -134,9 +147,21 @@ Source report:
 ## Validation Evidence
 
 1. `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
-2. `cd dashboard && npm run test:unit -- --run src/lib/components/LandingHero.svelte.test.ts src/lib/components/landing/landing_decomposition.svelte.test.ts src/routes/resources/resources-page.svelte.test.ts src/routes/insights/insights-page.svelte.test.ts src/routes/talk-to-sales/talk-to-sales-page.svelte.test.ts src/routes/privacy/privacy-page.svelte.test.ts src/routes/terms/terms-page.svelte.test.ts` -> passed (`7 files`, `15 tests`).
+2. `cd dashboard && npm run test:unit -- --run src/lib/components/LandingHero.svelte.test.ts src/lib/components/landing/landing_decomposition.svelte.test.ts src/routes/resources/resources-page.svelte.test.ts src/routes/insights/insights-page.svelte.test.ts src/routes/talk-to-sales/talk-to-sales-page.svelte.test.ts src/routes/privacy/privacy-page.svelte.test.ts src/routes/terms/terms-page.svelte.test.ts src/lib/routeProtection.test.ts src/routes/sitemap.xml/sitemap.server.test.ts src/routes/blog/blog-page.server.test.ts src/lib/landing/reducedMotion.test.ts` -> passed (`11 files`, `32 tests`).
 3. `cd dashboard && npx playwright test e2e/landing-layout-audit.spec.ts` -> passed (`3 passed`).
-4. `uv run python3 scripts/verify_landing_component_budget.py` -> passed (`hero_lines=774 max=800 components=14`).
+4. `uv run python3 scripts/verify_landing_component_budget.py` -> passed (`hero_lines=790 max=800 components=14`).
+5. `cd dashboard && npx playwright test e2e/a11y.spec.ts -g "\/ has no critical\/serious axe violations"` -> passed (`1 passed`).
+6. `cd dashboard && npx playwright test e2e/performance.spec.ts` -> passed (`2 passed`).
+
+## Residual Risk / Dependency
+
+1. Anonymized case studies (`Medium`)
+- Current state: `MITIGATED`
+- Reason not fully closed in code:
+  - named logos/customer identities require explicit legal/commercial approval and source-of-truth references from go-to-market owners.
+- Existing mitigation in product:
+  - validation briefing request flow and downloadable executive collateral are live on landing and resource surfaces.
+  - landing copy now states pre-customer status directly while preserving a diligence CTA path.
 
 ## Post-Closure Sanity Check (Release-Critical)
 
@@ -159,4 +184,4 @@ Source report:
 - Marketing subscribe endpoint keeps rate-limit + honeypot + webhook-failure handling under test.
 
 7. Operational misconfiguration:
-- New public routes (`/insights`, `/talk-to-sales`) are covered in route protection and sitemap tests to prevent accidental auth-gating or discoverability drift.
+- New public routes (`/blog`, `/insights`, `/talk-to-sales`) are covered in route protection and sitemap tests to prevent accidental auth-gating or discoverability drift.

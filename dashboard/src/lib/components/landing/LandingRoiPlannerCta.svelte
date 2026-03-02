@@ -14,7 +14,7 @@
 		<h2 class="landing-h2">Need the full 12-month ROI planner?</h2>
 		<p class="landing-p">
 			Start free for deeper team-specific scenarios. Preview the model snapshot below before you open
-			the full planner.
+			the full planner. Includes rollout effort and implementation cost assumptions.
 		</p>
 
 		<div class="landing-roi-snapshot" aria-label="Example ROI model snapshot">

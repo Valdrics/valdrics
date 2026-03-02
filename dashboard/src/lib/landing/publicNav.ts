@@ -15,6 +15,7 @@ export const PUBLIC_PRIMARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 
 export const PUBLIC_SECONDARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/talk-to-sales', label: 'Talk to Sales' },
+	{ href: '/blog', label: 'Blog' },
 	{ href: '/insights', label: 'Insights' },
 	{ href: '/docs', label: 'Docs' }
 ]);
@@ -25,6 +26,7 @@ export const PUBLIC_MOBILE_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/#personas', label: "Who It's For" },
 	{ href: '/#trust', label: 'Proof' },
 	{ href: '/resources', label: 'Resources' },
+	{ href: '/blog', label: 'Blog' },
 	{ href: '/insights', label: 'Insights' },
 	{ href: '/talk-to-sales', label: 'Talk to Sales' },
 	{ href: '/docs', label: 'Docs' },
@@ -35,6 +37,7 @@ export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/docs', label: 'Documentation' },
 	{ href: '/docs/api', label: 'API Reference' },
 	{ href: '/resources', label: 'Resources' },
+	{ href: '/blog', label: 'Blog' },
 	{ href: '/insights', label: 'Insights' },
 	{ href: '/talk-to-sales', label: 'Talk to Sales' },
 	{ href: '/pricing', label: 'Pricing' },

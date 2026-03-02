@@ -27,6 +27,10 @@
 		normalizeLandingRoiInputs
 	} from '$lib/landing/roiCalculator';
 	import {
+		getReducedMotionPreference,
+		observeReducedMotionPreference
+	} from '$lib/landing/reducedMotion';
+	import {
 		BUYER_ROLE_VIEWS,
 		CLOUD_HOOK_STATES,
 		HERO_ROLE_CONTEXT,
@@ -127,6 +131,9 @@
 	let scenarioAdjustCaptured = $state(false);
 	let plainLanguageMode = $state(false);
 	let landingScrollProgressPct = $state(0);
+	let prefersReducedMotion = $state(
+		getReducedMotionPreference(browser && typeof window !== 'undefined' ? window : undefined)
+	);
 	let telemetryEnabled = $state(false);
 	let telemetryInitialized = $state(false);
 	let cookieBannerVisible = $state(false);
@@ -168,9 +175,14 @@
 	);
 	let includeExperimentQueryParams = $derived(shouldIncludeExperimentQueryParams($page.url, false));
 	let shouldRotateSnapshots = $derived(
-		signalMapInView && documentVisible && REALTIME_SIGNAL_SNAPSHOTS.length > 1
+		!prefersReducedMotion &&
+			signalMapInView &&
+			documentVisible &&
+			REALTIME_SIGNAL_SNAPSHOTS.length > 1
 	);
-	let shouldRotateDemoSteps = $derived(documentVisible && MICRO_DEMO_STEPS.length > 1);
+	let shouldRotateDemoSteps = $derived(
+		!prefersReducedMotion && documentVisible && MICRO_DEMO_STEPS.length > 1
+	);
 	let roiInputs = $derived(
 		normalizeLandingRoiInputs({
 			monthlySpendUsd: roiMonthlySpendUsd,
@@ -270,6 +282,9 @@
 
 	onMount(() => {
 		const storage = browser ? window.localStorage : undefined;
+		const stopReducedMotionObservation = observeReducedMotionPreference(window, (value) => {
+			prefersReducedMotion = value;
+		});
 		documentVisible = document.visibilityState === 'visible';
 		pageReferrer = normalizeReferrer(document.referrer);
 		const consent = storage?.getItem(LANDING_CONSENT_KEY);
@@ -362,6 +377,7 @@
 		handleScroll();
 
 		return () => {
+			stopReducedMotionObservation();
 			document.removeEventListener('visibilitychange', handleVisibility);
 			window.removeEventListener('scroll', handleScroll);
 			signalMapObserver?.disconnect();
@@ -710,7 +726,9 @@
 
 	<LandingTrustSection
 		onTrackCta={(value) => trackCta('cta_click', 'trust', value)}
-		requestReferencesHref={buildSignupHref('named_references', { source: 'trust' })}
+		requestValidationBriefingHref={buildSignupHref('executive_briefing', {
+			source: 'trust_validation'
+		})}
 		onePagerHref={ONE_PAGER_HREF}
 	/>
 

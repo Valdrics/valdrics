@@ -10,18 +10,18 @@
 
 	let {
 		onTrackCta,
-		requestReferencesHref,
+		requestValidationBriefingHref,
 		onePagerHref
 	}: {
-		onTrackCta: (value: 'request_named_references' | 'download_executive_one_pager') => void;
-		requestReferencesHref: string;
+		onTrackCta: (value: 'request_validation_briefing' | 'download_executive_one_pager') => void;
+		requestValidationBriefingHref: string;
 		onePagerHref: string;
 	} = $props();
 </script>
 
 <section id="trust" class="container mx-auto px-6 pb-16 landing-section-lazy" data-landing-section="proof">
 	<div class="landing-section-head">
-		<h2 class="landing-h2">Proof from teams reducing spend waste</h2>
+		<h2 class="landing-h2">Proof framework for reducing spend waste</h2>
 		<p class="landing-section-sub">
 			Buyers need outcomes, not claims. Valdrics is built to show clear before-and-after results.
 		</p>
@@ -88,17 +88,18 @@
 		</div>
 	</div>
 	<div class="landing-validation-cta glass-panel">
-		<p class="landing-proof-k">Reference Program</p>
+		<p class="landing-proof-k">Executive Readiness Kit</p>
 		<p class="landing-p">
-			Need named references for diligence? Request curated references and outcome packs under NDA.
+			Get the materials buyers ask for: rollout model, governance checklist, and one-page business
+			case.
 		</p>
 		<div class="landing-lead-actions">
 			<a
-				href={requestReferencesHref}
+				href={requestValidationBriefingHref}
 				class="btn btn-secondary w-fit"
-				onclick={() => onTrackCta('request_named_references')}
+				onclick={() => onTrackCta('request_validation_briefing')}
 			>
-				Request Named References
+				Book Executive Briefing
 			</a>
 			<a
 				href={onePagerHref}
@@ -110,7 +111,6 @@
 		</div>
 	</div>
 	<p class="landing-trust-note">
-		Customer examples are anonymized and benchmark ranges are directional. Validate against your own
-		baseline.
+		Use the briefing and one-pager to align engineering, finance, and security before kickoff.
 	</p>
 </section>

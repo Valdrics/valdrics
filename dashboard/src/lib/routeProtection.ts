@@ -6,6 +6,7 @@ const PUBLIC_EXACT_PATHS = new Set<string>([
 	'/sitemap.xml',
 	'/terms',
 	'/privacy',
+	'/blog',
 	'/insights',
 	'/talk-to-sales',
 	'/status'

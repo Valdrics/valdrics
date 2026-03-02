@@ -152,18 +152,18 @@ describe('Landing component decomposition', () => {
 		expect(onTrackCta).toHaveBeenCalledTimes(1);
 	});
 
-	it('renders trust references and one-pager collateral CTAs', async () => {
+	it('renders trust validation and one-pager collateral CTAs', async () => {
 		const onTrackCta = vi.fn();
 		render(LandingTrustSection, {
 			props: {
-				requestReferencesHref: '/auth/login?intent=named_references',
+				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
 				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
 				onTrackCta
 			}
 		});
 
-		await fireEvent.click(screen.getByRole('link', { name: /request named references/i }));
-		expect(onTrackCta).toHaveBeenCalledWith('request_named_references');
+		await fireEvent.click(screen.getByRole('link', { name: /book executive briefing/i }));
+		expect(onTrackCta).toHaveBeenCalledWith('request_validation_briefing');
 
 		await fireEvent.click(screen.getByRole('link', { name: /download executive one-pager/i }));
 		expect(onTrackCta).toHaveBeenCalledWith('download_executive_one_pager');
