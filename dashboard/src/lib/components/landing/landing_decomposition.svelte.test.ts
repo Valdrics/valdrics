@@ -35,6 +35,10 @@ describe('Landing component decomposition', () => {
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
 		expect(screen.getByText(/one control loop/i)).toBeTruthy();
+
+		// Check for GreenOps Global Flip additions
+		expect(screen.getByText(/Cloud, Software, and Carbon/i)).toBeTruthy();
+		expect(screen.getByText(/See waste and intensity early/i)).toBeTruthy();
 	});
 
 	it('renders signal map card and propagates interactions', async () => {
@@ -66,10 +70,12 @@ describe('Landing component decomposition', () => {
 		});
 
 		expect(screen.getByText(/realtime signal map/i)).toBeTruthy();
+		await fireEvent.click(screen.getByRole('button', { name: /explore control details/i }));
 		const firstLaneTab = screen.getByRole('tab', { name: /economic visibility/i });
 		await fireEvent.click(firstLaneTab);
 		expect(onSelectSignalLane).toHaveBeenCalled();
 
+		await fireEvent.click(screen.getByRole('button', { name: /open 20-second walkthrough/i }));
 		const demoButton = screen.getByRole('button', { name: /^assess$/i });
 		await fireEvent.click(demoButton);
 		expect(onSelectDemoStep).toHaveBeenCalled();
@@ -141,21 +147,57 @@ describe('Landing component decomposition', () => {
 		expect(onTrackCta).toHaveBeenCalledTimes(1);
 	});
 
-	it('renders trust validation and one-pager collateral CTAs', async () => {
+	it('renders global trust compliance badges and regional resilience signals', async () => {
 		const onTrackCta = vi.fn();
-		render(LandingTrustSection, {
+		const view = render(LandingTrustSection, {
 			props: {
 				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
 				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.pdf',
 				onTrackCta
 			}
 		});
 
-		await fireEvent.click(screen.getByRole('link', { name: /book executive briefing/i }));
-		expect(onTrackCta).toHaveBeenCalledWith('request_validation_briefing');
+		// Check for specific global compliance badges (ISO 27001 and DORA)
+		expect(view.getByText(/ISO 27001 readiness alignment/i)).toBeTruthy();
+		expect(view.getByText(/DORA operational resilience/i)).toBeTruthy();
 
-		await fireEvent.click(screen.getByRole('link', { name: /download executive one-pager/i }));
-		expect(onTrackCta).toHaveBeenCalledWith('download_executive_one_pager');
+		// Check for the Global FinOps Compliance Workbook CTA
+		const ctaBlock = within(view.container).getByRole('generic', {
+			name: 'Executive Validation Materials'
+		});
+		expect(ctaBlock).toBeTruthy();
+		if (ctaBlock) {
+			const ctaView = within(ctaBlock);
+			expect(ctaView.getByText(/Download Compliance Workbook/i)).toBeTruthy();
+			await fireEvent.click(ctaView.getByRole('link', { name: /Download Compliance Workbook/i }));
+			expect(onTrackCta).toHaveBeenCalledWith('download_global_compliance_workbook');
+		}
+	});
+
+	it('renders trust validation and one-pager collateral CTAs', async () => {
+		const onTrackCta = vi.fn();
+		const view = render(LandingTrustSection, {
+			props: {
+				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
+				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.pdf',
+				onTrackCta
+			}
+		});
+
+		const ctaBlock = within(view.container).getByRole('generic', {
+			name: 'Executive Validation Materials'
+		});
+		expect(ctaBlock).toBeTruthy();
+		if (ctaBlock) {
+			const ctaView = within(ctaBlock);
+			await fireEvent.click(ctaView.getByRole('link', { name: /book executive briefing/i }));
+			expect(onTrackCta).toHaveBeenCalledWith('request_validation_briefing');
+
+			await fireEvent.click(ctaView.getByRole('link', { name: /download executive one-pager/i }));
+			expect(onTrackCta).toHaveBeenCalledWith('download_executive_one_pager');
+		}
 	});
 
 	it('rotates customer comments with navigation controls', async () => {
@@ -163,6 +205,7 @@ describe('Landing component decomposition', () => {
 			props: {
 				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
 				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.pdf',
 				onTrackCta: vi.fn()
 			}
 		});
@@ -217,6 +260,7 @@ describe('Landing component decomposition', () => {
 				props: {
 					requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
 					onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+					globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.pdf',
 					onTrackCta: vi.fn()
 				}
 			});
@@ -263,7 +307,11 @@ describe('Landing component decomposition', () => {
 				roiTeamMembers: 2,
 				roiBlendedHourlyUsd: 145,
 				buildRoiCtaHref: '/auth/login?intent=roi_assessment',
-				formatUsd: (amount: number) => `$${amount}`,
+				formatUsd: (amount: number, currency: string = 'USD') => {
+					if (currency === 'EUR') return `€${amount}`;
+					if (currency === 'GBP') return `£${amount}`;
+					return `$${amount}`;
+				},
 				onRoiControlInput,
 				onRoiMonthlySpendChange,
 				onRoiExpectedReductionChange,
@@ -274,13 +322,24 @@ describe('Landing component decomposition', () => {
 			}
 		});
 
+		// Test currency toggle interaction first on the initial static amount (120000)
+		const eurButton = screen.getByRole('button', { name: /Switch to EUR/i });
+		expect(eurButton).toBeTruthy();
+		await fireEvent.click(eurButton);
+		expect(screen.getByText(/€120000/i)).toBeTruthy();
+
 		await fireEvent.input(screen.getByLabelText(/cloud \+ software monthly spend/i), {
 			target: { value: '130000' }
 		});
-		await fireEvent.input(screen.getByLabelText(/expected reduction/i), { target: { value: '13' } });
+		await fireEvent.input(screen.getByLabelText(/expected reduction/i), {
+			target: { value: '13' }
+		});
 		await fireEvent.input(screen.getByLabelText(/rollout duration/i), { target: { value: '35' } });
 		await fireEvent.input(screen.getByLabelText(/team members/i), { target: { value: '3' } });
-		await fireEvent.input(screen.getByLabelText(/blended hourly rate/i), { target: { value: '150' } });
+		await fireEvent.input(screen.getByLabelText(/blended hourly rate/i), {
+			target: { value: '150' }
+		});
+
 		await fireEvent.click(screen.getByRole('link', { name: /run this in your environment/i }));
 
 		expect(onRoiMonthlySpendChange).toHaveBeenCalledWith(130000);
@@ -288,7 +347,7 @@ describe('Landing component decomposition', () => {
 		expect(onRoiRolloutDaysChange).toHaveBeenCalledWith(35);
 		expect(onRoiTeamMembersChange).toHaveBeenCalledWith(3);
 		expect(onRoiBlendedHourlyChange).toHaveBeenCalledWith(150);
-		expect(onRoiControlInput).toHaveBeenCalledTimes(5);
+		expect(onRoiControlInput).toHaveBeenCalledTimes(6); // +1 for currency toggle
 		expect(onRoiCta).toHaveBeenCalledTimes(1);
 	});
 

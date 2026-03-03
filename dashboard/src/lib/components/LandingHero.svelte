@@ -23,7 +23,8 @@
 	} from '$lib/landing/landingFunnel';
 	import {
 		DEFAULT_LANDING_ROI_INPUTS,
-		normalizeLandingRoiInputs
+		normalizeLandingRoiInputs,
+		formatCurrencyAmount
 	} from '$lib/landing/roiCalculator';
 	import {
 		getReducedMotionPreference,
@@ -55,11 +56,7 @@
 		seed: 'default'
 	});
 
-	const USD_WHOLE_FORMATTER = new Intl.NumberFormat('en-US', {
-		style: 'currency',
-		currency: 'USD',
-		maximumFractionDigits: 0
-	});
+
 
 	const SNAPSHOT_ROTATION_MS = 4400;
 	const DEMO_ROTATION_MS = 3200;
@@ -116,9 +113,7 @@
 	let activeSignalLane = $derived(
 		activeSnapshot.lanes.find((lane) => lane.id === activeLaneId) ?? activeSnapshot.lanes[0]
 	);
-	let heroContext = $derived(
-		HERO_ROLE_CONTEXT[activeBuyerRole.id] ?? HERO_ROLE_CONTEXT.finops
-	);
+	let heroContext = $derived(HERO_ROLE_CONTEXT[activeBuyerRole.id] ?? HERO_ROLE_CONTEXT.finops);
 	let heroTitle = $derived(
 		experiments.heroVariant === 'from_metrics_to_control'
 			? heroContext.metricsTitle
@@ -138,8 +133,8 @@
 	let includeExperimentQueryParams = $derived(shouldIncludeExperimentQueryParams($page.url, false));
 	let shouldRotateSnapshots = $derived(
 		!prefersReducedMotion &&
-			signalMapInView &&
 			documentVisible &&
+			signalMapInView &&
 			REALTIME_SIGNAL_SNAPSHOTS.length > 1
 	);
 	let shouldRotateDemoSteps = $derived(
@@ -197,10 +192,16 @@
 			activeLaneId = activeSnapshot.lanes[0].id;
 			return;
 		}
-		if (activeSignalLane) {
-			return;
+
+		// Auto-synchronize focus during rotation
+		if (shouldRotateSnapshots) {
+			const watchLane = activeSnapshot.lanes.find(
+				(lane) => lane.severity === 'watch' || lane.severity === 'critical'
+			);
+			if (watchLane && watchLane.id !== activeLaneId) {
+				activeLaneId = watchLane.id;
+			}
 		}
-		activeLaneId = activeSnapshot.lanes[0]?.id ?? null;
 	});
 
 	function stopSnapshotRotation() {
@@ -544,13 +545,17 @@
 			return;
 		}
 		scenarioAdjustCaptured = true;
-		emitLandingTelemetrySafe('scenario_adjust', 'simulator', control, buildTelemetryContext('engaged'));
+		emitLandingTelemetrySafe(
+			'scenario_adjust',
+			'simulator',
+			control,
+			buildTelemetryContext('engaged')
+		);
 	}
 
-	function formatUsd(amount: number): string {
-		return USD_WHOLE_FORMATTER.format(amount);
+	function formatUsd(amount: number, currency: string = 'USD'): string {
+		return formatCurrencyAmount(amount, currency);
 	}
-
 </script>
 
 <div class="landing" itemscope itemtype="https://schema.org/SoftwareApplication">
@@ -568,13 +573,13 @@
 	<meta itemprop="image" content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()} />
 
 	<section id="hero" class="landing-hero" data-landing-section="hero">
-		<div class="container mx-auto px-6 pt-10 pb-16">
+		<div class="container mx-auto px-6 pt-8 pb-12 sm:pt-10 sm:pb-16">
 			<LandingHeroCopy
-				heroTitle={heroTitle}
-				heroSubtitle={heroSubtitle}
-				primaryCtaLabel={primaryCtaLabel}
-				secondaryCtaLabel={secondaryCtaLabel}
-				secondaryCtaHref={secondaryCtaHref}
+				{heroTitle}
+				{heroSubtitle}
+				{primaryCtaLabel}
+				{secondaryCtaLabel}
+				{secondaryCtaHref}
 				primaryCtaHref={buildPrimaryCtaHref()}
 				onPrimaryCta={() => trackCta('cta_click', 'hero', experiments.ctaVariant)}
 				onSecondaryCta={() => trackCta('cta_click', 'hero', 'see_plans')}
@@ -586,14 +591,18 @@
 		<LandingWorkflowSection />
 	{:else}
 		<LandingCloudHookSection
-			activeHookState={activeHookState}
-			hookStateIndex={hookStateIndex}
+			{activeHookState}
+			{hookStateIndex}
 			cloudHookStates={CLOUD_HOOK_STATES}
 			onSelectHookState={selectHookState}
 		/>
 	{/if}
 
-	<section id="signal-map" class="container mx-auto px-6 pb-16 landing-section-lazy" data-landing-section="signal_map">
+	<section
+		id="signal-map"
+		class="container mx-auto px-6 pb-12 md:pb-16 landing-section-lazy"
+		data-landing-section="signal_map"
+	>
 		<div class="landing-section-head">
 			<h2 class="landing-h2">See it in action</h2>
 			<p class="landing-section-sub">
@@ -601,11 +610,11 @@
 			</p>
 		</div>
 		<LandingSignalMapCard
-			activeSnapshot={activeSnapshot}
-			activeSignalLane={activeSignalLane}
-			signalMapInView={signalMapInView}
-			snapshotIndex={snapshotIndex}
-			demoStepIndex={demoStepIndex}
+			{activeSnapshot}
+			{activeSignalLane}
+			{signalMapInView}
+			{snapshotIndex}
+			{demoStepIndex}
 			onSelectSignalLane={selectSignalLane}
 			onSelectDemoStep={selectDemoStep}
 			onSelectSnapshot={selectSnapshot}
@@ -616,20 +625,20 @@
 	</section>
 
 	<LandingRoiSimulator
-		normalizedScenarioWasteWithoutPct={normalizedScenarioWasteWithoutPct}
-		normalizedScenarioWasteWithPct={normalizedScenarioWasteWithPct}
-		normalizedScenarioWindowMonths={normalizedScenarioWindowMonths}
-		scenarioWithoutBarPct={scenarioWithoutBarPct}
-		scenarioWithBarPct={scenarioWithBarPct}
-		scenarioWasteWithoutUsd={scenarioWasteWithoutUsd}
-		scenarioWasteWithUsd={scenarioWasteWithUsd}
-		scenarioWasteRecoveryMonthlyUsd={scenarioWasteRecoveryMonthlyUsd}
-		scenarioWasteRecoveryWindowUsd={scenarioWasteRecoveryWindowUsd}
+		{normalizedScenarioWasteWithoutPct}
+		{normalizedScenarioWasteWithPct}
+		{normalizedScenarioWindowMonths}
+		{scenarioWithoutBarPct}
+		{scenarioWithBarPct}
+		{scenarioWasteWithoutUsd}
+		{scenarioWasteWithUsd}
+		{scenarioWasteRecoveryMonthlyUsd}
+		{scenarioWasteRecoveryWindowUsd}
 		monthlySpendUsd={roiInputs.monthlySpendUsd}
-		scenarioWasteWithoutPct={scenarioWasteWithoutPct}
-		scenarioWasteWithPct={scenarioWasteWithPct}
-		scenarioWindowMonths={scenarioWindowMonths}
-		formatUsd={formatUsd}
+		{scenarioWasteWithoutPct}
+		{scenarioWasteWithPct}
+		{scenarioWindowMonths}
+		{formatUsd}
 		onTrackScenarioAdjust={trackScenarioAdjust}
 		onScenarioWasteWithoutChange={(value) => {
 			scenarioWasteWithoutPct = value;
@@ -682,7 +691,11 @@
 	</div>
 
 	{#if landingScrollProgressPct >= 8}
-		<a href="#hero" class="landing-back-to-top" onclick={() => trackCta('cta_click', 'utility', 'back_to_top')}>
+		<a
+			href="#hero"
+			class="landing-back-to-top"
+			onclick={() => trackCta('cta_click', 'utility', 'back_to_top')}
+		>
 			Back to top
 		</a>
 	{/if}

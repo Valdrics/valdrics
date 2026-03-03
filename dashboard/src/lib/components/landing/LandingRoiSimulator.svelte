@@ -58,11 +58,16 @@
 	}
 </script>
 
-<section id="simulator" class="container mx-auto px-6 pb-16 landing-section-lazy" data-landing-section="simulator">
+<section
+	id="simulator"
+	class="container mx-auto px-6 pb-16 landing-section-lazy"
+	data-landing-section="simulator"
+>
 	<div class="landing-section-head">
 		<h2 class="landing-h2">Realtime spend scenario simulator</h2>
 		<p class="landing-section-sub">
-			Compare reactive spend behavior versus owner-led execution and see the economic delta instantly.
+			Compare reactive spend behavior versus owner-led execution and see the economic delta
+			instantly.
 		</p>
 	</div>
 
@@ -117,18 +122,24 @@
 
 		<div class="glass-panel landing-sim-results">
 			<p class="landing-proof-k">Scenario Delta</p>
-			<div class="landing-sim-chart" role="img" aria-label="Reactive versus governed waste comparison">
+			<div
+				class="landing-sim-chart"
+				role="img"
+				aria-label="Reactive versus governed waste comparison"
+			>
 				<div class="landing-sim-bar-row">
 					<div class="landing-sim-bar-label">Reactive spend</div>
 					<div class="landing-sim-bar-track">
-						<span class="landing-sim-bar is-reactive" style={`width:${scenarioWithoutBarPct}%;`}></span>
+						<span class="landing-sim-bar is-reactive" style={`width:${scenarioWithoutBarPct}%;`}
+						></span>
 					</div>
 					<div class="landing-sim-bar-value">{formatUsd(scenarioWasteWithoutUsd)}</div>
 				</div>
 				<div class="landing-sim-bar-row">
 					<div class="landing-sim-bar-label">Governed spend</div>
 					<div class="landing-sim-bar-track">
-						<span class="landing-sim-bar is-governed" style={`width:${scenarioWithBarPct}%;`}></span>
+						<span class="landing-sim-bar is-governed" style={`width:${scenarioWithBarPct}%;`}
+						></span>
 					</div>
 					<div class="landing-sim-bar-value">{formatUsd(scenarioWasteWithUsd)}</div>
 				</div>
@@ -149,7 +160,8 @@
 				</div>
 			</div>
 			<p class="landing-roi-note">
-				This simulator is directional and designed to accelerate finance + engineering decision alignment.
+				This simulator is directional and designed to accelerate finance + engineering decision
+				alignment.
 			</p>
 		</div>
 	</div>

@@ -35,6 +35,28 @@ function roundCurrency(value: number): number {
 	return Math.round(value * 100) / 100;
 }
 
+/**
+ * Deterministically formats currency values based on supported FX Engine locales.
+ * Defaults to USD. Fallbacks properly if an unknown currency is passed.
+ *
+ * Supported currencies reflect the backend ExchangeRateService targets.
+ */
+export function formatCurrencyAmount(amount: number, currencyCode: string = 'USD'): string {
+	const safeAmount = Number.isFinite(amount) ? amount : 0;
+	
+	try {
+		return new Intl.NumberFormat('en-US', {
+			style: 'currency',
+			currency: currencyCode,
+			maximumFractionDigits: 0,
+			minimumFractionDigits: 0
+		}).format(safeAmount);
+	} catch (e) {
+		// Fallback for unsupported currency codes, deterministic
+		return `${currencyCode} ${safeAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+	}
+}
+
 export function normalizeLandingRoiInputs(
 	inputs: Partial<LandingRoiInputs> | undefined
 ): LandingRoiInputs {

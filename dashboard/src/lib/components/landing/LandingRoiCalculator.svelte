@@ -32,7 +32,7 @@
 		roiTeamMembers: number;
 		roiBlendedHourlyUsd: number;
 		buildRoiCtaHref: string;
-		formatUsd: (amount: number) => string;
+		formatUsd: (amount: number, currency?: string) => string;
 		onRoiControlInput: () => void;
 		onRoiMonthlySpendChange: (value: number) => void;
 		onRoiExpectedReductionChange: (value: number) => void;
@@ -71,6 +71,18 @@
 		onRoiBlendedHourlyChange(Number((event.currentTarget as HTMLInputElement).value));
 		onRoiControlInput();
 	}
+
+	let activeCurrency = $state('USD');
+	const CURRENCIES = [
+		{ code: 'USD', symbol: '$' },
+		{ code: 'EUR', symbol: '€' },
+		{ code: 'GBP', symbol: '£' }
+	];
+
+	function selectCurrency(code: string): void {
+		activeCurrency = code;
+		onRoiControlInput(); // trigger recalculation/tracking if needed
+	}
 </script>
 
 <section
@@ -83,12 +95,29 @@
 		<p class="landing-section-sub">{subtitle}</p>
 	</div>
 
+	<div class="landing-currency-toggle flex justify-center mb-8 gap-2">
+		{#each CURRENCIES as currency}
+			<button
+				type="button"
+				class="btn btn-sm {activeCurrency === currency.code ? 'btn-primary' : 'btn-outline'}"
+				onclick={() => selectCurrency(currency.code)}
+				aria-pressed={activeCurrency === currency.code}
+				aria-label={`Switch to ${currency.code}`}
+			>
+				{currency.symbol}
+				{currency.code}
+			</button>
+		{/each}
+	</div>
+
 	<div class="landing-roi-grid">
 		<div class="glass-panel landing-roi-controls">
 			<div class="landing-roi-control">
-				<label for="roi-monthly-spend" class="landing-roi-label">Cloud + software monthly spend</label>
+				<label for="roi-monthly-spend" class="landing-roi-label"
+					>Cloud + software monthly spend</label
+				>
 				<div class="landing-roi-meta">
-					<span>{formatUsd(roiInputs.monthlySpendUsd)}</span>
+					<span>{formatUsd(roiInputs.monthlySpendUsd, activeCurrency)}</span>
 				</div>
 				<input
 					id="roi-monthly-spend"
@@ -168,20 +197,20 @@
 			<div class="landing-roi-metrics">
 				<div class="landing-roi-metric">
 					<p>Monthly savings potential</p>
-					<strong>{formatUsd(roiResult.monthlySavingsUsd)}</strong>
+					<strong>{formatUsd(roiResult.monthlySavingsUsd, activeCurrency)}</strong>
 				</div>
 				<div class="landing-roi-metric">
 					<p>Annual gross savings</p>
-					<strong>{formatUsd(roiResult.annualGrossSavingsUsd)}</strong>
+					<strong>{formatUsd(roiResult.annualGrossSavingsUsd, activeCurrency)}</strong>
 				</div>
 				<div class="landing-roi-metric">
 					<p>Implementation + platform cost</p>
-					<strong>{formatUsd(roiResult.implementationCostUsd)}</strong>
+					<strong>{formatUsd(roiResult.implementationCostUsd, activeCurrency)}</strong>
 				</div>
 				<div class="landing-roi-metric">
 					<p>Annual net economic value</p>
 					<strong class={roiResult.annualNetSavingsUsd >= 0 ? 'is-positive' : 'is-negative'}>
-						{formatUsd(roiResult.annualNetSavingsUsd)}
+						{formatUsd(roiResult.annualNetSavingsUsd, activeCurrency)}
 					</strong>
 				</div>
 				<div class="landing-roi-metric">

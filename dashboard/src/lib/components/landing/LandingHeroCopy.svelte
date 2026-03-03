@@ -22,9 +22,11 @@
 
 <div class="landing-copy">
 	<div class="landing-kicker fade-in-up" style="animation-delay: 0ms;">
-		<span class="badge badge-accent">Cloud + Software Spend Control</span>
+		<span class="badge badge-accent">Cloud, Software, and Carbon Spend Control</span>
 		<span class="landing-sep" aria-hidden="true">•</span>
-		<span class="landing-kicker-text">See waste early. Act faster. Protect margin.</span>
+		<span class="landing-kicker-text"
+			>See waste and intensity early. Act faster. Protect margin.</span
+		>
 	</div>
 
 	<h1 class="landing-title fade-in-up" style="animation-delay: 80ms;">
@@ -36,19 +38,25 @@
 	</p>
 
 	<div class="landing-problem-hook fade-in-up" style="animation-delay: 230ms;">
-		<p class="landing-problem-k">
-			The problem is not visibility. The problem is delayed action.
-		</p>
+		<p class="landing-problem-k">The problem is not visibility. The problem is delayed action.</p>
 		<p class="landing-problem-v">
 			When ownership is unclear and approvals happen late, controllable waste compounds every week.
 		</p>
 	</div>
 
 	<div class="landing-cta fade-in-up" style="animation-delay: 280ms;">
-		<a href={primaryCtaHref} class="btn btn-primary text-base px-8 py-3 pulse-glow" onclick={onPrimaryCta}>
+		<a
+			href={primaryCtaHref}
+			class="btn btn-primary text-base px-8 py-3 pulse-glow"
+			onclick={onPrimaryCta}
+		>
 			{primaryCtaLabel}
 		</a>
-		<a href={secondaryCtaHref} class="btn btn-secondary text-base px-8 py-3" onclick={onSecondaryCta}>
+		<a
+			href={secondaryCtaHref}
+			class="btn btn-secondary text-base px-8 py-3"
+			onclick={onSecondaryCta}
+		>
 			{secondaryCtaLabel}
 		</a>
 	</div>

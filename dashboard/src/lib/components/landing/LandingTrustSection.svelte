@@ -9,7 +9,10 @@
 		TRUST_BENCHMARK_OUTCOMES,
 		TRUST_ECOSYSTEM_BADGES
 	} from '$lib/landing/heroContent';
-	import { getReducedMotionPreference, observeReducedMotionPreference } from '$lib/landing/reducedMotion';
+	import {
+		getReducedMotionPreference,
+		observeReducedMotionPreference
+	} from '$lib/landing/reducedMotion';
 
 	const QUOTE_ROTATION_MS = 6500;
 	const CUSTOMER_COMMENTS_POLL_MS = 20_000;
@@ -120,11 +123,18 @@
 	let {
 		onTrackCta,
 		requestValidationBriefingHref,
-		onePagerHref
+		onePagerHref,
+		globalComplianceWorkbookHref = '/resources/global-finops-compliance-workbook.pdf'
 	}: {
-		onTrackCta: (value: 'request_validation_briefing' | 'download_executive_one_pager') => void;
+		onTrackCta: (
+			value:
+				| 'request_validation_briefing'
+				| 'download_executive_one_pager'
+				| 'download_global_compliance_workbook'
+		) => void;
 		requestValidationBriefingHref: string;
 		onePagerHref: string;
+		globalComplianceWorkbookHref?: string;
 	} = $props();
 
 	onMount(() => {
@@ -162,7 +172,11 @@
 	});
 </script>
 
-<section id="trust" class="container mx-auto px-6 pb-16 landing-section-lazy" data-landing-section="proof">
+<section
+	id="trust"
+	class="container mx-auto px-6 pb-16 landing-section-lazy"
+	data-landing-section="proof"
+>
 	<div class="landing-section-head">
 		<h2 class="landing-h2">Proof framework for reducing spend waste</h2>
 		<p class="landing-section-sub">
@@ -265,19 +279,26 @@
 			{/each}
 		</div>
 	</div>
-	<div class="landing-validation-cta glass-panel">
+	<div class="landing-validation-cta glass-panel" aria-label="Executive Validation Materials">
 		<p class="landing-proof-k">Executive Readiness Kit</p>
 		<p class="landing-p">
-			Get the materials buyers ask for: rollout model, governance checklist, and one-page business
-			case.
+			Get the materials buyers ask for: rollout model, governance checklist, and compliance
+			validation.
 		</p>
 		<div class="landing-lead-actions">
 			<a
 				href={requestValidationBriefingHref}
-				class="btn btn-secondary w-fit"
+				class="btn btn-primary w-fit pulse-glow"
 				onclick={() => onTrackCta('request_validation_briefing')}
 			>
 				Book Executive Briefing
+			</a>
+			<a
+				href={globalComplianceWorkbookHref}
+				class="btn btn-secondary w-fit"
+				onclick={() => onTrackCta('download_global_compliance_workbook')}
+			>
+				Download Compliance Workbook
 			</a>
 			<a
 				href={onePagerHref}

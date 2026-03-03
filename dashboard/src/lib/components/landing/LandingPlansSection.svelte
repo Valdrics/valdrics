@@ -19,7 +19,11 @@
 	} = $props();
 </script>
 
-<section id="plans" class="container mx-auto px-6 pb-16 landing-section-lazy" data-landing-section="plans">
+<section
+	id="plans"
+	class="container mx-auto px-6 pb-16 landing-section-lazy"
+	data-landing-section="plans"
+>
 	<div class="landing-section-head">
 		<h2 class="landing-h2">Choose a plan and launch in one sprint</h2>
 		<p class="landing-section-sub">
@@ -87,8 +91,8 @@
 			Know onboarding path and total effort before procurement review
 		</h3>
 		<p class="landing-p">
-			Finance and engineering teams can model software cost plus rollout effort up front so approvals
-			are based on full cost visibility, not subscription price alone.
+			Finance and engineering teams can model software cost plus rollout effort up front so
+			approvals are based on full cost visibility, not subscription price alone.
 		</p>
 
 		<div class="landing-rollout-grid">
