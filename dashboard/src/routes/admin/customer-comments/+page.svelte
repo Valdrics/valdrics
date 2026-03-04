@@ -136,7 +136,9 @@
 						></textarea>
 					</div>
 					<div class="space-y-2">
-						<label for="comment-attribution" class="text-sm font-medium text-ink-300">Attribution</label>
+						<label for="comment-attribution" class="text-sm font-medium text-ink-300"
+							>Attribution</label
+						>
 						<input
 							id="comment-attribution"
 							type="text"
@@ -148,7 +150,9 @@
 						/>
 					</div>
 					<div class="space-y-2">
-						<label for="comment-stage" class="text-sm font-medium text-ink-300">Evidence Stage</label>
+						<label for="comment-stage" class="text-sm font-medium text-ink-300"
+							>Evidence Stage</label
+						>
 						<select
 							id="comment-stage"
 							class="w-full rounded-lg border border-ink-700 bg-ink-900/60 px-3 py-2 text-sm text-ink-100"
@@ -173,7 +177,12 @@
 			<section class="card border border-ink-800 space-y-4">
 				<div class="flex items-center justify-between">
 					<h2 class="text-lg font-semibold text-ink-100">Current Feed</h2>
-					<button type="button" class="btn btn-secondary" onclick={() => void loadComments()} disabled={loading}>
+					<button
+						type="button"
+						class="btn btn-secondary"
+						onclick={() => void loadComments()}
+						disabled={loading}
+					>
 						{loading ? 'Refreshing...' : 'Refresh'}
 					</button>
 				</div>

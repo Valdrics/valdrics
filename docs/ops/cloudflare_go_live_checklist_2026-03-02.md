@@ -203,6 +203,9 @@ Cross-check:
 
 ## 3) Email section decision tree
 
+Reference baseline:
+- `docs/ops/email_auth_dns_baseline_2026-03-04.md` (copy/paste MX/SPF/DMARC + verification commands)
+
 If you do not need domain email now:
 - [ ] Do nothing in Email Routing yet
 - [ ] Do not add conflicting MX/TXT records
@@ -213,6 +216,7 @@ If you want forwarding now:
 - [ ] Create custom address -> destination address
 - [ ] Verify destination address
 - [ ] Lock DNS records for Email Routing once stable
+- [ ] Ensure DMARC record is valid (`p=quarantine` or `p=reject`, never `p=quarantine/reject`)
 
 If you use external email provider:
 - [ ] Keep provider MX records only

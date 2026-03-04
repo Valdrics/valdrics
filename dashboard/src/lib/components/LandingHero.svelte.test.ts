@@ -21,121 +21,130 @@ vi.mock('$app/stores', () => ({
 }));
 
 describe('LandingHero', () => {
-	it(
-		'renders simplified hero plus progressive detail sections with telemetry and map a11y',
-		async () => {
-			const dataLayer: unknown[] = [];
-			(window as Window & { dataLayer?: unknown[] }).dataLayer = dataLayer;
-			const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
-			window.localStorage.setItem('valdrics.cookie_consent.v1', 'accepted');
+	it('renders simplified hero plus progressive detail sections with telemetry and map a11y', async () => {
+		const dataLayer: unknown[] = [];
+		(window as Window & { dataLayer?: unknown[] }).dataLayer = dataLayer;
+		const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+		window.localStorage.setItem('valdrics.cookie_consent.v1', 'accepted');
 
-			render(LandingHero);
+		render(LandingHero);
 
-			const mainHeading = screen.getByRole('heading', { level: 1 });
-			expect(mainHeading).toBeTruthy();
-			expect(mainHeading.textContent?.length).toBeGreaterThan(12);
-			expect(screen.getByText(/one control loop/i)).toBeTruthy();
-			expect(screen.getByText(/start free\. upgrade only when ready\./i)).toBeTruthy();
+		const mainHeading = screen.getByRole('heading', { level: 1 });
+		expect(mainHeading).toBeTruthy();
+		expect(mainHeading.textContent?.length).toBeGreaterThan(12);
+		expect(screen.getByText(/one control loop/i)).toBeTruthy();
+		expect(screen.getByText(/start free\. upgrade only when ready\./i)).toBeTruthy();
 
-			const primaryCandidates = screen.getAllByRole('link', {
-				name: /Start Free|Book Executive Briefing/i
-			});
-			const primaryCta = primaryCandidates.find((element) =>
-				(element.getAttribute('class') || '').includes('pulse-glow')
-			);
-			expect(primaryCta).toBeTruthy();
-			expect(primaryCta?.getAttribute('href')).toContain('/auth/login?');
-			if (primaryCta) {
-				await fireEvent.click(primaryCta);
-			}
+		const primaryCandidates = screen.getAllByRole('link', {
+			name: /Start Free|Book Executive Briefing/i
+		});
+		const primaryCta = primaryCandidates.find((element) =>
+			(element.getAttribute('class') || '').includes('pulse-glow')
+		);
+		expect(primaryCta).toBeTruthy();
+		expect(primaryCta?.getAttribute('href')).toContain('/auth/login?');
+		if (primaryCta) {
+			await fireEvent.click(primaryCta);
+		}
 
-			const secondaryCandidates = screen.getAllByRole('link', { name: /See Plans/i });
-			const secondaryCta = secondaryCandidates.find((element) =>
-				(element.getAttribute('class') || '').includes('btn-secondary')
-			);
-			expect(secondaryCta).toBeTruthy();
-			const secondaryHref = secondaryCta?.getAttribute('href') || '';
-			expect(secondaryHref.startsWith('#plans')).toBe(true);
-			if (secondaryCta) {
-				await fireEvent.click(secondaryCta);
-			}
+		const secondaryCandidates = screen.getAllByRole('link', { name: /See it in action/i });
+		const secondaryCta = secondaryCandidates.find((element) =>
+			(element.getAttribute('class') || '').includes('btn-secondary')
+		);
+		expect(secondaryCta).toBeTruthy();
+		const secondaryHref = secondaryCta?.getAttribute('href') || '';
+		expect(secondaryHref.startsWith('#signal-map')).toBe(true);
+		if (secondaryCta) {
+			await fireEvent.click(secondaryCta);
+		}
 
-			expect(screen.getByRole('heading', { name: /visibility alone does not control cloud spend/i })).toBeTruthy();
-			expect(screen.getByRole('heading', { name: /see it in action/i })).toBeTruthy();
-			expect(screen.getByRole('heading', { name: /realtime spend scenario simulator/i })).toBeTruthy();
-			expect(screen.getByRole('heading', { name: /choose a plan and launch in one sprint/i })).toBeTruthy();
-			expect(screen.getByRole('heading', { name: /proof framework for reducing spend waste/i })).toBeTruthy();
+		expect(
+			screen.getByRole('heading', { name: /visibility alone does not control cloud spend/i })
+		).toBeTruthy();
+		expect(screen.getByRole('heading', { name: /see it in action/i })).toBeTruthy();
+		expect(
+			screen.getByRole('heading', { name: /realtime spend scenario simulator/i })
+		).toBeTruthy();
+		expect(
+			screen.getByRole('heading', { name: /choose a plan and launch in one sprint/i })
+		).toBeTruthy();
+		expect(
+			screen.getByRole('heading', { name: /trust, risk, and procurement readiness/i })
+		).toBeTruthy();
 
-			expect(screen.queryByRole('heading', { name: /what each team gets in the first 30 days/i })).toBeNull();
-			expect(
-				screen.queryByRole('heading', {
-					name: /one platform for cloud, saas, and license spend/i
-				})
-			).toBeNull();
-			expect(screen.queryByRole('heading', { name: /not ready to sign up today\?/i })).toBeNull();
-			expect(screen.queryByRole('button', { name: /switch to plain english/i })).toBeNull();
-			expect(screen.queryByRole('link', { name: /run the spend scenario simulator/i })).toBeNull();
+		expect(
+			screen.queryByRole('heading', { name: /what each team gets in the first 30 days/i })
+		).toBeNull();
+		expect(
+			screen.queryByRole('heading', {
+				name: /one platform for cloud, saas, and license spend/i
+			})
+		).toBeNull();
+		expect(screen.queryByRole('heading', { name: /not ready to sign up today\?/i })).toBeNull();
+		expect(screen.queryByRole('button', { name: /switch to plain english/i })).toBeNull();
+		expect(screen.queryByRole('link', { name: /run the spend scenario simulator/i })).toBeNull();
 
-			const withoutToggle = screen.getByRole('button', { name: /^without valdrics$/i });
-			const withToggle = screen.getByRole('button', { name: /^with valdrics$/i });
-			expect(withoutToggle.getAttribute('aria-pressed')).toBe('true');
-			expect(withToggle.getAttribute('aria-pressed')).toBe('false');
-			await fireEvent.click(withToggle);
-			expect(withToggle.getAttribute('aria-pressed')).toBe('true');
-			expect(screen.getByText(/guardrailed/i)).toBeTruthy();
+		const withoutToggle = screen.getByRole('button', { name: /^without valdrics$/i });
+		const withToggle = screen.getByRole('button', { name: /^with valdrics$/i });
+		expect(withoutToggle.getAttribute('aria-pressed')).toBe('true');
+		expect(withToggle.getAttribute('aria-pressed')).toBe('false');
+		await fireEvent.click(withToggle);
+		expect(withToggle.getAttribute('aria-pressed')).toBe('true');
+		expect(screen.getByText(/guardrailed/i)).toBeTruthy();
 
-			const summary = screen.getByText(/signal map summary for snapshot a/i);
-			const signalMap = summary.closest('.signal-map');
-			expect(signalMap).toBeTruthy();
-			const signalGraphic = signalMap?.querySelector('svg[role="img"]');
-			expect(signalGraphic).toBeTruthy();
-			expect(signalGraphic?.getAttribute('aria-labelledby')).toBe('signal-map-summary');
-			expect(summary.getAttribute('id')).toBe('signal-map-summary');
+		const summary = screen.getByText(/signal map summary for snapshot a/i);
+		const signalMap = summary.closest('.signal-map');
+		expect(signalMap).toBeTruthy();
+		const signalGraphic = signalMap?.querySelector('svg[role="img"]');
+		expect(signalGraphic).toBeTruthy();
+		expect(signalGraphic?.getAttribute('aria-labelledby')).toBe('signal-map-summary');
+		expect(summary.getAttribute('id')).toBe('signal-map-summary');
 
-			const snapshotButtons = screen.getAllByRole('button', { name: /snapshot [abc]/i });
-			expect(snapshotButtons).toHaveLength(3);
-			expect(snapshotButtons[0]?.getAttribute('aria-pressed')).toBe('true');
-			await fireEvent.click(snapshotButtons[1] as HTMLButtonElement);
-			expect(snapshotButtons[1]?.getAttribute('aria-pressed')).toBe('true');
+		await fireEvent.click(screen.getByRole('button', { name: /explore control details/i }));
+		const snapshotButtons = screen.getAllByRole('button', { name: /snapshot [abc]/i });
+		expect(snapshotButtons).toHaveLength(3);
+		expect(snapshotButtons[0]?.getAttribute('aria-pressed')).toBe('true');
+		await fireEvent.click(snapshotButtons[1] as HTMLButtonElement);
+		expect(snapshotButtons[1]?.getAttribute('aria-pressed')).toBe('true');
 
-			const laneTabs = screen.getAllByRole('tab');
-			expect(laneTabs.length).toBeGreaterThanOrEqual(4);
-			const economicVisibilityTab = screen.getByRole('tab', { name: /Economic Visibility/i });
-			await fireEvent.click(economicVisibilityTab);
-			expect(screen.getByText(/Current metric:/i)).toBeTruthy();
+		const laneTabs = screen.getAllByRole('tab');
+		expect(laneTabs.length).toBeGreaterThanOrEqual(4);
+		const economicVisibilityTab = screen.getByRole('tab', { name: /Economic Visibility/i });
+		await fireEvent.click(economicVisibilityTab);
+		expect(screen.getByText(/Current metric:/i)).toBeTruthy();
 
-			expect(screen.getByLabelText(/reactive waste rate/i)).toBeTruthy();
-			expect(screen.getByLabelText(/managed waste rate/i)).toBeTruthy();
-			expect(screen.getByLabelText(/decision window \(months\)/i)).toBeTruthy();
-			expect(screen.getByText(/Scenario Delta/i)).toBeTruthy();
-			expect(screen.getByRole('link', { name: /Open Full ROI Planner/i })).toBeTruthy();
+		expect(screen.getByLabelText(/reactive waste rate/i)).toBeTruthy();
+		expect(screen.getByLabelText(/managed waste rate/i)).toBeTruthy();
+		expect(screen.getByLabelText(/decision window \(months\)/i)).toBeTruthy();
+		expect(screen.getByText(/Scenario Delta/i)).toBeTruthy();
+		expect(screen.getByRole('link', { name: /Open Full ROI Planner/i })).toBeTruthy();
 
-			const freePlanCta = screen.getByRole('link', { name: /start on free tier/i });
-			expect(freePlanCta.getAttribute('href') || '').toContain('plan=free');
-			await fireEvent.click(freePlanCta);
+		const freePlanCta = screen.getByRole('link', { name: /start on free tier/i });
+		expect(freePlanCta.getAttribute('href') || '').toContain('plan=free');
+		await fireEvent.click(freePlanCta);
 
-			const validationBriefingLink = screen.getByRole('link', {
-				name: /book executive briefing/i
-			});
-			expect(validationBriefingLink.getAttribute('href') || '').toContain(
-				'intent=executive_briefing'
-			);
-			const onePagerLink = screen.getByRole('link', { name: /download executive one-pager/i });
-			expect(onePagerLink.getAttribute('href')).toBe('/resources/valdrics-enterprise-one-pager.md');
+		const validationBriefingLink = screen.getByRole('link', {
+			name: /request validation briefing/i
+		});
+		expect(validationBriefingLink.getAttribute('href') || '').toContain(
+			'intent=executive_briefing'
+		);
+		const onePagerLink = screen.getByRole('link', {
+			name: /download executive due-diligence one-pager/i
+		});
+		expect(onePagerLink.getAttribute('href')).toBe('/resources/valdrics-enterprise-one-pager.md');
 
-			expect(dispatchSpy).toHaveBeenCalled();
-			expect(dataLayer.length).toBeGreaterThan(0);
-			const payload = dataLayer[dataLayer.length - 1] as Record<string, unknown>;
-			expect(payload.event).toBe('valdrics_landing_event');
-			expect(payload.funnelStage).toBeTruthy();
-			expect(payload.experiment).toBeTruthy();
+		expect(dispatchSpy).toHaveBeenCalled();
+		expect(dataLayer.length).toBeGreaterThan(0);
+		const payload = dataLayer[dataLayer.length - 1] as Record<string, unknown>;
+		expect(payload.event).toBe('valdrics_landing_event');
+		expect(payload.funnelStage).toBeTruthy();
+		expect(payload.experiment).toBeTruthy();
 
-			dispatchSpy.mockRestore();
-			window.localStorage.removeItem('valdrics.cookie_consent.v1');
-			delete (window as Window & { dataLayer?: unknown[] }).dataLayer;
-		},
-		15000
-	);
+		dispatchSpy.mockRestore();
+		window.localStorage.removeItem('valdrics.cookie_consent.v1');
+		delete (window as Window & { dataLayer?: unknown[] }).dataLayer;
+	}, 15000);
 
 	it('shows cookie consent controls before analytics is accepted', async () => {
 		window.localStorage.removeItem('valdrics.cookie_consent.v1');

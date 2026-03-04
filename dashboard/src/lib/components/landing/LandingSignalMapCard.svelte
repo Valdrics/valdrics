@@ -317,6 +317,7 @@
 						role="tabpanel"
 						id={`signal-lane-panel-${activeSignalLane.id}`}
 						aria-labelledby={`signal-lane-tab-${activeSignalLane.id}`}
+						data-testid="signal-lane-panel"
 					>
 						<p class="signal-lane-detail-k">{activeSignalLane.title} · {activeSignalLane.status}</p>
 						<p class="signal-lane-detail-v">{activeSignalLane.detail}</p>

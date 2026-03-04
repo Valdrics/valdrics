@@ -17,7 +17,8 @@
 		onTrackScenarioAdjust,
 		onScenarioWasteWithoutChange,
 		onScenarioWasteWithChange,
-		onScenarioWindowChange
+		onScenarioWindowChange,
+		currencyCode
 	}: {
 		normalizedScenarioWasteWithoutPct: number;
 		normalizedScenarioWasteWithPct: number;
@@ -32,11 +33,12 @@
 		scenarioWasteWithoutPct: number;
 		scenarioWasteWithPct: number;
 		scenarioWindowMonths: number;
-		formatUsd: (amount: number) => string;
+		formatUsd: (amount: number, currency?: string) => string;
 		onTrackScenarioAdjust: (control: string) => void;
 		onScenarioWasteWithoutChange: (value: number) => void;
 		onScenarioWasteWithChange: (value: number) => void;
 		onScenarioWindowChange: (value: number) => void;
+		currencyCode: string;
 	} = $props();
 
 	function updateWasteWithout(event: Event): void {
@@ -64,11 +66,13 @@
 	data-landing-section="simulator"
 >
 	<div class="landing-section-head">
-		<h2 class="landing-h2">Realtime spend scenario simulator</h2>
-		<p class="landing-section-sub">
-			Compare reactive spend behavior versus owner-led execution and see the economic delta
-			instantly.
-		</p>
+		<div>
+			<h2 class="landing-h2">Realtime spend scenario simulator</h2>
+			<p class="landing-section-sub">
+				Compare reactive spend behavior versus owner-led execution and see the economic delta
+				instantly.
+			</p>
+		</div>
 	</div>
 
 	<div class="landing-sim-grid">
@@ -133,7 +137,9 @@
 						<span class="landing-sim-bar is-reactive" style={`width:${scenarioWithoutBarPct}%;`}
 						></span>
 					</div>
-					<div class="landing-sim-bar-value">{formatUsd(scenarioWasteWithoutUsd)}</div>
+					<div class="landing-sim-bar-value">
+						{formatUsd(scenarioWasteWithoutUsd, currencyCode)}
+					</div>
 				</div>
 				<div class="landing-sim-bar-row">
 					<div class="landing-sim-bar-label">Governed spend</div>
@@ -141,22 +147,22 @@
 						<span class="landing-sim-bar is-governed" style={`width:${scenarioWithBarPct}%;`}
 						></span>
 					</div>
-					<div class="landing-sim-bar-value">{formatUsd(scenarioWasteWithUsd)}</div>
+					<div class="landing-sim-bar-value">{formatUsd(scenarioWasteWithUsd, currencyCode)}</div>
 				</div>
 			</div>
 
 			<div class="landing-sim-metrics">
 				<div class="landing-sim-metric">
 					<p>Recoverable waste / month</p>
-					<strong>{formatUsd(scenarioWasteRecoveryMonthlyUsd)}</strong>
+					<strong>{formatUsd(scenarioWasteRecoveryMonthlyUsd, currencyCode)}</strong>
 				</div>
 				<div class="landing-sim-metric">
 					<p>Recoverable waste / {normalizedScenarioWindowMonths} months</p>
-					<strong>{formatUsd(scenarioWasteRecoveryWindowUsd)}</strong>
+					<strong>{formatUsd(scenarioWasteRecoveryWindowUsd, currencyCode)}</strong>
 				</div>
 				<div class="landing-sim-metric">
 					<p>Spend context used</p>
-					<strong>{formatUsd(monthlySpendUsd)} / month</strong>
+					<strong>{formatUsd(monthlySpendUsd, currencyCode)} / month</strong>
 				</div>
 			</div>
 			<p class="landing-roi-note">

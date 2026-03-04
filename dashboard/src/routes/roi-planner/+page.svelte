@@ -1,17 +1,24 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
+	import { browser } from '$app/environment';
 	import { base } from '$app/paths';
+	import { page } from '$app/stores';
+	import { onMount } from 'svelte';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import LandingRoiCalculator from '$lib/components/landing/LandingRoiCalculator.svelte';
 	import {
 		DEFAULT_LANDING_ROI_INPUTS,
 		calculateLandingRoi,
 		normalizeLandingRoiInputs,
-		formatCurrencyAmount
+		formatCurrencyAmount,
+		SUPPORTED_CURRENCIES
 	} from '$lib/landing/roiCalculator';
 	import '$lib/components/LandingHero.css';
 
 	let { data } = $props();
+	const GEO_CURRENCY_HINT_ENDPOINT = `${base}/api/geo/currency`;
+	const GEO_CURRENCY_HINT_TIMEOUT_MS = 1200;
+	const SUPPORTED_CURRENCY_CODES = new Set(SUPPORTED_CURRENCIES.map((currency) => currency.code));
 
 	let roiMonthlySpendUsd = $state(DEFAULT_LANDING_ROI_INPUTS.monthlySpendUsd);
 	let roiExpectedReductionPct = $state(DEFAULT_LANDING_ROI_INPUTS.expectedReductionPct);
@@ -19,6 +26,7 @@
 	let roiTeamMembers = $state(DEFAULT_LANDING_ROI_INPUTS.teamMembers);
 	let roiBlendedHourlyUsd = $state(DEFAULT_LANDING_ROI_INPUTS.blendedHourlyUsd);
 	let roiPlatformAnnualCostUsd = $state(DEFAULT_LANDING_ROI_INPUTS.platformAnnualCostUsd);
+	let roiCurrencyCode = $state('USD');
 
 	let roiInputs = $derived(
 		normalizeLandingRoiInputs({
@@ -32,8 +40,54 @@
 	);
 	let roiResult = $derived(calculateLandingRoi(roiInputs));
 
-	function formatUsd(amount: number, currency: string = 'USD'): string {
+	function formatUsd(amount: number, currency: string = roiCurrencyCode): string {
 		return formatCurrencyAmount(amount, currency);
+	}
+
+	onMount(() => {
+		const geoCurrencyController = new AbortController();
+		const geoCurrencyTimeout = setTimeout(
+			() => geoCurrencyController.abort(),
+			GEO_CURRENCY_HINT_TIMEOUT_MS
+		);
+		void applyGeoCurrencyHint(geoCurrencyController.signal).finally(() => {
+			clearTimeout(geoCurrencyTimeout);
+		});
+	});
+
+	async function applyGeoCurrencyHint(signal: AbortSignal): Promise<void> {
+		roiCurrencyCode = 'USD';
+		if (browser && typeof window !== 'undefined') {
+			const host = window.location.hostname.toLowerCase();
+			if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+				return;
+			}
+		}
+
+		let requestUrl: string;
+		try {
+			requestUrl = new URL(GEO_CURRENCY_HINT_ENDPOINT, $page.url.origin).toString();
+		} catch {
+			return;
+		}
+
+		try {
+			const response = await fetch(requestUrl, {
+				method: 'GET',
+				headers: { accept: 'application/json' },
+				cache: 'no-store',
+				signal
+			});
+			if (!response.ok) return;
+			const payload = (await response.json()) as { currencyCode?: string };
+			const currencyCode = String(payload.currencyCode ?? '')
+				.trim()
+				.toUpperCase();
+			if (!SUPPORTED_CURRENCY_CODES.has(currencyCode)) return;
+			roiCurrencyCode = currencyCode;
+		} catch {
+			// Keep deterministic USD fallback.
+		}
 	}
 </script>
 
@@ -91,6 +145,7 @@
 				roiBlendedHourlyUsd = value;
 			}}
 			onRoiCta={() => {}}
+			currencyCode={roiCurrencyCode}
 		/>
 	</AuthGate>
 </div>

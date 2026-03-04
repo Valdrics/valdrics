@@ -21,8 +21,8 @@ describe('Landing component decomposition', () => {
 				heroTitle: 'Control every dollar in your cloud and software stack.',
 				heroSubtitle: 'From signal to owner and approved action in one loop.',
 				primaryCtaLabel: 'Start Free',
-				secondaryCtaLabel: 'See Plans',
-				secondaryCtaHref: '#plans',
+					secondaryCtaLabel: 'See it in action',
+					secondaryCtaHref: '#signal-map',
 				primaryCtaHref: '/auth/login',
 				onPrimaryCta,
 				onSecondaryCta
@@ -31,7 +31,7 @@ describe('Landing component decomposition', () => {
 
 		expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
 		await fireEvent.click(screen.getByRole('link', { name: /start free/i }));
-		await fireEvent.click(screen.getByRole('link', { name: /see plans/i }));
+		await fireEvent.click(screen.getByRole('link', { name: /see it in action/i }));
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
 		expect(screen.getByText(/one control loop/i)).toBeTruthy();
@@ -108,6 +108,7 @@ describe('Landing component decomposition', () => {
 				scenarioWasteWithPct: 7,
 				scenarioWindowMonths: 12,
 				formatUsd: (amount: number) => `$${amount}`,
+				currencyCode: 'USD',
 				onTrackScenarioAdjust,
 				onScenarioWasteWithoutChange,
 				onScenarioWasteWithChange,
@@ -153,7 +154,7 @@ describe('Landing component decomposition', () => {
 			props: {
 				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
 				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
-				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.pdf',
+				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
 				onTrackCta
 			}
 		});
@@ -164,13 +165,15 @@ describe('Landing component decomposition', () => {
 
 		// Check for the Global FinOps Compliance Workbook CTA
 		const ctaBlock = within(view.container).getByRole('generic', {
-			name: 'Executive Validation Materials'
+			name: 'Trust, Risk, and Procurement Readiness'
 		});
 		expect(ctaBlock).toBeTruthy();
 		if (ctaBlock) {
 			const ctaView = within(ctaBlock);
-			expect(ctaView.getByText(/Download Compliance Workbook/i)).toBeTruthy();
-			await fireEvent.click(ctaView.getByRole('link', { name: /Download Compliance Workbook/i }));
+			expect(ctaView.getByText(/Access Control & Compliance Checklist/i)).toBeTruthy();
+			await fireEvent.click(
+				ctaView.getByRole('link', { name: /Access Control & Compliance Checklist/i })
+			);
 			expect(onTrackCta).toHaveBeenCalledWith('download_global_compliance_workbook');
 		}
 	});
@@ -181,21 +184,25 @@ describe('Landing component decomposition', () => {
 			props: {
 				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
 				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
-				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.pdf',
+				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
 				onTrackCta
 			}
 		});
 
 		const ctaBlock = within(view.container).getByRole('generic', {
-			name: 'Executive Validation Materials'
+			name: 'Trust, Risk, and Procurement Readiness'
 		});
 		expect(ctaBlock).toBeTruthy();
 		if (ctaBlock) {
 			const ctaView = within(ctaBlock);
-			await fireEvent.click(ctaView.getByRole('link', { name: /book executive briefing/i }));
+			await fireEvent.click(
+				ctaView.getByRole('link', { name: /request validation briefing/i })
+			);
 			expect(onTrackCta).toHaveBeenCalledWith('request_validation_briefing');
 
-			await fireEvent.click(ctaView.getByRole('link', { name: /download executive one-pager/i }));
+			await fireEvent.click(
+				ctaView.getByRole('link', { name: /download executive due-diligence one-pager/i })
+			);
 			expect(onTrackCta).toHaveBeenCalledWith('download_executive_one_pager');
 		}
 	});
@@ -205,7 +212,7 @@ describe('Landing component decomposition', () => {
 			props: {
 				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
 				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
-				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.pdf',
+				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
 				onTrackCta: vi.fn()
 			}
 		});
@@ -214,13 +221,17 @@ describe('Landing component decomposition', () => {
 		expect(
 			trustView.getByText(/we stopped debating whose queue a cost issue belongs to/i)
 		).toBeTruthy();
-		await fireEvent.click(trustView.getByRole('button', { name: /next customer comment/i }));
+		await fireEvent.click(
+			trustView.getByRole('button', { name: /next design-partner comment/i })
+		);
 		expect(
 			trustView.getByText(
 				/the value is not another dashboard\. it is moving from signal to controlled action/i
 			)
 		).toBeTruthy();
-		await fireEvent.click(trustView.getByRole('button', { name: /show customer comment 3/i }));
+		await fireEvent.click(
+			trustView.getByRole('button', { name: /show design-partner comment 3/i })
+		);
 		expect(trustView.getByText(/leadership reviews got shorter/i)).toBeTruthy();
 	});
 
@@ -260,7 +271,7 @@ describe('Landing component decomposition', () => {
 				props: {
 					requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
 					onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
-					globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.pdf',
+					globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
 					onTrackCta: vi.fn()
 				}
 			});
@@ -275,6 +286,37 @@ describe('Landing component decomposition', () => {
 		} finally {
 			fetchMock.mockRestore();
 			vi.useRealTimers();
+		}
+	});
+
+	it('keeps fallback trust quotes when the customer comments feed is unavailable', async () => {
+		const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network down'));
+
+		try {
+			const trust = render(LandingTrustSection, {
+				props: {
+					requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
+					onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
+					globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
+					onTrackCta: vi.fn()
+				}
+			});
+			const trustView = within(trust.container);
+
+			expect(
+				trustView.getByText(/we stopped debating whose queue a cost issue belongs to/i)
+			).toBeTruthy();
+			await fireEvent.click(
+				trustView.getByRole('button', { name: /next design-partner comment/i })
+			);
+			expect(
+				trustView.getByText(
+					/the value is not another dashboard\. it is moving from signal to controlled action/i
+				)
+			).toBeTruthy();
+			expect(fetchMock).toHaveBeenCalled();
+		} finally {
+			fetchMock.mockRestore();
 		}
 	});
 
@@ -322,12 +364,6 @@ describe('Landing component decomposition', () => {
 			}
 		});
 
-		// Test currency toggle interaction first on the initial static amount (120000)
-		const eurButton = screen.getByRole('button', { name: /Switch to EUR/i });
-		expect(eurButton).toBeTruthy();
-		await fireEvent.click(eurButton);
-		expect(screen.getByText(/€120000/i)).toBeTruthy();
-
 		await fireEvent.input(screen.getByLabelText(/cloud \+ software monthly spend/i), {
 			target: { value: '130000' }
 		});
@@ -347,7 +383,7 @@ describe('Landing component decomposition', () => {
 		expect(onRoiRolloutDaysChange).toHaveBeenCalledWith(35);
 		expect(onRoiTeamMembersChange).toHaveBeenCalledWith(3);
 		expect(onRoiBlendedHourlyChange).toHaveBeenCalledWith(150);
-		expect(onRoiControlInput).toHaveBeenCalledTimes(6); // +1 for currency toggle
+		expect(onRoiControlInput).toHaveBeenCalledTimes(5);
 		expect(onRoiCta).toHaveBeenCalledTimes(1);
 	});
 

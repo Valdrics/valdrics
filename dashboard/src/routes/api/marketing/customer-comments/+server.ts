@@ -16,10 +16,10 @@ export const GET: RequestHandler = async () => {
 				hasLiveCustomerEvidence: items.some((item) => item.stage === 'customer')
 			}
 		},
-			{
-				headers: {
-					'cache-control': 'public, max-age=15, stale-while-revalidate=60'
-				}
+		{
+			headers: {
+				'cache-control': 'public, max-age=15, stale-while-revalidate=60'
 			}
-		);
+		}
+	);
 };

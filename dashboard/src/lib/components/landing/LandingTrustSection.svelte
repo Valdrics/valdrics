@@ -124,7 +124,7 @@
 		onTrackCta,
 		requestValidationBriefingHref,
 		onePagerHref,
-		globalComplianceWorkbookHref = '/resources/global-finops-compliance-workbook.pdf'
+		globalComplianceWorkbookHref = '/resources/global-finops-compliance-workbook.md'
 	}: {
 		onTrackCta: (
 			value:
@@ -178,9 +178,46 @@
 	data-landing-section="proof"
 >
 	<div class="landing-section-head">
-		<h2 class="landing-h2">Proof framework for reducing spend waste</h2>
+		<h2 class="landing-h2">Trust, Risk, and Procurement Readiness</h2>
 		<p class="landing-section-sub">
-			Buyers need outcomes, not claims. Valdrics is built to show clear before-and-after results.
+			Prelaunch validation package for security, compliance, governance, and commercial diligence.
+		</p>
+	</div>
+
+	<div class="landing-validation-cta glass-panel" aria-label="Trust, Risk, and Procurement Readiness">
+		<p class="landing-proof-k">Enterprise Validation Program</p>
+		<p class="landing-p">
+			Run a structured validation sprint covering identity controls, approval governance, evidence
+			exports, and rollout risk controls before procurement sign-off.
+		</p>
+		<div class="landing-lead-actions">
+			<a
+				href={requestValidationBriefingHref}
+				class="btn btn-primary w-fit pulse-glow"
+				onclick={() => onTrackCta('request_validation_briefing')}
+			>
+				Request Validation Briefing
+			</a>
+			<a
+				href={onePagerHref}
+				class="btn btn-secondary w-fit"
+				onclick={() => onTrackCta('download_executive_one_pager')}
+			>
+				Download Executive Due-Diligence One-Pager
+			</a>
+		</div>
+		<p class="landing-more-resources">
+			More resources:
+			<a
+				href={globalComplianceWorkbookHref}
+				onclick={() => onTrackCta('download_global_compliance_workbook')}
+			>
+				Access Control & Compliance Checklist
+			</a>
+		</p>
+		<p class="landing-trust-note">
+			Valdrics is prelaunch. Public customer logos and production outcome studies will be published
+			post go-live. Current proof reflects design-partner sessions and benchmark ranges.
 		</p>
 	</div>
 
@@ -229,7 +266,7 @@
 
 	<div class="landing-testimonial-rotator glass-panel" aria-live="polite" aria-atomic="true">
 		<div class="landing-testimonial-head">
-			<p class="landing-proof-k">Customer Comments</p>
+			<p class="landing-proof-k">Design-Partner Comments</p>
 			<p class="landing-testimonial-counter">{activeQuoteIndex + 1}/{customerQuotes.length}</p>
 		</div>
 		{#if activeQuote}
@@ -242,18 +279,18 @@
 			<button
 				type="button"
 				class="landing-testimonial-nav"
-				aria-label="Previous customer comment"
+				aria-label="Previous design-partner comment"
 				disabled={customerQuotes.length < 2}
 				onclick={showPreviousQuote}
 			>
 				Prev
 			</button>
-			<div class="landing-testimonial-dots" role="group" aria-label="Customer comment selector">
+			<div class="landing-testimonial-dots" role="group" aria-label="Design-partner comment selector">
 				{#each customerQuotes as quote, index (quote.quote)}
 					<button
 						type="button"
 						class="landing-testimonial-dot"
-						aria-label={`Show customer comment ${index + 1}`}
+						aria-label={`Show design-partner comment ${index + 1}`}
 						aria-pressed={activeQuoteIndex === index}
 						onclick={() => selectQuote(index)}
 					></button>
@@ -262,7 +299,7 @@
 			<button
 				type="button"
 				class="landing-testimonial-nav"
-				aria-label="Next customer comment"
+				aria-label="Next design-partner comment"
 				disabled={customerQuotes.length < 2}
 				onclick={showNextQuote}
 			>
@@ -275,38 +312,12 @@
 		<p class="landing-proof-k">Security and compliance essentials</p>
 		<div class="landing-trust-badges">
 			{#each COMPLIANCE_FOUNDATION_BADGES as badge (badge)}
-				<span class="landing-trust-badge">{badge}</span>
+				<span
+					class="landing-trust-badge {badge.includes('ISO 27001') || badge.includes('DORA')
+						? 'is-featured'
+						: ''}">{badge}</span
+				>
 			{/each}
-		</div>
-	</div>
-	<div class="landing-validation-cta glass-panel" aria-label="Executive Validation Materials">
-		<p class="landing-proof-k">Executive Readiness Kit</p>
-		<p class="landing-p">
-			Get the materials buyers ask for: rollout model, governance checklist, and compliance
-			validation.
-		</p>
-		<div class="landing-lead-actions">
-			<a
-				href={requestValidationBriefingHref}
-				class="btn btn-primary w-fit pulse-glow"
-				onclick={() => onTrackCta('request_validation_briefing')}
-			>
-				Book Executive Briefing
-			</a>
-			<a
-				href={globalComplianceWorkbookHref}
-				class="btn btn-secondary w-fit"
-				onclick={() => onTrackCta('download_global_compliance_workbook')}
-			>
-				Download Compliance Workbook
-			</a>
-			<a
-				href={onePagerHref}
-				class="btn btn-secondary w-fit"
-				onclick={() => onTrackCta('download_executive_one_pager')}
-			>
-				Download Executive One-Pager
-			</a>
 		</div>
 	</div>
 	<p class="landing-trust-note">

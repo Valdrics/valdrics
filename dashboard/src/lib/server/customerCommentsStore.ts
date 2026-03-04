@@ -31,8 +31,12 @@ function resolveStorePath(): string {
 function normalizeSingleComment(input: unknown): CustomerCommentRecord | null {
 	if (!input || typeof input !== 'object') return null;
 	const candidate = input as Record<string, unknown>;
-	const quote = String(candidate.quote ?? '').trim().slice(0, 360);
-	const attribution = String(candidate.attribution ?? '').trim().slice(0, 120);
+	const quote = String(candidate.quote ?? '')
+		.trim()
+		.slice(0, 360);
+	const attribution = String(candidate.attribution ?? '')
+		.trim()
+		.slice(0, 120);
 	const stage = candidate.stage === 'customer' ? 'customer' : 'design_partner';
 	if (!quote || !attribution) return null;
 	return { quote, attribution, stage };
@@ -56,9 +60,9 @@ async function readStoreFile(): Promise<CustomerCommentRecord[] | null> {
 		const parsed = JSON.parse(raw) as Partial<CustomerCommentsStoreFile> | unknown;
 		if (!parsed || typeof parsed !== 'object') return null;
 		const items = Array.isArray((parsed as { items?: unknown }).items)
-			? ((parsed as { items: unknown[] }).items
+			? (parsed as { items: unknown[] }).items
 					.map((entry) => normalizeSingleComment(entry))
-					.filter((entry): entry is CustomerCommentRecord => !!entry))
+					.filter((entry): entry is CustomerCommentRecord => !!entry)
 			: [];
 		if (!items.length) return null;
 		return normalizeCustomerCommentsFeed(items);

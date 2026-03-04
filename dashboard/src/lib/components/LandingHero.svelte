@@ -24,7 +24,8 @@
 	import {
 		DEFAULT_LANDING_ROI_INPUTS,
 		normalizeLandingRoiInputs,
-		formatCurrencyAmount
+		formatCurrencyAmount,
+		SUPPORTED_CURRENCIES
 	} from '$lib/landing/roiCalculator';
 	import {
 		getReducedMotionPreference,
@@ -56,15 +57,16 @@
 		seed: 'default'
 	});
 
-
-
 	const SNAPSHOT_ROTATION_MS = 4400;
 	const DEMO_ROTATION_MS = 3200;
 	const LANDING_SCROLL_MILESTONES = Object.freeze([25, 50, 75, 95]);
 	const LANDING_CONSENT_KEY = 'valdrics.cookie_consent.v1';
+	const GEO_CURRENCY_HINT_ENDPOINT = `${base}/api/geo/currency`;
+	const GEO_CURRENCY_HINT_TIMEOUT_MS = 1200;
 	const DEFAULT_SIGNAL_SNAPSHOT = REALTIME_SIGNAL_SNAPSHOTS[0];
 	const ONE_PAGER_HREF = `${base}/resources/valdrics-enterprise-one-pager.md`;
 	const TALK_TO_SALES_PATH = `${base}/talk-to-sales`;
+	const SUPPORTED_CURRENCY_CODES = new Set(SUPPORTED_CURRENCIES.map((currency) => currency.code));
 
 	if (!DEFAULT_SIGNAL_SNAPSHOT) {
 		throw new Error('Realtime signal map requires at least one snapshot.');
@@ -104,6 +106,7 @@
 	let telemetryEnabled = $state(false);
 	let telemetryInitialized = $state(false);
 	let cookieBannerVisible = $state(false);
+	let roiCurrencyCode = $state('USD');
 
 	let activeSnapshot = $derived(
 		REALTIME_SIGNAL_SNAPSHOTS[snapshotIndex] ?? DEFAULT_SIGNAL_SNAPSHOT
@@ -125,8 +128,8 @@
 	let primaryCtaLabel = $derived(
 		experiments.ctaVariant === 'book_briefing' ? 'Book Executive Briefing' : 'Start Free'
 	);
-	let secondaryCtaLabel = $derived('See Plans');
-	let secondaryCtaHref = $derived('#plans');
+	let secondaryCtaLabel = $derived('See it in action');
+	let secondaryCtaHref = $derived('#signal-map');
 	let primaryCtaIntent = $derived(
 		experiments.ctaVariant === 'book_briefing' ? 'executive_briefing' : heroContext.primaryIntent
 	);
@@ -244,6 +247,15 @@
 	});
 
 	onMount(() => {
+		const geoCurrencyController = new AbortController();
+		const geoCurrencyTimeout = setTimeout(
+			() => geoCurrencyController.abort(),
+			GEO_CURRENCY_HINT_TIMEOUT_MS
+		);
+		void applyGeoCurrencyHint(geoCurrencyController.signal).finally(() => {
+			clearTimeout(geoCurrencyTimeout);
+		});
+
 		const storage = browser ? window.localStorage : undefined;
 		const stopReducedMotionObservation = observeReducedMotionPreference(window, (value) => {
 			prefersReducedMotion = value;
@@ -340,6 +352,8 @@
 		handleScroll();
 
 		return () => {
+			geoCurrencyController.abort();
+			clearTimeout(geoCurrencyTimeout);
 			stopReducedMotionObservation();
 			document.removeEventListener('visibilitychange', handleVisibility);
 			window.removeEventListener('scroll', handleScroll);
@@ -553,8 +567,44 @@
 		);
 	}
 
-	function formatUsd(amount: number, currency: string = 'USD'): string {
+	function formatUsd(amount: number, currency: string = roiCurrencyCode): string {
 		return formatCurrencyAmount(amount, currency);
+	}
+
+	async function applyGeoCurrencyHint(signal: AbortSignal): Promise<void> {
+		// Keep pricing deterministic in USD unless a trusted edge country hint maps to a supported currency.
+		roiCurrencyCode = 'USD';
+		if (browser && typeof window !== 'undefined') {
+			const host = window.location.hostname.toLowerCase();
+			if (host === 'localhost' || host === '127.0.0.1' || host === '::1') {
+				return;
+			}
+		}
+
+		let requestUrl: string;
+		try {
+			requestUrl = new URL(GEO_CURRENCY_HINT_ENDPOINT, $page.url.origin).toString();
+		} catch {
+			return;
+		}
+
+		try {
+			const response = await fetch(requestUrl, {
+				method: 'GET',
+				headers: { accept: 'application/json' },
+				cache: 'no-store',
+				signal
+			});
+			if (!response.ok) return;
+			const payload = (await response.json()) as { currencyCode?: string };
+			const currencyCode = String(payload.currencyCode ?? '')
+				.trim()
+				.toUpperCase();
+			if (!SUPPORTED_CURRENCY_CODES.has(currencyCode)) return;
+			roiCurrencyCode = currencyCode;
+		} catch {
+			// Keep locale/timezone fallback when geo hint is unavailable.
+		}
 	}
 </script>
 
@@ -582,7 +632,7 @@
 				{secondaryCtaHref}
 				primaryCtaHref={buildPrimaryCtaHref()}
 				onPrimaryCta={() => trackCta('cta_click', 'hero', experiments.ctaVariant)}
-				onSecondaryCta={() => trackCta('cta_click', 'hero', 'see_plans')}
+				onSecondaryCta={() => trackCta('cta_click', 'hero', 'see_signal_map')}
 			/>
 		</div>
 	</section>
@@ -639,6 +689,7 @@
 		{scenarioWasteWithPct}
 		{scenarioWindowMonths}
 		{formatUsd}
+		currencyCode={roiCurrencyCode}
 		onTrackScenarioAdjust={trackScenarioAdjust}
 		onScenarioWasteWithoutChange={(value) => {
 			scenarioWasteWithoutPct = value;
@@ -682,11 +733,11 @@
 			{primaryCtaLabel}
 		</a>
 		<a
-			href="#plans"
+			href="#signal-map"
 			class="btn btn-secondary"
-			onclick={() => trackCta('cta_click', 'mobile_sticky', 'see_plans')}
+			onclick={() => trackCta('cta_click', 'mobile_sticky', 'see_signal_map')}
 		>
-			Plans
+			See it in action
 		</a>
 	</div>
 

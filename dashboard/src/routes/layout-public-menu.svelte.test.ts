@@ -153,6 +153,33 @@ describe('public layout mobile menu', () => {
 		});
 	});
 
+	it('keeps desktop conversion actions in the public header', () => {
+		renderPublicLayout();
+
+		expect(screen.getAllByRole('link', { name: /^talk to sales$/i }).length).toBeGreaterThan(0);
+		expect(screen.getAllByRole('link', { name: /^start free$/i }).length).toBeGreaterThan(0);
+	});
+
+	it('surfaces concise conversion-safe contact channels in footer', () => {
+		renderPublicLayout();
+
+		expect(screen.getAllByRole('link', { name: /sales@valdrics\.com/i }).length).toBeGreaterThan(
+			0
+		);
+		expect(screen.getAllByRole('link', { name: /support@valdrics\.com/i }).length).toBeGreaterThan(
+			0
+		);
+		expect(
+			screen.getAllByRole('link', { name: /security@valdrics\.com/i }).length
+		).toBeGreaterThan(0);
+		expect(screen.queryByRole('link', { name: /enterprise@valdrics\.com/i })).toBeNull();
+		expect(screen.queryByRole('link', { name: /billing@valdrics\.com/i })).toBeNull();
+		expect(screen.queryByRole('link', { name: /hello@valdrics\.com/i })).toBeNull();
+		expect(screen.queryByRole('link', { name: /abuse@valdrics\.com/i })).toBeNull();
+		expect(screen.queryByRole('link', { name: /privacy@valdrics\.com/i })).toBeNull();
+		expect(screen.queryByRole('link', { name: /postmaster@valdrics\.com/i })).toBeNull();
+	});
+
 	it('opens desktop resources dropdown and closes with escape or outside click', async () => {
 		renderPublicLayout();
 

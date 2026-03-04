@@ -36,6 +36,7 @@ describe('isPublicPath', () => {
 		expect(isPublicPath('/docs')).toBe(true);
 		expect(isPublicPath('/docs/api')).toBe(true);
 		expect(isPublicPath('/status')).toBe(true);
+		expect(isPublicPath('/.well-known/security.txt')).toBe(true);
 		expect(isPublicPath('/resources')).toBe(true);
 		expect(isPublicPath('/blog')).toBe(true);
 		expect(isPublicPath('/insights')).toBe(true);

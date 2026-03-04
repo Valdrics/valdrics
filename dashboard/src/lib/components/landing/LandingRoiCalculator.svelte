@@ -18,6 +18,7 @@
 		onRoiTeamMembersChange,
 		onRoiBlendedHourlyChange,
 		onRoiCta,
+		currencyCode = 'USD',
 		sectionId = 'roi',
 		heading = 'See your 12-month control ROI before you commit',
 		subtitle = 'Adjust spend and rollout assumptions to estimate savings velocity, payback timing, and net economic impact.',
@@ -40,6 +41,7 @@
 		onRoiTeamMembersChange: (value: number) => void;
 		onRoiBlendedHourlyChange: (value: number) => void;
 		onRoiCta: () => void;
+		currencyCode?: string;
 		sectionId?: string;
 		heading?: string;
 		subtitle?: string;
@@ -72,17 +74,11 @@
 		onRoiControlInput();
 	}
 
-	let activeCurrency = $state('USD');
-	const CURRENCIES = [
-		{ code: 'USD', symbol: '$' },
-		{ code: 'EUR', symbol: '€' },
-		{ code: 'GBP', symbol: '£' }
-	];
-
-	function selectCurrency(code: string): void {
-		activeCurrency = code;
-		onRoiControlInput(); // trigger recalculation/tracking if needed
-	}
+	let activeCurrency = $derived(
+		String(currencyCode || 'USD')
+			.trim()
+			.toUpperCase() || 'USD'
+	);
 </script>
 
 <section
@@ -91,23 +87,10 @@
 	data-landing-section={sectionId}
 >
 	<div class="landing-section-head">
-		<h2 class="landing-h2">{heading}</h2>
-		<p class="landing-section-sub">{subtitle}</p>
-	</div>
-
-	<div class="landing-currency-toggle flex justify-center mb-8 gap-2">
-		{#each CURRENCIES as currency}
-			<button
-				type="button"
-				class="btn btn-sm {activeCurrency === currency.code ? 'btn-primary' : 'btn-outline'}"
-				onclick={() => selectCurrency(currency.code)}
-				aria-pressed={activeCurrency === currency.code}
-				aria-label={`Switch to ${currency.code}`}
-			>
-				{currency.symbol}
-				{currency.code}
-			</button>
-		{/each}
+		<div>
+			<h2 class="landing-h2">{heading}</h2>
+			<p class="landing-section-sub">{subtitle}</p>
+		</div>
 	</div>
 
 	<div class="landing-roi-grid">

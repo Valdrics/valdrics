@@ -26,6 +26,7 @@
 	import { allowedNavHrefs, isAdminRole, normalizePersona } from '$lib/persona';
 	import ErrorBoundary from '$lib/components/ErrorBoundary.svelte';
 	import {
+		PUBLIC_CONTACT_CHANNELS,
 		PUBLIC_FOOTER_BADGES,
 		PUBLIC_FOOTER_CAPTION,
 		PUBLIC_FOOTER_LINKS,
@@ -540,6 +541,15 @@
 					{/each}
 				</div>
 
+				<div class="public-nav-secondary items-center gap-2">
+					<a href={toAppPath('/talk-to-sales')} class="btn btn-secondary text-sm px-4 py-2">
+						Talk to Sales
+					</a>
+					<a href={toAppPath('/auth/login')} class="btn btn-primary text-sm px-4 py-2">
+						Start Free
+					</a>
+				</div>
+
 				<div class="public-nav-mobile flex items-center gap-2">
 					<a href={toAppPath('/auth/login')} class="btn btn-primary public-nav-mobile-cta">
 						Start Free
@@ -690,10 +700,27 @@
 					{/each}
 				</div>
 
-				<p class="mt-4 text-sm text-ink-500">{PUBLIC_FOOTER_CAPTION}</p>
+					<p class="mt-4 text-sm text-ink-500">{PUBLIC_FOOTER_CAPTION}</p>
 
-				<p class="mt-6 text-sm text-ink-500">© {currentYear} Valdrics. All rights reserved.</p>
-			</div>
+					<div class="mt-5 space-y-2" aria-label="Public contact channels">
+						<p class="text-xs font-semibold uppercase tracking-[0.12em] text-ink-500">
+							Contact Channels
+						</p>
+						<div class="flex flex-wrap gap-2">
+							{#each PUBLIC_CONTACT_CHANNELS as channel (channel.email)}
+								<a
+									href={channel.href}
+									class="badge badge-default text-ink-200 hover:text-ink-100 transition-colors"
+									aria-label={`${channel.label} contact ${channel.email}`}
+								>
+									{channel.label}: {channel.email}
+								</a>
+							{/each}
+						</div>
+					</div>
+
+					<p class="mt-6 text-sm text-ink-500">© {currentYear} Valdrics. All rights reserved.</p>
+				</div>
 		</footer>
 	{/if}
 </div>
@@ -776,8 +803,9 @@
 		padding: 0.5rem 0.6rem;
 		border-radius: 0.45rem;
 		color: var(--color-ink-200);
-		transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast)
-			var(--ease-out);
+		transition:
+			background-color var(--duration-fast) var(--ease-out),
+			color var(--duration-fast) var(--ease-out);
 	}
 	.public-nav-dropdown-item:hover {
 		background: rgb(255 255 255 / 0.08);
