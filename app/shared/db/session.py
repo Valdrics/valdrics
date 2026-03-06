@@ -1,9 +1,8 @@
-import ssl
-import time
-import uuid
-from dataclasses import dataclass
 import inspect
 import re
+import ssl
+import time
+from dataclasses import dataclass
 from threading import Lock
 from typing import Any, AsyncGenerator, Dict, Optional, cast
 from uuid import UUID
@@ -11,7 +10,7 @@ from uuid import UUID
 import structlog
 from fastapi import Request
 from sqlalchemy import event, text
-from sqlalchemy.engine import Connection, Engine
+from sqlalchemy.engine import Connection
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -25,8 +24,18 @@ from app.shared.core.config import get_settings
 from app.shared.core.constants import RLS_EXEMPT_TABLES
 from app.shared.core.exceptions import ValdricsException
 from app.shared.core.ops_metrics import RLS_CONTEXT_MISSING, RLS_ENFORCEMENT_LATENCY
+from app.shared.db.session_context_ops import (
+    backend_from_url as _backend_from_url_impl,
+    clear_session_tenant_context as _clear_session_tenant_context_impl,
+    get_db_impl as _get_db_impl_impl,
+    mark_session_system_context as _mark_session_system_context_impl,
+    resolve_session_backend as _resolve_session_backend_impl,
+    set_session_tenant_id as _set_session_tenant_id_impl,
+)
+from app.shared.db.session_rls_ops import check_rls_policy as _check_rls_policy_impl
 
 logger = structlog.get_logger()
+__all__ = ["ValdricsException"]
 
 # Ensure ORM mappings are registered for scripts/workers that import the DB layer
 # without importing `app/main.py`.
@@ -51,8 +60,32 @@ _db_runtime: _DBRuntime | None = None
 _db_runtime_lock = Lock()
 DB_RUNTIME_DISPOSE_ERRORS = (AttributeError, TypeError, RuntimeError)
 SESSION_INTROSPECTION_ERRORS = (AttributeError, TypeError, RuntimeError)
-DB_OPERATION_RECOVERABLE_ERRORS = (SQLAlchemyError, RuntimeError, TypeError, ValueError, OSError)
+DB_OPERATION_RECOVERABLE_ERRORS = (
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    OSError,
+)
 RLS_METRIC_RECOVERABLE_ERRORS = (TypeError, ValueError, RuntimeError)
+
+
+class GuardedAsyncSession(AsyncSession):
+    """Async session with fail-safe rollback on commit errors."""
+
+    async def commit(self) -> None:
+        try:
+            await super().commit()
+        except DB_OPERATION_RECOVERABLE_ERRORS as exc:
+            try:
+                await super().rollback()
+            except DB_OPERATION_RECOVERABLE_ERRORS as rollback_exc:
+                logger.error(
+                    "session_commit_rollback_failed",
+                    commit_error=str(exc),
+                    rollback_error=str(rollback_exc),
+                )
+            raise
 
 
 def _as_bool(value: Any) -> bool:
@@ -83,7 +116,6 @@ def _resolve_effective_url(settings_obj: Any) -> tuple[str, bool, bool]:
     if is_testing and not db_url:
         effective_url = "sqlite+aiosqlite:///:memory:"
     elif is_testing and "sqlite" not in db_url and not allow_test_database_url:
-        # Safety: protect tests from accidental writes to real databases.
         effective_url = "sqlite+aiosqlite:///:memory:"
 
     return effective_url, use_null_pool, external_pooler
@@ -188,10 +220,10 @@ def _build_pool_config(
 
 def _register_engine_event_listeners(engine: AsyncEngine) -> None:
     sync_engine = getattr(engine, "sync_engine", None)
-    # Test doubles/mocks may not support SQLAlchemy event registration.
     if sync_engine is None or type(sync_engine).__module__.startswith("unittest.mock"):
         logger.debug("db_engine_listener_registration_skipped_non_engine_target")
         return
+    event.listen(sync_engine, "before_cursor_execute", check_rls_policy, retval=True)
     event.listen(sync_engine, "before_cursor_execute", before_cursor_execute)
     event.listen(sync_engine, "after_cursor_execute", after_cursor_execute)
 
@@ -217,7 +249,7 @@ def _build_db_runtime() -> _DBRuntime:
     _register_engine_event_listeners(engine)
     session_maker = async_sessionmaker(
         engine,
-        class_=AsyncSession,
+        class_=GuardedAsyncSession,
         expire_on_commit=False,
     )
     return _DBRuntime(
@@ -251,7 +283,6 @@ def reset_db_runtime() -> None:
         return
 
     try:
-        # Use sync disposal so reset can be called from non-async test fixtures.
         runtime.engine.sync_engine.dispose()
     except DB_RUNTIME_DISPOSE_ERRORS as exc:
         logger.debug("db_runtime_dispose_skipped", error=str(exc), exc_info=True)
@@ -322,124 +353,33 @@ def _session_uses_postgresql(session: AsyncSession) -> bool:
 
 
 def _backend_from_url(url: str) -> Optional[str]:
-    value = url.strip().lower()
-    if not value:
-        return None
-    if "postgresql" in value:
-        return "postgresql"
-    if "sqlite" in value:
-        return "sqlite"
-    if "mysql" in value:
-        return "mysql"
-    return None
+    return _backend_from_url_impl(url)
 
 
 def _resolve_session_backend(session: AsyncSession) -> tuple[str, str]:
-    """Resolve effective DB backend and attribution source for a session."""
-    try:
-        bind = getattr(session, "bind", None)
-        if bind is not None:
-            dialect_name = getattr(getattr(bind, "dialect", None), "name", None)
-            if isinstance(dialect_name, str) and dialect_name.strip():
-                return dialect_name.strip().lower(), "session.bind.dialect.name"
-
-            bind_url = getattr(bind, "url", None)
-            if bind_url is not None:
-                backend = _backend_from_url(str(bind_url))
-                if backend is not None:
-                    return backend, "session.bind.url"
-    except SESSION_INTROSPECTION_ERRORS as e:
-        logger.debug("session_bind_introspection_failed", error=str(e), exc_info=True)
-
-    try:
-        get_bind = getattr(session, "get_bind", None)
-        runtime_bind = None
-        if callable(get_bind):
-            if inspect.iscoroutinefunction(get_bind):
-                logger.debug("session_get_bind_is_coroutine_skipped")
-            else:
-                runtime_bind = get_bind()
-        if runtime_bind is not None:
-            dialect_name = getattr(getattr(runtime_bind, "dialect", None), "name", None)
-            if isinstance(dialect_name, str) and dialect_name.strip():
-                return dialect_name.strip().lower(), "session.get_bind().dialect.name"
-
-            runtime_url = getattr(runtime_bind, "url", None)
-            if runtime_url is not None:
-                backend = _backend_from_url(str(runtime_url))
-                if backend is not None:
-                    return backend, "session.get_bind().url"
-    except SESSION_INTROSPECTION_ERRORS as e:
-        logger.debug("session_runtime_bind_resolution_failed", error=str(e), exc_info=True)
-
-    fallback_url, _, _ = _resolve_effective_url(get_settings())
-    fallback_backend = _backend_from_url(fallback_url)
-    if fallback_backend is not None:
-        logger.warning(
-            "session_dialect_fallback_used",
-            backend=fallback_backend,
-            source="configured_effective_url",
-        )
-        return fallback_backend, "configured_effective_url"
-
-    return "unknown", "unresolved"
+    return _resolve_session_backend_impl(
+        session,
+        backend_from_url_fn=_backend_from_url,
+        resolve_effective_url_fn=_resolve_effective_url,
+        get_settings_fn=get_settings,
+        session_introspection_errors=SESSION_INTROSPECTION_ERRORS,
+        inspect_module=inspect,
+        logger_obj=logger,
+    )
 
 
 async def _get_db_impl(
     request: Request = cast(Request, None),
 ) -> AsyncGenerator[AsyncSession, None]:
-    """
-    Internal implementation for FastAPI DB dependency.
-    """
-    async with async_session_maker() as session:
-        rls_context_set = False
-
-        if request is not None:
-            tenant_id = getattr(request.state, "tenant_id", None)
-            tenant_key = str(tenant_id) if isinstance(tenant_id, uuid.UUID) else tenant_id
-            if tenant_id:
-                try:
-                    backend, source = _resolve_session_backend(session)
-                    # RLS: execute set_config only on PostgreSQL.
-                    if backend == "postgresql":
-                        rls_start = time.perf_counter()
-                        await session.execute(
-                            text(
-                                "SELECT set_config('app.current_tenant_id', :tid, true)"
-                            ),
-                            {"tid": str(tenant_id)},
-                        )
-                        RLS_ENFORCEMENT_LATENCY.observe(time.perf_counter() - rls_start)
-                        rls_context_set = True
-                    elif backend == "unknown":
-                        # Fail closed: do not mark context as set when backend cannot be resolved.
-                        logger.error(
-                            "rls_session_backend_unknown_fail_closed",
-                            source=source,
-                            tenant_id=tenant_key,
-                        )
-                        rls_context_set = False
-                    else:
-                        # Non-Postgres backend (e.g. sqlite in tests).
-                        rls_context_set = True
-
-                except DB_OPERATION_RECOVERABLE_ERRORS as e:
-                    logger.warning("rls_context_set_failed", error=str(e))
-        else:
-            # For system tasks or background jobs not triggered by a request,
-            # we assume the handler will set its own context if needed,
-            # or it's a system-level operation.
-            rls_context_set = True
-
-        # PROPAGATION: Ensure the listener can see the RLS status on the connection
-        # and satisfy session-level checks in existing tests.
-        session.info["rls_context_set"] = rls_context_set
-        session.info["rls_system_context"] = False
-
-        conn = await session.connection()
-        conn.info["rls_context_set"] = rls_context_set
-        conn.info["rls_system_context"] = False
-
+    async for session in _get_db_impl_impl(
+        request=request,
+        session_factory=async_session_maker,
+        resolve_session_backend_fn=_resolve_session_backend,
+        rls_enforcement_latency_metric=RLS_ENFORCEMENT_LATENCY,
+        db_operation_recoverable_errors=DB_OPERATION_RECOVERABLE_ERRORS,
+        logger_obj=logger,
+        time_module=time,
+    ):
         yield session
 
 
@@ -451,39 +391,14 @@ async def get_db(
 
 
 async def mark_session_system_context(session: AsyncSession) -> None:
-    """
-    Mark a session as an explicit system/public context.
-
-    This is required for code paths that intentionally bypass tenant-bound RLS
-    checks (for example OIDC discovery, SCIM token lookup, and global reference
-    tables).
-    """
-    session_info = getattr(session, "info", None)
-    if not isinstance(session_info, dict):
-        logger.debug("mark_session_system_context_missing_session_info_dict")
-        return
-    session_info["rls_context_set"] = None
-    session_info["rls_system_context"] = True
-    try:
-        conn = await session.connection()
-        conn.info["rls_context_set"] = None
-        conn.info["rls_system_context"] = True
-    except DB_OPERATION_RECOVERABLE_ERRORS as exc:
-        logger.debug("mark_session_system_context_connection_unavailable", error=str(exc))
+    await _mark_session_system_context_impl(
+        session=session,
+        db_operation_recoverable_errors=DB_OPERATION_RECOVERABLE_ERRORS,
+        logger_obj=logger,
+    )
 
 
 async def _get_system_db_impl() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Provide a DB session for system/public operations that must not require a tenant context.
-
-    This intentionally sets `rls_context_set=None` so the RLS enforcement listener does not
-    block execution (it only blocks when the flag is explicitly False).
-
-    IMPORTANT:
-    - Only use this for tables that are NOT tenant-scoped or that intentionally expose
-      a public mapping (for example, SSO domain routing lookup).
-    - Do not use this for tenant-scoped business data.
-    """
     async with async_session_maker() as session:
         await mark_session_system_context(session)
         yield session
@@ -495,86 +410,27 @@ async def get_system_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def clear_session_tenant_context(session: AsyncSession) -> None:
-    """
-    Clear tenant/session RLS context and mark the session fail-closed.
-
-    This function is used after tenant-scoped work completes so the same
-    pooled session cannot accidentally retain tenant context.
-    """
-    session.info["tenant_id"] = None
-    session.info["rls_context_set"] = False
-    session.info["rls_system_context"] = False
-
-    # We must ensure the connection itself has the info, as listeners look there
-    conn = await session.connection()
-    conn.info["tenant_id"] = None
-    conn.info["rls_context_set"] = False
-    conn.info["rls_system_context"] = False
-
-    backend, source = _resolve_session_backend(session)
-    if backend == "postgresql":
-        try:
-            await session.execute(
-                text("SELECT set_config('app.current_tenant_id', '', true)")
-            )
-        except DB_OPERATION_RECOVERABLE_ERRORS as e:
-            logger.warning("failed_to_clear_rls_config_in_session", error=str(e))
-    elif backend == "unknown":
-        logger.error(
-            "clear_session_tenant_context_backend_unknown_fail_closed",
-            source=source,
-        )
+    await _clear_session_tenant_context_impl(
+        session=session,
+        resolve_session_backend_fn=_resolve_session_backend,
+        db_operation_recoverable_errors=DB_OPERATION_RECOVERABLE_ERRORS,
+        logger_obj=logger,
+    )
 
 
 async def set_session_tenant_id(session: AsyncSession, tenant_id: Optional[UUID]) -> None:
-    """Set tenant context for a session. `tenant_id=None` clears context fail-closed."""
-    if tenant_id is None:
-        await clear_session_tenant_context(session)
-        return
-
-    session.info["tenant_id"] = tenant_id
-
-    # We must ensure the connection itself has the info, as listeners look there
-    conn = await session.connection()
-    conn.info["tenant_id"] = tenant_id
-    backend, source = _resolve_session_backend(session)
-    if backend == "unknown":
-        # Fail closed on unresolved backend detection.
-        session.info["rls_context_set"] = False
-        session.info["rls_system_context"] = False
-        conn.info["rls_context_set"] = False
-        conn.info["rls_system_context"] = False
-        logger.error(
-            "set_session_tenant_id_backend_unknown_fail_closed",
-            source=source,
-            tenant_id=str(tenant_id) if tenant_id else None,
-        )
-        return
-
-    # Mark context as set for known backends.
-    session.info["rls_context_set"] = True
-    session.info["rls_system_context"] = False
-    conn.info["rls_context_set"] = True
-    conn.info["rls_system_context"] = False
-
-    # For Postgres, execute the actual set_config for RLS.
-    if backend == "postgresql":
-        try:
-            rls_start = time.perf_counter()
-            await session.execute(
-                text("SELECT set_config('app.current_tenant_id', :tid, true)"),
-                {"tid": str(tenant_id)},
-            )
-            RLS_ENFORCEMENT_LATENCY.observe(time.perf_counter() - rls_start)
-        except DB_OPERATION_RECOVERABLE_ERRORS as e:
-            session.info["rls_context_set"] = False
-            session.info["rls_system_context"] = False
-            conn.info["rls_context_set"] = False
-            conn.info["rls_system_context"] = False
-            logger.warning("failed_to_set_rls_config_in_session", error=str(e))
+    await _set_session_tenant_id_impl(
+        session=session,
+        tenant_id=tenant_id,
+        clear_session_tenant_context_fn=clear_session_tenant_context,
+        resolve_session_backend_fn=_resolve_session_backend,
+        rls_enforcement_latency_metric=RLS_ENFORCEMENT_LATENCY,
+        db_operation_recoverable_errors=DB_OPERATION_RECOVERABLE_ERRORS,
+        logger_obj=logger,
+        time_module=time,
+    )
 
 
-@event.listens_for(Engine, "before_cursor_execute", retval=True)
 def check_rls_policy(
     conn: Connection,
     _cursor: Any,
@@ -583,112 +439,16 @@ def check_rls_policy(
     _context: Any,
     _executemany: bool,
 ) -> tuple[str, Any]:
-    """
-    PRODUCTION: Hardened Multi-Tenancy RLS Enforcement
-
-    This listener ENFORCES Row-Level Security by raising an exception if a query runs
-    without proper tenant context. This prevents accidental data leaks across tenants.
-    """
-    # Skip enforcement in tests to avoid dialect-specific transaction issues (e.g. prepare)
-    if settings.TESTING and not settings.ENFORCE_RLS_IN_TESTS:
-        return statement, parameters
-
-    stmt_lower = statement.lower()
-
-    # Only enforce for data-access statements. Transaction/session control statements
-    # (BEGIN/COMMIT/ROLLBACK/SET/SHOW/...) must be allowed even when tenant context
-    # is not yet established (e.g. during auth bootstrap).
-    stmt_stripped = stmt_lower.lstrip()
-    if stmt_stripped:
-        verb = stmt_stripped.split(None, 1)[0]
-        if verb not in {"select", "insert", "update", "delete", "with"}:
-            return statement, parameters
-
-    if (
-        "select 1" in stmt_lower
-        or "select version()" in stmt_lower
-        or "select pg_is_in_recovery()" in stmt_lower
-    ):
-        return statement, parameters
-
-    if _RLS_EXEMPT_TABLE_PATTERN.search(stmt_lower):
-        return statement, parameters
-
-    # Identify the state from the connection info
-    rls_status = conn.info.get("rls_context_set")
-    rls_status_explicit = "rls_context_set" in conn.info
-    rls_system_context = bool(conn.info.get("rls_system_context", False))
-
-    if rls_status is None:
-        if rls_system_context:
-            return statement, parameters
-
-        # Fail closed for non-testing execution paths when data-access sessions
-        # are missing an explicit RLS posture marker.
-        if not settings.TESTING:
-            try:
-                if statement.split():
-                    RLS_CONTEXT_MISSING.labels(
-                        statement_type=statement.split()[0].upper()
-                    ).inc()
-            except RLS_METRIC_RECOVERABLE_ERRORS as e:
-                logger.debug("rls_metric_increment_failed", error=str(e))
-
-            logger.critical(
-                "rls_enforcement_ambiguous_context_detected",
-                statement=statement[:500],
-                rls_status=rls_status,
-                rls_status_explicit=rls_status_explicit,
-                rls_system_context=rls_system_context,
-                error="Query executed with no explicit RLS/session context marker",
-            )
-            raise ValdricsException(
-                message="RLS context unresolved - query execution aborted",
-                code="rls_context_unresolved",
-                status_code=500,
-                details={
-                    "reason": "No explicit tenant/system context marker for DB query",
-                    "action": "Use get_db()/set_session_tenant_id for tenant flows, or mark_session_system_context for system flows.",
-                },
-            )
-
-        logger.warning(
-            "rls_context_unset_in_testing",
-            statement=statement[:120],
-            rls_status_explicit=rls_status_explicit,
-        )
-        return statement, parameters
-
-    # PRODUCTION: Raise exception on RLS context missing (False).
-    # System/public contexts must now be marked explicitly via `rls_system_context=True`.
-    if rls_status is False:
-        try:
-            if statement.split():
-                RLS_CONTEXT_MISSING.labels(
-                    statement_type=statement.split()[0].upper()
-                ).inc()
-        except RLS_METRIC_RECOVERABLE_ERRORS as e:
-            logger.debug("rls_metric_increment_failed", error=str(e))
-
-        logger.critical(
-            "rls_enforcement_violation_detected",
-            statement=statement[:500],
-            rls_status=rls_status,
-            error="Query executed WITHOUT tenant insulation set. RLS policy violated!",
-        )
-
-        # PRODUCTION: Hard exception - no execution allowed
-        raise ValdricsException(
-            message="RLS context missing - query execution aborted",
-            code="rls_enforcement_failed",
-            status_code=500,
-            details={
-                "reason": "Multi-tenant isolation enforcement failed",
-                "action": "This is a critical security error. Check that all DB sessions are initialized with tenant context.",
-            },
-        )
-
-    return statement, parameters
+    return _check_rls_policy_impl(
+        conn=conn,
+        statement=statement,
+        parameters=parameters,
+        settings_obj=settings,
+        rls_exempt_table_pattern=_RLS_EXEMPT_TABLE_PATTERN,
+        rls_context_missing_metric=RLS_CONTEXT_MISSING,
+        rls_metric_recoverable_errors=RLS_METRIC_RECOVERABLE_ERRORS,
+        logger_obj=logger,
+    )
 
 
 async def health_check() -> Dict[str, Any]:
@@ -698,7 +458,6 @@ async def health_check() -> Dict[str, Any]:
         db_engine = get_engine()
         async with async_session_maker() as session:
             await mark_session_system_context(session)
-            # Item 4: Fast Health Check (No heavy joins/locks)
             await session.execute(text("SELECT 1"))
 
         latency = (time.perf_counter() - start_time) * 1000
@@ -709,10 +468,10 @@ async def health_check() -> Dict[str, Any]:
                 db_engine.dialect.name if hasattr(db_engine, "dialect") else "unknown"
             ),
         }
-    except DB_OPERATION_RECOVERABLE_ERRORS as e:
-        logger.error("database_health_check_failed", error=str(e))
+    except DB_OPERATION_RECOVERABLE_ERRORS as exc:
+        logger.error("database_health_check_failed", error=str(exc))
         return {
             "status": "down",
-            "error": str(e),
+            "error": str(exc),
             "latency_ms": (time.perf_counter() - start_time) * 1000,
         }

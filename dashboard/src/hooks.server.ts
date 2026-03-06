@@ -12,6 +12,7 @@ import { env as publicEnv } from '$env/dynamic/public';
 import { env } from '$env/dynamic/private';
 import type { Handle } from '@sveltejs/kit';
 import type { Session, User } from '@supabase/supabase-js';
+import { serverLogger } from '$lib/logging/server';
 import { isPublicPath } from '$lib/routeProtection';
 import { canUseE2EAuthBypass, shouldUseSecureCookies } from '$lib/serverSecurity';
 
@@ -180,7 +181,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 export const handleError: import('@sveltejs/kit').HandleServerError = ({ error, event }) => {
 	const errorId = crypto.randomUUID();
 
-	console.error('Unhandled server error:', {
+	serverLogger.error('Unhandled server error:', {
 		errorId,
 		error: error instanceof Error ? error.message : error,
 		stack: error instanceof Error ? error.stack : undefined,

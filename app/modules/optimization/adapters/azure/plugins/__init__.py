@@ -1,31 +1,39 @@
+"""Azure plugin registration loader.
+
+This module intentionally avoids hard failing when optional SDK dependencies are
+missing in lightweight test environments. Successfully imported plugins still
+register themselves via the global registry.
 """
-Azure Zombie Detection Plugins.
 
-All plugins use Cost Management export data for zero-cost detection.
-"""
+from __future__ import annotations
 
-from .compute import IdleVmsPlugin, IdleGpuVmsPlugin, StoppedVmsPlugin
-from .storage import UnattachedDisksPlugin, OldSnapshotsPlugin
-from .network import OrphanPublicIpsPlugin, OrphanNicsPlugin, OrphanNsgsPlugin
-from .database import IdleSqlDatabasesPlugin
-from .containers import IdleAksClusterPlugin, UnusedAppServicePlansPlugin
-from .ai import IdleAzureOpenAIPlugin, IdleAISearchPlugin
-from .rightsizing import OverprovisionedVmPlugin
+import importlib
 
-__all__ = [
-    "IdleVmsPlugin",
-    "IdleGpuVmsPlugin",
-    "StoppedVmsPlugin",
-    "StoppedVmsPlugin",
-    "UnattachedDisksPlugin",
-    "OldSnapshotsPlugin",
-    "OrphanPublicIpsPlugin",
-    "OrphanNicsPlugin",
-    "OrphanNsgsPlugin",
-    "IdleSqlDatabasesPlugin",
-    "IdleAksClusterPlugin",
-    "UnusedAppServicePlansPlugin",
-    "IdleAzureOpenAIPlugin",
-    "IdleAISearchPlugin",
-    "OverprovisionedVmPlugin",
-]
+import structlog
+
+logger = structlog.get_logger()
+
+_PLUGIN_MODULES: tuple[str, ...] = (
+    "compute",
+    "storage",
+    "network",
+    "database",
+    "containers",
+    "ai",
+    "rightsizing",
+)
+
+
+def load_plugins() -> None:
+    for module_name in _PLUGIN_MODULES:
+        try:
+            importlib.import_module(f"{__name__}.{module_name}")
+        except (ModuleNotFoundError, ImportError, AttributeError) as exc:
+            logger.debug(
+                "azure_plugin_module_skipped",
+                module=module_name,
+                error=str(exc),
+            )
+
+
+__all__ = ("load_plugins",)

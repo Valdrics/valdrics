@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import types
 from unittest.mock import MagicMock, patch
 
@@ -283,9 +282,9 @@ def test_config_environment_safety_branch_paths() -> None:
     s.CORS_ORIGINS = ["http://localhost:5173"]
     s.API_URL = "http://api.example.com"
     s.FRONTEND_URL = "http://app.example.com"
+    s.WEB_CONCURRENCY = "not-an-int"
     with patch("app.shared.core.config.structlog.get_logger") as get_logger:
-        with patch.dict(os.environ, {"WEB_CONCURRENCY": "not-an-int"}, clear=False):
-            s._validate_environment_safety()
+        s._validate_environment_safety()
     assert get_logger.return_value.warning.call_count >= 2
 
     s = _settings()

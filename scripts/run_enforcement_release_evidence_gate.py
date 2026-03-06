@@ -137,6 +137,7 @@ def build_gate_environment(
     )
 
     env = os.environ.copy()
+    env["ENFORCEMENT_RUNTIME_EVIDENCE_ONLY"] = "true"
     env["ENFORCEMENT_STRESS_EVIDENCE_PATH"] = str(stress_path)
     env["ENFORCEMENT_STRESS_EVIDENCE_REQUIRED"] = "true"
     env["ENFORCEMENT_STRESS_EVIDENCE_MAX_AGE_HOURS"] = str(validated_stress_max_age)

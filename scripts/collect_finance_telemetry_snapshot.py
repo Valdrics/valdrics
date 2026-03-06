@@ -12,13 +12,19 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.core.pricing import PricingTier, TIER_CONFIG
 from app.shared.db.session import async_session_maker
 
 TRACKED_TIERS: tuple[str, ...] = ("free", "starter", "growth", "pro", "enterprise")
+PAID_TIER_FALLBACK_PRICING_USD: dict[str, tuple[float, float]] = {
+    "starter": (49.0, 490.0),
+    "growth": (149.0, 1490.0),
+    "pro": (299.0, 2990.0),
+    "enterprise": (799.0, 7990.0),
+}
 ACTIVE_SUBSCRIPTION_STATUSES: tuple[str, ...] = (
     "active",
     "non-renewing",
@@ -121,6 +127,13 @@ def _build_pricing_reference() -> dict[str, dict[str, float]]:
     for tier in TRACKED_TIERS:
         monthly = _monthly_price_usd(tier)
         annual = _annual_price_usd(tier)
+        if tier in PAID_TIER_FALLBACK_PRICING_USD and monthly <= 0.0:
+            fallback_monthly, fallback_annual = PAID_TIER_FALLBACK_PRICING_USD[tier]
+            monthly = fallback_monthly
+            annual = fallback_annual
+        elif tier in PAID_TIER_FALLBACK_PRICING_USD and annual <= 0.0:
+            _fallback_monthly, fallback_annual = PAID_TIER_FALLBACK_PRICING_USD[tier]
+            annual = fallback_annual
         annual_factor = 0.0
         if monthly > 0.0 and annual > 0.0:
             annual_factor = annual / (monthly * 12.0)
@@ -197,7 +210,13 @@ async def _fetch_subscription_snapshot(
         FROM effective_tiers
         GROUP BY tier
         """
-    ).bindparams(active_statuses=ACTIVE_SUBSCRIPTION_STATUSES, expanding=True)
+    ).bindparams(
+        bindparam(
+            "active_statuses",
+            value=ACTIVE_SUBSCRIPTION_STATUSES,
+            expanding=True,
+        )
+    )
     result = await db.execute(
         query,
         {

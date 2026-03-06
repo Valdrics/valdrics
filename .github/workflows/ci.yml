@@ -62,7 +62,7 @@ jobs:
           version: "latest"
 
       - name: Install Dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       - name: Runtime Env Preflight (Strict Contract)
         env:
@@ -102,8 +102,14 @@ jobs:
       - name: Enforce Environment Hygiene
         run: uv run python3 scripts/verify_env_hygiene.py
 
+      - name: Enforce Dependency Lock Discipline
+        run: uv run python3 scripts/verify_dependency_locking.py
+
       - name: Enforce Adapter Test Coverage
         run: uv run python3 scripts/verify_adapter_test_coverage.py
+
+      - name: Enforce Python Complexity Budget (McCabe)
+        run: uv run ruff check app --select C901 --config lint.mccabe.max-complexity=30
 
       - name: Enforce Python Module Size Budget
         run: uv run python3 scripts/verify_python_module_size_budget.py
@@ -116,6 +122,9 @@ jobs:
 
       - name: Verify Frontend Hygiene
         run: uv run python scripts/check_frontend_hygiene.py
+
+      - name: Enforce Frontend Module Size Budget
+        run: uv run python3 scripts/verify_frontend_module_size_budget.py
 
       - name: Run Pytest with Coverage
         run: |
@@ -193,7 +202,7 @@ jobs:
           version: "latest"
 
       - name: Install Dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       - name: Run Alembic Forward/Rollback Smoke
         run: |
@@ -221,7 +230,7 @@ jobs:
           version: "latest"
 
       - name: Install Dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       - name: Run Mypy
         run: uv run mypy app
@@ -303,7 +312,7 @@ jobs:
           version: "latest"
 
       - name: Install Dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       - name: Run CodeCarbon Benchmark
         env:
@@ -350,7 +359,7 @@ jobs:
           version: "latest"
 
       - name: Install Dependencies
-        run: uv sync --group dev
+        run: uv sync --locked --group dev
 
       - name: Build API Image (for CVE scan)
         run: docker build -t valdrics-api-ci:${{ github.sha }} .
@@ -425,30 +434,91 @@ jobs:
           version: "latest"
 
       - name: Install Dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
+
+      - name: Generate Runtime Release Evidence
+        run: |
+          set -euo pipefail
+
+          EVIDENCE_DIR="${RUNNER_TEMP}/enterprise-gate-evidence"
+          mkdir -p "${EVIDENCE_DIR}"
+
+          DEBUG=false uv run python3 scripts/generate_enforcement_stress_evidence.py \
+            --output "${EVIDENCE_DIR}/enforcement_stress_artifact.json" \
+            --duration-seconds 30 \
+            --concurrent-users 10 \
+            --ramp-seconds 5 \
+            --rounds 3 \
+            --max-p95-seconds 2.0 \
+            --max-error-rate-percent 1.0 \
+            --min-throughput-rps 0.5
+
+          DEBUG=false uv run python3 scripts/generate_enforcement_failure_injection_evidence.py \
+            --output "${EVIDENCE_DIR}/enforcement_failure_injection.json" \
+            --executed-by "ci.enforcement.executor@valdrics.local" \
+            --approved-by "ci.enforcement.approver@valdrics.local"
+
+          DEBUG=false uv run python3 scripts/generate_finance_telemetry_snapshot.py \
+            --output "${EVIDENCE_DIR}/finance_telemetry_snapshot.json"
+
+          DEBUG=false uv run python3 scripts/generate_finance_committee_packet_assumptions.py \
+            --output "${EVIDENCE_DIR}/finance_committee_packet_assumptions.json" \
+            --telemetry-path "${EVIDENCE_DIR}/finance_telemetry_snapshot.json"
+
+          DEBUG=false uv run python3 scripts/generate_finance_committee_packet.py \
+            --telemetry-path "${EVIDENCE_DIR}/finance_telemetry_snapshot.json" \
+            --assumptions-path "${EVIDENCE_DIR}/finance_committee_packet_assumptions.json" \
+            --output-dir "${EVIDENCE_DIR}"
+
+          DEBUG=false uv run python3 scripts/generate_pricing_benchmark_register.py \
+            --output "${EVIDENCE_DIR}/pricing_benchmark_register.json" \
+            --max-source-age-days 120
+
+          DEBUG=false uv run python3 scripts/generate_pkg_fin_policy_decisions.py \
+            --output "${EVIDENCE_DIR}/pkg_fin_policy_decisions.json" \
+            --telemetry-snapshot-path "${EVIDENCE_DIR}/finance_telemetry_snapshot.json"
+
+          DEBUG=false uv run python3 scripts/generate_key_rotation_drill_evidence.py \
+            --output "${EVIDENCE_DIR}/key_rotation_drill.md" \
+            --max-drill-age-days 120
+
+          DEBUG=false uv run python3 scripts/generate_valdrics_disposition_register.py \
+            --output "${EVIDENCE_DIR}/valdrics_disposition_register.json" \
+            --max-artifact-age-days 45 \
+            --max-review-window-days 120
+
+          FINANCE_GUARDRAILS_PATH="$(ls "${EVIDENCE_DIR}"/finance_guardrails_*.json | sort | tail -n 1)"
+
+          {
+            echo "ENFORCEMENT_RUNTIME_EVIDENCE_ONLY=true"
+            echo "ENFORCEMENT_STRESS_EVIDENCE_PATH=${EVIDENCE_DIR}/enforcement_stress_artifact.json"
+            echo "ENFORCEMENT_STRESS_EVIDENCE_REQUIRED=true"
+            echo "ENFORCEMENT_STRESS_EVIDENCE_MAX_AGE_HOURS=48"
+            echo "ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_PATH=${EVIDENCE_DIR}/enforcement_failure_injection.json"
+            echo "ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_REQUIRED=true"
+            echo "ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_MAX_AGE_HOURS=48"
+            echo "ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH=${FINANCE_GUARDRAILS_PATH}"
+            echo "ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_REQUIRED=true"
+            echo "ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_MAX_AGE_HOURS=744"
+            echo "ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH=${EVIDENCE_DIR}/finance_telemetry_snapshot.json"
+            echo "ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED=true"
+            echo "ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS=744"
+            echo "ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH=${EVIDENCE_DIR}/pricing_benchmark_register.json"
+            echo "ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED=true"
+            echo "ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS=120"
+            echo "ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH=${EVIDENCE_DIR}/pkg_fin_policy_decisions.json"
+            echo "ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED=true"
+            echo "ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS=744"
+            echo "ENFORCEMENT_KEY_ROTATION_DRILL_PATH=${EVIDENCE_DIR}/key_rotation_drill.md"
+            echo "ENFORCEMENT_KEY_ROTATION_DRILL_MAX_AGE_DAYS=120"
+            echo "ENFORCEMENT_VALDRICS_DISPOSITION_REGISTER_PATH=${EVIDENCE_DIR}/valdrics_disposition_register.json"
+            echo "ENFORCEMENT_VALDRICS_DISPOSITION_MAX_AGE_DAYS=45"
+            echo "ENFORCEMENT_VALDRICS_DISPOSITION_MAX_REVIEW_WINDOW_DAYS=120"
+            echo "ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS=35"
+            echo "ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS=14"
+          } >> "${GITHUB_ENV}"
 
       - name: Run Enterprise TDD Gate
-        env:
-          ENFORCEMENT_STRESS_EVIDENCE_PATH: "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json"
-          ENFORCEMENT_STRESS_EVIDENCE_REQUIRED: "true"
-          ENFORCEMENT_STRESS_EVIDENCE_MAX_AGE_HOURS: "48"
-          ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_PATH: "docs/ops/evidence/enforcement_failure_injection_2026-02-27.json"
-          ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_REQUIRED: "true"
-          ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_MAX_AGE_HOURS: "48"
-          ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH: "docs/ops/evidence/finance_guardrails_2026-02-27.json"
-          ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_REQUIRED: "true"
-          ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_MAX_AGE_HOURS: "744"
-          ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH: "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json"
-          ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_REQUIRED: "true"
-          ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_MAX_AGE_HOURS: "744"
-          ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH: "docs/ops/evidence/pricing_benchmark_register_2026-02-27.json"
-          ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED: "true"
-          ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS: "120"
-          ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH: "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json"
-          ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED: "true"
-          ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS: "744"
-          ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_AGE_DAYS: "35"
-          ENFORCEMENT_MONTHLY_FINANCE_REFRESH_MAX_CAPTURE_SPREAD_DAYS: "14"
         run: uv run python3 scripts/run_enterprise_tdd_gate.py
 
       - name: Upload Enterprise Gate Coverage Artifact
@@ -498,7 +568,7 @@ jobs:
           version: "latest"
 
       - name: Install Backend Dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       - name: Setup Node
         uses: actions/setup-node@v4

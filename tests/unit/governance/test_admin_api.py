@@ -1,11 +1,14 @@
 import pytest
 from fastapi import Request, HTTPException
 from unittest.mock import MagicMock, patch, AsyncMock
+from datetime import datetime, timezone
 from app.modules.governance.api.v1.admin import (
     validate_admin_key,
     trigger_analysis,
     reconcile_tenant_costs,
+    get_landing_campaign_metrics,
 )
+from app.models.landing_telemetry_rollup import LandingTelemetryDailyRollup
 
 
 @pytest.mark.asyncio
@@ -98,3 +101,79 @@ async def test_reconcile_tenant_costs_success(db):
             True,
         )
         assert result["diff"] == 0
+
+
+@pytest.mark.asyncio
+async def test_get_landing_campaign_metrics_aggregates_by_campaign(db):
+    request = MagicMock(spec=Request)
+    now = datetime.now(timezone.utc)
+    today = now.date()
+
+    db.add_all(
+        [
+            LandingTelemetryDailyRollup(
+                event_date=today,
+                event_name="landing_view",
+                section="landing",
+                funnel_stage="view",
+                utm_source="google",
+                utm_medium="cpc",
+                utm_campaign="launch",
+                event_count=11,
+                first_seen_at=now,
+                last_seen_at=now,
+            ),
+            LandingTelemetryDailyRollup(
+                event_date=today,
+                event_name="cta_click",
+                section="hero",
+                funnel_stage="cta",
+                utm_source="google",
+                utm_medium="cpc",
+                utm_campaign="launch",
+                event_count=7,
+                first_seen_at=now,
+                last_seen_at=now,
+            ),
+            LandingTelemetryDailyRollup(
+                event_date=today,
+                event_name="signup_intent",
+                section="hero",
+                funnel_stage="signup_intent",
+                utm_source="google",
+                utm_medium="cpc",
+                utm_campaign="launch",
+                event_count=2,
+                first_seen_at=now,
+                last_seen_at=now,
+            ),
+            LandingTelemetryDailyRollup(
+                event_date=today,
+                event_name="landing_view",
+                section="landing",
+                funnel_stage="view",
+                utm_source="linkedin",
+                utm_medium="paid_social",
+                utm_campaign="retarget",
+                event_count=3,
+                first_seen_at=now,
+                last_seen_at=now,
+            ),
+        ]
+    )
+    await db.commit()
+
+    result = await get_landing_campaign_metrics(
+        request=request,
+        days=30,
+        limit=10,
+        db=db,
+        user=MagicMock(),
+    )
+
+    assert result.total_events == 23
+    assert len(result.items) == 2
+    assert result.items[0].utm_campaign == "launch"
+    assert result.items[0].total_events == 20
+    assert result.items[0].cta_events == 7
+    assert result.items[0].signup_intent_events == 2

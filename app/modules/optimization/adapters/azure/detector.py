@@ -5,9 +5,10 @@ from app.shared.core.exceptions import ExternalAPIError
 from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
+from app.modules.optimization.adapters.azure import plugins as azure_plugins
 
-# Import Azure Plugins to trigger registration
-import app.modules.optimization.adapters.azure.plugins  # noqa
+# Import Azure plugins to trigger registry registration.
+azure_plugins.load_plugins()
 
 logger = structlog.get_logger()
 

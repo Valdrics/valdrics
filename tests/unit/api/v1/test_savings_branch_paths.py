@@ -29,6 +29,7 @@ def _scalars_result(items: list[object]) -> MagicMock:
     result = MagicMock()
     scalars = MagicMock()
     scalars.all.return_value = items
+    scalars.__iter__.side_effect = lambda: iter(items)
     result.scalars.return_value = scalars
     return result
 
@@ -36,6 +37,7 @@ def _scalars_result(items: list[object]) -> MagicMock:
 def _all_result(items: list[object]) -> MagicMock:
     result = MagicMock()
     result.all.return_value = items
+    result.__iter__.side_effect = lambda: iter(items)
     return result
 
 
@@ -241,6 +243,7 @@ async def test_compute_realized_savings_rejects_invalid_window() -> None:
             measurement_days=7,
             gap_days=1,
             monthly_multiplier_days=30,
+            limit=1000,
             require_final=True,
             current_user=_user(),
             db=MagicMock(),
@@ -270,6 +273,7 @@ async def test_compute_realized_savings_handles_computed_skipped_and_errors() ->
             measurement_days=7,
             gap_days=1,
             monthly_multiplier_days=30,
+            limit=1000,
             require_final=True,
             current_user=_user(),
             db=db,
@@ -302,6 +306,7 @@ async def test_compute_realized_savings_does_not_swallow_base_exceptions() -> No
                 measurement_days=7,
                 gap_days=1,
                 monthly_multiplier_days=30,
+                limit=1000,
                 require_final=True,
                 current_user=_user(),
                 db=db,

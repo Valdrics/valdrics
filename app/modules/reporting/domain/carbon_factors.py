@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.carbon_factors import CarbonFactorSet, CarbonFactorUpdateLog
-from app.modules.reporting.domain.calculator import (
+from app.modules.reporting.domain.carbon_factor_catalog import (
     build_carbon_factor_payload,
     compute_carbon_factor_checksum,
 )

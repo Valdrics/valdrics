@@ -1,45 +1,42 @@
-from typing import Annotated, Optional, Dict, Any
+from typing import Annotated, Dict, Any, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.params import Param
-from sqlalchemy import select
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
-from pydantic import BaseModel
 import structlog
 
 from app.shared.core.auth import CurrentUser, requires_role, require_tenant_access
 from app.shared.db.session import get_db
 from app.models.remediation import (
-    RemediationAction,
     RemediationRequest,
-    RemediationStatus,
 )
 from app.modules.optimization.domain import ZombieService, RemediationService
+from app.modules.optimization.api.v1.zombies_route_helpers import (
+    DEFAULT_REGION_HINT as _DEFAULT_REGION_HINT,
+    coerce_query_bool as _coerce_query_bool_impl,
+    coerce_query_int as _coerce_query_int_impl,
+    coerce_region_hint as _coerce_region_hint_impl,
+    enforce_growth_nonprod_auto_remediation as _enforce_growth_nonprod_auto_remediation_impl,
+    load_remediation_request_for_authorization as _load_remediation_request_for_authorization_impl,
+    parse_remediation_action as _parse_remediation_action_impl,
+    raise_if_failed_execution as _raise_if_failed_execution_impl,
+    required_approval_permission as _required_approval_permission_impl,
+)
 from app.shared.core.dependencies import requires_feature
-from app.shared.core.pricing import FeatureFlag, PricingTier, normalize_tier
+from app.shared.core.pricing import FeatureFlag
 from app.shared.core.rate_limit import rate_limit
 from app.shared.core.exceptions import ResourceNotFoundError, ValdricsException
 from app.shared.core.provider import normalize_provider
-from app.shared.core.remediation_results import (
-    normalize_remediation_status,
-    parse_remediation_execution_error,
-)
 from app.models.background_job import JobType
 from app.modules.governance.domain.jobs.processor import enqueue_job
-from app.modules.governance.domain.security.remediation_policy import (
-    is_production_destructive_remediation,
-    is_production_remediation_target,
-)
 from app.shared.core.approval_permissions import (
-    APPROVAL_PERMISSION_REMEDIATION_APPROVE_NONPROD,
-    APPROVAL_PERMISSION_REMEDIATION_APPROVE_PROD,
     user_has_approval_permission,
 )
 
 router = APIRouter(tags=["Cloud Hygiene (Zombies)"])
 logger = structlog.get_logger()
-DEFAULT_REGION_HINT = "global"
+DEFAULT_REGION_HINT = _DEFAULT_REGION_HINT
 REMEDIATION_EXECUTION_RECOVERABLE_EXCEPTIONS = (
     SQLAlchemyError,
     RuntimeError,
@@ -49,136 +46,17 @@ REMEDIATION_EXECUTION_RECOVERABLE_EXCEPTIONS = (
     TypeError,
 )
 
-
-def _coerce_region_hint(value: Any) -> str:
-    if isinstance(value, Param):
-        value = value.default
-    normalized = str(value or "").strip().lower()
-    return normalized or DEFAULT_REGION_HINT
-
-
-def _coerce_query_bool(value: Any, *, default: bool = False) -> bool:
-    if isinstance(value, Param):
-        value = value.default
-    if isinstance(value, bool):
-        return value
-    if value is None:
-        return default
-    if isinstance(value, str):
-        normalized = value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-    return bool(value)
+_coerce_region_hint = _coerce_region_hint_impl
+_coerce_query_bool = _coerce_query_bool_impl
+_coerce_query_int = _coerce_query_int_impl
+_parse_remediation_action = _parse_remediation_action_impl
+_raise_if_failed_execution = _raise_if_failed_execution_impl
+_load_remediation_request_for_authorization = (
+    _load_remediation_request_for_authorization_impl
+)
+_required_approval_permission = _required_approval_permission_impl
 
 
-def _coerce_query_int(
-    value: Any,
-    *,
-    default: int,
-    minimum: int | None = None,
-) -> int:
-    if isinstance(value, Param):
-        value = value.default
-    if value is None:
-        coerced = default
-    else:
-        try:
-            coerced = int(value)
-        except (TypeError, ValueError):
-            coerced = default
-    if minimum is not None and coerced < minimum:
-        return minimum
-    return coerced
-
-
-def _parse_remediation_action(action: str) -> RemediationAction:
-    try:
-        return RemediationAction(action)
-    except ValueError as exc:
-        raise ValdricsException(
-            message=f"Invalid action: {action}",
-            code="invalid_remediation_action",
-            status_code=400,
-        ) from exc
-
-
-def _raise_if_failed_execution(executed_request: RemediationRequest) -> None:
-    status_value = normalize_remediation_status(getattr(executed_request, "status", None))
-    if status_value != RemediationStatus.FAILED.value:
-        return
-
-    failure = parse_remediation_execution_error(
-        getattr(executed_request, "execution_error", None)
-    )
-
-    raise ValdricsException(
-        message=failure.message,
-        code=failure.reason,
-        status_code=failure.status_code or 400,
-    )
-
-
-async def _load_remediation_request_for_authorization(
-    db: AsyncSession,
-    *,
-    request_id: UUID,
-    tenant_id: UUID,
-) -> RemediationRequest:
-    result = await db.execute(
-        select(RemediationRequest)
-        .where(RemediationRequest.id == request_id)
-        .where(RemediationRequest.tenant_id == tenant_id)
-    )
-    remediation_request = result.scalar_one_or_none()
-    if remediation_request is None:
-        raise ResourceNotFoundError(f"Remediation request {request_id} not found")
-    return remediation_request
-
-
-def _required_approval_permission(remediation_request: RemediationRequest) -> str:
-    if is_production_destructive_remediation(remediation_request):
-        return APPROVAL_PERMISSION_REMEDIATION_APPROVE_PROD
-    return APPROVAL_PERMISSION_REMEDIATION_APPROVE_NONPROD
-
-
-async def _enforce_approval_permission(
-    db: AsyncSession,
-    *,
-    user: CurrentUser,
-    required_permission: str,
-) -> None:
-    if await user_has_approval_permission(db, user, required_permission):
-        return
-    raise HTTPException(
-        status_code=403,
-        detail=(
-            "Insufficient permissions. "
-            f"Required approval permission: {required_permission}"
-        ),
-    )
-
-
-def _enforce_growth_nonprod_auto_remediation(
-    *,
-    user: CurrentUser,
-    remediation_request: RemediationRequest,
-) -> None:
-    if normalize_tier(user.tier) != PricingTier.GROWTH:
-        return
-    if not is_production_remediation_target(remediation_request):
-        return
-    raise HTTPException(
-        status_code=403,
-        detail=(
-            "Growth tier allows auto-remediation for non-production resources only. "
-            "Upgrade to Pro for production remediation."
-        ),
-    )
-
-
-# --- Schemas ---
 class RemediationRequestCreate(BaseModel):
     resource_id: str
     resource_type: str
@@ -216,8 +94,26 @@ class PolicyPreviewCreate(BaseModel):
     parameters: Optional[Dict[str, Any]] = None
 
 
-# --- Endpoints ---
+async def _enforce_approval_permission(
+    db: AsyncSession,
+    *,
+    user: CurrentUser,
+    required_permission: str,
+) -> None:
+    if await user_has_approval_permission(db, user, required_permission):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail=(
+            "Insufficient permissions. "
+            f"Required approval permission: {required_permission}"
+        ),
+    )
 
+
+_enforce_growth_nonprod_auto_remediation = (
+    _enforce_growth_nonprod_auto_remediation_impl
+)
 
 @router.get("")
 @rate_limit("10/minute")
@@ -232,10 +128,6 @@ async def scan_zombies(
     ),
     background: bool = Query(default=False, description="Run scan as a background job"),
 ) -> Any:
-    """
-    Scan cloud accounts for zombie resources.
-    If background=True, returns a job_id immediately.
-    """
     region_hint = _coerce_region_hint(region)
     analyze_enabled = _coerce_query_bool(analyze, default=False)
     run_in_background = _coerce_query_bool(background, default=False)
@@ -526,13 +418,7 @@ async def get_remediation_plan(
     ],
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
-    """
-    Generate and return a Terraform decommissioning plan for a remediation request.
-    Requires Pro tier or higher.
-    """
     service = RemediationService(db=db)
-
-    # Fetch the request using centralized scoping
     remediation_request = await service.get_by_id(
         RemediationRequest, request_id, tenant_id
     )

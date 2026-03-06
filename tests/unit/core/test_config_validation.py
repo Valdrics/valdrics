@@ -443,40 +443,17 @@ class TestSettingsValidation:
             )
 
     def test_settings_multi_worker_requires_distributed_breaker_and_redis(self):
-        with patch.dict("os.environ", {"WEB_CONCURRENCY": "4"}, clear=True):
-            with pytest.raises(ValidationError) as exc:
-                Settings(
-                    ENVIRONMENT="production",
-                    DATABASE_URL="postgresql+asyncpg://test",
-                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
-                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
-                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
-                    KDF_SALT=FAKE_KDF_SALT,
-                    DEBUG=False,
-                    TESTING=False,
-                    DB_SSL_MODE="require",
-                    ADMIN_API_KEY="a" * 32,
-                    GROQ_API_KEY="g" * 32,
-                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
-                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
-                    _env_file=None,
-                )
-            assert "WEB_CONCURRENCY > 1 requires CIRCUIT_BREAKER_DISTRIBUTED_STATE" in str(
-                exc.value
-            )
-
-    def test_settings_multi_worker_allowed_with_distributed_breaker_and_redis(self):
-        with patch.dict("os.environ", {"WEB_CONCURRENCY": "4"}, clear=True):
-            settings = Settings(
+        with pytest.raises(ValidationError) as exc:
+            Settings(
                 ENVIRONMENT="production",
                 DATABASE_URL="postgresql+asyncpg://test",
-                REDIS_URL="redis://localhost:6379",
                 SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                 ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
                 CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
                 KDF_SALT=FAKE_KDF_SALT,
                 DEBUG=False,
                 TESTING=False,
+                WEB_CONCURRENCY=4,
                 DB_SSL_MODE="require",
                 ADMIN_API_KEY="a" * 32,
                 GROQ_API_KEY="g" * 32,
@@ -484,7 +461,30 @@ class TestSettingsValidation:
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                 _env_file=None,
             )
-            assert settings.CIRCUIT_BREAKER_DISTRIBUTED_STATE is True
+        assert "WEB_CONCURRENCY > 1 requires CIRCUIT_BREAKER_DISTRIBUTED_STATE" in str(
+            exc.value
+        )
+
+    def test_settings_multi_worker_allowed_with_distributed_breaker_and_redis(self):
+        settings = Settings(
+            ENVIRONMENT="production",
+            DATABASE_URL="postgresql+asyncpg://test",
+            REDIS_URL="redis://localhost:6379",
+            SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+            ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+            CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+            KDF_SALT=FAKE_KDF_SALT,
+            DEBUG=False,
+            TESTING=False,
+            WEB_CONCURRENCY=4,
+            DB_SSL_MODE="require",
+            ADMIN_API_KEY="a" * 32,
+            GROQ_API_KEY="g" * 32,
+            PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+            PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+            _env_file=None,
+        )
+        assert settings.CIRCUIT_BREAKER_DISTRIBUTED_STATE is True
 
     def test_settings_production_requires_redis_for_rate_limiting(self):
         with patch.dict("os.environ", {}, clear=True):

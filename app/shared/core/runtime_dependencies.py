@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from datetime import datetime, timezone
 from importlib.util import find_spec
 
@@ -94,7 +93,7 @@ def validate_runtime_dependencies(settings: Settings) -> None:
             "Install tiktoken to ensure accurate LLM token accounting."
         )
 
-    sentry_dsn = str(os.getenv("SENTRY_DSN", "")).strip()
+    sentry_dsn = str(getattr(settings, "SENTRY_DSN", None) or "").strip()
     if strict_env and sentry_dsn and not _module_available("sentry_sdk"):
         raise RuntimeError(
             "SENTRY_DSN is configured but 'sentry_sdk' is not installed. "

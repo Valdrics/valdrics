@@ -7,7 +7,8 @@ from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.domain.registry import registry
 
 # Import plugins to trigger registration.
-import app.modules.optimization.adapters.saas.plugins  # noqa
+import app.modules.optimization.adapters.saas.plugins.api  # noqa: F401
+import app.modules.optimization.adapters.saas.plugins.core  # noqa: F401
 
 logger = structlog.get_logger()
 

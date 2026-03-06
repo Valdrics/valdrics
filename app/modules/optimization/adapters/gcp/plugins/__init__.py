@@ -1,34 +1,35 @@
-"""
-GCP Zombie Detection Plugins.
+"""GCP plugin registration loader with optional dependency tolerance."""
 
-All plugins use billing export data from BigQuery for zero-cost detection.
-"""
+from __future__ import annotations
 
-from .compute import IdleVmsPlugin, IdleGpuInstancesPlugin, StoppedVmsPlugin
-from .storage import UnattachedDisksPlugin, OldSnapshotsPlugin
-from .network import OrphanExternalIpsPlugin
-from .database import IdleCloudSqlPlugin
-from .containers import (
-    EmptyGkeClusterPlugin,
-    IdleCloudRunPlugin,
-    IdleCloudFunctionsPlugin,
+import importlib
+
+import structlog
+
+logger = structlog.get_logger()
+
+_PLUGIN_MODULES: tuple[str, ...] = (
+    "compute",
+    "storage",
+    "network",
+    "database",
+    "containers",
+    "ai",
+    "search",
+    "rightsizing",
 )
-from .ai import IdleVertexEndpointsPlugin
-from .search import IdleVectorSearchPlugin
-from .rightsizing import OverprovisionedComputePlugin
 
-__all__ = [
-    "IdleVmsPlugin",
-    "IdleGpuInstancesPlugin",
-    "StoppedVmsPlugin",
-    "IdleVertexEndpointsPlugin",
-    "IdleVectorSearchPlugin",
-    "OverprovisionedComputePlugin",
-    "UnattachedDisksPlugin",
-    "OldSnapshotsPlugin",
-    "OrphanExternalIpsPlugin",
-    "IdleCloudSqlPlugin",
-    "EmptyGkeClusterPlugin",
-    "IdleCloudRunPlugin",
-    "IdleCloudFunctionsPlugin",
-]
+
+def load_plugins() -> None:
+    for module_name in _PLUGIN_MODULES:
+        try:
+            importlib.import_module(f"{__name__}.{module_name}")
+        except (ModuleNotFoundError, ImportError, AttributeError) as exc:
+            logger.debug(
+                "gcp_plugin_module_skipped",
+                module=module_name,
+                error=str(exc),
+            )
+
+
+__all__ = ("load_plugins",)

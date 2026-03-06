@@ -16,6 +16,7 @@ def _settings(
     allow_prophet_fallback: bool = True,
     break_glass_reason: str | None = "Temporary dependency incident",
     break_glass_expires_at: str | None = None,
+    sentry_dsn: str | None = None,
 ) -> SimpleNamespace:
     if break_glass_expires_at is None:
         break_glass_expires_at = (
@@ -27,6 +28,7 @@ def _settings(
         FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=allow_prophet_fallback,
         FORECASTER_BREAK_GLASS_REASON=break_glass_reason,
         FORECASTER_BREAK_GLASS_EXPIRES_AT=break_glass_expires_at,
+        SENTRY_DSN=sentry_dsn,
     )
 
 
@@ -44,11 +46,11 @@ def test_validate_runtime_dependencies_requires_tiktoken_in_strict_env() -> None
             validate_runtime_dependencies(settings)  # type: ignore[arg-type]
 
 
-def test_validate_runtime_dependencies_requires_sentry_sdk_when_dsn_set(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    settings = _settings(environment="staging")
-    monkeypatch.setenv("SENTRY_DSN", "https://example@sentry.io/1")
+def test_validate_runtime_dependencies_requires_sentry_sdk_when_dsn_set() -> None:
+    settings = _settings(
+        environment="staging",
+        sentry_dsn="https://example@sentry.io/1",
+    )
 
     def available(module_name: str) -> bool:
         if module_name == "sentry_sdk":

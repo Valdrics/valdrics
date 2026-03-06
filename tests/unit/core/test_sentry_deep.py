@@ -1,4 +1,4 @@
-import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 # Import app modules locally inside tests to allow patching
@@ -15,21 +15,44 @@ class TestSentryDeep:
     @patch("app.shared.core.sentry.SENTRY_AVAILABLE", True)
     @patch("app.shared.core.sentry.sentry_sdk")
     def test_init_sentry_success(self, mock_sentry):
-        with patch.dict(os.environ, {"SENTRY_DSN": "http://test@sentry.io/1"}):
+        with patch(
+            "app.shared.core.sentry.get_settings",
+            return_value=SimpleNamespace(
+                SENTRY_DSN="http://test@sentry.io/1",
+                ENVIRONMENT="development",
+                APP_VERSION=None,
+                VERSION="0.1.0",
+            ),
+        ):
             result = init_sentry()
             assert result is True
             assert mock_sentry.init.called
 
     @patch("app.shared.core.sentry.SENTRY_AVAILABLE", False)
     def test_init_sentry_unavailable(self):
-        result = init_sentry()
+        with patch(
+            "app.shared.core.sentry.get_settings",
+            return_value=SimpleNamespace(
+                SENTRY_DSN="http://test@sentry.io/1",
+                ENVIRONMENT="development",
+                APP_VERSION=None,
+                VERSION="0.1.0",
+            ),
+        ):
+            result = init_sentry()
         assert result is False
 
     @patch("app.shared.core.sentry.SENTRY_AVAILABLE", True)
     def test_init_sentry_no_dsn(self):
-        with patch.dict(os.environ, {}, clear=True):
-            if "SENTRY_DSN" in os.environ:
-                del os.environ["SENTRY_DSN"]
+        with patch(
+            "app.shared.core.sentry.get_settings",
+            return_value=SimpleNamespace(
+                SENTRY_DSN="",
+                ENVIRONMENT="development",
+                APP_VERSION=None,
+                VERSION="0.1.0",
+            ),
+        ):
             result = init_sentry()
             assert result is False
 

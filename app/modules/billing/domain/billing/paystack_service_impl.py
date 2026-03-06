@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from datetime import datetime, timezone
 from typing import Any, Protocol, Callable
 from uuid import UUID
 
@@ -17,6 +16,16 @@ from app.shared.core.pricing import PricingTier
 
 from . import paystack_shared as shared
 from .paystack_client_impl import PaystackClient
+from .paystack_service_runtime_ops import (
+    compute_fallback_next_payment_date as _compute_fallback_next_payment_date_impl,
+    fetch_provider_next_payment_date as _fetch_provider_next_payment_date_impl,
+    infer_interval_days as _infer_interval_days_impl,
+    parse_paystack_datetime as _parse_paystack_datetime_impl,
+    resolve_checkout_currency as _resolve_checkout_currency_impl,
+    resolve_renewal_next_payment_date as _resolve_renewal_next_payment_date_impl,
+    to_decimal_usd as _to_decimal_usd_impl,
+    usd_to_subunit_cents as _usd_to_subunit_cents_impl,
+)
 
 PAYSTACK_RUNTIME_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     SQLAlchemyError,
@@ -69,53 +78,32 @@ class BillingService:
     def _build_exchange_rate_service(self) -> _ExchangeRateRuntime:
         return self._exchange_rate_service_factory(self.db)
 
-    @staticmethod
-    def _to_decimal_usd(value: Any) -> Decimal:
-        try:
-            amount = Decimal(str(value))
-        except (InvalidOperation, TypeError, ValueError) as exc:
-            raise ValueError(f"Invalid USD amount: {value}") from exc
-        if amount < 0:
-            raise ValueError(f"Invalid USD amount: {value}")
-        return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-    @staticmethod
-    def _usd_to_subunit_cents(amount_usd: Decimal) -> int:
-        return int(
-            (amount_usd * Decimal("100")).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
-        )
-
-    @property
-    def plan_codes(self) -> dict[PricingTier, str | None]:
-        """Resolve monthly plan codes lazily from live settings."""
-        return {
-            PricingTier.STARTER: shared.settings.PAYSTACK_PLAN_STARTER,
-            PricingTier.GROWTH: shared.settings.PAYSTACK_PLAN_GROWTH,
-            PricingTier.PRO: shared.settings.PAYSTACK_PLAN_PRO,
-            PricingTier.ENTERPRISE: shared.settings.PAYSTACK_PLAN_ENTERPRISE,
-        }
-
-    @property
-    def annual_plan_codes(self) -> dict[PricingTier, str | None]:
-        """Resolve annual plan codes lazily from live settings."""
-        return {
-            PricingTier.STARTER: getattr(
-                shared.settings, "PAYSTACK_PLAN_STARTER_ANNUAL", None
-            ),
-            PricingTier.GROWTH: getattr(
-                shared.settings, "PAYSTACK_PLAN_GROWTH_ANNUAL", None
-            ),
-            PricingTier.PRO: getattr(shared.settings, "PAYSTACK_PLAN_PRO_ANNUAL", None),
-            PricingTier.ENTERPRISE: getattr(
-                shared.settings, "PAYSTACK_PLAN_ENTERPRISE_ANNUAL", None
-            ),
-        }
+    _to_decimal_usd = staticmethod(_to_decimal_usd_impl)
+    _usd_to_subunit_cents = staticmethod(_usd_to_subunit_cents_impl)
 
     def _resolve_plan_code(self, *, tier: PricingTier, billing_cycle: str) -> str | None:
-        is_annual = billing_cycle.lower() == "annual"
-        mapping = self.annual_plan_codes if is_annual else self.plan_codes
+        mapping = {
+            PricingTier.STARTER: (
+                getattr(shared.settings, "PAYSTACK_PLAN_STARTER_ANNUAL", None)
+                if billing_cycle.lower() == "annual"
+                else shared.settings.PAYSTACK_PLAN_STARTER
+            ),
+            PricingTier.GROWTH: (
+                getattr(shared.settings, "PAYSTACK_PLAN_GROWTH_ANNUAL", None)
+                if billing_cycle.lower() == "annual"
+                else shared.settings.PAYSTACK_PLAN_GROWTH
+            ),
+            PricingTier.PRO: (
+                getattr(shared.settings, "PAYSTACK_PLAN_PRO_ANNUAL", None)
+                if billing_cycle.lower() == "annual"
+                else shared.settings.PAYSTACK_PLAN_PRO
+            ),
+            PricingTier.ENTERPRISE: (
+                getattr(shared.settings, "PAYSTACK_PLAN_ENTERPRISE_ANNUAL", None)
+                if billing_cycle.lower() == "annual"
+                else shared.settings.PAYSTACK_PLAN_ENTERPRISE
+            ),
+        }
         value = mapping.get(tier)
         if value is None:
             return None
@@ -123,123 +111,43 @@ class BillingService:
         return normalized or None
 
     def _resolve_checkout_currency(self, requested_currency: str | None) -> str:
-        default_currency = str(
-            getattr(
-                shared.settings,
-                "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY",
-                shared.PAYSTACK_CHECKOUT_CURRENCY,
-            )
-            or shared.PAYSTACK_CHECKOUT_CURRENCY
-        ).strip().upper()
-        if default_currency not in {"NGN", "USD"}:
-            default_currency = shared.PAYSTACK_CHECKOUT_CURRENCY
-
-        resolved = (
-            str(requested_currency).strip().upper()
-            if isinstance(requested_currency, str) and requested_currency.strip()
-            else default_currency
+        return _resolve_checkout_currency_impl(
+            requested_currency,
+            settings=shared.settings,
+            default_checkout_currency=shared.PAYSTACK_CHECKOUT_CURRENCY,
         )
-        if resolved == "USD" and not bool(
-            getattr(shared.settings, "PAYSTACK_ENABLE_USD_CHECKOUT", False)
-        ):
-            raise ValueError("USD checkout is not enabled")
-        if resolved not in {"NGN", "USD"}:
-            raise ValueError(f"Unsupported checkout currency: {resolved}")
-        return resolved
 
-    @staticmethod
-    def _parse_paystack_datetime(value: Any) -> datetime | None:
-        if not isinstance(value, str) or not value.strip():
-            return None
-        try:
-            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-        except ValueError:
-            return None
-        if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=timezone.utc)
-        return parsed
-
-    @staticmethod
-    def _infer_interval_days(charge_data: dict[str, Any]) -> int:
-        interval_raw: Any = None
-        plan_data = charge_data.get("plan")
-        if isinstance(plan_data, dict):
-            interval_raw = plan_data.get("interval")
-        if interval_raw is None:
-            metadata = charge_data.get("metadata")
-            if isinstance(metadata, dict):
-                interval_raw = metadata.get("billing_cycle")
-
-        interval = str(interval_raw or "").strip().lower()
-        if interval in {"annual", "annually", "year", "yearly"}:
-            return 365
-        return 30
+    _parse_paystack_datetime = staticmethod(_parse_paystack_datetime_impl)
+    _infer_interval_days = staticmethod(_infer_interval_days_impl)
 
     async def _fetch_provider_next_payment_date(
         self, subscription: TenantSubscription
     ) -> datetime | None:
-        code_raw = getattr(subscription, "paystack_subscription_code", None)
-        if not isinstance(code_raw, str) or not code_raw.strip():
-            return None
-
-        try:
-            provider_payload = await self.client.fetch_subscription(code_raw.strip())
-        except PAYSTACK_RUNTIME_RECOVERABLE_ERRORS as exc:
-            shared.logger.warning(
-                "renewal_fetch_subscription_failed",
-                tenant_id=str(subscription.tenant_id),
-                subscription_code=code_raw,
-                error=str(exc),
-            )
-            return None
-
-        if not isinstance(provider_payload, dict):
-            return None
-        data = provider_payload.get("data")
-        if not isinstance(data, dict):
-            return None
-
-        return (
-            self._parse_paystack_datetime(data.get("next_payment_date"))
-            or self._parse_paystack_datetime(data.get("next_payment"))
-            or self._parse_paystack_datetime(data.get("current_period_end"))
+        return await _fetch_provider_next_payment_date_impl(
+            subscription,
+            client=self.client,
+            parse_paystack_datetime_fn=self._parse_paystack_datetime,
+            logger=shared.logger,
+            runtime_recoverable_errors=PAYSTACK_RUNTIME_RECOVERABLE_ERRORS,
         )
 
     @staticmethod
     def _compute_fallback_next_payment_date(
         subscription: TenantSubscription, interval_days: int
     ) -> datetime:
-        now = datetime.now(timezone.utc)
-        anchor = getattr(subscription, "next_payment_date", None)
-        if isinstance(anchor, datetime):
-            anchor_utc = anchor if anchor.tzinfo else anchor.replace(tzinfo=timezone.utc)
-            if anchor_utc < now - timedelta(days=interval_days):
-                anchor_utc = now
-        else:
-            anchor_utc = now
-
-        candidate = anchor_utc + timedelta(days=interval_days)
-        if candidate <= now:
-            candidate = now + timedelta(days=interval_days)
-        return candidate
+        return _compute_fallback_next_payment_date_impl(subscription, interval_days)
 
     async def _resolve_renewal_next_payment_date(
         self, subscription: TenantSubscription, charge_data: dict[str, Any]
     ) -> datetime:
-        provider_next_payment = await self._fetch_provider_next_payment_date(
-            subscription
+        return await _resolve_renewal_next_payment_date_impl(
+            subscription,
+            charge_data,
+            fetch_provider_next_payment_date_fn=self._fetch_provider_next_payment_date,
+            parse_paystack_datetime_fn=self._parse_paystack_datetime,
+            infer_interval_days_fn=self._infer_interval_days,
+            compute_fallback_next_payment_date_fn=self._compute_fallback_next_payment_date,
         )
-        if provider_next_payment is not None:
-            return provider_next_payment
-
-        payload_next_payment = self._parse_paystack_datetime(
-            charge_data.get("next_payment_date")
-        )
-        if payload_next_payment is not None:
-            return payload_next_payment
-
-        interval_days = self._infer_interval_days(charge_data)
-        return self._compute_fallback_next_payment_date(subscription, interval_days)
 
     async def create_checkout_session(
         self,
@@ -250,16 +158,10 @@ class BillingService:
         billing_cycle: str = "monthly",
         currency: str | None = None,
     ) -> dict[str, Any]:
-        """
-        Initialize Paystack transaction for subscription using dynamic currency.
-        Defaults to NGN and supports USD only when explicitly enabled.
-        """
         if tier == PricingTier.FREE:
             raise ValueError("Cannot checkout free tier")
 
         is_annual = billing_cycle.lower() == "annual"
-
-        # 1. Look up USD price from TIER_CONFIG (or DB fallback)
         from app.shared.core.pricing import TIER_CONFIG
 
         config = TIER_CONFIG.get(tier)
@@ -280,7 +182,6 @@ class BillingService:
         amount_subunits: int
 
         if checkout_currency == shared.PAYSTACK_CHECKOUT_CURRENCY:
-            # Convert to NGN using Exchange Rate Service.
             currency_service = self._build_exchange_rate_service()
             ngn_rate = await currency_service.get_ngn_rate()
             amount_subunits = currency_service.convert_usd_to_ngn(
@@ -289,7 +190,6 @@ class BillingService:
             fx_rate = float(ngn_rate)
             fx_provider = shared.PAYSTACK_FX_PROVIDER
         else:
-            # USD checkout uses native currency subunits (cents).
             amount_subunits = self._usd_to_subunit_cents(usd_price_decimal)
             fx_rate = 1.0
             fx_provider = shared.PAYSTACK_USD_FX_PROVIDER
@@ -302,7 +202,6 @@ class BillingService:
         pricing_mode = "fixed_plan_code" if plan_code else "dynamic_amount"
 
         try:
-            # Check existing subscription
             result = await self.db.execute(
                 select(TenantSubscription).where(
                     TenantSubscription.tenant_id == tenant_id
@@ -310,7 +209,6 @@ class BillingService:
             )
             sub = result.scalar_one_or_none()
 
-            # Start transaction with plan-code when available, else dynamic amount.
             response = await self.client.initialize_transaction(
                 email=email,
                 amount_kobo=amount_subunits,

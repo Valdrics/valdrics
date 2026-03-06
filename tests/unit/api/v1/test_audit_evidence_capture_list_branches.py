@@ -33,6 +33,9 @@ class _ScalarsResult:
     def all(self) -> list[object]:
         return self._rows
 
+    def __iter__(self):
+        return iter(self._rows)
+
 
 class _RowsResult:
     def __init__(self, rows: list[tuple[object, ...]]) -> None:

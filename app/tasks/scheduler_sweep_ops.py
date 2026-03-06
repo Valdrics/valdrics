@@ -1,10 +1,16 @@
 from __future__ import annotations
 
-import inspect
+import time
 from datetime import datetime, timezone
 from typing import Any, Callable
 
 from sqlalchemy.exc import SQLAlchemyError
+
+from app.tasks.scheduler_sweep_runtime import (
+    increment_background_job_metric,
+    open_transaction_session,
+    run_sweep_with_retries,
+)
 
 SCHEDULER_SWEEP_RECOVERABLE_ERRORS = (
     SQLAlchemyError,
@@ -40,90 +46,71 @@ async def billing_sweep_logic(
     )
 
     job_name = "daily_billing_sweep"
-    start_time = time_module.time()
-    max_retries = 3
-    retry_count = 0
-
     with scheduler_span_fn("scheduler.billing_sweep", job_name=job_name):
-        while retry_count < max_retries:
-            try:
-                async with open_db_session_fn() as db:
-                    begin_ctx = db.begin()
-                    if (
-                        asyncio_module.iscoroutine(begin_ctx)
-                        or inspect.isawaitable(begin_ctx)
-                    ) and not hasattr(begin_ctx, "__aenter__"):
-                        begin_ctx = await begin_ctx
-                    async with begin_ctx:
-                        query = (
-                            sa.select(TenantSubscription)
-                            .where(
-                                TenantSubscription.status
-                                == SubscriptionStatus.ACTIVE.value,
-                                TenantSubscription.next_payment_date
-                                <= datetime.now(timezone.utc),
-                                TenantSubscription.paystack_auth_code.isnot(None),
-                            )
-                            .with_for_update(skip_locked=True)
+        async def _run_once() -> None:
+            async with open_transaction_session(
+                open_db_session_fn=open_db_session_fn,
+                asyncio_module=asyncio_module,
+            ) as db:
+                query = (
+                    sa.select(TenantSubscription)
+                    .where(
+                        TenantSubscription.status == SubscriptionStatus.ACTIVE.value,
+                        TenantSubscription.next_payment_date <= datetime.now(timezone.utc),
+                        TenantSubscription.paystack_auth_code.isnot(None),
+                    )
+                    .with_for_update(skip_locked=True)
+                )
+                result = await db.execute(query)
+                due_subscriptions = result.scalars().all()
+
+                now = datetime.now(timezone.utc)
+                bucket_str = now.strftime("%Y-%m-%d")
+                jobs_enqueued = 0
+                for sub in due_subscriptions:
+                    dedup_key = (
+                        f"{sub.tenant_id}:{job_type.RECURRING_BILLING.value}:{bucket_str}"
+                    )
+                    stmt = (
+                        insert(background_job_model)
+                        .values(
+                            job_type=job_type.RECURRING_BILLING.value,
+                            tenant_id=sub.tenant_id,
+                            payload={"subscription_id": str(sub.id)},
+                            status=job_status.PENDING,
+                            scheduled_for=now,
+                            created_at=now,
+                            deduplication_key=dedup_key,
+                        )
+                        .on_conflict_do_nothing(index_elements=["deduplication_key"])
+                    )
+                    result_proxy = await db.execute(stmt)
+                    if hasattr(result_proxy, "rowcount") and result_proxy.rowcount > 0:
+                        jobs_enqueued += 1
+                        increment_background_job_metric(
+                            background_jobs_enqueued=background_jobs_enqueued,
+                            job_type_value=job_type.RECURRING_BILLING.value,
+                            cohort="BILLING",
                         )
 
-                        result = await db.execute(query)
-                        due_subscriptions = result.scalars().all()
+                logger.info(
+                    "billing_sweep_completed",
+                    due_count=len(due_subscriptions),
+                    jobs_enqueued=jobs_enqueued,
+                )
 
-                        now = datetime.now(timezone.utc)
-                        bucket_str = now.strftime("%Y-%m-%d")
-                        jobs_enqueued = 0
-
-                        for sub in due_subscriptions:
-                            dedup_key = (
-                                f"{sub.tenant_id}:{job_type.RECURRING_BILLING.value}:{bucket_str}"
-                            )
-                            stmt = (
-                                insert(background_job_model)
-                                .values(
-                                    job_type=job_type.RECURRING_BILLING.value,
-                                    tenant_id=sub.tenant_id,
-                                    payload={"subscription_id": str(sub.id)},
-                                    status=job_status.PENDING,
-                                    scheduled_for=now,
-                                    created_at=now,
-                                    deduplication_key=dedup_key,
-                                )
-                                .on_conflict_do_nothing(
-                                    index_elements=["deduplication_key"]
-                                )
-                            )
-
-                            result_proxy = await db.execute(stmt)
-                            if (
-                                hasattr(result_proxy, "rowcount")
-                                and result_proxy.rowcount > 0
-                            ):
-                                jobs_enqueued += 1
-                                background_jobs_enqueued.labels(
-                                    job_type=job_type.RECURRING_BILLING.value,
-                                    cohort="BILLING",
-                                ).inc()
-
-                        logger.info(
-                            "billing_sweep_completed",
-                            due_count=len(due_subscriptions),
-                            jobs_enqueued=jobs_enqueued,
-                        )
-                scheduler_job_runs.labels(job_name=job_name, status="success").inc()
-                break
-            except SCHEDULER_SWEEP_RECOVERABLE_ERRORS as e:
-                retry_count += 1
-                logger.error("billing_sweep_failed", error=str(e), attempt=retry_count)
-                if retry_count == max_retries:
-                    scheduler_job_runs.labels(
-                        job_name=job_name, status="failure"
-                    ).inc()
-                else:
-                    await asyncio_module.sleep(2 ** (retry_count - 1))
-
-        duration = time_module.time() - start_time
-        scheduler_job_duration.labels(job_name=job_name).observe(duration)
+        await run_sweep_with_retries(
+            job_name=job_name,
+            error_event="billing_sweep_failed",
+            max_retries=3,
+            time_module=time_module,
+            asyncio_module=asyncio_module,
+            scheduler_job_runs=scheduler_job_runs,
+            scheduler_job_duration=scheduler_job_duration,
+            logger=logger,
+            recoverable_errors=SCHEDULER_SWEEP_RECOVERABLE_ERRORS,
+            run_once=_run_once,
+        )
 
 
 async def acceptance_sweep_logic(
@@ -147,21 +134,17 @@ async def acceptance_sweep_logic(
     asyncio_module: Any,
 ) -> None:
     job_name = "daily_acceptance_sweep"
-    start_time = __import__("time").time()
+    start_time = time.time()
     max_retries = 3
     retry_count = 0
 
     with scheduler_span_fn("scheduler.acceptance_sweep", job_name=job_name):
         while retry_count < max_retries:
             try:
-                async with open_db_session_fn() as db:
-                    begin_ctx = db.begin()
-                    if (
-                        asyncio_module.iscoroutine(begin_ctx)
-                        or inspect.isawaitable(begin_ctx)
-                    ) and not hasattr(begin_ctx, "__aenter__"):
-                        begin_ctx = await begin_ctx
-                    async with begin_ctx:
+                async with open_transaction_session(
+                    open_db_session_fn=open_db_session_fn,
+                    asyncio_module=asyncio_module,
+                ) as db:
                         result = await db.execute(
                             sa.select(tenant_model).with_for_update(skip_locked=True)
                         )
@@ -220,10 +203,11 @@ async def acceptance_sweep_logic(
                                 and result_proxy.rowcount > 0
                             ):
                                 jobs_enqueued += 1
-                                background_jobs_enqueued.labels(
-                                    job_type=job_type.ACCEPTANCE_SUITE_CAPTURE.value,
+                                increment_background_job_metric(
+                                    background_jobs_enqueued=background_jobs_enqueued,
+                                    job_type_value=job_type.ACCEPTANCE_SUITE_CAPTURE.value,
                                     cohort="ACCEPTANCE",
-                                ).inc()
+                                )
 
                         logger.info(
                             "acceptance_sweep_enqueued",
@@ -246,7 +230,7 @@ async def acceptance_sweep_logic(
                 else:
                     await asyncio_module.sleep(2 ** (retry_count - 1))
 
-        duration = __import__("time").time() - start_time
+        duration = time.time() - start_time
         scheduler_job_duration.labels(job_name=job_name).observe(duration)
 
 
@@ -411,89 +395,72 @@ async def enforcement_reconciliation_sweep_logic(
         return
 
     job_name = "hourly_enforcement_reconciliation_sweep"
-    start_time = time_module.time()
-    max_retries = 3
-    retry_count = 0
-
     with scheduler_span_fn(
         "scheduler.enforcement_reconciliation_sweep", job_name=job_name
     ):
-        while retry_count < max_retries:
-            try:
-                async with open_db_session_fn() as db:
-                    begin_ctx = db.begin()
-                    if (
-                        asyncio_module.iscoroutine(begin_ctx)
-                        or inspect.isawaitable(begin_ctx)
-                    ) and not hasattr(begin_ctx, "__aenter__"):
-                        begin_ctx = await begin_ctx
-                    async with begin_ctx:
-                        result = await db.execute(
-                            sa.select(tenant_model.id).with_for_update(skip_locked=True)
-                        )
-                        tenant_limit = system_sweep_tenant_limit_fn()
-                        tenant_ids = cap_scope_items_fn(
-                            result.scalars().all(),
-                            scope="enforcement_reconciliation_tenants",
-                            limit=tenant_limit,
-                        )
-                        now = datetime_cls.now(timezone_obj.utc)
-                        bucket_str = now.replace(
-                            minute=0, second=0, microsecond=0
-                        ).isoformat()
-                        jobs_enqueued = 0
-
-                        for tenant_id in tenant_ids:
-                            dedup_key = (
-                                f"{tenant_id}:{job_type.ENFORCEMENT_RECONCILIATION.value}:{bucket_str}"
-                            )
-                            stmt = (
-                                insert(background_job_model)
-                                .values(
-                                    job_type=job_type.ENFORCEMENT_RECONCILIATION.value,
-                                    tenant_id=tenant_id,
-                                    status=job_status.PENDING,
-                                    scheduled_for=now,
-                                    created_at=now,
-                                    payload={"trigger": "scheduled"},
-                                    deduplication_key=dedup_key,
-                                    priority=1,
-                                )
-                                .on_conflict_do_nothing(index_elements=["deduplication_key"])
-                            )
-                            result_proxy = await db.execute(stmt)
-                            if (
-                                hasattr(result_proxy, "rowcount")
-                                and result_proxy.rowcount > 0
-                            ):
-                                jobs_enqueued += 1
-                                background_jobs_enqueued.labels(
-                                    job_type=job_type.ENFORCEMENT_RECONCILIATION.value,
-                                    cohort="ENFORCEMENT",
-                                ).inc()
-
-                        logger.info(
-                            "enforcement_reconciliation_sweep_enqueued",
-                            tenants=len(tenant_ids),
-                            jobs_enqueued=jobs_enqueued,
-                            bucket=bucket_str,
-                        )
-
-                scheduler_job_runs.labels(job_name=job_name, status="success").inc()
-                break
-            except SCHEDULER_SWEEP_RECOVERABLE_ERRORS as e:
-                retry_count += 1
-                logger.error(
-                    "enforcement_reconciliation_sweep_failed",
-                    error=str(e),
-                    attempt=retry_count,
+        async def _run_once() -> None:
+            async with open_transaction_session(
+                open_db_session_fn=open_db_session_fn,
+                asyncio_module=asyncio_module,
+            ) as db:
+                result = await db.execute(
+                    sa.select(tenant_model.id).with_for_update(skip_locked=True)
                 )
-                if retry_count == max_retries:
-                    scheduler_job_runs.labels(
-                        job_name=job_name, status="failure"
-                    ).inc()
-                else:
-                    await asyncio_module.sleep(2 ** (retry_count - 1))
+                tenant_limit = system_sweep_tenant_limit_fn()
+                tenant_ids = cap_scope_items_fn(
+                    result.scalars().all(),
+                    scope="enforcement_reconciliation_tenants",
+                    limit=tenant_limit,
+                )
+                now = datetime_cls.now(timezone_obj.utc)
+                bucket_str = now.replace(
+                    minute=0, second=0, microsecond=0
+                ).isoformat()
+                jobs_enqueued = 0
 
-        duration = time_module.time() - start_time
-        scheduler_job_duration.labels(job_name=job_name).observe(duration)
+                for tenant_id in tenant_ids:
+                    dedup_key = (
+                        f"{tenant_id}:{job_type.ENFORCEMENT_RECONCILIATION.value}:{bucket_str}"
+                    )
+                    stmt = (
+                        insert(background_job_model)
+                        .values(
+                            job_type=job_type.ENFORCEMENT_RECONCILIATION.value,
+                            tenant_id=tenant_id,
+                            status=job_status.PENDING,
+                            scheduled_for=now,
+                            created_at=now,
+                            payload={"trigger": "scheduled"},
+                            deduplication_key=dedup_key,
+                            priority=1,
+                        )
+                        .on_conflict_do_nothing(index_elements=["deduplication_key"])
+                    )
+                    result_proxy = await db.execute(stmt)
+                    if hasattr(result_proxy, "rowcount") and result_proxy.rowcount > 0:
+                        jobs_enqueued += 1
+                        increment_background_job_metric(
+                            background_jobs_enqueued=background_jobs_enqueued,
+                            job_type_value=job_type.ENFORCEMENT_RECONCILIATION.value,
+                            cohort="ENFORCEMENT",
+                        )
+
+                logger.info(
+                    "enforcement_reconciliation_sweep_enqueued",
+                    tenants=len(tenant_ids),
+                    jobs_enqueued=jobs_enqueued,
+                    bucket=bucket_str,
+                )
+
+        await run_sweep_with_retries(
+            job_name=job_name,
+            error_event="enforcement_reconciliation_sweep_failed",
+            max_retries=3,
+            time_module=time_module,
+            asyncio_module=asyncio_module,
+            scheduler_job_runs=scheduler_job_runs,
+            scheduler_job_duration=scheduler_job_duration,
+            logger=logger,
+            recoverable_errors=SCHEDULER_SWEEP_RECOVERABLE_ERRORS,
+            run_once=_run_once,
+        )

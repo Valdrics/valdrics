@@ -1,0 +1,332 @@
+.landing-preview {
+	max-width: 42rem;
+	margin: 0 auto;
+	min-width: 0;
+}
+
+@media (min-width: 1024px) {
+	.landing-preview {
+		max-width: none;
+		margin: 0;
+	}
+}
+
+.landing-preview-card {
+	padding: 1.1rem;
+	contain: layout paint style;
+	min-width: 0;
+	max-width: 100%;
+}
+
+.landing-preview-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.75rem;
+	margin-bottom: 0.75rem;
+}
+
+.landing-preview-title {
+	display: flex;
+	align-items: center;
+	gap: 0.55rem;
+	font-weight: 700;
+	color: var(--color-ink-100);
+}
+
+.landing-preview-pill {
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.12em;
+	font-weight: 800;
+	padding: 0.25rem 0.55rem;
+	border-radius: 9999px;
+	color: var(--color-success-400);
+	background: rgb(16 185 129 / 0.1);
+	border: 1px solid rgb(16 185 129 / 0.22);
+}
+
+.landing-live-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 9999px;
+	background: var(--color-success-400);
+	box-shadow: 0 0 0 6px rgb(16 185 129 / 0.12);
+	animation: livePulse 1.8s var(--ease-in-out) infinite;
+}
+
+@keyframes livePulse {
+	0%,
+	100% {
+		transform: scale(1);
+		opacity: 0.95;
+	}
+	50% {
+		transform: scale(1.4);
+		opacity: 0.55;
+	}
+}
+
+.signal-state-headline {
+	margin: 0;
+	font-size: 1.08rem;
+	font-weight: 600;
+	color: var(--color-ink-200);
+}
+
+.signal-state-sub {
+	margin: 0.35rem 0 0.8rem 0;
+	font-size: 0.98rem;
+	line-height: 1.45;
+	color: var(--color-ink-400);
+	display: -webkit-box;
+	line-clamp: 2;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+}
+
+.signal-map {
+	position: relative;
+	border-radius: var(--radius-lg);
+	overflow: visible;
+	contain: layout style;
+	border: 1px solid rgb(255 255 255 / 0.07);
+	background:
+		radial-gradient(
+			120% 90% at 30% 20%,
+			rgb(34 211 238 / 0.18) 0%,
+			rgb(6 182 212 / 0.06) 38%,
+			rgb(15 19 24 / 0.55) 70%
+		),
+		radial-gradient(90% 120% at 75% 70%, rgb(16 185 129 / 0.12) 0%, rgb(15 19 24 / 0) 62%);
+	height: 344px;
+}
+
+.signal-map::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background-image: radial-gradient(rgb(255 255 255 / 0.1) 1px, transparent 1px);
+	background-size: 26px 26px;
+	opacity: 0.12;
+	pointer-events: none;
+	z-index: 2;
+}
+
+.signal-svg {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	z-index: 1;
+}
+
+.sig-grid line {
+	stroke: rgb(255 255 255 / 0.06);
+	stroke-width: 1;
+}
+
+.sig-link {
+	stroke: url(#sigLine);
+	opacity: 0.88;
+	animation: lineDash 7s linear infinite;
+}
+
+.signal-map.is-paused .sig-link,
+.signal-map.is-paused .sig-node {
+	animation-play-state: paused;
+}
+
+@keyframes lineDash {
+	to {
+		stroke-dashoffset: -220;
+	}
+}
+
+.sig-node {
+	fill: rgb(10 13 18 / 0.8);
+	stroke: var(--color-accent-400);
+	stroke-width: 2.2;
+	filter: drop-shadow(0 0 10px rgb(34 211 238 / 0.2));
+	transform-box: fill-box;
+	transform-origin: center;
+	animation: nodePulse 2.9s var(--ease-in-out) infinite;
+}
+
+.sig-node--center {
+	fill: rgb(6 182 212 / 0.65);
+	stroke: var(--color-accent-400);
+	animation-duration: 3.8s;
+}
+
+@keyframes nodePulse {
+	0%,
+	100% {
+		transform: scale(1);
+	}
+	50% {
+		transform: scale(1.18);
+	}
+}
+
+.sig-link.is-healthy {
+	stroke: url(#sigLine);
+	opacity: 0.92;
+}
+
+.sig-link.is-watch {
+	stroke: var(--color-warning-400);
+	opacity: 0.82;
+}
+
+.sig-link.is-critical {
+	stroke: var(--color-danger-400);
+	opacity: 0.95;
+}
+
+.sig-node.is-healthy {
+	stroke: var(--color-success-400);
+	filter: drop-shadow(0 0 10px rgb(16 185 129 / 0.24));
+}
+
+.sig-node.is-watch {
+	stroke: var(--color-warning-400);
+	filter: drop-shadow(0 0 10px rgb(245 158 11 / 0.24));
+}
+
+.sig-node.is-critical {
+	stroke: var(--color-danger-400);
+	filter: drop-shadow(0 0 10px rgb(244 63 94 / 0.26));
+}
+
+.sig-node.is-focused {
+	stroke-width: 3.2;
+	filter: drop-shadow(0 0 14px rgb(34 211 238 / 0.45));
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.landing-hero::before,
+	.landing-hero::after,
+	.landing-hero-signal-core::before,
+	.landing-hero-signal-ring,
+	.landing-hero-signal-node,
+	.landing-live-dot,
+	.sig-link,
+	.sig-node {
+		animation: none !important;
+	}
+}
+
+@media (max-width: 640px) {
+	.landing-live-dot,
+	.sig-link,
+	.sig-node {
+		animation-duration: 0.001ms;
+		animation-iteration-count: 1;
+	}
+}
+
+.signal-hotspot {
+	position: absolute;
+	appearance: none;
+	-webkit-appearance: none;
+	padding: 0;
+	margin: 0;
+	width: 1.35rem;
+	height: 1.35rem;
+	border-radius: 9999px;
+	border: 1px solid transparent;
+	background: transparent;
+	box-shadow: none;
+	transform: translate(-50%, -50%);
+	z-index: 4;
+	transition: all var(--duration-fast) var(--ease-out);
+}
+
+.signal-hotspot:hover,
+.signal-hotspot:focus-visible {
+	border-color: rgb(34 211 238 / 0.82);
+	box-shadow: 0 0 0 3px rgb(34 211 238 / 0.2);
+	background: rgb(34 211 238 / 0.2);
+}
+
+.signal-hotspot.is-active {
+	border-color: transparent;
+	box-shadow: none;
+	background: transparent;
+}
+
+.signal-hotspot:focus-visible {
+	outline: 2px solid var(--color-accent-500);
+	outline-offset: 2px;
+}
+
+.signal-lane-controls {
+	margin-top: 0.85rem;
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 0.45rem;
+}
+
+.signal-summary-row {
+	margin-top: 0.75rem;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.55rem;
+}
+
+.signal-summary-text {
+	margin: 0;
+	font-size: 0.84rem;
+	color: var(--color-ink-300);
+}
+
+.signal-summary-text strong {
+	color: var(--color-ink-100);
+	font-weight: 700;
+}
+
+.signal-details-toggle {
+	border-radius: 9999px;
+	border: 1px solid rgb(255 255 255 / 0.2);
+	background: rgb(7 13 20 / 0.78);
+	color: var(--color-ink-100);
+	font-size: 0.8rem;
+	font-weight: 700;
+	padding: 0.34rem 0.74rem;
+	transition: all var(--duration-fast) var(--ease-out);
+}
+
+.signal-details-toggle:hover {
+	border-color: rgb(255 255 255 / 0.34);
+	background: rgb(9 16 24 / 0.9);
+}
+
+.signal-details-toggle:focus-visible {
+	outline: 2px solid var(--color-accent-500);
+	outline-offset: 2px;
+}
+
+.signal-details-toggle--secondary {
+	font-size: 0.76rem;
+	padding: 0.3rem 0.68rem;
+}
+
+.signal-walkthrough-row {
+	margin-top: 0.9rem;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 0.55rem;
+	flex-wrap: wrap;
+}
+
+.signal-walkthrough-text {
+	margin: 0;
+	font-size: 0.83rem;
+	color: var(--color-ink-400);
+}
+

@@ -1,29 +1,31 @@
-"""
-Unified currency service for billing, reporting, and scheduler jobs.
-
-This module is the single source of truth for USD->X exchange rates:
-- NGN priority source: CBN NFEM official endpoint.
-- Cache hierarchy: in-memory (L1), Redis (L2), Postgres `exchange_rates` (L3).
-
-Billing callers must use strict mode to fail closed when no trustworthy live rate exists.
-"""
+"""Unified FX service with L1/L2/L3 cache hierarchy and strict billing safety mode."""
 
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone, timedelta
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal
 import time
 from typing import Any, AsyncGenerator, Optional
 
-from httpx import HTTPError
 import structlog
 from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pricing import ExchangeRate
 from app.shared.core.config import get_settings
+from app.shared.core.currency_errors import (
+    EXCHANGE_RATE_CACHE_RECOVERABLE_ERRORS,
+    EXCHANGE_RATE_DB_RECOVERABLE_ERRORS,
+    EXCHANGE_RATE_DECIMAL_PARSE_ERRORS,
+    EXCHANGE_RATE_LIVE_PROVIDER_ERRORS,
+)
+from app.shared.core.currency_ops import (
+    convert_to_usd_amount,
+    convert_usd_to_ngn_subunits,
+    format_currency_amount,
+    normalize_currency,
+)
 
 logger = structlog.get_logger()
 
@@ -34,36 +36,6 @@ _RATES_CACHE: dict[str, tuple[Decimal, float, Optional[str]]] = {
     "USD": (Decimal("1.0"), time.time(), "internal")
 }
 _L1_TTL_SECONDS = 300.0
-
-EXCHANGE_RATE_DB_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
-    SQLAlchemyError,
-    RuntimeError,
-    OSError,
-    TimeoutError,
-    TypeError,
-    ValueError,
-)
-EXCHANGE_RATE_CACHE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
-    RuntimeError,
-    OSError,
-    TimeoutError,
-    TypeError,
-    ValueError,
-)
-EXCHANGE_RATE_DECIMAL_PARSE_ERRORS: tuple[type[Exception], ...] = (
-    InvalidOperation,
-    TypeError,
-    ValueError,
-)
-EXCHANGE_RATE_LIVE_PROVIDER_ERRORS: tuple[type[Exception], ...] = (
-    HTTPError,
-    RuntimeError,
-    OSError,
-    TimeoutError,
-    TypeError,
-    ValueError,
-    InvalidOperation,
-)
 
 
 class ExchangeRateUnavailableError(RuntimeError):
@@ -98,8 +70,38 @@ class ExchangeRateService:
             yield session
 
     @staticmethod
+    async def _apply_db_rate_upsert(
+        session: AsyncSession,
+        to_currency: str,
+        rate: Decimal,
+        provider: str,
+    ) -> None:
+        result = await session.execute(
+            select(ExchangeRate).where(
+                ExchangeRate.from_currency == "USD",
+                ExchangeRate.to_currency == to_currency,
+            )
+        )
+        row = result.scalar_one_or_none()
+        now_utc = datetime.now(timezone.utc)
+        if row:
+            row.rate = float(rate)
+            row.provider = provider
+            row.last_updated = now_utc
+            return
+        session.add(
+            ExchangeRate(
+                from_currency="USD",
+                to_currency=to_currency,
+                rate=float(rate),
+                provider=provider,
+                last_updated=now_utc,
+            )
+        )
+
+    @staticmethod
     def _normalize_currency(currency: str | None) -> str:
-        return (currency or "USD").strip().upper()
+        return normalize_currency(currency)
 
     @staticmethod
     def _read_l1_rate(
@@ -147,37 +149,34 @@ class ExchangeRateService:
     ) -> None:
         async with self._session_scope() as session:
             try:
-                result = await session.execute(
-                    select(ExchangeRate).where(
-                        ExchangeRate.from_currency == "USD",
-                        ExchangeRate.to_currency == to_currency,
-                    )
-                )
-                row = result.scalar_one_or_none()
-                now_utc = datetime.now(timezone.utc)
-                if row:
-                    row.rate = float(rate)
-                    row.provider = provider
-                    row.last_updated = now_utc
-                else:
-                    session.add(
-                        ExchangeRate(
-                            from_currency="USD",
+                if self.db is None:
+                    async with session.begin():
+                        await self._apply_db_rate_upsert(
+                            session=session,
                             to_currency=to_currency,
-                            rate=float(rate),
+                            rate=rate,
                             provider=provider,
-                            last_updated=now_utc,
                         )
-                    )
-                await session.commit()
+                    return
+                await self._apply_db_rate_upsert(
+                    session=session,
+                    to_currency=to_currency,
+                    rate=rate,
+                    provider=provider,
+                )
+                await session.flush()
             except EXCHANGE_RATE_DB_RECOVERABLE_ERRORS as exc:
-                await session.rollback()
                 logger.warning(
                     "exchange_rate_db_upsert_failed",
                     currency=to_currency,
                     provider=provider,
                     error=str(exc),
                 )
+                if self.db is None:
+                    # Internal lifecycle writes are best-effort for cache hygiene.
+                    return
+                # Caller-owned session must decide retry/rollback policy.
+                raise
 
     async def _read_redis_rate(
         self, to_currency: str
@@ -412,14 +411,8 @@ class ExchangeRateService:
 
     @staticmethod
     def convert_usd_to_ngn(usd_amount: float | Decimal, rate: float | Decimal) -> int:
-        """
-        Convert USD to NGN subunits (kobo).
-        Paystack expects integer subunits.
-        """
-        ngn_amount = Decimal(str(usd_amount)) * Decimal(str(rate))
-        return int(
-            (ngn_amount * Decimal("100")).to_integral_value(rounding=ROUND_HALF_UP)
-        )
+        """Convert USD to NGN subunits (kobo)."""
+        return convert_usd_to_ngn_subunits(usd_amount, rate)
 
     async def list_cached_rates(self) -> dict[str, Decimal]:
         """
@@ -470,7 +463,7 @@ async def convert_usd(
     strict: bool = False,
 ) -> Decimal:
     """Convert USD amount to target currency."""
-    currency = (to_currency or "USD").upper()
+    currency = normalize_currency(to_currency)
     if currency == "USD":
         return Decimal(str(amount_usd))
     rate = await get_exchange_rate(currency, strict=strict)
@@ -484,14 +477,11 @@ async def convert_to_usd(
     strict: bool = False,
 ) -> Decimal:
     """Convert amount from source currency into USD."""
-    currency = (from_currency or "USD").upper()
-    amount_dec = Decimal(str(amount))
+    currency = normalize_currency(from_currency)
     if currency == "USD":
-        return amount_dec
+        return Decimal(str(amount))
     rate = await get_exchange_rate(currency, strict=strict)
-    if rate <= 0:
-        return amount_dec
-    return amount_dec / rate
+    return convert_to_usd_amount(amount, rate)
 
 
 async def format_currency(
@@ -502,8 +492,5 @@ async def format_currency(
 ) -> str:
     """Format USD-denominated value in the requested currency."""
     converted = await convert_usd(amount_usd, to_currency, strict=strict)
-    currency = (to_currency or "USD").upper()
-
-    symbols = {"NGN": "₦", "USD": "$", "EUR": "€", "GBP": "£"}
-    symbol = symbols.get(currency, f"{currency} ")
-    return f"{symbol}{float(converted):,.2f}"
+    currency = normalize_currency(to_currency)
+    return format_currency_amount(converted, currency)

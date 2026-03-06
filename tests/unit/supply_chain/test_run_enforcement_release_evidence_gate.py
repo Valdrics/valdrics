@@ -54,6 +54,7 @@ def test_build_gate_environment_sets_required_env_vars(tmp_path: Path) -> None:
         failure.resolve()
     )
     assert env["ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_MAX_AGE_HOURS"] == "36.0"
+    assert env["ENFORCEMENT_RUNTIME_EVIDENCE_ONLY"] == "true"
     assert "ENFORCEMENT_FINANCE_GUARDRAILS_EVIDENCE_PATH" not in env
     assert "ENFORCEMENT_FINANCE_TELEMETRY_SNAPSHOT_PATH" not in env
     assert "ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH" not in env

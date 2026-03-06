@@ -44,6 +44,45 @@ def test_validate_report_scope_flags_missing_findings() -> None:
     assert errors == ("report missing expected finding headings: L-02",)
 
 
+def test_main_allows_noncanonical_report_headings(tmp_path: Path) -> None:
+    report = tmp_path / "deep_debt.md"
+    _write(
+        report,
+        "\n".join(
+            [
+                "### TECH-01: Dynamic import usage",
+                "### OPS-01: Environment drift",
+            ]
+        ),
+    )
+    _write(
+        tmp_path / ".env.example",
+        "\n".join(
+            [
+                'APP_NAME="Valdrics"',
+                "CSRF_SECRET_KEY=",
+                "SMTP_USER=",
+                "DB_POOL_SIZE=20",
+                "DB_MAX_OVERFLOW=10",
+                "DB_POOL_TIMEOUT=30",
+            ]
+        ),
+    )
+
+    exit_code = main(
+        [
+            "--repo-root",
+            str(tmp_path),
+            "--report-path",
+            str(report),
+            "--finding",
+            "C-01",
+        ]
+    )
+
+    assert exit_code == 0
+
+
 def test_main_passes_for_c01_with_clean_template(tmp_path: Path) -> None:
     _write(
         tmp_path / ".env.example",
@@ -110,7 +149,13 @@ def test_main_flags_m09_missing_governance_tokens(tmp_path: Path) -> None:
 def test_main_passes_m01_with_compact_optimization_structure(tmp_path: Path) -> None:
     _write(
         tmp_path / "scripts/verify_python_module_size_budget.py",
-        "DEFAULT_MAX_LINES = 600\n",
+        (
+            "DEFAULT_MAX_LINES = 700\n"
+            "PREFERRED_MAX_LINES = 500\n"
+            "override_budget = 700\n"
+            "max(default_max_lines, override_budget)\n"
+            "default=\"advisory\"\n"
+        ),
     )
     _write(tmp_path / "app/modules/optimization/domain/service.py", "pass\n")
 
@@ -129,7 +174,13 @@ def test_main_passes_m01_with_compact_optimization_structure(tmp_path: Path) -> 
 def test_main_flags_m01_when_file_budget_exceeded(tmp_path: Path) -> None:
     _write(
         tmp_path / "scripts/verify_python_module_size_budget.py",
-        "DEFAULT_MAX_LINES = 600\n",
+        (
+            "DEFAULT_MAX_LINES = 700\n"
+            "PREFERRED_MAX_LINES = 500\n"
+            "override_budget = 700\n"
+            "max(default_max_lines, override_budget)\n"
+            "default=\"advisory\"\n"
+        ),
     )
     for idx in range(106):
         _write(
@@ -152,7 +203,7 @@ def test_main_flags_m01_when_file_budget_exceeded(tmp_path: Path) -> None:
 def test_main_flags_m03_when_bundle_exceeds_default_budget(tmp_path: Path) -> None:
     _write_lines(
         tmp_path / "app/modules/governance/domain/security/compliance_pack_bundle.py",
-        601,
+        701,
     )
 
     exit_code = main(

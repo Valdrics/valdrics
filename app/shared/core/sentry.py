@@ -16,10 +16,11 @@ Usage:
     sentry_sdk.capture_exception(error)
 """
 
-import os
 from typing import Any
 
 import structlog
+
+from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
 
@@ -56,14 +57,15 @@ def init_sentry() -> bool:
     Returns:
         True if Sentry was initialized, False otherwise
     """
-    dsn = os.getenv("SENTRY_DSN")
+    settings = get_settings()
+    dsn = str(getattr(settings, "SENTRY_DSN", None) or "").strip()
 
     if not dsn:
         logger.info("sentry_disabled", reason="SENTRY_DSN not set")
         return False
 
     if not SENTRY_AVAILABLE:
-        environment = str(os.getenv("ENVIRONMENT", "development")).strip().lower()
+        environment = str(getattr(settings, "ENVIRONMENT", None) or "development").strip().lower()
         strict_env = environment in {"production", "staging"}
         error_message = (
             "SENTRY_DSN is configured but sentry-sdk is not installed. "
@@ -82,8 +84,12 @@ def init_sentry() -> bool:
 
     assert sentry_sdk is not None
 
-    environment = os.getenv("ENVIRONMENT", "development")
-    release = os.getenv("APP_VERSION", "0.1.0")
+    environment = str(getattr(settings, "ENVIRONMENT", None) or "development").strip().lower()
+    release = str(
+        getattr(settings, "APP_VERSION", None)
+        or getattr(settings, "VERSION", None)
+        or "0.1.0"
+    ).strip()
     integrations: list[Any] = []
     if FastApiIntegration is not None:
         integrations.append(FastApiIntegration(transaction_style="endpoint"))

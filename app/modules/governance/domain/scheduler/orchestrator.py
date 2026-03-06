@@ -3,7 +3,6 @@ from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timezone
 import asyncio
 import time
-import os
 import structlog
 import sqlalchemy as sa
 from httpx import HTTPError
@@ -89,7 +88,7 @@ class SchedulerOrchestrator:
         when multiple API instances are running APScheduler.
         """
         # Test runs should be deterministic and fast; do not depend on Redis lock timing.
-        if settings.TESTING or os.getenv("PYTEST_CURRENT_TEST"):
+        if settings.TESTING or settings.PYTEST_CURRENT_TEST:
             return True
 
         redis = get_redis_client()

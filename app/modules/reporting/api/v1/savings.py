@@ -150,6 +150,7 @@ async def compute_realized_savings(
     measurement_days: int = Query(default=7, ge=1, le=31),
     gap_days: int = Query(default=1, ge=0, le=7),
     monthly_multiplier_days: int = Query(default=30, ge=1, le=31),
+    limit: int = Query(default=1000, ge=1, le=10000),
     require_final: bool = Query(default=True),
     current_user: CurrentUser = Depends(
         requires_feature(FeatureFlag.SAVINGS_PROOF, required_role="admin")
@@ -175,8 +176,9 @@ async def compute_realized_savings(
         RemediationRequest.executed_at.is_not(None),
         RemediationRequest.executed_at >= window_start,
         RemediationRequest.executed_at <= window_end,
-    )
-    remediations = list((await db.execute(stmt)).scalars().all())
+    ).order_by(RemediationRequest.executed_at.desc(), RemediationRequest.created_at.desc())
+    stmt = stmt.limit(int(limit))
+    remediations = list((await db.execute(stmt)).scalars())
 
     service = RealizedSavingsService(db)
     computed = 0
@@ -281,7 +283,7 @@ async def list_realized_savings_events(
     if normalized_provider:
         stmt = stmt.where(RealizedSavingsEvent.provider == normalized_provider)
 
-    rows = list((await db.execute(stmt)).all())
+    rows = list(await db.execute(stmt))
     events: list[RealizedSavingsEventResponse] = []
     for event, executed_at in rows:
         events.append(

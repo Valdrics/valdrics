@@ -71,7 +71,7 @@ jobs:
           version: "latest"
 
       - name: Install Dependencies
-        run: uv sync --dev
+        run: uv sync --locked --dev
 
       - name: Run Load Test (Enforced Thresholds)
         env:

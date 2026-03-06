@@ -9,6 +9,15 @@
 		type SignalSnapshot
 	} from '$lib/landing/realtimeSignalMap';
 	import { MICRO_DEMO_STEPS, SIGNAL_VALUE_CARDS } from '$lib/landing/heroContent';
+	import {
+		LABEL_TRANSLATE,
+		LANDING_GRID_X,
+		LANDING_GRID_Y,
+		SIGNAL_CENTER,
+		resolveHotspotPoint,
+		resolveLaneAnchor,
+		resolveSvgProjection
+	} from './signalMapLayout';
 
 	let {
 		activeSnapshot,
@@ -32,29 +41,18 @@
 		onSignalMapElementChange: (element: HTMLDivElement | null) => void;
 	} = $props();
 
-	const landingGridX = [...Array(13).keys()];
-	const landingGridY = [...Array(9).keys()];
-	const SIGNAL_CENTER = Object.freeze({ x: 320, y: 210 });
-	const LANE_ANCHOR_NUDGE: Readonly<Record<SignalLaneId, { x: number; y: number }>> = Object.freeze(
-		{
-			economic_visibility: { x: -40, y: -30 },
-			deterministic_enforcement: { x: 40, y: -30 },
-			financial_governance: { x: 40, y: 30 },
-			operational_resilience: { x: -40, y: 30 }
-		}
-	);
-
-	const LABEL_TRANSLATE: Readonly<Record<SignalLaneId, string>> = Object.freeze({
-		economic_visibility: 'transform: translate(-100%, -50%) translateX(-12px);',
-		deterministic_enforcement: 'transform: translate(0, -50%) translateX(12px);',
-		financial_governance: 'transform: translate(0, -50%) translateX(12px);',
-		operational_resilience: 'transform: translate(-100%, -50%) translateX(-12px);'
-	});
-
 	let signalMapElement: HTMLDivElement | null = $state(null);
 	let signalMapWidth = $state(0);
 	let signalMapHeight = $state(0);
 	let activeDemoStep = $derived(MICRO_DEMO_STEPS[demoStepIndex] ?? MICRO_DEMO_STEPS[0]);
+	let svgProjection = $derived(
+		resolveSvgProjection(
+			signalMapWidth,
+			signalMapHeight,
+			SIGNAL_MAP_VIEWBOX.width,
+			SIGNAL_MAP_VIEWBOX.height
+		)
+	);
 	let controlDetailsOpen = $state(false);
 	let walkthroughOpen = $state(false);
 
@@ -105,55 +103,6 @@
 		if (demoStepIndex < index) return 0;
 		return 62;
 	}
-
-	function resolveSvgProjection():
-		| {
-				scale: number;
-				offsetX: number;
-				offsetY: number;
-		  }
-		| undefined {
-		if (signalMapWidth <= 0 || signalMapHeight <= 0) {
-			return undefined;
-		}
-		const scale = Math.min(
-			signalMapWidth / SIGNAL_MAP_VIEWBOX.width,
-			signalMapHeight / SIGNAL_MAP_VIEWBOX.height
-		);
-		const renderedWidth = SIGNAL_MAP_VIEWBOX.width * scale;
-		const renderedHeight = SIGNAL_MAP_VIEWBOX.height * scale;
-		return {
-			scale,
-			offsetX: (signalMapWidth - renderedWidth) / 2,
-			offsetY: (signalMapHeight - renderedHeight) / 2
-		};
-	}
-
-	function resolveLaneAnchor(lane: SignalLaneSnapshot): { x: number; y: number } {
-		const nudge = LANE_ANCHOR_NUDGE[lane.id];
-		return {
-			x: Math.min(622, Math.max(18, lane.x + nudge.x)),
-			y: Math.min(402, Math.max(18, lane.y + nudge.y))
-		};
-	}
-
-	function resolveFlowEndpoint(lane: SignalLaneSnapshot): { x: number; y: number } {
-		return resolveLaneAnchor(lane);
-	}
-
-	function resolveHotspotPoint(point: {
-		x: number;
-		y: number;
-	}): { leftPx: number; topPx: number } | undefined {
-		const projection = resolveSvgProjection();
-		if (!projection) {
-			return undefined;
-		}
-		return {
-			leftPx: projection.offsetX + point.x * projection.scale,
-			topPx: projection.offsetY + point.y * projection.scale
-		};
-	}
 </script>
 
 <div class="landing-preview fade-in-up" style="animation-delay: 170ms;">
@@ -184,10 +133,10 @@
 
 				<rect x="0" y="0" width="640" height="420" fill="rgba(0,0,0,0)" />
 				<g class="sig-grid">
-					{#each landingGridX as xIndex (xIndex)}
+					{#each LANDING_GRID_X as xIndex (xIndex)}
 						<line x1={xIndex * 54} y1="0" x2={xIndex * 54} y2="420" />
 					{/each}
-					{#each landingGridY as yIndex (yIndex)}
+					{#each LANDING_GRID_Y as yIndex (yIndex)}
 						<line x1="0" y1={yIndex * 52} x2="640" y2={yIndex * 52} />
 					{/each}
 				</g>
@@ -195,7 +144,7 @@
 				<circle cx="320" cy="210" r="160" fill="url(#sigGlow)" />
 
 				{#each activeSnapshot.lanes as lane (lane.id)}
-					{@const flowEndpoint = resolveFlowEndpoint(lane)}
+					{@const flowEndpoint = resolveLaneAnchor(lane)}
 					<line
 						class={`sig-link ${laneSeverityClass(lane.severity)}`}
 						x1={SIGNAL_CENTER.x}
@@ -226,7 +175,7 @@
 			</div>
 			{#each activeSnapshot.lanes as lane (lane.id)}
 				{@const laneAnchor = resolveLaneAnchor(lane)}
-				{@const labelPoint = resolveHotspotPoint(laneAnchor)}
+				{@const labelPoint = resolveHotspotPoint(laneAnchor, svgProjection)}
 				{#if labelPoint}
 					<div
 						class={`signal-label ${lane.labelClass}`}
@@ -245,7 +194,7 @@
 			{/each}
 			{#each activeSnapshot.lanes as lane (lane.id)}
 				{@const laneAnchor = resolveLaneAnchor(lane)}
-				{@const lanePoint = resolveHotspotPoint(laneAnchor)}
+				{@const lanePoint = resolveHotspotPoint(laneAnchor, svgProjection)}
 				{#if lanePoint}
 					<button
 						type="button"

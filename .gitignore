@@ -48,6 +48,10 @@ htmlcov/
 .nox/
 .coverage
 .coverage.*
+reports/coverage/
+.cursorrules
+node_modules/
+.pnpm-store/
 .cache
 nosetests.xml
 coverage.xml

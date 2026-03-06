@@ -1,0 +1,224 @@
+/**
+ * Valdrics Design System - 2026 Premium SaaS
+ * 
+ * Design Principles:
+ * - Utility-first UX
+ * - Progressive disclosure
+ * - Calm sophistication
+ * - Motion with meaning
+ */
+
+/* ===== CSS CUSTOM PROPERTIES (Design Tokens) ===== */
+@import 'tailwindcss';
+
+@theme {
+	/* === Color Palette === */
+
+	/* Base Neutrals - Refined ink tones */
+	--color-ink-950: #0a0d12;
+	--color-ink-900: #0f1318;
+	--color-ink-800: #182028;
+	--color-ink-700: #243040;
+	--color-ink-600: #374657;
+	--color-ink-500: #7089a0;
+	--color-ink-400: #809ab0;
+	--color-ink-300: #94a3b8;
+	--color-ink-200: #bfcad6;
+	--color-ink-100: #e2e8ef;
+	--color-ink-50: #f5f7fa;
+
+	/* Primary Accent - Teal/Cyan for trust */
+	--color-accent-500: #087ea4;
+	--color-accent-400: #22d3ee;
+	--color-accent-600: #0b7285;
+	--color-accent-700: #0e6679;
+	--color-accent-500-rgb: 8 126 164;
+	--color-primary-500: #4f46e5;
+
+	/* Success - Emerald */
+	--color-success-500: #10b981;
+	--color-success-400: #34d399;
+	--color-success-500-rgb: 16 185 129;
+
+	/* Surface tones for elevated cards */
+	--color-surface-100: #182028;
+	--color-surface-200: #243040;
+	--color-surface-300: #374657;
+
+	/* Warning - Amber */
+	--color-warning-500: #f59e0b;
+	--color-warning-400: #fbbf24;
+
+	/* Danger - Rose */
+	--color-danger-500: #f43f5e;
+	--color-danger-400: #fb7185;
+
+	/* === Typography Scale === */
+	--font-sans:
+		-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+	--font-mono:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New',
+		monospace;
+
+	--text-xs: 0.8125rem;
+	--text-sm: 0.875rem;
+	--text-base: 1rem;
+	--text-lg: 1.125rem;
+	--text-xl: 1.25rem;
+	--text-2xl: 1.5rem;
+	--text-3xl: 2rem;
+
+	/* === Spacing Scale === */
+	--space-1: 0.25rem;
+	--space-2: 0.5rem;
+	--space-3: 0.75rem;
+	--space-4: 1rem;
+	--space-5: 1.25rem;
+	--space-6: 1.5rem;
+	--space-8: 2rem;
+	--space-10: 2.5rem;
+	--space-12: 3rem;
+	--space-16: 4rem;
+
+	/* === Radii === */
+	--radius-sm: 0.25rem;
+	--radius-md: 0.5rem;
+	--radius-lg: 0.75rem;
+	--radius-xl: 1rem;
+	--radius-full: 9999px;
+
+	/* === Shadows === */
+	--shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+	--shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+	--shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+	--shadow-glow: 0 0 20px rgb(6 182 212 / 0.15);
+
+	/* === Animation Durations (Motion System) === */
+	--duration-instant: 100ms;
+	--duration-fast: 150ms;
+	--duration-normal: 200ms;
+	--duration-slow: 300ms;
+	--duration-slower: 400ms;
+
+	/* === Easings === */
+	--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+	--ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* ===== BASE STYLES ===== */
+html {
+	font-family: var(--font-sans);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	background: linear-gradient(180deg, var(--color-ink-950) 0%, var(--color-ink-900) 100%);
+	color: var(--color-ink-100);
+	line-height: 1.6;
+}
+
+/* Accessible focus ring for plain links (buttons/nav items define their own). */
+a:focus-visible {
+	outline: 2px solid var(--color-accent-500);
+	outline-offset: 2px;
+}
+
+/* ===== MOTION SYSTEM ===== */
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+/* Page transition animation */
+.page-enter {
+	animation: pageEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes pageEnter {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* Staggered list entrance - IMPORTANT: uses animation-delay via inline style */
+.stagger-enter {
+	opacity: 0;
+	animation: staggerEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes staggerEnter {
+	from {
+		opacity: 0;
+		transform: translateY(16px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* Hero icon floating animation */
+.hero-icon {
+	animation: heroFloat 3s ease-in-out infinite;
+}
+
+@keyframes heroFloat {
+	0%,
+	100% {
+		transform: translateY(0);
+	}
+	50% {
+		transform: translateY(-8px);
+	}
+}
+
+/* Fade in up animation */
+.fade-in-up {
+	opacity: 0;
+	animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes fadeInUp {
+	from {
+		opacity: 0;
+		transform: translateY(24px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+/* Pulse glow animation */
+.pulse-glow {
+	animation: pulseGlow 2s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+	0%,
+	100% {
+		box-shadow: 0 0 20px rgb(6 182 212 / 0.2);
+	}
+	50% {
+		box-shadow: 0 0 40px rgb(6 182 212 / 0.4);
+	}
+}
+

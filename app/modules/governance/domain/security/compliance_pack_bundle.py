@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Callable, Optional, cast
 from uuid import UUID, uuid4
 
@@ -24,11 +24,6 @@ from app.modules.governance.domain.security.compliance_pack_evidence import (
     collect_payload_evidence,
     collect_settings_snapshots,
 )
-from app.modules.governance.domain.security.compliance_pack_support import (
-    load_reference_documents,
-    normalize_optional_provider,
-    resolve_window,
-)
 from app.modules.governance.domain.security.compliance_pack_bundle_exports import (
     build_manifest,
     run_close_package_export,
@@ -36,6 +31,16 @@ from app.modules.governance.domain.security.compliance_pack_bundle_exports impor
     run_realized_savings_export,
     run_savings_proof_export,
     write_core_artifacts,
+)
+from app.modules.governance.domain.security.compliance_pack_bundle_state import (
+    build_doc_payloads,
+    collect_payload_evidence_map,
+    default_included_files,
+    initialize_optional_export_state,
+    resolve_optional_export_scopes,
+)
+from app.modules.governance.domain.security.compliance_pack_support import (
+    load_reference_documents,
 )
 from app.shared.core.auth import CurrentUser
 from app.shared.core.config import get_settings
@@ -205,35 +210,13 @@ async def export_compliance_pack_bundle(
             False,
         ),
     )
-    payload_evidence: dict[str, list[dict[str, Any]]] = {}
-    for key, event_type, payload_key, include_thresholds in payload_specs:
-        payload_evidence[key] = await collect_payload_evidence(
-            db=db,
-            tenant_id=cast(UUID, user.tenant_id),
-            event_type=event_type,
-            payload_key=payload_key,
-            limit=int(evidence_limit),
-            include_thresholds=include_thresholds,
-        )
-
-    acceptance_kpi_evidence = payload_evidence["acceptance_kpi_evidence"]
-    leadership_kpi_evidence = payload_evidence["leadership_kpi_evidence"]
-    quarterly_commercial_proof_evidence = payload_evidence[
-        "quarterly_commercial_proof_evidence"
-    ]
-    identity_smoke_evidence = payload_evidence["identity_smoke_evidence"]
-    sso_federation_validation_evidence = payload_evidence[
-        "sso_federation_validation_evidence"
-    ]
-    performance_load_test_evidence = payload_evidence["performance_load_test_evidence"]
-    ingestion_persistence_benchmark_evidence = payload_evidence[
-        "ingestion_persistence_benchmark_evidence"
-    ]
-    ingestion_soak_evidence = payload_evidence["ingestion_soak_evidence"]
-    partitioning_evidence = payload_evidence["partitioning_evidence"]
-    job_slo_evidence = payload_evidence["job_slo_evidence"]
-    tenant_isolation_evidence = payload_evidence["tenant_isolation_evidence"]
-    carbon_assurance_evidence = payload_evidence["carbon_assurance_evidence"]
+    payload_evidence = await collect_payload_evidence_map(
+        db=db,
+        tenant_id=cast(UUID, user.tenant_id),
+        evidence_limit=int(evidence_limit),
+        payload_specs=payload_specs,
+        collect_payload_evidence=collect_payload_evidence,
+    )
 
     # --- Carbon factor lifecycle evidence (global, non-tenant data) ---
     carbon_factor_sets, carbon_factor_update_logs = (
@@ -283,164 +266,58 @@ async def export_compliance_pack_bundle(
     audit_csv.seek(0)
 
     reference_docs, included_doc_files = load_reference_documents()
-    scim_doc = reference_docs.get("scim_doc")
-    idp_reference_doc = reference_docs.get("idp_reference_doc")
-    sso_doc = reference_docs.get("sso_doc")
-    teams_doc = reference_docs.get("teams_doc")
-    compliance_pack_doc = reference_docs.get("compliance_pack_doc")
-    focus_doc = reference_docs.get("focus_doc")
-    acceptance_doc = reference_docs.get("acceptance_doc")
-    close_runbook_doc = reference_docs.get("close_runbook_doc")
-    tenant_lifecycle_doc = reference_docs.get("tenant_lifecycle_doc")
-    partition_maintenance_doc = reference_docs.get("partition_maintenance_doc")
-    licensing_doc = reference_docs.get("licensing_doc")
-    license_text = reference_docs.get("license_text")
-    trademark_policy_doc = reference_docs.get("trademark_policy_doc")
-    commercial_license_doc = reference_docs.get("commercial_license_doc")
-
-    included_files: list[str] = [
-        "audit_logs.csv",
-        "notification_settings.json",
-        "remediation_settings.json",
-        "identity_settings.json",
-        "integration_acceptance_evidence.json",
-        "acceptance_kpis_evidence.json",
-        "leadership_kpis_evidence.json",
-        "quarterly_commercial_proof_evidence.json",
-        "identity_smoke_evidence.json",
-        "sso_federation_validation_evidence.json",
-        "performance_load_test_evidence.json",
-        "ingestion_persistence_benchmark_evidence.json",
-        "ingestion_soak_evidence.json",
-        "partitioning_evidence.json",
-        "job_slo_evidence.json",
-        "tenant_isolation_evidence.json",
-        "carbon_assurance_evidence.json",
-        "carbon_factor_sets.json",
-        "carbon_factor_update_logs.json",
-    ]
-    focus_export_info: dict[str, Any] = {
-        "included": bool(include_focus_export),
-        "provider": None,
-        "include_preliminary": bool(focus_include_preliminary),
-        "max_rows": int(focus_max_rows),
-        "rows_written": 0,
-        "truncated": False,
-        "window": {
-            "start_date": None,
-            "end_date": None,
-        },
-        "status": "skipped" if not include_focus_export else "pending",
-        "error": None,
-    }
-    savings_proof_info: dict[str, Any] = {
-        "included": bool(include_savings_proof),
-        "provider": None,
-        "window": {
-            "start_date": None,
-            "end_date": None,
-        },
-        "status": "skipped" if not include_savings_proof else "pending",
-        "error": None,
-    }
-    realized_savings_info: dict[str, Any] = {
-        "included": bool(include_realized_savings),
-        "provider": None,
-        "limit": int(realized_limit),
-        "window": {
-            "start_date": None,
-            "end_date": None,
-        },
-        "status": "skipped" if not include_realized_savings else "pending",
-        "error": None,
-        "rows_written": 0,
-    }
-    close_package_info: dict[str, Any] = {
-        "included": bool(include_close_package),
-        "provider": None,
-        "enforce_finalized": bool(close_enforce_finalized),
-        "max_restatements": int(close_max_restatements),
-        "window": {
-            "start_date": None,
-            "end_date": None,
-        },
-        "status": "skipped" if not include_close_package else "pending",
-        "error": None,
-    }
+    included_files: list[str] = default_included_files()
+    (
+        focus_export_info,
+        savings_proof_info,
+        realized_savings_info,
+        close_package_info,
+    ) = initialize_optional_export_state(
+        include_focus_export=include_focus_export,
+        focus_include_preliminary=focus_include_preliminary,
+        focus_max_rows=int(focus_max_rows),
+        include_savings_proof=include_savings_proof,
+        include_realized_savings=include_realized_savings,
+        realized_limit=int(realized_limit),
+        include_close_package=include_close_package,
+        close_enforce_finalized=close_enforce_finalized,
+        close_max_restatements=int(close_max_restatements),
+    )
 
     included_files.extend(included_doc_files)
-
-    normalized_focus_provider = normalize_optional_provider(
-        provider=focus_provider,
-        provider_name="focus_provider",
+    scope = resolve_optional_export_scopes(
+        focus_export_info=focus_export_info,
+        savings_proof_info=savings_proof_info,
+        realized_savings_info=realized_savings_info,
+        close_package_info=close_package_info,
+        focus_provider=focus_provider,
+        savings_provider=savings_provider,
+        realized_provider=realized_provider,
+        close_provider=close_provider,
+        focus_start_date=focus_start_date,
+        focus_end_date=focus_end_date,
+        savings_start_date=savings_start_date,
+        savings_end_date=savings_end_date,
+        realized_start_date=realized_start_date,
+        realized_end_date=realized_end_date,
+        close_start_date=close_start_date,
+        close_end_date=close_end_date,
+        default_start_date=start_date,
+        default_end_date=end_date,
+        exported_at=exported_at,
     )
-    focus_export_info["provider"] = normalized_focus_provider
-
-    focus_window_start, focus_window_end = resolve_window(
-        start=focus_start_date,
-        end=focus_end_date,
-        default_start=(start_date or (exported_at - timedelta(days=30))).date(),
-        default_end=(end_date or exported_at).date(),
-        error_detail="start_date must be <= end_date",
-    )
-    focus_export_info["window"] = {
-        "start_date": focus_window_start.isoformat(),
-        "end_date": focus_window_end.isoformat(),
-    }
-
-    # Savings Proof window/provider validation
-    normalized_savings_provider = normalize_optional_provider(
-        provider=savings_provider,
-        provider_name="savings_provider",
-    )
-    savings_window_start, savings_window_end = resolve_window(
-        start=savings_start_date,
-        end=savings_end_date,
-        default_start=focus_window_start,
-        default_end=focus_window_end,
-        error_detail="savings_start_date must be <= savings_end_date",
-    )
-    savings_proof_info["provider"] = normalized_savings_provider
-    savings_proof_info["window"] = {
-        "start_date": savings_window_start.isoformat(),
-        "end_date": savings_window_end.isoformat(),
-    }
-
-    # Realized savings evidence window/provider validation (executed_at window)
-    normalized_realized_provider = normalize_optional_provider(
-        provider=realized_provider,
-        provider_name="realized_provider",
-    )
-    realized_window_start, realized_window_end = resolve_window(
-        start=realized_start_date,
-        end=realized_end_date,
-        default_start=savings_window_start,
-        default_end=savings_window_end,
-        error_detail="realized_start_date must be <= realized_end_date",
-    )
-    realized_savings_info["provider"] = normalized_realized_provider
-    realized_savings_info["window"] = {
-        "start_date": realized_window_start.isoformat(),
-        "end_date": realized_window_end.isoformat(),
-    }
-
-    # Close package window/provider validation
-    normalized_close_provider = normalize_optional_provider(
-        provider=close_provider,
-        provider_name="close_provider",
-    )
-    close_window_start, close_window_end = resolve_window(
-        start=close_start_date,
-        end=close_end_date,
-        default_start=focus_window_start,
-        default_end=focus_window_end,
-        error_detail="close_start_date must be <= close_end_date",
-    )
-    close_package_info["provider"] = normalized_close_provider
-    close_package_info["window"] = {
-        "start_date": close_window_start.isoformat(),
-        "end_date": close_window_end.isoformat(),
-    }
+    normalized_focus_provider = scope["normalized_focus_provider"]
+    normalized_savings_provider = scope["normalized_savings_provider"]
+    normalized_realized_provider = scope["normalized_realized_provider"]
+    normalized_close_provider = scope["normalized_close_provider"]
+    focus_window_start = scope["focus_window_start"]
+    focus_window_end = scope["focus_window_end"]
+    savings_window_start = scope["savings_window_start"]
+    savings_window_end = scope["savings_window_end"]
+    realized_window_start = scope["realized_window_start"]
+    realized_window_end = scope["realized_window_end"]
+    close_window_start = scope["close_window_start"]
+    close_window_end = scope["close_window_end"]
 
     manifest = build_manifest(
         exported_at=exported_at,
@@ -455,17 +332,25 @@ async def export_compliance_pack_bundle(
         focus_export_info=focus_export_info,
         savings_proof_info=savings_proof_info,
         close_package_info=close_package_info,
-        leadership_kpi_evidence=leadership_kpi_evidence,
-        quarterly_commercial_proof_evidence=quarterly_commercial_proof_evidence,
-        identity_smoke_evidence=identity_smoke_evidence,
-        sso_federation_validation_evidence=sso_federation_validation_evidence,
-        performance_load_test_evidence=performance_load_test_evidence,
-        ingestion_persistence_benchmark_evidence=ingestion_persistence_benchmark_evidence,
-        ingestion_soak_evidence=ingestion_soak_evidence,
-        partitioning_evidence=partitioning_evidence,
-        job_slo_evidence=job_slo_evidence,
-        tenant_isolation_evidence=tenant_isolation_evidence,
-        carbon_assurance_evidence=carbon_assurance_evidence,
+        leadership_kpi_evidence=payload_evidence["leadership_kpi_evidence"],
+        quarterly_commercial_proof_evidence=payload_evidence[
+            "quarterly_commercial_proof_evidence"
+        ],
+        identity_smoke_evidence=payload_evidence["identity_smoke_evidence"],
+        sso_federation_validation_evidence=payload_evidence[
+            "sso_federation_validation_evidence"
+        ],
+        performance_load_test_evidence=payload_evidence[
+            "performance_load_test_evidence"
+        ],
+        ingestion_persistence_benchmark_evidence=payload_evidence[
+            "ingestion_persistence_benchmark_evidence"
+        ],
+        ingestion_soak_evidence=payload_evidence["ingestion_soak_evidence"],
+        partitioning_evidence=payload_evidence["partitioning_evidence"],
+        job_slo_evidence=payload_evidence["job_slo_evidence"],
+        tenant_isolation_evidence=payload_evidence["tenant_isolation_evidence"],
+        carbon_assurance_evidence=payload_evidence["carbon_assurance_evidence"],
         carbon_factor_sets=carbon_factor_sets,
         carbon_factor_update_logs=carbon_factor_update_logs,
     )
@@ -475,39 +360,30 @@ async def export_compliance_pack_bundle(
         "remediation_settings.json": remediation_snapshot,
         "identity_settings.json": identity_snapshot,
         "integration_acceptance_evidence.json": integration_evidence,
-        "acceptance_kpis_evidence.json": acceptance_kpi_evidence,
-        "leadership_kpis_evidence.json": leadership_kpi_evidence,
-        "quarterly_commercial_proof_evidence.json": quarterly_commercial_proof_evidence,
-        "identity_smoke_evidence.json": identity_smoke_evidence,
-        "sso_federation_validation_evidence.json": sso_federation_validation_evidence,
-        "performance_load_test_evidence.json": performance_load_test_evidence,
+        "acceptance_kpis_evidence.json": payload_evidence["acceptance_kpi_evidence"],
+        "leadership_kpis_evidence.json": payload_evidence["leadership_kpi_evidence"],
+        "quarterly_commercial_proof_evidence.json": payload_evidence[
+            "quarterly_commercial_proof_evidence"
+        ],
+        "identity_smoke_evidence.json": payload_evidence["identity_smoke_evidence"],
+        "sso_federation_validation_evidence.json": payload_evidence[
+            "sso_federation_validation_evidence"
+        ],
+        "performance_load_test_evidence.json": payload_evidence[
+            "performance_load_test_evidence"
+        ],
         "ingestion_persistence_benchmark_evidence.json": (
-            ingestion_persistence_benchmark_evidence
+            payload_evidence["ingestion_persistence_benchmark_evidence"]
         ),
-        "ingestion_soak_evidence.json": ingestion_soak_evidence,
-        "partitioning_evidence.json": partitioning_evidence,
-        "job_slo_evidence.json": job_slo_evidence,
-        "tenant_isolation_evidence.json": tenant_isolation_evidence,
-        "carbon_assurance_evidence.json": carbon_assurance_evidence,
+        "ingestion_soak_evidence.json": payload_evidence["ingestion_soak_evidence"],
+        "partitioning_evidence.json": payload_evidence["partitioning_evidence"],
+        "job_slo_evidence.json": payload_evidence["job_slo_evidence"],
+        "tenant_isolation_evidence.json": payload_evidence["tenant_isolation_evidence"],
+        "carbon_assurance_evidence.json": payload_evidence["carbon_assurance_evidence"],
         "carbon_factor_sets.json": carbon_factor_sets,
         "carbon_factor_update_logs.json": carbon_factor_update_logs,
     }
-    doc_payloads: dict[str, Optional[str]] = {
-        "docs/integrations/scim.md": scim_doc,
-        "docs/integrations/idp_reference_configs.md": idp_reference_doc,
-        "docs/integrations/sso.md": sso_doc,
-        "docs/integrations/microsoft_teams.md": teams_doc,
-        "docs/compliance/compliance_pack.md": compliance_pack_doc,
-        "docs/compliance/focus_export.md": focus_doc,
-        "docs/ops/acceptance_evidence_capture.md": acceptance_doc,
-        "docs/runbooks/month_end_close.md": close_runbook_doc,
-        "docs/runbooks/tenant_data_lifecycle.md": tenant_lifecycle_doc,
-        "docs/runbooks/partition_maintenance.md": partition_maintenance_doc,
-        "docs/licensing.md": licensing_doc,
-        "LICENSE": license_text,
-        "TRADEMARK_POLICY.md": trademark_policy_doc,
-        "COMMERCIAL_LICENSE.md": commercial_license_doc,
-    }
+    doc_payloads = build_doc_payloads(reference_docs)
 
     bundle = io.BytesIO()
     with zipfile.ZipFile(bundle, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:

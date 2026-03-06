@@ -1,0 +1,141 @@
+.landing-hero-signal-field {
+	position: absolute;
+	inset: var(--landing-hero-signal-field-inset);
+	height: var(--landing-hero-signal-field-height);
+	opacity: var(--landing-hero-signal-field-opacity);
+	pointer-events: none;
+	z-index: 1;
+}
+
+.landing-hero-signal-core {
+	position: absolute;
+	left: 50%;
+	top: var(--landing-hero-core-top);
+	transform: translate(-50%, -50%);
+	width: var(--landing-hero-core-size);
+	height: var(--landing-hero-core-size);
+	border-radius: 999px;
+	display: grid;
+	place-items: center;
+	border: 1px solid rgb(34 211 238 / 0.3);
+	background: radial-gradient(circle, rgb(34 211 238 / 0.22), transparent 70%);
+	box-shadow:
+		0 0 85px rgb(34 211 238 / 0.22),
+		0 0 120px rgb(16 185 129 / 0.09);
+}
+
+.landing-hero-signal-core::before {
+	content: '';
+	position: absolute;
+	inset: var(--landing-hero-core-ring-inset);
+	border-radius: inherit;
+	background: conic-gradient(
+		from 0deg,
+		transparent 0deg 32deg,
+		rgb(34 211 238 / 0.5) 32deg 54deg,
+		transparent 54deg 158deg,
+		rgb(16 185 129 / 0.44) 158deg 188deg,
+		transparent 188deg 294deg,
+		rgb(79 70 229 / 0.34) 294deg 320deg,
+		transparent 320deg 360deg
+	);
+	filter: blur(0.7px);
+	opacity: var(--landing-hero-core-ring-opacity);
+	animation: landingHeroSignalSpin var(--landing-hero-core-ring-duration) linear infinite;
+}
+
+.landing-hero-signal-core img {
+	opacity: 0.33;
+	filter: saturate(130%);
+}
+
+.landing-hero-signal-ring {
+	position: absolute;
+	left: 50%;
+	top: var(--landing-hero-core-top);
+	transform: translate(-50%, -50%);
+	border-radius: 999px;
+	mix-blend-mode: screen;
+}
+
+.landing-hero-signal-ring-a {
+	width: var(--landing-hero-ring-a-size);
+	height: var(--landing-hero-ring-a-size);
+	border: 1.5px dashed rgb(34 211 238 / 0.34);
+	animation: landingHeroSignalSpin var(--landing-hero-ring-a-duration) linear infinite;
+}
+
+.landing-hero-signal-ring-b {
+	width: var(--landing-hero-ring-b-size);
+	height: var(--landing-hero-ring-b-size);
+	border: 1.5px dashed rgb(16 185 129 / 0.26);
+	animation: landingHeroSignalSpinReverse var(--landing-hero-ring-b-duration) linear infinite;
+}
+
+.landing-hero-signal-ring-c {
+	width: var(--landing-hero-ring-c-size);
+	height: var(--landing-hero-ring-c-size);
+	border: 1px solid rgb(79 70 229 / 0.2);
+	animation: landingHeroSignalSpin var(--landing-hero-ring-c-duration) linear infinite;
+}
+
+.landing-hero-signal-node {
+	position: absolute;
+	width: var(--landing-hero-node-size);
+	height: var(--landing-hero-node-size);
+	border-radius: 999px;
+	background: rgb(34 211 238 / 0.9);
+	box-shadow: 0 0 18px rgb(34 211 238 / 0.68);
+	animation: landingHeroNodePulse var(--landing-hero-node-duration) ease-in-out infinite;
+}
+
+.landing-hero-signal-node-a {
+	top: 17%;
+	left: 31%;
+}
+
+.landing-hero-signal-node-b {
+	top: 28%;
+	right: 30%;
+	animation-delay: 1.1s;
+}
+
+.landing-hero-signal-node-c {
+	top: 51%;
+	left: 23%;
+	animation-delay: 2s;
+}
+
+.landing-hero-signal-node-d {
+	top: 62%;
+	right: 25%;
+	animation-delay: 3s;
+}
+
+@media (max-width: 980px) {
+	.landing-hero-signal-field {
+		inset: var(--landing-hero-signal-field-inset-md);
+		height: var(--landing-hero-signal-field-height-md);
+	}
+
+	.landing-hero-signal-core {
+		width: var(--landing-hero-core-size-md);
+		height: var(--landing-hero-core-size-md);
+	}
+}
+
+@media (max-width: 640px) {
+	.landing-hero-signal-field {
+		inset: var(--landing-hero-signal-field-inset-sm);
+		height: var(--landing-hero-signal-field-height-sm);
+		opacity: var(--landing-hero-signal-field-opacity-sm);
+	}
+
+	.landing-hero-signal-ring-c {
+		display: none;
+	}
+
+	.landing-hero-signal-node {
+		display: none;
+	}
+}

@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Any
 
 import httpx
+from pydantic import SecretStr
 import structlog
 
 from app.shared.adapters.base import BaseAdapter
@@ -90,11 +91,14 @@ class LicenseAdapter(BaseAdapter):
 
     def _resolve_api_key(self) -> str:
         token = self.credentials.api_key
-        if not token:
+        if token is None:
             raise ExternalAPIError("Missing API token for license native connector")
-        resolved = (
-            token.get_secret_value() if hasattr(token, "get_secret_value") else str(token)
-        )
+        if isinstance(token, SecretStr):
+            resolved = token.get_secret_value()
+        elif isinstance(token, str):
+            resolved = token
+        else:
+            raise ExternalAPIError("Missing API token for license native connector")
         if not resolved or not resolved.strip():
             raise ExternalAPIError("Missing API token for license native connector")
         return resolved.strip()

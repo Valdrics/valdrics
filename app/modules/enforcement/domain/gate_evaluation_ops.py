@@ -1,21 +1,26 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Callable, Mapping
 from uuid import UUID
 
-from sqlalchemy.exc import IntegrityError
-
 from app.models.enforcement import (
-    EnforcementApprovalRequest,
-    EnforcementApprovalStatus,
     EnforcementDecision,
     EnforcementDecisionType,
     EnforcementMode,
     EnforcementSource,
 )
-
+from app.modules.enforcement.domain.gate_evaluation_persistence_ops import (
+    build_fail_safe_reasons,
+    build_metadata_payload,
+    credit_reservation_callback,
+    get_existing_gate_result,
+    get_existing_gate_result_with_lock,
+    persist_decision_with_optional_approval,
+    sanitize_failure_metadata,
+)
+from app.modules.enforcement.domain.gate_evaluation_context_ops import build_gate_evaluation_context
 
 async def evaluate_gate(
     *,
@@ -36,57 +41,39 @@ async def evaluate_gate(
     normalize_policy_document_sha256_fn: Callable[[str | None], str],
     utcnow_fn: Callable[[], datetime],
 ) -> Any:
-    policy = await service.get_or_create_policy(tenant_id)
-    normalized_env = normalize_environment_fn(gate_input.environment)
-    mode, mode_scope = service._resolve_policy_mode(
-        policy=policy,
+    context = await build_gate_evaluation_context(
+        service=service,
+        tenant_id=tenant_id,
         source=source,
-        environment=normalized_env,
+        gate_input=gate_input,
+        stable_fingerprint_fn=stable_fingerprint_fn,
+        normalize_environment_fn=normalize_environment_fn,
     )
-    ttl_seconds = max(60, min(int(policy.default_ttl_seconds), 86400))
-
-    fingerprint = stable_fingerprint_fn(source, gate_input)
-    raw_idempotency_key = (gate_input.idempotency_key or fingerprint).strip()
-    idempotency_key = raw_idempotency_key[:128] if raw_idempotency_key else fingerprint
-
-    existing = await service._get_decision_by_idempotency(
+    policy = context.policy
+    normalized_env = context.normalized_env
+    mode = context.mode
+    mode_scope = context.mode_scope
+    ttl_seconds = context.ttl_seconds
+    fingerprint = context.fingerprint
+    idempotency_key = context.idempotency_key
+    existing_result = await get_existing_gate_result_with_lock(
+        service=service,
         tenant_id=tenant_id,
         source=source,
         idempotency_key=idempotency_key,
+        gate_evaluation_result_cls=gate_evaluation_result_cls,
+        ttl_seconds=ttl_seconds,
+        acquire_lock_fn=lambda: service._acquire_gate_evaluation_lock(
+            policy=policy, source=source
+        ),
     )
-    if existing is not None:
-        existing_approval = await service._get_approval_by_decision(existing.id)
-        return gate_evaluation_result_cls(
-            decision=existing,
-            approval=existing_approval,
-            approval_token=None,
-            ttl_seconds=ttl_seconds,
-        )
-
-    await service._acquire_gate_evaluation_lock(policy=policy, source=source)
-
-    # Re-check idempotency after lock acquisition to avoid duplicate work when
-    # another worker commits while this request waits on the serialization lock.
-    existing = await service._get_decision_by_idempotency(
-        tenant_id=tenant_id,
-        source=source,
-        idempotency_key=idempotency_key,
-    )
-    if existing is not None:
-        existing_approval = await service._get_approval_by_decision(existing.id)
-        return gate_evaluation_result_cls(
-            decision=existing,
-            approval=existing_approval,
-            approval_token=None,
-            ttl_seconds=ttl_seconds,
-        )
-
+    if existing_result is not None:
+        return existing_result
     now = utcnow_fn()
     month_start, month_end = month_bounds_fn(now)
     monthly_delta = quantize_fn(gate_input.estimated_monthly_delta_usd, "0.0001")
     hourly_delta = quantize_fn(gate_input.estimated_hourly_delta_usd, "0.000001")
     reasons: list[str] = []
-
     reserved_alloc_total, reserved_credit_total = await service._get_reserved_totals(
         tenant_id=tenant_id,
         month_start=month_start,
@@ -121,7 +108,6 @@ async def evaluate_gate(
         if enterprise_ceiling is not None
         else None
     )
-
     budget = await service._get_effective_budget(
         tenant_id=tenant_id,
         scope_key=gate_input.project_id,
@@ -154,7 +140,9 @@ async def evaluate_gate(
         is_production=is_prod,
     )
     approval_required = (
-        policy.require_approval_for_prod if is_prod else policy.require_approval_for_nonprod
+        policy.require_approval_for_prod
+        if is_prod
+        else policy.require_approval_for_nonprod
     )
     if monthly_delta <= to_decimal_fn(policy.auto_approve_below_monthly_usd):
         approval_required = False
@@ -244,11 +232,11 @@ async def evaluate_gate(
     elif decision != EnforcementDecisionType.DENY and mode != EnforcementMode.SHADOW:
         reservation_active = (reserve_allocation + reserve_credit) > Decimal("0")
 
-    metadata_payload = dict(gate_input.metadata)
-    if "risk_level" not in metadata_payload:
-        metadata_payload["risk_level"] = computed_context.risk_class
-    metadata_payload["computed_risk_class"] = computed_context.risk_class
-    metadata_payload["computed_risk_score"] = computed_context.risk_score
+    metadata_payload = build_metadata_payload(
+        original_metadata=gate_input.metadata,
+        risk_class=computed_context.risk_class,
+        risk_score=computed_context.risk_score,
+    )
 
     decision_row = EnforcementDecision(
         tenant_id=tenant_id,
@@ -340,83 +328,32 @@ async def evaluate_gate(
     )
     service.db.add(decision_row)
 
-    approval: EnforcementApprovalRequest | None = None
-    try:
-        # Ensure the decision id is materialized before creating approval rows.
-        await service.db.flush()
-
-        credit_allocations_payload: list[dict[str, str]] = []
-        if reservation_active and reserve_credit > Decimal("0"):
-            credit_allocations_payload = await service._reserve_credit_for_decision(
-                tenant_id=tenant_id,
-                decision_id=decision_row.id,
-                scope_key=gate_input.project_id,
-                reserve_reserved_credit_usd=reserve_reserved_credit,
-                reserve_emergency_credit_usd=reserve_emergency_credit,
-                now=now,
-            )
-            decision_row.response_payload = {
-                **(decision_row.response_payload or {}),
-                "credit_reservation_allocations": credit_allocations_payload,
-            }
-
-        if (
-            decision == EnforcementDecisionType.REQUIRE_APPROVAL
-            and not gate_input.dry_run
-            and mode != EnforcementMode.SHADOW
-        ):
-            approval_routing_trace = service._resolve_approval_routing_trace(
-                policy=policy,
-                decision=decision_row,
-            )
-            approval = EnforcementApprovalRequest(
-                tenant_id=tenant_id,
-                decision_id=decision_row.id,
-                status=EnforcementApprovalStatus.PENDING,
-                requested_by_user_id=actor_id,
-                routing_rule_id=(
-                    str(approval_routing_trace.get("rule_id") or "").strip() or None
-                ),
-                routing_trace=approval_routing_trace,
-                expires_at=now + timedelta(seconds=ttl_seconds),
-            )
-            service.db.add(approval)
-            await service.db.flush()
-
-        service._append_decision_ledger_entry(
-            decision_row=decision_row,
-            approval_row=approval,
-        )
-        await service.db.commit()
-    except IntegrityError:
-        await service.db.rollback()
-        existing = await service._get_decision_by_idempotency(
-            tenant_id=tenant_id,
-            source=source,
-            idempotency_key=idempotency_key,
-        )
-        if existing is None:
-            raise
-        existing_approval = await service._get_approval_by_decision(existing.id)
-        return gate_evaluation_result_cls(
-            decision=existing,
-            approval=existing_approval,
-            approval_token=None,
-            ttl_seconds=ttl_seconds,
-        )
-
-    await service.db.refresh(decision_row)
-    if approval is not None:
-        await service.db.refresh(approval)
-
-    return gate_evaluation_result_cls(
-        decision=decision_row,
-        approval=approval,
-        approval_token=None,
-        ttl_seconds=ttl_seconds,
+    reserve_credit_fn = credit_reservation_callback(
+        service=service,
+        tenant_id=tenant_id,
+        decision_row=decision_row,
+        scope_key=gate_input.project_id,
+        reserve_reserved_credit_usd=reserve_reserved_credit,
+        reserve_emergency_credit_usd=reserve_emergency_credit,
+        now=now,
     )
 
-
+    return await persist_decision_with_optional_approval(
+        service=service,
+        tenant_id=tenant_id,
+        source=source,
+        idempotency_key=idempotency_key,
+        decision_row=decision_row,
+        gate_input=gate_input,
+        mode=mode,
+        decision=decision,
+        policy=policy,
+        actor_id=actor_id,
+        now=now,
+        ttl_seconds=ttl_seconds,
+        gate_evaluation_result_cls=gate_evaluation_result_cls,
+        reserve_credit_allocations_fn=reserve_credit_fn,
+    )
 async def resolve_fail_safe_gate(
     *,
     service: Any,
@@ -438,46 +375,37 @@ async def resolve_fail_safe_gate(
     utcnow_fn: Callable[[], datetime],
 ) -> Any:
     now = utcnow_fn()
-    normalized_env = normalize_environment_fn(gate_input.environment)
-    policy = await service.get_or_create_policy(tenant_id)
-    mode, mode_scope = service._resolve_policy_mode(
-        policy=policy,
+    context = await build_gate_evaluation_context(
+        service=service,
+        tenant_id=tenant_id,
         source=source,
-        environment=normalized_env,
+        gate_input=gate_input,
+        stable_fingerprint_fn=stable_fingerprint_fn,
+        normalize_environment_fn=normalize_environment_fn,
     )
-    ttl_seconds = max(60, min(int(policy.default_ttl_seconds), 86400))
-
-    fingerprint = stable_fingerprint_fn(source, gate_input)
-    raw_idempotency_key = (gate_input.idempotency_key or fingerprint).strip()
-    idempotency_key = raw_idempotency_key[:128] if raw_idempotency_key else fingerprint
-
-    existing = await service._get_decision_by_idempotency(
+    policy = context.policy
+    normalized_env = context.normalized_env
+    mode = context.mode
+    mode_scope = context.mode_scope
+    ttl_seconds = context.ttl_seconds
+    fingerprint = context.fingerprint
+    idempotency_key = context.idempotency_key
+    existing_result = await get_existing_gate_result(
+        service=service,
         tenant_id=tenant_id,
         source=source,
         idempotency_key=idempotency_key,
+        gate_evaluation_result_cls=gate_evaluation_result_cls,
+        ttl_seconds=ttl_seconds,
     )
-    if existing is not None:
-        existing_approval = await service._get_approval_by_decision(existing.id)
-        return gate_evaluation_result_cls(
-            decision=existing,
-            approval=existing_approval,
-            approval_token=None,
-            ttl_seconds=ttl_seconds,
-        )
+    if existing_result is not None:
+        return existing_result
 
-    normalized_reason = str(failure_reason_code or "").strip().lower()
-    if not normalized_reason:
-        normalized_reason = "gate_evaluation_error"
-
-    mode_reason = {
-        EnforcementMode.SHADOW: "shadow_mode_fail_open",
-        EnforcementMode.SOFT: "soft_mode_fail_safe_escalation",
-        EnforcementMode.HARD: "hard_mode_fail_closed",
-    }[mode]
-    reasons = [normalized_reason, mode_reason]
-    if gate_input.dry_run:
-        reasons.append("dry_run")
-
+    normalized_reason, reasons = build_fail_safe_reasons(
+        mode=mode,
+        failure_reason_code=failure_reason_code,
+        dry_run=gate_input.dry_run,
+    )
     monthly_delta = quantize_fn(gate_input.estimated_monthly_delta_usd, "0.0001")
     hourly_delta = quantize_fn(gate_input.estimated_hourly_delta_usd, "0.000001")
     decision = mode_violation_decision_fn(mode)
@@ -490,19 +418,12 @@ async def resolve_fail_safe_gate(
         is_production=is_prod,
     )
 
-    fail_safe_details: dict[str, Any] | None = None
-    if failure_metadata:
-        fail_safe_details = {
-            str(key): value
-            for key, value in failure_metadata.items()
-            if str(key).strip()
-        } or None
-
-    metadata_payload = dict(gate_input.metadata)
-    if "risk_level" not in metadata_payload:
-        metadata_payload["risk_level"] = computed_context.risk_class
-    metadata_payload["computed_risk_class"] = computed_context.risk_class
-    metadata_payload["computed_risk_score"] = computed_context.risk_score
+    fail_safe_details = sanitize_failure_metadata(failure_metadata)
+    metadata_payload = build_metadata_payload(
+        original_metadata=gate_input.metadata,
+        risk_class=computed_context.risk_class,
+        risk_score=computed_context.risk_score,
+    )
 
     decision_row = EnforcementDecision(
         tenant_id=tenant_id,
@@ -559,62 +480,19 @@ async def resolve_fail_safe_gate(
     )
     service.db.add(decision_row)
 
-    approval: EnforcementApprovalRequest | None = None
-    try:
-        await service.db.flush()
-
-        if (
-            decision == EnforcementDecisionType.REQUIRE_APPROVAL
-            and not gate_input.dry_run
-            and mode != EnforcementMode.SHADOW
-        ):
-            approval_routing_trace = service._resolve_approval_routing_trace(
-                policy=policy,
-                decision=decision_row,
-            )
-            approval = EnforcementApprovalRequest(
-                tenant_id=tenant_id,
-                decision_id=decision_row.id,
-                status=EnforcementApprovalStatus.PENDING,
-                requested_by_user_id=actor_id,
-                routing_rule_id=(
-                    str(approval_routing_trace.get("rule_id") or "").strip() or None
-                ),
-                routing_trace=approval_routing_trace,
-                expires_at=now + timedelta(seconds=ttl_seconds),
-            )
-            service.db.add(approval)
-            await service.db.flush()
-
-        service._append_decision_ledger_entry(
-            decision_row=decision_row,
-            approval_row=approval,
-        )
-        await service.db.commit()
-    except IntegrityError:
-        await service.db.rollback()
-        existing = await service._get_decision_by_idempotency(
-            tenant_id=tenant_id,
-            source=source,
-            idempotency_key=idempotency_key,
-        )
-        if existing is None:
-            raise
-        existing_approval = await service._get_approval_by_decision(existing.id)
-        return gate_evaluation_result_cls(
-            decision=existing,
-            approval=existing_approval,
-            approval_token=None,
-            ttl_seconds=ttl_seconds,
-        )
-
-    await service.db.refresh(decision_row)
-    if approval is not None:
-        await service.db.refresh(approval)
-
-    return gate_evaluation_result_cls(
-        decision=decision_row,
-        approval=approval,
-        approval_token=None,
+    return await persist_decision_with_optional_approval(
+        service=service,
+        tenant_id=tenant_id,
+        source=source,
+        idempotency_key=idempotency_key,
+        decision_row=decision_row,
+        gate_input=gate_input,
+        mode=mode,
+        decision=decision,
+        policy=policy,
+        actor_id=actor_id,
+        now=now,
         ttl_seconds=ttl_seconds,
+        gate_evaluation_result_cls=gate_evaluation_result_cls,
+        reserve_credit_allocations_fn=None,
     )

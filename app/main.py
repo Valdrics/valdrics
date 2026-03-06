@@ -1,20 +1,16 @@
 import asyncio
-import base64
 import hashlib
 import inspect
-import json
 import os
 from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import Any, AsyncGenerator, Awaitable, Callable, Dict, List, Sequence, TypeVar, cast
+from typing import Any, AsyncGenerator, Awaitable, Callable, TypeVar, cast
 
 import structlog
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi_csrf_protect import CsrfProtect
 from fastapi_csrf_protect.exceptions import CsrfProtectError
@@ -25,12 +21,18 @@ from slowapi.errors import RateLimitExceeded
 
 from app.shared.core.app_routes import register_api_routers, register_lifecycle_routes
 from app.shared.core.config import get_settings, reload_settings_from_environment
+from app.shared.core.cors_policy import (
+    InvalidCorsConfiguration,
+    resolve_cors_allowed_origins,
+)
 from app.shared.core.logging import setup_logging
 from app.shared.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
 from app.shared.core.security_metrics import CSRF_ERRORS, RATE_LIMIT_EXCEEDED
 from app.shared.core.ops_metrics import API_ERRORS_TOTAL
+from app.shared.core.docs_assets import render_redoc_ui_html, render_swagger_ui_html
 from app.shared.core.sentry import init_sentry
 from app.shared.core.runtime_dependencies import validate_runtime_dependencies
+from app.shared.core.validation_errors import sanitize_validation_errors
 
 # SchedulerService imported lazily in lifespan() to avoid Celery blocking on startup
 from app.shared.core.timeout import TimeoutMiddleware
@@ -76,10 +78,10 @@ def _resolve_csrf_settings() -> CsrfSettings:
     if settings.TESTING:
         # Tests may provide an explicit key; otherwise derive an ephemeral key so
         # no hardcoded fallback secret can leak across environments.
-        explicit_test_key = (os.getenv("CSRF_TEST_SECRET_KEY") or "").strip()
+        explicit_test_key = (settings.CSRF_TEST_SECRET_KEY or "").strip()
         if explicit_test_key:
             return CsrfSettings(secret_key=explicit_test_key)
-        test_seed = f"{os.getenv('PYTEST_CURRENT_TEST', 'pytest')}:{os.getpid()}"
+        test_seed = f"{settings.PYTEST_CURRENT_TEST or 'pytest'}:{os.getpid()}"
         derived_key = hashlib.sha256(test_seed.encode("utf-8")).hexdigest()
         return CsrfSettings(secret_key=f"test_csrf_{derived_key}")
     raise ValueError("CSRF_SECRET_KEY must be configured")
@@ -91,16 +93,10 @@ def get_csrf_config() -> CsrfSettings:
 
 
 logger = structlog.get_logger()
-DOCS_ASSET_SRI_RECOVERABLE_EXCEPTIONS = (
-    OSError,
-    RuntimeError,
-    TypeError,
-    ValueError,
-)
 
 
 def _is_test_mode() -> bool:
-    return settings.TESTING or os.getenv("PYTEST_CURRENT_TEST") is not None
+    return settings.TESTING or bool(settings.PYTEST_CURRENT_TEST)
 
 
 def _load_emissions_tracker() -> Any:
@@ -307,26 +303,6 @@ async def validation_exception_handler(
 ) -> JSONResponse:
     """Handle Pydantic validation errors."""
 
-    def _json_safe(value: Any) -> Any:
-        if isinstance(value, Exception):
-            return str(value)
-        try:
-            json.dumps(value)
-            return value
-        except (TypeError, ValueError):
-            return str(value)
-
-    def _sanitize_errors(errors: Sequence[Any]) -> List[Dict[str, Any]]:
-        sanitized = []
-        for err in errors:
-            clean = dict(err)
-            if "ctx" in clean and isinstance(clean["ctx"], dict):
-                clean["ctx"] = {k: _json_safe(v) for k, v in clean["ctx"].items()}
-            if "input" in clean:
-                clean["input"] = _json_safe(clean["input"])
-            sanitized.append(clean)
-        return sanitized
-
     API_ERRORS_TOTAL.labels(
         path=request.url.path, method=request.method, status_code=422
     ).inc()
@@ -336,7 +312,7 @@ async def validation_exception_handler(
             "error": "Unprocessable Entity",
             "code": "VALIDATION_ERROR",
             "message": "The request body or parameters are invalid.",
-            "details": _sanitize_errors(exc.errors()),
+            "details": sanitize_validation_errors(exc.errors()),
         },
     )
 
@@ -361,64 +337,14 @@ setup_rate_limiting(valdrics_app)
 valdrics_app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
-def _compute_sri(file_path: str) -> str | None:
-    try:
-        digest = hashlib.sha384(Path(file_path).read_bytes()).digest()
-        return "sha384-" + base64.b64encode(digest).decode("ascii")
-    except DOCS_ASSET_SRI_RECOVERABLE_EXCEPTIONS as exc:
-        logger.warning("docs_asset_sri_compute_failed", file_path=file_path, error=str(exc))
-        return None
-
-
-def _attach_sri(content: str, *, marker: str, sri_hash: str | None) -> str:
-    if not sri_hash or marker not in content:
-        return content
-    return content.replace(
-        marker,
-        f'{marker} integrity="{sri_hash}" crossorigin="anonymous"',
-        1,
-    )
-
-
 @valdrics_app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html() -> Any:
-    response = get_swagger_ui_html(
-        openapi_url=valdrics_app.openapi_url or "/openapi.json",
-        title=valdrics_app.title + " - Swagger UI",
-        oauth2_redirect_url=valdrics_app.swagger_ui_oauth2_redirect_url,
-        swagger_js_url="/static/swagger-ui-bundle.js",
-        swagger_css_url="/static/swagger-ui.css",
-        swagger_favicon_url="/static/favicon.png",
-    )
-    content = bytes(response.body).decode("utf-8")
-    content = _attach_sri(
-        content,
-        marker='src="/static/swagger-ui-bundle.js"',
-        sri_hash=_compute_sri("app/static/swagger-ui-bundle.js"),
-    )
-    content = _attach_sri(
-        content,
-        marker='href="/static/swagger-ui.css"',
-        sri_hash=_compute_sri("app/static/swagger-ui.css"),
-    )
-    return HTMLResponse(content=content, status_code=response.status_code)
+    return await render_swagger_ui_html(valdrics_app, logger=logger)
 
 
 @valdrics_app.get("/redoc", include_in_schema=False)
 async def redoc_html() -> Any:
-    response = get_redoc_html(
-        openapi_url=valdrics_app.openapi_url or "/openapi.json",
-        title=valdrics_app.title + " - ReDoc",
-        redoc_js_url="/static/redoc.standalone.js",
-        redoc_favicon_url="/static/favicon.png",
-    )
-    content = bytes(response.body).decode("utf-8")
-    content = _attach_sri(
-        content,
-        marker='src="/static/redoc.standalone.js"',
-        sri_hash=_compute_sri("app/static/redoc.standalone.js"),
-    )
-    return HTMLResponse(content=content, status_code=response.status_code)
+    return await render_redoc_ui_html(valdrics_app, logger=logger)
 
 
 # Override handler to include metrics (SEC-03)
@@ -487,14 +413,18 @@ valdrics_app.add_middleware(RequestIDMiddleware)
 
 # CORS - added LAST so it processes FIRST
 # This ensures OPTIONS preflight requests are handled before other middleware
-# Security Hardening: allow_credentials=True requires specific origins (no wildcards)
-if settings.CORS_ORIGINS and "*" in settings.CORS_ORIGINS:
-    # If credentials allowed, we MUST NOT use wildcard origins in production
-    # This check ensures we default to a safe state if misconfigured.
-    logger.error("insecure_cors_config_detected", msg="allow_credentials=True with '*' origin is forbidden")
-    cors_allowed_origins = [o for o in settings.CORS_ORIGINS if o != "*"]
-else:
-    cors_allowed_origins = settings.CORS_ORIGINS
+try:
+    cors_allowed_origins = resolve_cors_allowed_origins(
+        settings.CORS_ORIGINS,
+        allow_credentials=True,
+    )
+except InvalidCorsConfiguration as exc:
+    logger.critical(
+        "insecure_cors_config_detected",
+        msg=str(exc),
+        configured_origins=settings.CORS_ORIGINS,
+    )
+    raise RuntimeError(str(exc)) from exc
 
 valdrics_app.add_middleware(
     CORSMiddleware,

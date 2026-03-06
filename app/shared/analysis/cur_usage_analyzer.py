@@ -9,8 +9,13 @@ for compute resources (e.g., EC2 BoxUsage) correlates with low utilization.
 """
 
 from typing import List, Dict, Any
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 import structlog
+
+from app.shared.analysis.cur_usage_eks import (
+    find_idle_eks_clusters as _find_idle_eks_clusters_impl,
+)
+from app.shared.analysis.usage_analyzer_numeric import safe_decimal, safe_int
 
 logger = structlog.get_logger()
 
@@ -35,26 +40,6 @@ class CURUsageAnalyzer:
         """
         self.records = cur_records
 
-    @staticmethod
-    def _safe_decimal(value: Any) -> Decimal:
-        """Convert values to Decimal safely, defaulting to 0 on invalid input."""
-        if value is None or value == "":
-            return Decimal("0")
-        try:
-            return Decimal(str(value))
-        except (InvalidOperation, TypeError, ValueError):
-            return Decimal("0")
-
-    @staticmethod
-    def _safe_int(value: Any) -> int:
-        """Convert values to int safely, defaulting to 0 on invalid input."""
-        if value is None or value == "":
-            return 0
-        try:
-            return int(float(value))
-        except (TypeError, ValueError, OverflowError):
-            return 0
-
     def find_low_usage_instances(self, days: int = 14) -> List[Dict[str, Any]]:
         """Identifies EC2 instances with low usage based on CUR data."""
         instance_usage: Dict[str, Dict[str, Any]] = {}
@@ -77,10 +62,10 @@ class CURUsageAnalyzer:
                     "cost": Decimal("0"),
                 }
 
-            instance_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
+            instance_usage[resource_id]["total_usage_hours"] += safe_decimal(
                 record.get("line_item_usage_amount")
             )
-            instance_usage[resource_id]["cost"] += self._safe_decimal(
+            instance_usage[resource_id]["cost"] += safe_decimal(
                 record.get("line_item_unblended_cost")
             )
 
@@ -135,15 +120,15 @@ class CURUsageAnalyzer:
             if "EBS:VolumeUsage" in usage_type and resource_id.startswith("vol-"):
                 volume_cost[resource_id] = volume_cost.get(
                     resource_id, Decimal("0")
-                ) + self._safe_decimal(record.get("line_item_unblended_cost"))
-                volume_size[resource_id] = self._safe_int(
+                ) + safe_decimal(record.get("line_item_unblended_cost"))
+                volume_size[resource_id] = safe_int(
                     record.get("line_item_usage_amount")
                 )
 
             if "EBS:VolumeIOUsage" in usage_type and resource_id.startswith("vol-"):
                 volume_io[resource_id] = volume_io.get(
                     resource_id, Decimal("0")
-                ) + self._safe_decimal(record.get("line_item_usage_amount"))
+                ) + safe_decimal(record.get("line_item_usage_amount"))
 
         unused_volumes = []
         for vol_id, cost in volume_cost.items():
@@ -191,10 +176,10 @@ class CURUsageAnalyzer:
                     "cost": Decimal("0"),
                 }
 
-            rds_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
+            rds_usage[resource_id]["total_usage_hours"] += safe_decimal(
                 record.get("line_item_usage_amount")
             )
-            rds_usage[resource_id]["cost"] += self._safe_decimal(
+            rds_usage[resource_id]["cost"] += safe_decimal(
                 record.get("line_item_unblended_cost")
             )
 
@@ -255,10 +240,10 @@ class CURUsageAnalyzer:
                     "cost": Decimal("0"),
                 }
 
-            redshift_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
+            redshift_usage[resource_id]["total_usage_hours"] += safe_decimal(
                 record.get("line_item_usage_amount")
             )
-            redshift_usage[resource_id]["cost"] += self._safe_decimal(
+            redshift_usage[resource_id]["cost"] += safe_decimal(
                 record.get("line_item_unblended_cost")
             )
 
@@ -317,14 +302,14 @@ class CURUsageAnalyzer:
                 }
 
             if "NatGateway-Hours" in usage_type:
-                nat_usage[resource_id]["hourly_cost"] += self._safe_decimal(
+                nat_usage[resource_id]["hourly_cost"] += safe_decimal(
                     record.get("line_item_unblended_cost")
                 )
             elif "NatGateway-Bytes" in usage_type:
-                nat_usage[resource_id]["data_processed_gb"] += self._safe_decimal(
+                nat_usage[resource_id]["data_processed_gb"] += safe_decimal(
                     record.get("line_item_usage_amount")
                 )
-                nat_usage[resource_id]["data_cost"] += self._safe_decimal(
+                nat_usage[resource_id]["data_cost"] += safe_decimal(
                     record.get("line_item_unblended_cost")
                 )
 
@@ -376,10 +361,10 @@ class CURUsageAnalyzer:
                     "cost": Decimal("0"),
                 }
 
-            sagemaker_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
+            sagemaker_usage[resource_id]["total_usage_hours"] += safe_decimal(
                 record.get("line_item_usage_amount")
             )
-            sagemaker_usage[resource_id]["cost"] += self._safe_decimal(
+            sagemaker_usage[resource_id]["cost"] += safe_decimal(
                 record.get("line_item_unblended_cost")
             )
 
@@ -439,10 +424,10 @@ class CURUsageAnalyzer:
                     "cost": Decimal("0"),
                 }
 
-            cache_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
+            cache_usage[resource_id]["total_usage_hours"] += safe_decimal(
                 record.get("line_item_usage_amount")
             )
-            cache_usage[resource_id]["cost"] += self._safe_decimal(
+            cache_usage[resource_id]["cost"] += safe_decimal(
                 record.get("line_item_unblended_cost")
             )
 
@@ -480,52 +465,9 @@ class CURUsageAnalyzer:
         return idle_clusters
 
     def find_idle_eks_clusters(self, days: int = 7) -> List[Dict[str, Any]]:
-        """Identifies EKS clusters based on CUR control plane charges."""
-        eks_usage: Dict[str, Dict[str, Any]] = {}
-
-        for record in self.records:
-            resource_id = record.get("line_item_resource_id", "")
-            product_code = record.get("line_item_product_code", "")
-
-            if product_code != "AmazonEKS":
-                continue
-
-            if resource_id not in eks_usage:
-                eks_usage[resource_id] = {
-                    "resource_id": resource_id,
-                    "total_usage_hours": Decimal("0"),
-                    "cost": Decimal("0"),
-                }
-
-            eks_usage[resource_id]["total_usage_hours"] += self._safe_decimal(
-                record.get("line_item_usage_amount")
-            )
-            eks_usage[resource_id]["cost"] += self._safe_decimal(
-                record.get("line_item_unblended_cost")
-            )
-
-        # EKS clusters are charged $0.10/hour for control plane
-        # If running full time but with minimal node costs, it may be idle
-        idle_clusters = []
-        for resource_id, data in eks_usage.items():
-            if float(data["cost"]) > 50:  # Charged for control plane
-                idle_clusters.append(
-                    {
-                        "resource_id": resource_id,
-                        "resource_type": "EKS Cluster",
-                        "usage_hours": float(data["total_usage_hours"]),
-                        "monthly_cost": float(data["cost"]),
-                        "recommendation": "EKS cluster detected. Verify workload activity.",
-                        "action": "manual_review",
-                        "confidence_score": 0.70,  # Lower confidence - needs pod-level analysis
-                        "explainability_notes": f"EKS control plane cost: ${data['cost']:.2f}. Review node utilization.",
-                        "detection_method": "cur-usage-analysis",
-                    }
-                )
-
-        logger.info(
-            "cur_eks_analysis_complete",
-            analyzed=len(eks_usage),
-            flagged=len(idle_clusters),
+        return _find_idle_eks_clusters_impl(
+            records=self.records,
+            safe_decimal_fn=safe_decimal,
+            logger=logger,
+            days=days,
         )
-        return idle_clusters

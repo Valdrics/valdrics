@@ -48,6 +48,9 @@ from app.tasks.scheduler_runtime_ops import (
     system_sweep_connection_limit as _system_sweep_connection_limit_impl,
     system_sweep_tenant_limit as _system_sweep_tenant_limit_impl,
 )
+from app.tasks.scheduler_remediation_ops import (
+    remediation_sweep_logic as _remediation_sweep_logic_impl,
+)
 
 logger = structlog.get_logger()
 tracer = get_tracer(__name__)
@@ -305,139 +308,35 @@ def run_remediation_sweep() -> None:
     run_async(_remediation_sweep_logic)
 
 
-async def _load_active_remediation_connections(db: AsyncSession) -> list[Any]:
-    connections = await list_active_connections_all_tenants(
-        db,
-        with_for_update=True,
-        skip_locked=True,
-    )
-    return [conn for conn in connections if is_connection_active(conn)]
-
-
 async def _remediation_sweep_logic() -> None:
-    job_name = "weekly_remediation_sweep"
-    start_time = time.time()
-    max_retries = 3
-    retry_count = 0
-
-    with _scheduler_span("scheduler.remediation_sweep", job_name=job_name):
-        while retry_count < max_retries:
-            try:
-                async with _open_db_session() as db:
-                    begin_ctx = db.begin()
-                    if (
-                        asyncio.iscoroutine(begin_ctx) or inspect.isawaitable(begin_ctx)
-                    ) and not hasattr(begin_ctx, "__aenter__"):
-                        begin_ctx = await begin_ctx
-                    async with begin_ctx:
-                        with _scheduler_span(
-                            "scheduler.remediation_sweep.load_connections",
-                            retry_count=retry_count,
-                        ):
-                            connections = await _load_active_remediation_connections(db)
-                            connection_limit = _system_sweep_connection_limit()
-                            connections = _cap_scope_items(
-                                connections,
-                                scope="remediation_connections",
-                                limit=connection_limit,
-                            )
-
-                        now = datetime.now(timezone.utc)
-                        bucket_str = now.strftime("%Y-W%U")
-                        jobs_to_insert = []
-                        orchestrator = SchedulerOrchestrator(async_session_maker)
-
-                        for conn in connections:
-                            resolved_provider = resolve_provider_from_connection(conn)
-                            provider = normalize_provider(resolved_provider)
-                            if not provider:
-                                logger.warning(
-                                    "remediation_sweep_skipping_unknown_provider",
-                                    provider=resolved_provider or None,
-                                    connection_id=str(getattr(conn, "id", "unknown")),
-                                    tenant_id=str(getattr(conn, "tenant_id", "unknown")),
-                                )
-                                continue
-                            connection_id = getattr(conn, "id", None)
-                            tenant_id = getattr(conn, "tenant_id", None)
-                            if not isinstance(connection_id, UUID) or not isinstance(tenant_id, UUID):
-                                logger.warning(
-                                    "remediation_sweep_skipping_invalid_connection_identity",
-                                    provider=provider,
-                                    connection_id=str(connection_id),
-                                    tenant_id=str(tenant_id),
-                                )
-                                continue
-                            connection_region = resolve_connection_region(conn)
-
-                            is_green = True
-                            if connection_region != "global":
-                                is_green = await orchestrator.is_low_carbon_window(
-                                    connection_region
-                                )
-
-                            scheduled_time = now
-                            if not is_green:
-                                scheduled_time += timedelta(hours=4)
-
-                            dedup_key = (
-                                f"{tenant_id}:{provider}:{connection_id}:"
-                                f"{JobType.REMEDIATION.value}:{bucket_str}"
-                            )
-                            jobs_to_insert.append({
-                                "job_type": JobType.REMEDIATION.value,
-                                "tenant_id": tenant_id,
-                                "payload": {
-                                    "provider": provider,
-                                    "connection_id": str(connection_id),
-                                    "region": connection_region,
-                                },
-                                "status": JobStatus.PENDING,
-                                "scheduled_for": scheduled_time,
-                                "created_at": now,
-                                "deduplication_key": dedup_key,
-                            })
-
-                        jobs_enqueued = 0
-                        if jobs_to_insert:
-                            with _scheduler_span(
-                                "scheduler.remediation_sweep.insert_jobs",
-                                connection_count=len(connections),
-                                job_count=len(jobs_to_insert),
-                            ):
-                                for i in range(0, len(jobs_to_insert), 500):
-                                    chunk = jobs_to_insert[i:i+500]
-                                    stmt = (
-                                        insert(BackgroundJob)
-                                        .values(chunk)
-                                        .on_conflict_do_nothing(
-                                            index_elements=["deduplication_key"]
-                                        )
-                                    )
-                                    result_proxy = await db.execute(stmt)
-                                    if hasattr(result_proxy, "rowcount"):
-                                        jobs_enqueued += result_proxy.rowcount
-
-                        logger.info(
-                            "auto_remediation_sweep_completed",
-                            count=len(connections),
-                            jobs_enqueued=jobs_enqueued,
-                        )
-
-                SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
-                break
-            except SCHEDULER_RECOVERABLE_ERRORS as e:
-                retry_count += 1
-                logger.error(
-                    "auto_remediation_sweep_failed", error=str(e), attempt=retry_count
-                )
-                if retry_count == max_retries:
-                    SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="failure").inc()
-                else:
-                    await asyncio.sleep(2 ** (retry_count - 1))
-
-        duration = time.time() - start_time
-        SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
+    await _remediation_sweep_logic_impl(
+        open_db_session_fn=_open_db_session,
+        scheduler_span_fn=_scheduler_span,
+        system_sweep_connection_limit_fn=_system_sweep_connection_limit,
+        cap_scope_items_fn=_cap_scope_items,
+        logger=logger,
+        list_active_connections_all_tenants_fn=list_active_connections_all_tenants,
+        is_connection_active_fn=is_connection_active,
+        scheduler_orchestrator_cls=SchedulerOrchestrator,
+        async_session_maker_fn=async_session_maker,
+        resolve_provider_from_connection_fn=resolve_provider_from_connection,
+        normalize_provider_fn=normalize_provider,
+        resolve_connection_region_fn=resolve_connection_region,
+        background_job_model=BackgroundJob,
+        job_type=JobType,
+        job_status=JobStatus,
+        insert_fn=insert,
+        scheduler_job_runs=SCHEDULER_JOB_RUNS,
+        scheduler_job_duration=SCHEDULER_JOB_DURATION,
+        datetime_cls=datetime,
+        timezone_obj=timezone,
+        timedelta_cls=timedelta,
+        uuid_cls=UUID,
+        asyncio_module=asyncio,
+        inspect_module=inspect,
+        time_module=time,
+        recoverable_errors=SCHEDULER_RECOVERABLE_ERRORS,
+    )
 
 
 @shared_task(

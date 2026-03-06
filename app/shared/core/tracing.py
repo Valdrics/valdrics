@@ -1,4 +1,3 @@
-import os
 import structlog
 from opentelemetry import trace
 from opentelemetry.trace import Tracer
@@ -28,7 +27,7 @@ def setup_tracing(app: FastAPI | None = None) -> None:
     resource = Resource(
         attributes={
             ResourceAttributes.SERVICE_NAME: "valdrics-api",
-            "env": os.getenv("ENV", "development"),
+            "env": settings.ENVIRONMENT,
         }
     )
 

@@ -20,12 +20,21 @@ from uuid import UUID
 
 import structlog
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.optimization import OptimizationStrategy, StrategyRecommendation
 from app.models.realized_savings import RealizedSavingsEvent
 from app.models.remediation import RemediationRequest, RemediationStatus
+from app.modules.reporting.domain.savings_proof_drilldown_ops import (
+    build_remediation_action_buckets,
+    build_strategy_type_buckets,
+    sort_and_limit_buckets,
+)
+from app.modules.reporting.domain.savings_proof_render_ops import (
+    render_drilldown_csv,
+    render_summary_csv,
+)
 
 logger = structlog.get_logger()
 
@@ -401,227 +410,29 @@ class SavingsProofService:
             return buckets_by_key[key]
 
         if dim == "strategy_type":
-            # Opportunity: open recommendations (as-of now), grouped by strategy.type.
-            open_stmt = (
-                select(
-                    OptimizationStrategy.type,
-                    func.coalesce(
-                        func.sum(StrategyRecommendation.estimated_monthly_savings), 0
-                    ),
-                    func.count(StrategyRecommendation.id),
-                )
-                .join(
-                    OptimizationStrategy,
-                    StrategyRecommendation.strategy_id == OptimizationStrategy.id,
-                )
-                .where(
-                    StrategyRecommendation.tenant_id == tenant_id,
-                    StrategyRecommendation.status == "open",
-                )
-                .group_by(OptimizationStrategy.type)
+            notes = await build_strategy_type_buckets(
+                db=self.db,
+                tenant_id=tenant_id,
+                normalized_provider=normalized_provider,
+                window_start=window_start,
+                window_end=window_end,
+                ensure_bucket=_ensure_bucket,
+                as_float=_as_float,
             )
-            if normalized_provider:
-                open_stmt = open_stmt.where(
-                    OptimizationStrategy.provider == normalized_provider
-                )
-            open_rows = list((await self.db.execute(open_stmt)).all())
-            for strategy_type, savings_sum, count in open_rows:
-                key = str(getattr(strategy_type, "value", strategy_type)).lower()
-                bucket = _ensure_bucket(key)
-                bucket["open_recommendations"] += int(count or 0)
-                bucket["opportunity_monthly_usd"] += _as_float(savings_sum)
-
-            # Realized: applied recommendations within window, grouped by strategy.type.
-            applied_stmt = (
-                select(
-                    OptimizationStrategy.type,
-                    func.coalesce(
-                        func.sum(StrategyRecommendation.estimated_monthly_savings), 0
-                    ),
-                    func.count(StrategyRecommendation.id),
-                )
-                .join(
-                    OptimizationStrategy,
-                    StrategyRecommendation.strategy_id == OptimizationStrategy.id,
-                )
-                .where(
-                    StrategyRecommendation.tenant_id == tenant_id,
-                    StrategyRecommendation.status == "applied",
-                    StrategyRecommendation.applied_at.is_not(None),
-                    StrategyRecommendation.applied_at >= window_start,
-                    StrategyRecommendation.applied_at <= window_end,
-                )
-                .group_by(OptimizationStrategy.type)
-            )
-            if normalized_provider:
-                applied_stmt = applied_stmt.where(
-                    OptimizationStrategy.provider == normalized_provider
-                )
-            applied_rows = list((await self.db.execute(applied_stmt)).all())
-            for strategy_type, savings_sum, count in applied_rows:
-                key = str(getattr(strategy_type, "value", strategy_type)).lower()
-                bucket = _ensure_bucket(key)
-                bucket["applied_recommendations"] += int(count or 0)
-                bucket["realized_monthly_usd"] += _as_float(savings_sum)
-
-            notes = [
-                "Opportunity is a snapshot of currently open recommendations, grouped by strategy type.",
-                "Realized is applied recommendations within the window (estimated monthly savings).",
-            ]
-
         else:
-            # Remediation drilldown by action.
-            pending_statuses = {
-                RemediationStatus.PENDING.value,
-                RemediationStatus.PENDING_APPROVAL.value,
-                RemediationStatus.APPROVED.value,
-                RemediationStatus.SCHEDULED.value,
-                RemediationStatus.EXECUTING.value,
-            }
-
-            pending_stmt = (
-                select(
-                    RemediationRequest.action,
-                    func.coalesce(
-                        func.sum(RemediationRequest.estimated_monthly_savings), 0
-                    ),
-                    func.count(RemediationRequest.id),
-                )
-                .where(
-                    RemediationRequest.tenant_id == tenant_id,
-                    RemediationRequest.status.in_(pending_statuses),
-                )
-                .group_by(RemediationRequest.action)
-            )
-            if normalized_provider:
-                pending_stmt = pending_stmt.where(
-                    RemediationRequest.provider == normalized_provider
-                )
-            pending_rows = list((await self.db.execute(pending_stmt)).all())
-            for action, savings_sum, count in pending_rows:
-                key = str(getattr(action, "value", action)).lower()
-                bucket = _ensure_bucket(key)
-                bucket["pending_remediations"] += int(count or 0)
-                bucket["opportunity_monthly_usd"] += _as_float(savings_sum)
-
-            completed_at = func.coalesce(
-                RemediationRequest.executed_at,
-                RemediationRequest.updated_at,
-                RemediationRequest.created_at,
+            notes = await build_remediation_action_buckets(
+                db=self.db,
+                tenant_id=tenant_id,
+                normalized_provider=normalized_provider,
+                window_start=window_start,
+                window_end=window_end,
+                ensure_bucket=_ensure_bucket,
+                as_float=_as_float,
             )
 
-            # Completed counts (all), grouped by action.
-            completed_count_stmt = (
-                select(
-                    RemediationRequest.action,
-                    func.count(RemediationRequest.id),
-                )
-                .where(
-                    RemediationRequest.tenant_id == tenant_id,
-                    RemediationRequest.status == RemediationStatus.COMPLETED.value,
-                    completed_at >= window_start,
-                    completed_at <= window_end,
-                )
-                .group_by(RemediationRequest.action)
-            )
-            if normalized_provider:
-                completed_count_stmt = completed_count_stmt.where(
-                    RemediationRequest.provider == normalized_provider
-                )
-            completed_count_rows = list(
-                (await self.db.execute(completed_count_stmt)).all()
-            )
-            for action, count in completed_count_rows:
-                key = str(getattr(action, "value", action)).lower()
-                bucket = _ensure_bucket(key)
-                bucket["completed_remediations"] += int(count or 0)
-
-            # Finance-grade realized savings evidence where available (RealizedSavingsEvent).
-            evidence_stmt = (
-                select(
-                    RemediationRequest.action,
-                    func.coalesce(
-                        func.sum(RealizedSavingsEvent.realized_monthly_savings_usd), 0
-                    ),
-                )
-                .join(
-                    RealizedSavingsEvent,
-                    (
-                        RealizedSavingsEvent.remediation_request_id
-                        == RemediationRequest.id
-                    )
-                    & (RealizedSavingsEvent.tenant_id == RemediationRequest.tenant_id),
-                )
-                .where(
-                    RemediationRequest.tenant_id == tenant_id,
-                    RemediationRequest.status == RemediationStatus.COMPLETED.value,
-                    completed_at >= window_start,
-                    completed_at <= window_end,
-                )
-                .group_by(RemediationRequest.action)
-            )
-            if normalized_provider:
-                evidence_stmt = evidence_stmt.where(
-                    RemediationRequest.provider == normalized_provider
-                )
-            evidence_rows = list((await self.db.execute(evidence_stmt)).all())
-            for action, savings_sum in evidence_rows:
-                key = str(getattr(action, "value", action)).lower()
-                bucket = _ensure_bucket(key)
-                bucket["realized_monthly_usd"] += _as_float(savings_sum)
-
-            # Fallback: completed remediations without evidence -> use estimated_monthly_savings.
-            fallback_stmt = (
-                select(
-                    RemediationRequest.action,
-                    func.coalesce(
-                        func.sum(RemediationRequest.estimated_monthly_savings), 0
-                    ),
-                )
-                .outerjoin(
-                    RealizedSavingsEvent,
-                    (
-                        RealizedSavingsEvent.remediation_request_id
-                        == RemediationRequest.id
-                    )
-                    & (RealizedSavingsEvent.tenant_id == RemediationRequest.tenant_id),
-                )
-                .where(
-                    RemediationRequest.tenant_id == tenant_id,
-                    RemediationRequest.status == RemediationStatus.COMPLETED.value,
-                    completed_at >= window_start,
-                    completed_at <= window_end,
-                    RealizedSavingsEvent.id.is_(None),
-                )
-                .group_by(RemediationRequest.action)
-            )
-            if normalized_provider:
-                fallback_stmt = fallback_stmt.where(
-                    RemediationRequest.provider == normalized_provider
-                )
-            fallback_rows = list((await self.db.execute(fallback_stmt)).all())
-            for action, savings_sum in fallback_rows:
-                key = str(getattr(action, "value", action)).lower()
-                bucket = _ensure_bucket(key)
-                bucket["realized_monthly_usd"] += _as_float(savings_sum)
-
-            notes = [
-                "Opportunity is a snapshot of pending/approved/scheduled remediations, grouped by action.",
-                "Realized uses finance-grade ledger deltas where evidence exists; otherwise it falls back to estimated monthly savings.",
-            ]
-
-        # Order buckets by opportunity, then realized (desc), with stable key tie-break.
-        bucket_items = sorted(
-            buckets_by_key.items(),
-            key=lambda item: (
-                item[1]["opportunity_monthly_usd"],
-                item[1]["realized_monthly_usd"],
-                item[0],
-            ),
-            reverse=True,
+        bucket_items, truncated = sort_and_limit_buckets(
+            buckets_by_key, top_limit=top_limit
         )
-        truncated = len(bucket_items) > top_limit
-        bucket_items = bucket_items[:top_limit]
 
         buckets = [
             SavingsProofDrilldownBucket(key=key, **values)
@@ -665,56 +476,8 @@ class SavingsProofService:
 
     @staticmethod
     def render_csv(payload: SavingsProofResponse) -> str:
-        lines: list[str] = []
-        lines.append(
-            "provider,opportunity_monthly_usd,realized_monthly_usd,open_recommendations,applied_recommendations,pending_remediations,completed_remediations"
-        )
-        for item in payload.breakdown:
-            lines.append(
-                f"{item.provider},{item.opportunity_monthly_usd:.2f},{item.realized_monthly_usd:.2f},"
-                f"{item.open_recommendations},{item.applied_recommendations},"
-                f"{item.pending_remediations},{item.completed_remediations}"
-            )
-        lines.append("")
-        lines.append(
-            f"TOTAL,{payload.opportunity_monthly_usd:.2f},{payload.realized_monthly_usd:.2f},"
-            f"{payload.open_recommendations},{payload.applied_recommendations},"
-            f"{payload.pending_remediations},{payload.completed_remediations}"
-        )
-        return "\n".join(lines) + "\n"
+        return render_summary_csv(payload)
 
     @staticmethod
     def render_drilldown_csv(payload: SavingsProofDrilldownResponse) -> str:
-        header = [
-            payload.dimension,
-            "opportunity_monthly_usd",
-            "realized_monthly_usd",
-            "open_recommendations",
-            "applied_recommendations",
-            "pending_remediations",
-            "completed_remediations",
-        ]
-        lines = [",".join(header)]
-        for item in payload.buckets:
-            lines.append(
-                ",".join(
-                    [
-                        str(item.key),
-                        f"{item.opportunity_monthly_usd:.2f}",
-                        f"{item.realized_monthly_usd:.2f}",
-                        str(item.open_recommendations),
-                        str(item.applied_recommendations),
-                        str(item.pending_remediations),
-                        str(item.completed_remediations),
-                    ]
-                )
-            )
-        lines.append("")
-        lines.append(
-            f"TOTAL,{payload.opportunity_monthly_usd:.2f},{payload.realized_monthly_usd:.2f},"
-            f"{sum(b.open_recommendations for b in payload.buckets)},"
-            f"{sum(b.applied_recommendations for b in payload.buckets)},"
-            f"{sum(b.pending_remediations for b in payload.buckets)},"
-            f"{sum(b.completed_remediations for b in payload.buckets)}"
-        )
-        return "\n".join(lines) + "\n"
+        return render_drilldown_csv(payload)

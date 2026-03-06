@@ -13,6 +13,7 @@
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { fetchWithTimeout } from '$lib/fetchWithTimeout';
+	import { clientLogger } from '$lib/logging/client';
 	import { normalizeCheckoutUrl } from '$lib/utils';
 
 	let { data } = $props();
@@ -123,7 +124,7 @@
 				plans = await res.json();
 			}
 		} catch (e) {
-			console.error('Failed to load plans', e);
+			clientLogger.error('Failed to load plans', e);
 		}
 	}
 

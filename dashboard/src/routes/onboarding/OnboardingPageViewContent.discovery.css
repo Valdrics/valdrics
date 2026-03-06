@@ -1,0 +1,150 @@
+.discovery-panel {
+	margin-top: 2rem;
+	padding: 1.25rem;
+	border: 1px solid var(--border, #333);
+	border-radius: 12px;
+	background: var(--bg-secondary, #0f0f1a);
+}
+
+.discovery-header {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 0.5rem 1rem;
+}
+
+.discovery-stage-a,
+.discovery-stage-b {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: end;
+	gap: 0.75rem;
+	margin-top: 0.75rem;
+}
+
+.discovery-actions {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 0.4rem;
+	min-width: 180px;
+}
+
+.discovery-error {
+	margin-top: 0.75rem;
+	padding: 0.65rem 0.8rem;
+	border-radius: 8px;
+	border: 1px solid #f43f5e66;
+	background: #f43f5e14;
+	color: #fda4af;
+	font-size: var(--text-xs);
+}
+
+.discovery-info {
+	margin-top: 0.75rem;
+	padding: 0.65rem 0.8rem;
+	border-radius: 8px;
+	border: 1px solid #22c55e66;
+	background: #22c55e14;
+	color: #86efac;
+	font-size: var(--text-xs);
+}
+
+.discovery-warnings {
+	margin-top: 0.75rem;
+	padding: 0.75rem 0.85rem;
+	border-radius: 8px;
+	border: 1px solid #f59e0b55;
+	background: #f59e0b14;
+}
+
+.discovery-warnings ul {
+	margin: 0;
+	padding-left: 1rem;
+	display: flex;
+	flex-direction: column;
+	gap: 0.2rem;
+	font-size: var(--text-xs);
+	color: #fcd34d;
+}
+
+.candidate-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0.6rem;
+	margin-top: 0.9rem;
+}
+
+.candidate-row {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 0.9rem;
+	padding: 0.75rem;
+	border: 1px solid var(--border, #333);
+	border-radius: 10px;
+	background: rgba(255, 255, 255, 0.02);
+}
+
+.candidate-main {
+	min-width: 0;
+}
+
+.candidate-title {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0.35rem;
+}
+
+.candidate-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 0.1rem 0.45rem;
+	border-radius: 999px;
+	border: 1px solid var(--border, #333);
+	background: var(--card-bg, #1a1a2e);
+	color: var(--text-muted, #888);
+	font-size: var(--text-xs);
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+
+.candidate-pill.status {
+	text-transform: capitalize;
+}
+
+.candidate-meta {
+	margin: 0.2rem 0 0;
+	font-size: var(--text-xs);
+	color: var(--text-muted, #888);
+}
+
+.candidate-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 0.4rem;
+}
+
+@media (max-width: 768px) {
+	.discovery-stage-a,
+	.discovery-stage-b {
+		grid-template-columns: 1fr;
+	}
+
+	.discovery-actions {
+		min-width: 0;
+		width: 100%;
+		align-items: stretch;
+	}
+
+	.candidate-row {
+		flex-direction: column;
+	}
+
+	.candidate-actions {
+		justify-content: flex-start;
+	}
+}

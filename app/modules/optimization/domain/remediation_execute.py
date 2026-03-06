@@ -10,19 +10,27 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.models.remediation import RemediationAction, RemediationRequest, RemediationStatus
+from app.models.remediation import RemediationRequest, RemediationStatus
 from app.modules.governance.domain.security.remediation_policy import PolicyDecision, RemediationPolicyEngine
-from app.modules.optimization.domain.actions.base import ExecutionStatus, RemediationContext
+from app.modules.optimization.domain.remediation_execute_helpers import (
+    apply_execution_result,
+    build_remediation_context,
+    coerce_remediation_action,
+    handle_policy_decision,
+    maybe_schedule_grace_period_execution,
+    normalize_estimated_savings,
+    resolve_execution_region,
+    should_notify_completion_workflow,
+)
 from app.shared.core.constants import SYSTEM_USER_ID
 from app.shared.core.exceptions import ExternalAPIError, ResourceNotFoundError
 from app.shared.core.ops_metrics import REMEDIATION_DURATION_SECONDS
-from app.shared.core.pricing import FeatureFlag, PricingTier, is_feature_enabled
+from app.shared.core.pricing import PricingTier
 from app.shared.core.security_metrics import REMEDIATION_TOTAL
 from app.shared.core.provider import normalize_provider
 
 logger = structlog.get_logger()
-
-REMEDIATION_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+_REMEDIATION_COMMON_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     SQLAlchemyError,
     RuntimeError,
     OSError,
@@ -33,24 +41,14 @@ REMEDIATION_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     LookupError,
     AttributeError,
 )
-REMEDIATION_ACTION_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
-    ValueError,
-    TypeError,
-    AttributeError,
+REMEDIATION_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS = (
+    _REMEDIATION_COMMON_RECOVERABLE_EXCEPTIONS
 )
-REMEDIATION_EXECUTION_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+REMEDIATION_ACTION_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (ValueError, TypeError, AttributeError)
+REMEDIATION_EXECUTION_RECOVERABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
     ExternalAPIError,
-    SQLAlchemyError,
-    RuntimeError,
-    OSError,
-    TimeoutError,
-    ValueError,
-    TypeError,
-    KeyError,
-    LookupError,
-    AttributeError,
+    *_REMEDIATION_COMMON_RECOVERABLE_EXCEPTIONS,
 )
-
 
 async def execute_remediation_request(
     service: Any,
@@ -59,9 +57,6 @@ async def execute_remediation_request(
     *,
     bypass_grace_period: bool = False,
 ) -> RemediationRequest:
-    """
-    Execute an approved remediation request through the registered action strategy.
-    """
     start_time = time.time()
     from app.modules.optimization.domain import remediation as remediation_module
 
@@ -96,20 +91,15 @@ async def execute_remediation_request(
         raise ValueError("Invalid or missing provider on remediation request")
     actor_id = str(getattr(request, "reviewed_by_user_id", None) or SYSTEM_USER_ID)
 
-    action_raw = getattr(request, "action", None)
-    if isinstance(action_raw, RemediationAction):
-        action = action_raw
-    else:
-        try:
-            action = RemediationAction(str(action_raw))
-            request.action = action
-        except REMEDIATION_ACTION_PARSE_RECOVERABLE_EXCEPTIONS as exc:
-            raise ValueError(f"Invalid remediation action on request: {action_raw}") from exc
+    action = coerce_remediation_action(
+        request,
+        recoverable_errors=REMEDIATION_ACTION_PARSE_RECOVERABLE_EXCEPTIONS,
+    )
     action_value = action.value
 
-    savings_value = getattr(request, "estimated_monthly_savings", Decimal("0")) or Decimal("0")
-    if not isinstance(savings_value, Decimal):
-        savings_value = Decimal(str(savings_value))
+    savings_value = normalize_estimated_savings(
+        getattr(request, "estimated_monthly_savings", Decimal("0"))
+    )
 
     audit_logger = remediation_module.AuditLogger(
         db=service.db, tenant_id=str(tenant_id)
@@ -175,200 +165,47 @@ async def execute_remediation_request(
             details=policy_details,
         )
 
-        if policy_evaluation.decision == PolicyDecision.WARN:
-            logger.warning(
-                "remediation_policy_warned",
-                request_id=str(request_id),
-                summary=policy_evaluation.summary,
-            )
-            await audit_logger.log(
-                event_type=remediation_module.AuditEventType.POLICY_WARNED,
+        if policy_evaluation.decision in {
+            PolicyDecision.WARN,
+            PolicyDecision.BLOCK,
+            PolicyDecision.ESCALATE,
+        }:
+            handled = await handle_policy_decision(
+                request=request,
+                policy_evaluation=policy_evaluation,
+                policy_details=policy_details,
+                request_id=request_id,
                 actor_id=actor_id,
                 resource_id=resource_id,
                 resource_type=resource_type,
-                success=True,
-                details=policy_details,
-            )
-        elif policy_evaluation.decision == PolicyDecision.BLOCK:
-            request.status = RemediationStatus.FAILED
-            request.execution_error = f"POLICY_BLOCK: {policy_evaluation.summary}"
-            await audit_logger.log(
-                event_type=remediation_module.AuditEventType.POLICY_BLOCKED,
-                actor_id=actor_id,
-                resource_id=resource_id,
-                resource_type=resource_type,
-                success=False,
-                error_message=request.execution_error,
-                details=policy_details,
-            )
-            should_notify_slack = bool(
-                remediation_settings
-                and bool(
-                    getattr(
-                        remediation_settings, "policy_violation_notify_slack", True
-                    )
-                )
-                and is_feature_enabled(tenant_tier, FeatureFlag.SLACK_INTEGRATION)
-            )
-            should_notify_jira = bool(
-                remediation_settings
-                and bool(
-                    getattr(
-                        remediation_settings, "policy_violation_notify_jira", False
-                    )
-                )
-                and is_feature_enabled(
-                    tenant_tier, FeatureFlag.INCIDENT_INTEGRATIONS
-                )
-            )
-            should_notify_workflow = bool(
-                is_feature_enabled(tenant_tier, FeatureFlag.INCIDENT_INTEGRATIONS)
-            )
-            should_notify_teams = bool(
-                is_feature_enabled(tenant_tier, FeatureFlag.INCIDENT_INTEGRATIONS)
-            )
-            if (
-                should_notify_slack
-                or should_notify_jira
-                or should_notify_workflow
-                or should_notify_teams
-            ):
-                from app.shared.core.notifications import NotificationDispatcher
-
-                await NotificationDispatcher.notify_policy_event(
-                    tenant_id=str(tenant_id),
-                    decision=policy_evaluation.decision.value,
-                    summary=policy_evaluation.summary,
-                    resource_id=resource_id,
-                    action=action_value,
-                    notify_slack=should_notify_slack,
-                    notify_jira=should_notify_jira,
-                    notify_teams=should_notify_teams,
-                    notify_workflow=should_notify_workflow,
-                    request_id=str(request_id),
-                    db=service.db,
-                )
-            await service.db.commit()
-            await service.db.refresh(request)
-            return request
-        elif policy_evaluation.decision == PolicyDecision.ESCALATE:
-            request.status = RemediationStatus.PENDING_APPROVAL
-            request.escalation_required = True
-            request.escalation_reason = policy_evaluation.summary
-            request.escalated_at = datetime.now(timezone.utc)
-            request.execution_error = None
-            policy_details["escalation_workflow_feature_enabled"] = (
-                is_feature_enabled(tenant_tier, FeatureFlag.ESCALATION_WORKFLOW)
-            )
-            await audit_logger.log(
-                event_type=remediation_module.AuditEventType.POLICY_ESCALATED,
-                actor_id=actor_id,
-                resource_id=resource_id,
-                resource_type=resource_type,
-                success=False,
-                error_message=policy_evaluation.summary,
-                details=policy_details,
-            )
-            should_notify_slack = bool(
-                remediation_settings
-                and bool(
-                    getattr(
-                        remediation_settings, "policy_violation_notify_slack", True
-                    )
-                )
-                and is_feature_enabled(tenant_tier, FeatureFlag.SLACK_INTEGRATION)
-            )
-            should_notify_jira = bool(
-                remediation_settings
-                and bool(
-                    getattr(
-                        remediation_settings, "policy_violation_notify_jira", False
-                    )
-                )
-                and is_feature_enabled(
-                    tenant_tier, FeatureFlag.INCIDENT_INTEGRATIONS
-                )
-            )
-            should_notify_workflow = bool(
-                is_feature_enabled(tenant_tier, FeatureFlag.INCIDENT_INTEGRATIONS)
-            )
-            should_notify_teams = bool(
-                is_feature_enabled(tenant_tier, FeatureFlag.INCIDENT_INTEGRATIONS)
-            )
-            if (
-                should_notify_slack
-                or should_notify_jira
-                or should_notify_workflow
-                or should_notify_teams
-            ):
-                from app.shared.core.notifications import NotificationDispatcher
-
-                await NotificationDispatcher.notify_policy_event(
-                    tenant_id=str(tenant_id),
-                    decision=policy_evaluation.decision.value,
-                    summary=policy_evaluation.summary,
-                    resource_id=resource_id,
-                    action=action_value,
-                    notify_slack=should_notify_slack,
-                    notify_jira=should_notify_jira,
-                    notify_teams=should_notify_teams,
-                    notify_workflow=should_notify_workflow,
-                    request_id=str(request_id),
-                    db=service.db,
-                )
-            await service.db.commit()
-            await service.db.refresh(request)
-            return request
-
-        if request.status == RemediationStatus.APPROVED and not bypass_grace_period:
-            from datetime import timedelta
-
-            hours = 24
-            if action == RemediationAction.RECLAIM_LICENSE_SEAT:
-                hours = (
-                    getattr(remediation_settings, "license_reclaim_grace_period_days", 1)
-                    or 1
-                ) * 24
-
-            grace_period = timedelta(hours=hours)
-            scheduled_at = datetime.now(timezone.utc) + grace_period
-
-            request.status = RemediationStatus.SCHEDULED
-            request.scheduled_execution_at = scheduled_at
-            await service.db.commit()
-
-            logger.info(
-                "remediation_scheduled_grace_period",
-                request_id=str(request_id),
-                scheduled_at=scheduled_at.isoformat(),
-                grace_hours=hours,
-            )
-
-            await audit_logger.log(
-                event_type=remediation_module.AuditEventType.REMEDIATION_EXECUTION_STARTED,
-                actor_id=actor_id,
-                resource_id=resource_id,
-                resource_type=resource_type,
-                success=True,
-                details={
-                    "request_id": str(request_id),
-                    "action": action_value,
-                    "scheduled_execution_at": scheduled_at.isoformat(),
-                    "note": f"Resource scheduled for execution after {hours}h grace period.",
-                },
-            )
-
-            from app.modules.governance.domain.jobs.processor import enqueue_job
-            from app.models.background_job import JobType
-
-            await enqueue_job(
-                db=service.db,
-                job_type=JobType.REMEDIATION,
+                action_value=action_value,
                 tenant_id=tenant_id,
-                payload={"request_id": str(request_id)},
-                scheduled_for=scheduled_at,
+                tenant_tier=tenant_tier,
+                remediation_settings=remediation_settings,
+                db=service.db,
+                audit_logger=audit_logger,
+                remediation_module=remediation_module,
+                logger=logger,
             )
+            if handled:
+                return request
 
+        if await maybe_schedule_grace_period_execution(
+            request=request,
+            action=action,
+            remediation_settings=remediation_settings,
+            request_id=request_id,
+            tenant_id=tenant_id,
+            action_value=action_value,
+            actor_id=actor_id,
+            resource_id=resource_id,
+            resource_type=resource_type,
+            db=service.db,
+            audit_logger=audit_logger,
+            remediation_module=remediation_module,
+            logger=logger,
+            bypass_grace_period=bypass_grace_period,
+        ):
             return request
 
         request.status = RemediationStatus.EXECUTING
@@ -389,30 +226,20 @@ async def execute_remediation_request(
         )
 
         credentials = await service._resolve_credentials(request)
-        execution_region = getattr(request, "region", None) or service.region
-        if str(execution_region or "").strip().lower() in {"", "global"}:
-            credential_region = str((credentials or {}).get("region") or "").strip()
-            if credential_region and credential_region.lower() != "global":
-                execution_region = credential_region
-        if (
-            provider == "aws"
-            and str(execution_region or "").strip().lower() in {"", "global"}
-        ):
-            execution_region = await service._resolve_aws_region_hint(
-                tenant_id=tenant_id,
-                connection_id=getattr(request, "connection_id", None),
-            )
-        context = RemediationContext(
-            db_session=service.db,
+        execution_region = await resolve_execution_region(
+            service=service,
+            request=request,
+            provider=provider,
             tenant_id=tenant_id,
-            tier=tier_value,
-            region=execution_region,
             credentials=credentials,
-            create_backup=bool(getattr(request, "create_backup", False)),
-            backup_retention_days=int(getattr(request, "backup_retention_days", 30) or 30),
-            parameters=service._strip_system_policy_context(
-                getattr(request, "action_parameters", None)
-            ),
+        )
+        context = build_remediation_context(
+            service=service,
+            tenant_id=tenant_id,
+            tier_value=tier_value,
+            execution_region=execution_region,
+            credentials=credentials,
+            request=request,
         )
 
         strategy = remediation_module.RemediationActionFactory.get_strategy(
@@ -420,20 +247,7 @@ async def execute_remediation_request(
         )
         execution_result = await strategy.execute(resource_id, context)
 
-        if execution_result.status == ExecutionStatus.SUCCESS:
-            request.status = RemediationStatus.COMPLETED
-            request.executed_at = datetime.now(timezone.utc)
-            request.backup_resource_id = execution_result.backup_id
-            request.execution_error = None
-        elif execution_result.status == ExecutionStatus.SKIPPED:
-            request.status = RemediationStatus.FAILED
-            request.execution_error = (
-                execution_result.error_message
-                or "Action skipped by validation or tier policy."
-            )
-        else:
-            request.status = RemediationStatus.FAILED
-            request.execution_error = execution_result.error_message or "Action failed."
+        apply_execution_result(request=request, execution_result=execution_result)
 
         logger.info(
             "remediation_executed",
@@ -502,12 +316,7 @@ async def execute_remediation_request(
             savings=float(savings_value),
             request_id=str(request_id),
             provider=provider,
-            notify_workflow=bool(
-                is_feature_enabled(tenant_tier, FeatureFlag.GITOPS_REMEDIATION)
-                or is_feature_enabled(
-                    tenant_tier, FeatureFlag.INCIDENT_INTEGRATIONS
-                )
-            ),
+            notify_workflow=should_notify_completion_workflow(tenant_tier),
             db=service.db,
         )
 

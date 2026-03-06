@@ -1,24 +1,37 @@
-from typing import List, Dict, Any
-from datetime import datetime, timezone
-from google.api_core.exceptions import GoogleAPIError
+from __future__ import annotations
+
+import time
+from typing import Any
+
+import structlog
 from google.cloud import aiplatform_v1
 from google.cloud import monitoring_v3
-from google.oauth2 import service_account
-from app.modules.optimization.domain.plugin import ZombiePlugin
+from google.oauth2 import service_account  # noqa: F401
+
+from app.modules.optimization.adapters.common.credentials import resolve_gcp_credentials
+from app.modules.optimization.adapters.common.sync_bridge import materialize_iterable
 from app.modules.optimization.domain.cloud_api_budget import (
     allow_expensive_cloud_api_call,
 )
+from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
-import structlog
 
 logger = structlog.get_logger()
+
+def _resolve_google_api_error_base() -> type[Exception]:
+    try:
+        from google.api_core.exceptions import GoogleAPIError
+    except ImportError:  # pragma: no cover - fallback for SDK-mocked test envs
+        return Exception
+    return GoogleAPIError
+
 GCP_VECTOR_SCAN_RECOVERABLE_EXCEPTIONS = (
-    GoogleAPIError,
+    _resolve_google_api_error_base(),
     OSError,
-    RuntimeError,
-    TypeError,
+    TimeoutError,
     ValueError,
 )
+
 
 @registry.register("gcp")
 class IdleVectorSearchPlugin(ZombiePlugin):
@@ -27,130 +40,122 @@ class IdleVectorSearchPlugin(ZombiePlugin):
         return "idle_vector_search_indices"
 
     async def scan(
-
-
-    
-
-    self,
-
-
-    
-
-    session: Any,
-
-
-    
-
-    region: str,
-
-
-    
-
-    credentials: Dict[str, Any] | None = None,
-
-
-    
-
-    config: Any = None,
-
-
-    
-
-    inventory: Any = None,
-
-
-    
-
-    **kwargs: Any,
-
-
-    ) -> List[Dict[str, Any]]:
-        project_id = session
-        zombies = []
+        self,
+        session: Any,
+        region: str,
+        credentials: dict[str, Any] | Any | None = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        del config, inventory, kwargs
+        project_id = str(session)
         target_region = region if region != "global" else "us-central1"
-        
-        endpoint_client_options = {"api_endpoint": f"{target_region}-aiplatform.googleapis.com"}
+        findings: list[dict[str, Any]] = []
 
         try:
-            gcp_creds = None
-            if credentials:
-                gcp_creds = service_account.Credentials.from_service_account_info(credentials)  # type: ignore[no-untyped-call]
-            
-            # 1. List Index Endpoints (Vector Search)
-            client = aiplatform_v1.IndexEndpointServiceClient(
-                client_options=endpoint_client_options, 
-                credentials=gcp_creds
+            gcp_creds = resolve_gcp_credentials(credentials)
+            index_endpoint_client = aiplatform_v1.IndexEndpointServiceClient(
+                client_options={"api_endpoint": f"{target_region}-aiplatform.googleapis.com"},
+                credentials=gcp_creds,
             )
-            parent = f"projects/{project_id}/locations/{target_region}"
-            index_endpoints = client.list_index_endpoints(parent=parent)
-            
             monitor_client = monitoring_v3.MetricServiceClient(credentials=gcp_creds)
-            project_name = f"projects/{project_id}"
-
-            for ie in index_endpoints:
-                # If no deployed indexes, cost is lower (just endpoint node?), but still valid to check
-                if not ie.deployed_indexes:
-                    continue
-
-                # Metric: aiplatform.googleapis.com/index_endpoint/query_count ?? Verify metric
-                # Or request_count
-                ie_id = ie.name.split('/')[-1]
-                filter_str = (
-                    f'metric.type="aiplatform.googleapis.com/index_endpoint/request_count" '
-                    f'AND resource.labels.index_endpoint_id="{ie_id}"'
+            index_endpoints = await materialize_iterable(
+                index_endpoint_client.list_index_endpoints,
+                parent=f"projects/{project_id}/locations/{target_region}",
+            )
+            for index_endpoint in index_endpoints:
+                finding = await self._scan_index_endpoint(
+                    index_endpoint=index_endpoint,
+                    monitor_client=monitor_client,
+                    project_id=project_id,
+                    target_region=target_region,
                 )
-                
-                now = datetime.now(timezone.utc)
-                start_time = now.timestamp() - (7 * 86400)
-                end_time = now.timestamp()
-                
-                interval = monitoring_v3.TimeInterval(
-                    {"start_time": {"seconds": int(start_time)}, "end_time": {"seconds": int(end_time)}}
-                )
-                
-                allowed = await allow_expensive_cloud_api_call(
-                    "gcp_monitoring",
-                    operation="list_time_series",
-                )
-                if not allowed:
-                    logger.warning(
-                        "gcp_monitoring_budget_exhausted",
-                        plugin=self.category_key,
-                        index_endpoint_id=ie_id,
-                    )
-                    continue
+                if finding is not None:
+                    findings.append(finding)
+        except GCP_VECTOR_SCAN_RECOVERABLE_EXCEPTIONS as exc:
+            logger.error(
+                "gcp_vector_scan_error",
+                error=str(exc),
+                project_id=project_id,
+                region=target_region,
+            )
 
-                results = monitor_client.list_time_series(
-                    request={
-                        "name": project_name,
-                        "filter": filter_str,
-                        "interval": interval,
-                        "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
-                    }
-                )
-                
-                has_queries = False
-                for result in results:
-                    if result.points:
-                        has_queries = True
-                        break
-                
-                if not has_queries:
-                    monthly_cost = 500.0 # Vector Search is expensive (node hours)
-                    
-                    zombies.append({
-                        "resource_id": ie.name,
-                        "resource_type": "Vertex AI Vector Index",
-                        "resource_name": ie.display_name,
-                        "region": target_region,
-                        "monthly_cost": monthly_cost,
-                        "recommendation": "Undeploy unused vector index",
-                        "action": "undeploy_vector_index",
-                        "confidence_score": 0.95,
-                        "explainability_notes": f"Vector Index Endpoint '{ie.display_name}' had 0 queries in the last 7 days."
-                    })
+        return findings
 
-        except GCP_VECTOR_SCAN_RECOVERABLE_EXCEPTIONS as e:
-            logger.error("gcp_vector_scan_error", error=str(e))
+    async def _scan_index_endpoint(
+        self,
+        *,
+        index_endpoint: Any,
+        monitor_client: monitoring_v3.MetricServiceClient,
+        project_id: str,
+        target_region: str,
+    ) -> dict[str, Any] | None:
+        deployed_indexes = getattr(index_endpoint, "deployed_indexes", None) or []
+        if not deployed_indexes:
+            return None
 
-        return zombies
+        endpoint_name = str(getattr(index_endpoint, "name", "") or "").strip()
+        if not endpoint_name:
+            return None
+        endpoint_id = endpoint_name.split("/")[-1]
+
+        allowed = await allow_expensive_cloud_api_call(
+            "gcp_monitoring",
+            operation="list_time_series",
+        )
+        if not allowed:
+            logger.warning(
+                "gcp_monitoring_budget_exhausted",
+                plugin=self.category_key,
+                index_endpoint_id=endpoint_id,
+            )
+            return None
+
+        now = int(time.time())
+        interval = monitoring_v3.TimeInterval(
+            {
+                "start_time": {"seconds": now - (7 * 86400)},
+                "end_time": {"seconds": now},
+            }
+        )
+
+        try:
+            results = await materialize_iterable(
+                monitor_client.list_time_series,
+                request={
+                    "name": f"projects/{project_id}",
+                    "filter": (
+                        'metric.type="aiplatform.googleapis.com/index_endpoint/request_count" '
+                        f'AND resource.labels.index_endpoint_id="{endpoint_id}"'
+                    ),
+                    "interval": interval,
+                    "view": monitoring_v3.ListTimeSeriesRequest.TimeSeriesView.FULL,
+                },
+            )
+        except GCP_VECTOR_SCAN_RECOVERABLE_EXCEPTIONS as exc:
+            logger.warning(
+                "gcp_vector_index_metric_error",
+                index_endpoint_id=endpoint_id,
+                error=str(exc),
+            )
+            return None
+
+        has_queries = any(getattr(result, "points", None) for result in results)
+        if has_queries:
+            return None
+
+        endpoint_display_name = str(getattr(index_endpoint, "display_name", "") or endpoint_id)
+        return {
+            "resource_id": endpoint_name,
+            "resource_type": "Vertex AI Vector Index",
+            "resource_name": endpoint_display_name,
+            "region": target_region,
+            "monthly_cost": 500.0,
+            "recommendation": "Undeploy unused vector index",
+            "action": "undeploy_vector_index",
+            "confidence_score": 0.95,
+            "explainability_notes": (
+                f"Vector Index Endpoint '{endpoint_display_name}' had 0 queries in the last 7 days."
+            ),
+        }

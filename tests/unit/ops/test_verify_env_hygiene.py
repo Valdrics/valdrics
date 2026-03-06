@@ -29,8 +29,8 @@ def test_verify_env_hygiene_passes_for_hardened_template(
 ) -> None:
     _write(tmp_path / ".env.example", _valid_template())
     monkeypatch.setattr(
-        "scripts.verify_env_hygiene._is_env_file_tracked",
-        lambda _repo_root: False,
+        "scripts.verify_env_hygiene._tracked_env_files",
+        lambda _repo_root: (),
     )
 
     errors = verify_env_hygiene(
@@ -58,8 +58,8 @@ def test_verify_env_hygiene_flags_tracked_env_and_secret_values(
         ),
     )
     monkeypatch.setattr(
-        "scripts.verify_env_hygiene._is_env_file_tracked",
-        lambda _repo_root: True,
+        "scripts.verify_env_hygiene._tracked_env_files",
+        lambda _repo_root: (".env", "dashboard/.env"),
     )
 
     errors = verify_env_hygiene(
@@ -69,6 +69,7 @@ def test_verify_env_hygiene_flags_tracked_env_and_secret_values(
     joined = "\n".join(errors)
 
     assert "`.env` is tracked by git" in joined
+    assert "`dashboard/.env` is tracked by git" in joined
     assert "APP_NAME in .env.example must be exactly `Valdrics`" in joined
     assert "CSRF_SECRET_KEY in .env.example must be empty." in joined
     assert "SMTP_USER in .env.example must be empty." in joined
@@ -81,8 +82,8 @@ def test_verify_env_hygiene_flags_tracked_env_and_secret_values(
 
 def test_main_returns_failure_for_missing_template(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
-        "scripts.verify_env_hygiene._is_env_file_tracked",
-        lambda _repo_root: False,
+        "scripts.verify_env_hygiene._tracked_env_files",
+        lambda _repo_root: (),
     )
 
     exit_code = main(
@@ -95,4 +96,3 @@ def test_main_returns_failure_for_missing_template(tmp_path: Path, monkeypatch) 
     )
 
     assert exit_code == 1
-

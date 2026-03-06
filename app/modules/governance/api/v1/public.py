@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.landing_telemetry_rollup import LandingTelemetryDailyRollup
 from app.models.tenant import Tenant
 from app.models.sso_domain_mapping import SsoDomainMapping
 from app.shared.core.pricing import FeatureFlag, is_feature_enabled, normalize_tier
@@ -135,6 +136,112 @@ def _normalize_event_timestamp(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def _resolve_db_dialect_name(db: AsyncSession) -> str:
+    bind = getattr(db, "bind", None)
+    dialect = getattr(bind, "dialect", None)
+    return str(getattr(dialect, "name", "") or "").lower()
+
+
+def _normalize_utm_token(value: str | None) -> str:
+    return _normalize_landing_label(value, "direct")
+
+
+async def _upsert_landing_rollup(
+    db: AsyncSession,
+    *,
+    event_timestamp: datetime,
+    event_name: str,
+    section: str,
+    funnel_stage: str,
+    utm_source: str,
+    utm_medium: str,
+    utm_campaign: str,
+) -> None:
+    rollup_dims = {
+        "event_date": event_timestamp.date(),
+        "event_name": event_name,
+        "section": section,
+        "funnel_stage": funnel_stage,
+        "utm_source": utm_source,
+        "utm_medium": utm_medium,
+        "utm_campaign": utm_campaign,
+    }
+    now = datetime.now(timezone.utc)
+    insert_values = {
+        **rollup_dims,
+        "event_count": 1,
+        "first_seen_at": event_timestamp,
+        "last_seen_at": event_timestamp,
+        "created_at": now,
+        "updated_at": now,
+    }
+    index_cols = [
+        "event_date",
+        "event_name",
+        "section",
+        "funnel_stage",
+        "utm_source",
+        "utm_medium",
+        "utm_campaign",
+    ]
+    set_values = {
+        "event_count": LandingTelemetryDailyRollup.event_count + 1,
+        "last_seen_at": event_timestamp,
+        "updated_at": now,
+    }
+
+    dialect = _resolve_db_dialect_name(db)
+    if dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        stmt = (
+            pg_insert(LandingTelemetryDailyRollup)
+            .values(**insert_values)
+            .on_conflict_do_update(
+                index_elements=index_cols,
+                set_=set_values,
+            )
+        )
+        await db.execute(stmt)
+        return
+
+    if dialect == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        stmt = (
+            sqlite_insert(LandingTelemetryDailyRollup)
+            .values(**insert_values)
+            .on_conflict_do_update(
+                index_elements=index_cols,
+                set_=set_values,
+            )
+        )
+        await db.execute(stmt)
+        return
+
+    existing = (
+        await db.execute(
+            select(LandingTelemetryDailyRollup).where(
+                LandingTelemetryDailyRollup.event_date == rollup_dims["event_date"],
+                LandingTelemetryDailyRollup.event_name == rollup_dims["event_name"],
+                LandingTelemetryDailyRollup.section == rollup_dims["section"],
+                LandingTelemetryDailyRollup.funnel_stage == rollup_dims["funnel_stage"],
+                LandingTelemetryDailyRollup.utm_source == rollup_dims["utm_source"],
+                LandingTelemetryDailyRollup.utm_medium == rollup_dims["utm_medium"],
+                LandingTelemetryDailyRollup.utm_campaign == rollup_dims["utm_campaign"],
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing is None:
+        db.add(LandingTelemetryDailyRollup(**insert_values))
+        return
+
+    existing.event_count = int(existing.event_count or 0) + 1
+    existing.last_seen_at = event_timestamp
+    existing.updated_at = now
 
 
 @router.get("/csrf")
@@ -265,6 +372,7 @@ async def discover_sso_federation(
 async def ingest_landing_event(
     request: Request,
     payload: LandingTelemetryRequest,
+    db: AsyncSession = Depends(get_system_db),
 ) -> LandingTelemetryResponse:
     now = datetime.now(timezone.utc)
     event_timestamp = _normalize_event_timestamp(payload.timestamp)
@@ -280,6 +388,9 @@ async def ingest_landing_event(
     funnel_stage = _normalize_landing_label(payload.funnel_stage, "unknown_stage")
     persona = _normalize_landing_label(payload.persona, "unknown_persona")
     value = _normalize_landing_label(payload.value, "")
+    utm_source = _normalize_utm_token(payload.utm.source if payload.utm else None)
+    utm_medium = _normalize_utm_token(payload.utm.medium if payload.utm else None)
+    utm_campaign = _normalize_utm_token(payload.utm.campaign if payload.utm else None)
     visitor_prefix = (payload.visitor_id or "").strip()[:24]
     event_id = (payload.event_id or "").strip() or str(uuid.uuid4())
     client_ip = getattr(request.client, "host", "") or "unknown"
@@ -291,6 +402,22 @@ async def ingest_landing_event(
         funnel_stage=funnel_stage,
     ).inc()
     LANDING_TELEMETRY_INGEST_OUTCOMES_TOTAL.labels(outcome="accepted").inc()
+
+    try:
+        await _upsert_landing_rollup(
+            db,
+            event_timestamp=event_timestamp,
+            event_name=event_name,
+            section=section,
+            funnel_stage=funnel_stage,
+            utm_source=utm_source,
+            utm_medium=utm_medium,
+            utm_campaign=utm_campaign,
+        )
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        logger.warning("landing_telemetry_rollup_persist_failed", error=str(exc))
 
     logger.info(
         "landing_telemetry_ingested",
