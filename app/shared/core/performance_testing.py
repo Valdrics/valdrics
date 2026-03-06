@@ -10,12 +10,15 @@ import time
 import statistics
 from typing import Dict, Any, List, Callable, Awaitable
 from dataclasses import dataclass, field
-from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 import httpx
 import structlog
 
 from app.shared.core.config import get_settings
+from app.shared.core.performance_benchmarking import (
+    BenchmarkResult,
+    PerformanceBenchmark,
+)
 from app.shared.core.ops_metrics import (
     API_REQUEST_DURATION,
     API_REQUESTS_TOTAL,
@@ -233,147 +236,6 @@ class LoadTester:
     def stop(self) -> None:
         """Stop the load test."""
         self._running = False
-
-
-@dataclass
-class BenchmarkResult:
-    """Results from a benchmark test."""
-
-    name: str
-    iterations: int = 0
-    total_time: float = 0.0
-    avg_time: float = 0.0
-    median_time: float = 0.0
-    min_time: float = float("inf")
-    max_time: float = 0.0
-    throughput: float = 0.0  # operations per second
-
-
-class PerformanceBenchmark:
-    """Performance benchmarking utility."""
-
-    def __init__(self, name: str = "benchmark"):
-        self.name = name
-        self.results: List[BenchmarkResult] = []
-
-    async def benchmark_async(
-        self,
-        func: Callable[..., Awaitable[Any]],
-        *args: Any,
-        iterations: int = 100,
-        warmup_iterations: int = 10,
-        **kwargs: Any,
-    ) -> BenchmarkResult:
-        """Benchmark an async function."""
-        # Warmup
-        for _ in range(warmup_iterations):
-            await func(*args, **kwargs)
-
-        # Benchmark
-        times = []
-        start_time = time.time()
-
-        for _ in range(iterations):
-            iteration_start = time.perf_counter()
-            await func(*args, **kwargs)
-            iteration_time = time.perf_counter() - iteration_start
-            times.append(iteration_time)
-
-        total_time = time.time() - start_time
-
-        # Calculate metrics
-        result = BenchmarkResult(
-            name=f"{self.name}_{func.__name__}",
-            iterations=iterations,
-            total_time=total_time,
-            avg_time=statistics.mean(times),
-            median_time=statistics.median(times),
-            min_time=min(times),
-            max_time=max(times),
-            throughput=iterations / total_time,
-        )
-
-        self.results.append(result)
-
-        logger.info(
-            "benchmark_completed",
-            name=result.name,
-            iterations=result.iterations,
-            avg_time=result.avg_time,
-            median_time=result.median_time,
-            throughput=result.throughput,
-        )
-
-        return result
-
-    def benchmark_sync(
-        self,
-        func: Callable[..., Any],
-        *args: Any,
-        iterations: int = 100,
-        warmup_iterations: int = 10,
-        **kwargs: Any,
-    ) -> BenchmarkResult:
-        """Benchmark a sync function using a thread pool."""
-
-        def run_warmup() -> None:
-            for _ in range(warmup_iterations):
-                func(*args, **kwargs)
-
-        def run_benchmark() -> list[float]:
-            times = []
-            for _ in range(iterations):
-                iteration_start = time.perf_counter()
-                func(*args, **kwargs)
-                iteration_time = time.perf_counter() - iteration_start
-                times.append(iteration_time)
-            return times
-
-        # Run warmup
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            executor.submit(run_warmup).result()
-
-        # Run benchmark
-        start_time = time.time()
-        with ThreadPoolExecutor(max_workers=1) as executor:
-            future = executor.submit(run_benchmark)
-            times = future.result()
-
-        total_time = time.time() - start_time
-
-        # Calculate metrics
-        result = BenchmarkResult(
-            name=f"{self.name}_{func.__name__}",
-            iterations=iterations,
-            total_time=total_time,
-            avg_time=statistics.mean(times),
-            median_time=statistics.median(times),
-            min_time=min(times),
-            max_time=max(times),
-            throughput=iterations / total_time,
-        )
-
-        self.results.append(result)
-        return result
-
-    def get_summary(self) -> Dict[str, Any]:
-        """Get summary of all benchmark results."""
-        return {
-            "benchmark_name": self.name,
-            "total_benchmarks": len(self.results),
-            "results": [
-                {
-                    "name": r.name,
-                    "iterations": r.iterations,
-                    "avg_time": r.avg_time,
-                    "median_time": r.median_time,
-                    "throughput": r.throughput,
-                    "min_time": r.min_time,
-                    "max_time": r.max_time,
-                }
-                for r in self.results
-            ],
-        }
 
 
 # Pre-configured benchmark scenarios

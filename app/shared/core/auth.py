@@ -10,6 +10,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 import structlog
 from app.shared.core.config import get_settings
+from app.shared.core.auth_identity_policy import enforce_tenant_identity_policy
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -48,11 +49,6 @@ AUTH_SCHEMA_RETRY_ERRORS: tuple[type[Exception], ...] = (
 AUTH_PERSONA_PARSE_ERRORS: tuple[type[Exception], ...] = (
     TypeError,
     ValueError,
-)
-AUTH_IDENTITY_POLICY_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
-    DBAPIError,
-    SQLAlchemyError,
-    RuntimeError,
 )
 AUTH_UNEXPECTED_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     DBAPIError,
@@ -332,62 +328,14 @@ async def get_current_user(
         # Propagate RLS context to the database session ASAP, before any tenant-scoped reads.
         await set_session_tenant_id(db, tenant_id)
 
-        # Tenant-scoped SSO enforcement (implemented as domain allowlisting).
-        # If configured, restrict access to approved email domains.
-        try:
-            from app.models.tenant_identity_settings import TenantIdentitySettings
-
-            identity_settings = (
-                await db.execute(
-                    select(TenantIdentitySettings).where(
-                        TenantIdentitySettings.tenant_id == tenant_id
-                    )
-                )
-            ).scalar_one_or_none()
-            if identity_settings and bool(
-                getattr(identity_settings, "sso_enabled", False)
-            ):
-                allowed_domains = [
-                    str(domain).strip().lower()
-                    for domain in (
-                        getattr(identity_settings, "allowed_email_domains", None) or []
-                    )
-                    if str(domain).strip()
-                ]
-                if allowed_domains:
-                    email_value = str(email or "")
-                    email_domain = (
-                        email_value.split("@")[-1].strip().lower()
-                        if "@" in email_value
-                        else ""
-                    )
-                    if not email_domain or email_domain not in allowed_domains:
-                        logger.warning(
-                            "auth_domain_not_allowed",
-                            user_id=str(user_uuid),
-                            tenant_id=str(tenant_id),
-                            email_domain=email_domain,
-                        )
-                        raise HTTPException(
-                            status_code=403,
-                            detail="Access denied: email domain is not allowed for this tenant.",
-                        )
-        except HTTPException:
-            raise
-        except AUTH_IDENTITY_POLICY_RECOVERABLE_ERRORS as exc:
-            app_settings = get_settings()
-            # Fail closed only in production to avoid silently bypassing tenant SSO enforcement.
-            if app_settings.is_production:
-                logger.error(
-                    "auth_identity_policy_check_failed",
-                    tenant_id=str(tenant_id),
-                    error=str(exc),
-                )
-                raise HTTPException(
-                    status_code=500,
-                    detail="Identity policy enforcement failed. Please contact support.",
-                )
-            logger.warning("auth_identity_policy_check_skipped", error=str(exc))
+        app_settings = get_settings()
+        await enforce_tenant_identity_policy(
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_uuid,
+            email=str(email),
+            is_production=bool(app_settings.is_production),
+        )
 
         logger.info(
             "user_authenticated",

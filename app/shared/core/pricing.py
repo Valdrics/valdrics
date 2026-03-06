@@ -1,19 +1,31 @@
+from __future__ import annotations
+
 import uuid
-import time
-from enum import Enum
-from functools import wraps
 from contextlib import suppress
-from threading import Lock
+from functools import wraps
 from typing import TYPE_CHECKING, Any, Callable, Union, cast
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
     from app.modules.governance.domain.security.auth import CurrentUser
 
 from fastapi import HTTPException, status
-from sqlalchemy.exc import SQLAlchemyError
 
 import structlog
+
+from app.shared.core.pricing_cache import (
+    TENANT_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS,
+    clear_tenant_tier_cache,
+    runtime_cache_get as _runtime_cache_get,
+    runtime_cache_set as _runtime_cache_set,
+)
+from app.shared.core.pricing_catalog import (
+    ENTERPRISE_FEATURES,
+    FEATURE_MATURITY,
+    TIER_CONFIG,
+)
+from app.shared.core.pricing_types import FeatureFlag, FeatureMaturity, PricingTier
 
 logger = structlog.get_logger()
 
@@ -36,509 +48,6 @@ __all__ = [
     "clear_tenant_tier_cache",
     "TierGuard",
 ]
-
-
-class PricingTier(str, Enum):
-    """Available subscription tiers."""
-
-    FREE = "free"
-    STARTER = "starter"
-    GROWTH = "growth"
-    PRO = "pro"
-    ENTERPRISE = "enterprise"
-
-
-class FeatureFlag(str, Enum):
-    """Feature flags for tier gating."""
-
-    DASHBOARDS = "dashboards"
-    COST_TRACKING = "cost_tracking"
-    ALERTS = "alerts"
-    SLACK_INTEGRATION = "slack_integration"
-    ZOMBIE_SCAN = "zombie_scan"
-    LLM_ANALYSIS = "llm_analysis"
-    AI_INSIGHTS = "ai_insights"
-    MULTI_CLOUD = "multi_cloud"
-    MULTI_REGION = "multi_region"
-    GREENOPS = "greenops"
-    CARBON_TRACKING = "carbon_tracking"
-    AUTO_REMEDIATION = "auto_remediation"
-    API_ACCESS = "api_access"
-    FORECASTING = "forecasting"
-    SSO = "sso"
-    SCIM = "scim"
-    DEDICATED_SUPPORT = "dedicated_support"
-    AUDIT_LOGS = "audit_logs"
-    HOURLY_SCANS = "hourly_scans"
-    AI_ANALYSIS_DETAILED = "ai_analysis_detailed"
-    DOMAIN_DISCOVERY = "domain_discovery"
-    IDP_DEEP_SCAN = "idp_deep_scan"
-    PRECISION_DISCOVERY = "precision_discovery"
-    OWNER_ATTRIBUTION = "owner_attribution"
-    GITOPS_REMEDIATION = "gitops_remediation"
-    UNIT_ECONOMICS = "unit_economics"
-    INGESTION_SLA = "ingestion_sla"
-    INGESTION_BACKFILL = "ingestion_backfill"
-    ANOMALY_DETECTION = "anomaly_detection"
-    CHARGEBACK = "chargeback"
-    RECONCILIATION = "reconciliation"
-    CLOSE_WORKFLOW = "close_workflow"
-    CARBON_ASSURANCE = "carbon_assurance"
-    CLOUD_PLUS_CONNECTORS = "cloud_plus_connectors"
-    COMPLIANCE_EXPORTS = "compliance_exports"
-    SAVINGS_PROOF = "savings_proof"
-    COMMITMENT_OPTIMIZATION = "commitment_optimization"
-    POLICY_PREVIEW = "policy_preview"
-    POLICY_CONFIGURATION = "policy_configuration"
-    ESCALATION_WORKFLOW = "escalation_workflow"
-    INCIDENT_INTEGRATIONS = "incident_integrations"
-
-
-class FeatureMaturity(str, Enum):
-    """Feature maturity metadata for packaging transparency."""
-
-    GA = "GA"
-    BETA = "Beta"
-    PREVIEW = "Preview"
-
-
-# Explicit enterprise entitlement roster (curated, non-dynamic).
-# Keep this list intentionally explicit so new FeatureFlag additions do not
-# auto-promote into Enterprise without an explicit packaging decision.
-ENTERPRISE_FEATURES: set[FeatureFlag] = {
-    FeatureFlag.DASHBOARDS,
-    FeatureFlag.COST_TRACKING,
-    FeatureFlag.ALERTS,
-    FeatureFlag.SLACK_INTEGRATION,
-    FeatureFlag.ZOMBIE_SCAN,
-    FeatureFlag.LLM_ANALYSIS,
-    FeatureFlag.AI_INSIGHTS,
-    FeatureFlag.MULTI_CLOUD,
-    FeatureFlag.MULTI_REGION,
-    FeatureFlag.GREENOPS,
-    FeatureFlag.CARBON_TRACKING,
-    FeatureFlag.AUTO_REMEDIATION,
-    FeatureFlag.API_ACCESS,
-    FeatureFlag.FORECASTING,
-    FeatureFlag.SSO,
-    FeatureFlag.SCIM,
-    FeatureFlag.DEDICATED_SUPPORT,
-    FeatureFlag.AUDIT_LOGS,
-    FeatureFlag.HOURLY_SCANS,
-    FeatureFlag.AI_ANALYSIS_DETAILED,
-    FeatureFlag.DOMAIN_DISCOVERY,
-    FeatureFlag.IDP_DEEP_SCAN,
-    FeatureFlag.PRECISION_DISCOVERY,
-    FeatureFlag.OWNER_ATTRIBUTION,
-    FeatureFlag.GITOPS_REMEDIATION,
-    FeatureFlag.UNIT_ECONOMICS,
-    FeatureFlag.INGESTION_SLA,
-    FeatureFlag.INGESTION_BACKFILL,
-    FeatureFlag.ANOMALY_DETECTION,
-    FeatureFlag.CHARGEBACK,
-    FeatureFlag.RECONCILIATION,
-    FeatureFlag.CLOSE_WORKFLOW,
-    FeatureFlag.CARBON_ASSURANCE,
-    FeatureFlag.CLOUD_PLUS_CONNECTORS,
-    FeatureFlag.COMPLIANCE_EXPORTS,
-    FeatureFlag.SAVINGS_PROOF,
-    FeatureFlag.COMMITMENT_OPTIMIZATION,
-    FeatureFlag.POLICY_PREVIEW,
-    FeatureFlag.POLICY_CONFIGURATION,
-    FeatureFlag.ESCALATION_WORKFLOW,
-    FeatureFlag.INCIDENT_INTEGRATIONS,
-}
-
-# Runtime-gated features are mapped to GA maturity.
-# Catalog-only (not yet hard-gated) features are explicitly tracked in Preview.
-_RUNTIME_GATED_FEATURES: set[FeatureFlag] = {
-    FeatureFlag.COST_TRACKING,
-    FeatureFlag.SLACK_INTEGRATION,
-    FeatureFlag.LLM_ANALYSIS,
-    FeatureFlag.GREENOPS,
-    FeatureFlag.AUTO_REMEDIATION,
-    FeatureFlag.SSO,
-    FeatureFlag.SCIM,
-    FeatureFlag.AUDIT_LOGS,
-    FeatureFlag.IDP_DEEP_SCAN,
-    FeatureFlag.PRECISION_DISCOVERY,
-    FeatureFlag.OWNER_ATTRIBUTION,
-    FeatureFlag.GITOPS_REMEDIATION,
-    FeatureFlag.UNIT_ECONOMICS,
-    FeatureFlag.INGESTION_SLA,
-    FeatureFlag.INGESTION_BACKFILL,
-    FeatureFlag.ANOMALY_DETECTION,
-    FeatureFlag.CHARGEBACK,
-    FeatureFlag.RECONCILIATION,
-    FeatureFlag.CLOSE_WORKFLOW,
-    FeatureFlag.CARBON_ASSURANCE,
-    FeatureFlag.CLOUD_PLUS_CONNECTORS,
-    FeatureFlag.COMPLIANCE_EXPORTS,
-    FeatureFlag.SAVINGS_PROOF,
-    FeatureFlag.COMMITMENT_OPTIMIZATION,
-    FeatureFlag.POLICY_PREVIEW,
-    FeatureFlag.ESCALATION_WORKFLOW,
-    FeatureFlag.INCIDENT_INTEGRATIONS,
-}
-
-_PREVIEW_MATURITY_FEATURES: set[FeatureFlag] = {
-    FeatureFlag.DASHBOARDS,
-    FeatureFlag.ALERTS,
-    FeatureFlag.ZOMBIE_SCAN,
-    FeatureFlag.AI_INSIGHTS,
-    FeatureFlag.DOMAIN_DISCOVERY,
-    FeatureFlag.MULTI_CLOUD,
-    FeatureFlag.MULTI_REGION,
-    FeatureFlag.CARBON_TRACKING,
-    FeatureFlag.API_ACCESS,
-    FeatureFlag.DEDICATED_SUPPORT,
-    FeatureFlag.HOURLY_SCANS,
-    FeatureFlag.AI_ANALYSIS_DETAILED,
-    FeatureFlag.FORECASTING,
-    FeatureFlag.POLICY_CONFIGURATION,
-}
-
-_FEATURE_MATURITY_COVERAGE = _RUNTIME_GATED_FEATURES | _PREVIEW_MATURITY_FEATURES
-_ALL_FEATURE_FLAGS = {flag for flag in FeatureFlag}
-_FEATURE_MATURITY_MISSING = _ALL_FEATURE_FLAGS - _FEATURE_MATURITY_COVERAGE
-_FEATURE_MATURITY_EXTRA = _FEATURE_MATURITY_COVERAGE - _ALL_FEATURE_FLAGS
-if _FEATURE_MATURITY_MISSING or _FEATURE_MATURITY_EXTRA:
-    raise RuntimeError(
-        "Feature maturity classification is incomplete or invalid. "
-        f"missing={[item.value for item in sorted(_FEATURE_MATURITY_MISSING, key=lambda x: x.value)]} "
-        f"extra={[item.value for item in sorted(_FEATURE_MATURITY_EXTRA, key=lambda x: x.value)]}"
-    )
-
-FEATURE_MATURITY: dict[FeatureFlag, FeatureMaturity] = {
-    flag: (
-        FeatureMaturity.GA
-        if flag in _RUNTIME_GATED_FEATURES
-        else FeatureMaturity.PREVIEW
-    )
-    for flag in FeatureFlag
-}
-
-_TENANT_TIER_CACHE_TTL_SECONDS = 60.0
-_TENANT_TIER_CACHE_MAX_ENTRIES = 4096
-_tenant_tier_runtime_cache: dict[str, tuple[float, "PricingTier"]] = {}
-_tenant_tier_runtime_cache_lock = Lock()
-TENANT_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS = (RuntimeError, ValueError, TypeError, SQLAlchemyError)
-def _runtime_cache_get(tenant_key: str, *, now: float | None = None) -> "PricingTier | None":
-    with _tenant_tier_runtime_cache_lock:
-        cached_entry = _tenant_tier_runtime_cache.get(tenant_key)
-        if cached_entry is None:
-            return None
-        cached_at, cached_tier = cached_entry
-        current = time.monotonic() if now is None else now
-        if current - cached_at > _TENANT_TIER_CACHE_TTL_SECONDS:
-            _tenant_tier_runtime_cache.pop(tenant_key, None)
-            return None
-        return cached_tier
-def _runtime_cache_set(tenant_key: str, tier: "PricingTier", *, now: float | None = None) -> None:
-    current = time.monotonic() if now is None else now
-    with _tenant_tier_runtime_cache_lock:
-        _tenant_tier_runtime_cache[tenant_key] = (current, tier)
-
-        if len(_tenant_tier_runtime_cache) <= _TENANT_TIER_CACHE_MAX_ENTRIES:
-            return
-
-        expiry_cutoff = current - _TENANT_TIER_CACHE_TTL_SECONDS
-        for key, (cached_at, _) in list(_tenant_tier_runtime_cache.items()):
-            if cached_at <= expiry_cutoff:
-                _tenant_tier_runtime_cache.pop(key, None)
-
-        while len(_tenant_tier_runtime_cache) > _TENANT_TIER_CACHE_MAX_ENTRIES:
-            oldest_key = next(iter(_tenant_tier_runtime_cache))
-            _tenant_tier_runtime_cache.pop(oldest_key, None)
-
-
-def clear_tenant_tier_cache(tenant_id: Union[str, uuid.UUID, None] = None) -> None:
-    """
-    Clear process-level tenant tier cache.
-
-    `tenant_id=None` clears all entries. Supplying a tenant id removes one entry.
-    """
-    with _tenant_tier_runtime_cache_lock:
-        if tenant_id is None:
-            _tenant_tier_runtime_cache.clear()
-            return
-        _tenant_tier_runtime_cache.pop(str(tenant_id), None)
-
-
-# Tier configuration - USD pricing
-TIER_CONFIG: dict[PricingTier, dict[str, Any]] = {
-    PricingTier.FREE: {
-        "name": "Free",
-        "price_usd": 0,
-        "features": {
-            FeatureFlag.DASHBOARDS,
-            FeatureFlag.COST_TRACKING,
-            FeatureFlag.ALERTS,
-            FeatureFlag.ZOMBIE_SCAN,
-            FeatureFlag.LLM_ANALYSIS,
-            FeatureFlag.DOMAIN_DISCOVERY,
-            FeatureFlag.GREENOPS,
-            FeatureFlag.CARBON_TRACKING,
-            FeatureFlag.UNIT_ECONOMICS,
-        },
-        "limits": {
-            "max_aws_accounts": 1,
-            "max_azure_tenants": 0,
-            "max_gcp_projects": 0,
-            "max_saas_connections": 0,
-            "max_license_connections": 0,
-            "max_platform_connections": 0,
-            "max_hybrid_connections": 0,
-            "byok_enabled": True,
-            "ai_insights_per_month": 0,
-            "scan_frequency_hours": 168,
-            "zombie_scans_per_day": 1,
-            "llm_analyses_per_day": 1,
-            "llm_analyses_per_user_per_day": 1,
-            "llm_system_analyses_per_day": 1,
-            "llm_analysis_max_records": 128,
-            "llm_analysis_max_window_days": 31,
-            "llm_prompt_max_input_tokens": 2048,
-            "llm_output_max_tokens": 512,
-            "max_backfill_days": 0,
-            "retention_days": 30,
-        },
-        "description": "Permanent free plan with core FinOps visibility and capped AI usage.",
-        "cta": "Start Free",
-        "display_features": [
-            "Single cloud provider (AWS) + core dashboards",
-            "Weekly zombie scans + basic alerts",
-            "1 AI analysis/day",
-            "BYOK supported (no platform surcharge)",
-            "30-day data retention",
-            "Entry-tier limits with no credit card",
-        ],
-    },
-    PricingTier.STARTER: {
-        "name": "Starter",
-        "price_usd": {"monthly": 49, "annual": 490},
-        "features": {
-            FeatureFlag.DASHBOARDS,
-            FeatureFlag.COST_TRACKING,
-            FeatureFlag.ALERTS,
-            FeatureFlag.ZOMBIE_SCAN,
-            FeatureFlag.AI_INSIGHTS,
-            FeatureFlag.LLM_ANALYSIS,
-            FeatureFlag.DOMAIN_DISCOVERY,
-            FeatureFlag.MULTI_REGION,
-            FeatureFlag.CARBON_TRACKING,
-            FeatureFlag.GREENOPS,
-            FeatureFlag.UNIT_ECONOMICS,
-            FeatureFlag.INGESTION_SLA,
-        },
-        "limits": {
-            "max_aws_accounts": 5,
-            "max_azure_tenants": 0,
-            "max_gcp_projects": 0,
-            "max_saas_connections": 0,
-            "max_license_connections": 0,
-            "max_platform_connections": 0,
-            "max_hybrid_connections": 0,
-            "byok_enabled": True,
-            "ai_insights_per_month": 10,
-            "llm_analyses_per_day": 5,
-            "llm_analyses_per_user_per_day": 2,
-            "llm_system_analyses_per_day": 2,
-            "llm_analysis_max_records": 256,
-            "llm_analysis_max_window_days": 90,
-            "llm_prompt_max_input_tokens": 4096,
-            "llm_output_max_tokens": 1024,
-            "max_backfill_days": 0,
-            "scan_frequency_hours": 24,
-            "retention_days": 90,
-        },
-        "description": "For small teams getting started with cloud cost visibility.",
-        "cta": "Start with Starter",
-        "display_features": [
-            "Includes all Free features",
-            "Multi-account support",
-            "Advanced budget alerts",
-            "5 AI analyses/day",
-            "BYOK supported (no platform surcharge)",
-            "Unit economics KPIs + ingestion SLA monitor",
-            "Multi-region analysis",
-            "90-day data retention",
-        ],
-    },
-    PricingTier.GROWTH: {
-        "name": "Growth",
-        "price_usd": {"monthly": 149, "annual": 1490},
-        "features": {
-            FeatureFlag.DASHBOARDS,
-            FeatureFlag.COST_TRACKING,
-            FeatureFlag.ALERTS,
-            FeatureFlag.ZOMBIE_SCAN,
-            FeatureFlag.AI_INSIGHTS,
-            FeatureFlag.LLM_ANALYSIS,
-            FeatureFlag.DOMAIN_DISCOVERY,
-            FeatureFlag.MULTI_CLOUD,
-            FeatureFlag.MULTI_REGION,
-            FeatureFlag.CARBON_TRACKING,
-            FeatureFlag.GREENOPS,
-            FeatureFlag.AUTO_REMEDIATION,
-            FeatureFlag.PRECISION_DISCOVERY,
-            FeatureFlag.OWNER_ATTRIBUTION,
-            FeatureFlag.CHARGEBACK,
-            FeatureFlag.INGESTION_SLA,
-            FeatureFlag.INGESTION_BACKFILL,
-            FeatureFlag.ANOMALY_DETECTION,
-            FeatureFlag.UNIT_ECONOMICS,
-            FeatureFlag.POLICY_PREVIEW,
-            FeatureFlag.ESCALATION_WORKFLOW,
-            FeatureFlag.COMMITMENT_OPTIMIZATION,
-        },
-        "limits": {
-            "max_aws_accounts": 20,
-            "max_azure_tenants": 10,
-            "max_gcp_projects": 15,
-            "max_saas_connections": 0,
-            "max_license_connections": 0,
-            "max_platform_connections": 0,
-            "max_hybrid_connections": 0,
-            "byok_enabled": True,
-            "llm_analyses_per_day": 20,
-            "llm_analyses_per_user_per_day": 8,
-            "llm_system_analyses_per_day": 5,
-            "llm_analysis_max_records": 1024,
-            "llm_analysis_max_window_days": 365,
-            "llm_prompt_max_input_tokens": 12288,
-            "llm_output_max_tokens": 2048,
-            "max_backfill_days": 180,
-            "retention_days": 365,
-        },
-        "description": "For growing teams who need structured FinOps governance.",
-        "cta": "Start with Growth",
-        "display_features": [
-            "Includes all Starter features",
-            "AI-driven savings analyses",
-            "Chargeback/showback workflows",
-            "Historical ingestion backfill",
-            "Non-production auto-remediation workflows",
-            "BYOK supported (no platform surcharge)",
-            "Full multi-cloud support",
-            "1-year data retention",
-        ],
-    },
-    PricingTier.PRO: {
-        "name": "Pro",
-        "price_usd": {"monthly": 299, "annual": 2990},
-        "features": {
-            FeatureFlag.DASHBOARDS,
-            FeatureFlag.COST_TRACKING,
-            FeatureFlag.ALERTS,
-            FeatureFlag.ZOMBIE_SCAN,
-            FeatureFlag.AI_INSIGHTS,
-            FeatureFlag.LLM_ANALYSIS,
-            FeatureFlag.DOMAIN_DISCOVERY,
-            FeatureFlag.IDP_DEEP_SCAN,
-            FeatureFlag.MULTI_CLOUD,
-            FeatureFlag.MULTI_REGION,
-            FeatureFlag.CARBON_TRACKING,
-            FeatureFlag.GREENOPS,
-            FeatureFlag.AUTO_REMEDIATION,
-            FeatureFlag.SSO,
-            FeatureFlag.API_ACCESS,
-            FeatureFlag.DEDICATED_SUPPORT,
-            FeatureFlag.HOURLY_SCANS,
-            FeatureFlag.AI_ANALYSIS_DETAILED,
-            FeatureFlag.SLACK_INTEGRATION,
-            FeatureFlag.AUDIT_LOGS,
-            FeatureFlag.GITOPS_REMEDIATION,
-            FeatureFlag.PRECISION_DISCOVERY,
-            FeatureFlag.OWNER_ATTRIBUTION,
-            FeatureFlag.CHARGEBACK,
-            FeatureFlag.INGESTION_SLA,
-            FeatureFlag.INGESTION_BACKFILL,
-            FeatureFlag.ANOMALY_DETECTION,
-            FeatureFlag.UNIT_ECONOMICS,
-            FeatureFlag.RECONCILIATION,
-            FeatureFlag.CLOSE_WORKFLOW,
-            FeatureFlag.CARBON_ASSURANCE,
-            FeatureFlag.CLOUD_PLUS_CONNECTORS,
-            FeatureFlag.COMPLIANCE_EXPORTS,
-            FeatureFlag.SAVINGS_PROOF,
-            FeatureFlag.COMMITMENT_OPTIMIZATION,
-            FeatureFlag.POLICY_PREVIEW,
-            FeatureFlag.POLICY_CONFIGURATION,
-            FeatureFlag.ESCALATION_WORKFLOW,
-            FeatureFlag.INCIDENT_INTEGRATIONS,
-        },
-        "limits": {
-            "max_aws_accounts": 25,
-            "max_azure_tenants": 25,
-            "max_gcp_projects": 25,
-            "max_saas_connections": 10,
-            "max_license_connections": 10,
-            "max_platform_connections": 10,
-            "max_hybrid_connections": 10,
-            "byok_enabled": True,
-            "ai_insights_per_month": 100,
-            "llm_analyses_per_day": 100,
-            "llm_analyses_per_user_per_day": 25,
-            "llm_system_analyses_per_day": 30,
-            "llm_analysis_max_records": 5000,
-            "llm_analysis_max_window_days": 730,
-            "llm_prompt_max_input_tokens": 32768,
-            "llm_output_max_tokens": 4096,
-            "max_backfill_days": 730,
-            "scan_frequency_hours": 1,
-            "retention_days": 730,
-        },
-        "description": "For enterprises requiring high-scale cloud governance.",
-        "cta": "Contact Sales",
-        "display_features": [
-            "Includes all Growth features",
-            "SSO / SAML integration",
-            "Hourly zombie scanning",
-            "Finance-grade reconciliation + close workflow",
-            "Dedicated support engineer",
-            "Compliance exports and audit evidence",
-            "Custom GitOps remediation",
-            "BYOK supported (no platform surcharge)",
-        ],
-    },
-    PricingTier.ENTERPRISE: {
-        "name": "Enterprise",
-        "price_usd": None,
-        "features": ENTERPRISE_FEATURES,
-        "limits": {
-            "max_aws_accounts": 999,
-            "max_azure_tenants": 999,
-            "max_gcp_projects": 999,
-            "max_saas_connections": 999,
-            "max_license_connections": 999,
-            "max_platform_connections": 999,
-            "max_hybrid_connections": 999,
-            "byok_enabled": True,
-            "ai_insights_per_month": 999,
-            "llm_analyses_per_day": 2000,
-            "llm_analyses_per_user_per_day": 500,
-            "llm_system_analyses_per_day": 400,
-            "llm_analysis_max_records": 20000,
-            "llm_analysis_max_window_days": 3650,
-            "llm_prompt_max_input_tokens": 65536,
-            "llm_output_max_tokens": 8192,
-            "scan_frequency_hours": 1,
-            "retention_days": None,
-        },
-        "description": "Custom solutions for global-scale infrastructure.",
-        "cta": "Talk to Expert",
-        "display_features": [
-            "Unlimited accounts & users",
-            "Cloud+ connectors (SaaS/license/custom sources)",
-            "Savings-proof exports for procurement cycles",
-            "Custom feature development",
-            "On-premise deployment options",
-            "White-labeling support",
-            "24/7/365 multi-region support",
-        ],
-    },
-}
 
 
 def get_feature_maturity(feature: FeatureFlag | str) -> FeatureMaturity:
@@ -566,6 +75,7 @@ def get_tier_feature_maturity(tier: PricingTier | str) -> dict[str, str]:
         for feature in sorted(normalized, key=lambda item: item.value)
     }
 
+
 def normalize_tier(tier: PricingTier | str | None) -> PricingTier:
     """Map arbitrary tier values to a supported PricingTier."""
     if isinstance(tier, PricingTier):
@@ -592,7 +102,6 @@ def is_feature_enabled(tier: PricingTier | str, feature: str | FeatureFlag) -> b
     """Check if a feature is enabled for a tier."""
     if isinstance(feature, str):
         try:
-            # Try to map string to modern FeatureFlag
             feature = FeatureFlag(feature)
         except ValueError:
             return False
@@ -604,7 +113,6 @@ def is_feature_enabled(tier: PricingTier | str, feature: str | FeatureFlag) -> b
 def get_tier_limit(tier: PricingTier | str, limit_name: str) -> Any:
     """Get a limit value for a tier (None = unlimited)."""
     config = get_tier_config(tier)
-    # Default to 0 for unknown limits to satisfy TestTierLimits.test_unknown_limit_returns_zero
     limits = cast(dict[str, Any], config.get("limits", {}))
     raw_limit = limits.get(limit_name, 0)
     if raw_limit is None:
@@ -696,13 +204,13 @@ async def get_tenant_tier(
     request/job execution context.
     """
     from sqlalchemy import select
+
     from app.models.tenant import Tenant
 
     if isinstance(tenant_id, str):
         try:
             tenant_id = uuid.UUID(tenant_id)
         except (ValueError, AttributeError):
-            # If not a valid UUID string, we can't look it up.
             return PricingTier.FREE
 
     cache: dict[str, PricingTier] | None = None
@@ -751,9 +259,7 @@ async def get_tenant_tier(
             _runtime_cache_set(tenant_key, resolved)
             return resolved
         except ValueError:
-            logger.error(
-                "invalid_tenant_plan", tenant_id=str(tenant_id), plan=tenant.plan
-            )
+            logger.error("invalid_tenant_plan", tenant_id=str(tenant_id), plan=tenant.plan)
             if cache is not None:
                 cache[tenant_key] = PricingTier.FREE
             _runtime_cache_set(tenant_key, PricingTier.FREE)

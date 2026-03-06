@@ -234,7 +234,7 @@ class TestFinOpsAnalyzerAnalysis:
             ) as mock_reserve,
             patch(
                 "app.shared.llm.analyzer.LLMGuardrails.sanitize_input",
-                side_effect=Exception("Data error"),
+                side_effect=RuntimeError("Data error"),
             ),
         ):
             mock_reserve.return_value = Decimal("1.0")
@@ -272,7 +272,7 @@ class TestFinOpsAnalyzerAnalysis:
                 "_setup_client_and_usage",
                 return_value=("groq", "llama-3.3-70b-versatile", None),
             ),
-            patch.object(analyzer, "_invoke_llm", side_effect=Exception("LLM failed")),
+            patch.object(analyzer, "_invoke_llm", side_effect=RuntimeError("LLM failed")),
         ):
             mock_reserve.return_value = Decimal("1.0")
 
@@ -537,7 +537,7 @@ class TestFinOpsAnalyzerLLMInvocation:
             }
 
             mock_chain.ainvoke = AsyncMock(
-                side_effect=[Exception("Primary failed"), mock_response]
+                side_effect=[RuntimeError("Primary failed"), mock_response]
             )
 
             mock_settings_obj = MagicMock()
@@ -567,7 +567,7 @@ class TestFinOpsAnalyzerLLMInvocation:
             analyzer.prompt.__or__.return_value = mock_chain
 
             # All calls fail
-            mock_chain.ainvoke = AsyncMock(side_effect=Exception("Provider failed"))
+            mock_chain.ainvoke = AsyncMock(side_effect=RuntimeError("Provider failed"))
 
             mock_settings_obj = MagicMock()
             mock_settings_obj.LLM_PROVIDER = "groq"
@@ -648,7 +648,7 @@ class TestFinOpsAnalyzerResultProcessing:
         with (
             patch(
                 "app.shared.llm.analyzer.LLMGuardrails.validate_output",
-                side_effect=Exception("Validation failed"),
+                side_effect=RuntimeError("Validation failed"),
             ),
             patch(
                 "app.shared.llm.analyzer.SymbolicForecaster.forecast",
@@ -681,7 +681,7 @@ class TestFinOpsAnalyzerResultProcessing:
         with (
             patch(
                 "app.shared.llm.analyzer.LLMGuardrails.validate_output",
-                side_effect=Exception("Validation failed"),
+                side_effect=RuntimeError("Validation failed"),
             ),
             patch(
                 "app.shared.llm.analyzer.SymbolicForecaster.forecast",
@@ -829,7 +829,7 @@ class TestFinOpsAnalyzerProductionQuality:
         # Test with YAML loading error
         with (
             patch("os.path.exists", return_value=True),
-            patch("builtins.open", side_effect=Exception("File read error")),
+            patch("builtins.open", side_effect=RuntimeError("File read error")),
         ):
             analyzer = FinOpsAnalyzer(llm)
             prompt = await analyzer._get_prompt()
@@ -906,7 +906,7 @@ class TestFinOpsAnalyzerProductionQuality:
                 new_callable=AsyncMock,
             ) as mock_reserve,
         ):
-            mock_reserve.side_effect = Exception("DB error")
+            mock_reserve.side_effect = RuntimeError("DB error")
             with pytest.raises(AIAnalysisError):
                 await analyzer.analyze(usage_summary, tenant_id=uuid4(), db=mock_db)
 
@@ -1012,7 +1012,7 @@ class TestFinOpsAnalyzerProductionQuality:
             ),
             patch(
                 "app.shared.llm.analyzer.LLMGuardrails.sanitize_input",
-                side_effect=Exception("Sanitization error"),
+                side_effect=RuntimeError("Sanitization error"),
             ),
             patch("app.shared.llm.analyzer.logger") as mock_logger,
         ):

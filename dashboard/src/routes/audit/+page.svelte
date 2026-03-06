@@ -1,37 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
-	import AuthGate from '$lib/components/AuthGate.svelte';
 	import { buildCompliancePackPath } from '$lib/compliancePack';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { buildFocusExportPath } from '$lib/focusExport';
 	import { filenameFromContentDispositionHeader } from '$lib/utils';
-
-	type AuditLog = {
-		id: string;
-		event_type: string;
-		event_timestamp: string;
-		actor_email?: string | null;
-		resource_type?: string | null;
-		resource_id?: string | null;
-		success: boolean;
-		correlation_id?: string | null;
-	};
-
-	type AuditDetail = {
-		id: string;
-		event_type: string;
-		event_timestamp: string;
-		actor_email?: string | null;
-		actor_ip?: string | null;
-		request_method?: string | null;
-		request_path?: string | null;
-		resource_type?: string | null;
-		resource_id?: string | null;
-		success: boolean;
-		error_message?: string | null;
-		details?: Record<string, unknown> | null;
-	};
+	import type { AuditDetail, AuditLog } from './auditTypes';
+	import AuditPageViewContent from './AuditPageViewContent.svelte';
 
 	let { data } = $props();
 	const AUDIT_REQUEST_TIMEOUT_MS = 8000;
@@ -305,296 +280,38 @@
 	<title>Audit Logs | Valdrics</title>
 </svelte:head>
 
-<div class="space-y-8">
-	<div class="flex items-center justify-between">
-		<div>
-			<h1 class="text-2xl font-bold mb-1">Audit Logs</h1>
-			<p class="text-ink-400 text-sm">
-				Security and governance event trail for compliance workflows.
-			</p>
-		</div>
-	</div>
-
-	<AuthGate
-		authenticated={!!data.user}
-		action="access audit logs"
-		className="card text-center py-10"
-	>
-		{#if error}
-			<div class="card border-danger-500/50 bg-danger-500/10">
-				<p class="text-danger-400">{error}</p>
-			</div>
-		{/if}
-		{#if success}
-			<div class="card border-success-500/50 bg-success-500/10">
-				<p class="text-success-400">{success}</p>
-			</div>
-		{/if}
-
-		<div class="card">
-			<div class="flex flex-wrap gap-3 items-end">
-				<div class="flex flex-col gap-1">
-					<label class="text-xs text-ink-400 uppercase tracking-wide" for="event-type"
-						>Event Type</label
-					>
-					<select id="event-type" bind:value={selectedEventType} class="select-input">
-						<option value="">All events</option>
-						{#each eventTypes as type (type)}
-							<option value={type}>{type}</option>
-						{/each}
-					</select>
-				</div>
-				<div class="flex flex-col gap-1">
-					<label class="text-xs text-ink-400 uppercase tracking-wide" for="limit">Page Size</label>
-					<select id="limit" bind:value={limit} class="select-input">
-						<option value={20}>20</option>
-						<option value={50}>50</option>
-						<option value={100}>100</option>
-					</select>
-				</div>
-				<div class="flex gap-2">
-					<button type="button" class="btn btn-secondary text-xs" onclick={applyFilters}
-						>Apply</button
-					>
-					<button type="button" class="btn btn-secondary text-xs" onclick={previousPage}>
-						Prev
-					</button>
-					<button type="button" class="btn btn-secondary text-xs" onclick={nextPage}>Next</button>
-					<button
-						type="button"
-						class="btn btn-primary text-xs"
-						disabled={exporting}
-						onclick={exportCsv}
-					>
-						{exporting ? 'Exporting...' : 'Export CSV'}
-					</button>
-					<button
-						type="button"
-						class="btn btn-primary text-xs"
-						disabled={exportingPack}
-						onclick={exportCompliancePack}
-					>
-						{exportingPack ? 'Exporting...' : 'Compliance Pack'}
-					</button>
-				</div>
-			</div>
-		</div>
-
-		<div class="card">
-			<h2 class="text-lg font-semibold mb-1">Compliance Exports</h2>
-			<p class="text-ink-400 text-sm mb-4">
-				Download FOCUS v1.3 core CSV (Pro+) or bundle exports into the Compliance Pack ZIP (Owner).
-			</p>
-			<div class="flex flex-wrap gap-3 items-end">
-				<div class="flex flex-col gap-1">
-					<label class="text-xs text-ink-400 uppercase tracking-wide" for="focus-start">Start</label
-					>
-					<input id="focus-start" type="date" class="select-input" bind:value={focusStartDate} />
-				</div>
-				<div class="flex flex-col gap-1">
-					<label class="text-xs text-ink-400 uppercase tracking-wide" for="focus-end">End</label>
-					<input id="focus-end" type="date" class="select-input" bind:value={focusEndDate} />
-				</div>
-				<div class="flex flex-col gap-1">
-					<label class="text-xs text-ink-400 uppercase tracking-wide" for="focus-provider"
-						>Provider</label
-					>
-					<select id="focus-provider" bind:value={focusProvider} class="select-input">
-						<option value="">All providers</option>
-						<option value="aws">AWS</option>
-						<option value="azure">Azure</option>
-						<option value="gcp">GCP</option>
-						<option value="saas">SaaS</option>
-						<option value="license">License</option>
-						<option value="platform">Platform</option>
-						<option value="hybrid">Hybrid</option>
-					</select>
-				</div>
-				<label class="flex items-center gap-2 text-xs text-ink-400">
-					<input type="checkbox" class="accent-accent-500" bind:checked={focusIncludePreliminary} />
-					<span>Include preliminary</span>
-				</label>
-				<button
-					type="button"
-					class="btn btn-primary text-xs"
-					disabled={exportingFocus}
-					onclick={exportFocusCsv}
-				>
-					{exportingFocus ? 'Exporting...' : 'FOCUS CSV'}
-				</button>
-			</div>
-
-			<div class="mt-5 border-t border-ink-700/40 pt-4">
-				<h3 class="text-sm font-semibold mb-2">Compliance Pack Add-ons</h3>
-				<p class="text-ink-400 text-xs mb-3">
-					Optional exports included inside the ZIP. Uses the same date/provider filters above.
-				</p>
-				<div class="flex flex-wrap gap-4 items-center">
-					<label class="flex items-center gap-2 text-xs text-ink-300">
-						<input type="checkbox" class="accent-accent-500" bind:checked={packIncludeFocus} />
-						<span>Include FOCUS CSV</span>
-					</label>
-					<label class="flex items-center gap-2 text-xs text-ink-300">
-						<input
-							type="checkbox"
-							class="accent-accent-500"
-							bind:checked={packIncludeSavingsProof}
-						/>
-						<span>Include Savings Proof</span>
-					</label>
-					<label class="flex items-center gap-2 text-xs text-ink-300">
-						<input
-							type="checkbox"
-							class="accent-accent-500"
-							bind:checked={packIncludeClosePackage}
-						/>
-						<span>Include Close Package</span>
-					</label>
-					{#if packIncludeClosePackage}
-						<label class="flex items-center gap-2 text-xs text-ink-300">
-							<input
-								type="checkbox"
-								class="accent-accent-500"
-								bind:checked={packCloseEnforceFinalized}
-							/>
-							<span>Enforce finalized</span>
-						</label>
-						<label class="flex items-center gap-2 text-xs text-ink-300">
-							<span>Max restatements</span>
-							<input
-								type="number"
-								min="0"
-								max="200000"
-								step="100"
-								class="select-input w-28"
-								bind:value={packCloseMaxRestatements}
-							/>
-						</label>
-					{/if}
-				</div>
-			</div>
-		</div>
-
-		<div class="card">
-			<h2 class="text-lg font-semibold mb-4">Events</h2>
-			{#if loading}
-				<div class="skeleton h-5 w-72 mb-2"></div>
-				<div class="skeleton h-5 w-full mb-2"></div>
-				<div class="skeleton h-5 w-full"></div>
-			{:else}
-				<div class="overflow-x-auto">
-					<table class="table">
-						<thead>
-							<tr>
-								<th>Timestamp</th>
-								<th>Event</th>
-								<th>Actor</th>
-								<th>Resource</th>
-								<th>Status</th>
-								<th>Correlation</th>
-								<th>Detail</th>
-							</tr>
-						</thead>
-						<tbody>
-							{#if logs.length === 0}
-								<tr>
-									<td colspan="7" class="text-ink-400 text-center py-4">No audit logs found.</td>
-								</tr>
-							{:else}
-								{#each logs as log (log.id)}
-									<tr>
-										<td class="text-xs text-ink-500">{formatDate(log.event_timestamp)}</td>
-										<td class="font-mono text-xs">{log.event_type}</td>
-										<td>{log.actor_email || '-'}</td>
-										<td>{log.resource_type || '-'} {log.resource_id || ''}</td>
-										<td>
-											<span class="badge {log.success ? 'badge-success' : 'badge-warning'}">
-												{log.success ? 'SUCCESS' : 'FAILED'}
-											</span>
-										</td>
-										<td class="text-xs font-mono">{log.correlation_id || '-'}</td>
-										<td>
-											<button
-												type="button"
-												class="btn btn-secondary text-xs"
-												onclick={() => viewDetail(log.id)}
-											>
-												View
-											</button>
-										</td>
-									</tr>
-								{/each}
-							{/if}
-						</tbody>
-					</table>
-				</div>
-			{/if}
-		</div>
-	</AuthGate>
-</div>
-
-{#if selectedLogId}
-	<div class="fixed inset-0 z-[150] flex items-center justify-center p-4">
-		<button
-			type="button"
-			class="absolute inset-0 bg-ink-950/70 backdrop-blur-sm border-0"
-			aria-label="Close details"
-			onclick={closeDetail}
-		></button>
-		<div
-			class="relative w-full max-w-3xl max-h-[85vh] overflow-auto card border border-ink-700"
-			role="dialog"
-			aria-modal="true"
-			aria-label="Audit log detail"
-		>
-			<div class="flex items-center justify-between mb-4">
-				<h3 class="text-lg font-semibold">Audit Log Detail</h3>
-				<button type="button" class="btn btn-secondary text-xs" onclick={closeDetail}>Close</button>
-			</div>
-			{#if loadingDetail}
-				<div class="skeleton h-5 w-64 mb-2"></div>
-				<div class="skeleton h-5 w-full mb-2"></div>
-				<div class="skeleton h-5 w-full"></div>
-			{:else if selectedDetail}
-				<div class="space-y-3 text-sm">
-					<div><strong>ID:</strong> <span class="font-mono text-xs">{selectedDetail.id}</span></div>
-					<div><strong>Event:</strong> {selectedDetail.event_type}</div>
-					<div><strong>Timestamp:</strong> {formatDate(selectedDetail.event_timestamp)}</div>
-					<div><strong>Actor:</strong> {selectedDetail.actor_email || '-'}</div>
-					<div><strong>IP:</strong> {selectedDetail.actor_ip || '-'}</div>
-					<div>
-						<strong>Request:</strong>
-						{selectedDetail.request_method || '-'}
-						{selectedDetail.request_path || '-'}
-					</div>
-					<div>
-						<strong>Resource:</strong>
-						{selectedDetail.resource_type || '-'}
-						{selectedDetail.resource_id || ''}
-					</div>
-					<div><strong>Status:</strong> {selectedDetail.success ? 'SUCCESS' : 'FAILED'}</div>
-					<div><strong>Error:</strong> {selectedDetail.error_message || '-'}</div>
-					<div>
-						<strong>Details JSON:</strong>
-						<pre class="mt-2 p-3 rounded-lg bg-ink-900 text-xs overflow-auto">{JSON.stringify(
-								selectedDetail.details || {},
-								null,
-								2
-							)}</pre>
-					</div>
-				</div>
-			{/if}
-		</div>
-	</div>
-{/if}
-
-<style>
-	.select-input {
-		min-width: 180px;
-		border: 1px solid var(--color-ink-700);
-		border-radius: 0.5rem;
-		background: var(--color-ink-900);
-		color: var(--color-ink-100);
-		padding: 0.5rem 0.75rem;
-	}
-</style>
+<AuditPageViewContent
+	{data}
+	{loading}
+	{loadingDetail}
+	{exporting}
+	{exportingPack}
+	{exportingFocus}
+	{error}
+	{success}
+	{logs}
+	{eventTypes}
+	bind:selectedEventType
+	bind:limit
+	{offset}
+	{selectedLogId}
+	{selectedDetail}
+	bind:focusStartDate
+	bind:focusEndDate
+	bind:focusProvider
+	bind:focusIncludePreliminary
+	bind:packIncludeFocus
+	bind:packIncludeSavingsProof
+	bind:packIncludeClosePackage
+	bind:packCloseEnforceFinalized
+	bind:packCloseMaxRestatements
+	{formatDate}
+	{applyFilters}
+	{previousPage}
+	{nextPage}
+	{exportCsv}
+	{exportCompliancePack}
+	{exportFocusCsv}
+	{viewDetail}
+	{closeDetail}
+/>

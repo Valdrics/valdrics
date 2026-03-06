@@ -2,6 +2,7 @@
 	import CloudLogo from './CloudLogo.svelte';
 	import DOMPurify from 'dompurify';
 	import { Terminal, Check } from '@lucide/svelte';
+	import { clientLogger } from '$lib/logging/client';
 
 	interface ZombieFinding {
 		provider: 'aws' | 'azure' | 'gcp';
@@ -76,7 +77,7 @@
 				if (copiedId === id) copiedId = null;
 			}, 2000);
 		} catch (err) {
-			console.error('Failed to copy: ', err);
+			clientLogger.error('Failed to copy: ', err);
 		}
 	}
 </script>

@@ -20,6 +20,15 @@ from app.models.hybrid_connection import HybridConnection
 from app.models.license_connection import LicenseConnection
 from app.models.platform_connection import PlatformConnection
 from app.models.saas_connection import SaaSConnection
+from app.modules.reporting.domain.focus_export_helpers import (
+    _CLOUD_PROVIDER_DISPLAY,
+    _focus_charge_category,
+    _focus_charge_frequency,
+    _focus_service_category,
+    _focus_service_subcategory,
+    _humanize_vendor,
+    _service_provider_display,
+)
 
 logger = structlog.get_logger()
 FOCUS_EXPORT_STREAM_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
@@ -72,25 +81,13 @@ FOCUS_V13_CORE_COLUMNS: list[str] = [
     "Tags",
 ]
 
-
-_CLOUD_PROVIDER_DISPLAY = {
-    "aws": "Amazon Web Services",
-    "azure": "Microsoft Azure",
-    "gcp": "Google Cloud",
-}
-
-_VENDOR_DISPLAY_OVERRIDES = {
-    "microsoft_365": "Microsoft 365",
-    "office365": "Microsoft 365",
-    "m365": "Microsoft 365",
-}
-
-_CANONICAL_TO_SERVICE_CATEGORY = {
-    "compute": "Compute",
-    "storage": "Storage",
-    "network": "Networking",
-    "database": "Databases",
-}
+__all__ = (
+    "FOCUS_V13_CORE_COLUMNS",
+    "FocusV13ExportService",
+    "_humanize_vendor",
+    "_service_provider_display",
+    "_focus_charge_category",
+)
 
 
 @dataclass(frozen=True)
@@ -123,60 +120,6 @@ def _next_month_start(day: date) -> datetime:
     if day.month == 12:
         return datetime(day.year + 1, 1, 1, tzinfo=timezone.utc)
     return datetime(day.year, day.month + 1, 1, tzinfo=timezone.utc)
-
-
-def _humanize_vendor(vendor: str | None) -> str | None:
-    if not isinstance(vendor, str):
-        return None
-    key = vendor.strip().lower()
-    if not key:
-        return None
-    if key in _VENDOR_DISPLAY_OVERRIDES:
-        return _VENDOR_DISPLAY_OVERRIDES[key]
-    return " ".join(
-        part.capitalize() for part in key.replace("_", " ").replace("-", " ").split()
-    )
-
-
-def _service_provider_display(provider_key: str, vendor: str | None = None) -> str:
-    vendor_display = _humanize_vendor(vendor)
-    if vendor_display:
-        return vendor_display
-    return _CLOUD_PROVIDER_DISPLAY.get(
-        provider_key, provider_key.upper() if provider_key else "Unknown"
-    )
-
-
-def _focus_service_category(canonical_category: str | None) -> str:
-    key = (canonical_category or "").strip().lower()
-    return _CANONICAL_TO_SERVICE_CATEGORY.get(key, "Other")
-
-
-def _focus_service_subcategory(service_category: str) -> str:
-    # FOCUS allows explicit "Other (...)" subcategories per ServiceCategory.
-    normalized = service_category.strip() or "Other"
-    return f"Other ({normalized})"
-
-
-def _focus_charge_category(service: str | None, usage_type: str | None) -> str:
-    combined = f"{service or ''} {usage_type or ''}".strip().lower()
-    if "tax" in combined:
-        return "Tax"
-    if "credit" in combined or "refund" in combined:
-        return "Credit"
-    if any(
-        token in combined
-        for token in ("support", "adjust", "adjustment", "fee", "marketplace")
-    ):
-        return "Adjustment"
-    return "Usage"
-
-
-def _focus_charge_frequency(charge_category: str) -> str:
-    normalized = (charge_category or "").strip()
-    if normalized in {"Usage", "Tax"}:
-        return "Usage-Based"
-    return "One-Time"
 
 
 def _format_cost(value: Any) -> str:

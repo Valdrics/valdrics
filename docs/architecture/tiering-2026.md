@@ -53,7 +53,7 @@ Package capabilities so entry tiers are affordable, advanced FinOps workflows ar
   - custom and contractual deployment options
 
 ## Delivery tracking
-Delivery milestones live in `roadmap.md`. Keep this document time-agnostic and aligned with current entitlements in `app/shared/core/pricing.py`.
+Delivery milestones live in `docs/roadmap.md`. Keep this document time-agnostic and aligned with current entitlements in `app/shared/core/pricing.py`.
 
 ## Enforcement principle
 - Every premium capability must be gated in backend API dependencies.

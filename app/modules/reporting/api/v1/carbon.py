@@ -5,8 +5,6 @@ from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from fastapi.params import Param
-from pydantic import BaseModel, Field
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,9 +18,25 @@ from app.modules.reporting.domain.carbon_scheduler import CarbonAwareScheduler
 from app.modules.reporting.domain.graviton_analyzer import GravitonAnalyzer
 from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.shared.adapters.factory import AdapterFactory
+from app.modules.reporting.api.v1.carbon_models import (
+    CarbonFactorSetItem,
+    CarbonFactorSetListResponse,
+    CarbonFactorStageRequest,
+    CarbonFactorUpdateLogItem,
+    CarbonFactorUpdateLogListResponse,
+)
+from app.modules.reporting.api.v1.carbon_route_helpers import (
+    coerce_query_int as _coerce_query_int_impl,
+    coerce_query_str as _coerce_query_str_impl,
+    factor_set_to_item as _factor_set_to_item_impl,
+    normalize_provider as _normalize_provider_impl,
+    require_tenant_id as _require_tenant_id_impl,
+    resolve_calc_region as _resolve_calc_region_impl,
+    resolve_region_hint as _resolve_region_hint_impl,
+    update_log_to_item as _update_log_to_item_impl,
+)
 from app.shared.core.auth import CurrentUser
 from app.shared.core.cache import get_cache_service
-from app.shared.core.connection_state import resolve_connection_region
 from app.shared.core.connection_queries import list_tenant_connections
 from app.shared.core.config import get_settings
 from app.shared.core.dependencies import requires_feature
@@ -39,150 +53,28 @@ CARBON_BUDGET_CACHE_TTL = timedelta(minutes=3)
 CARBON_GRAVITON_CACHE_TTL = timedelta(minutes=10)
 CARBON_INTENSITY_CACHE_TTL = timedelta(minutes=5)
 CARBON_SCHEDULE_CACHE_TTL = timedelta(minutes=3)
+__all__ = [
+    "CarbonFactorStageRequest",
+    "CarbonFactorSetItem",
+    "CarbonFactorSetListResponse",
+    "CarbonFactorUpdateLogItem",
+    "CarbonFactorUpdateLogListResponse",
+]
 
-
-class CarbonFactorStageRequest(BaseModel):
-    payload: Dict[str, Any] = Field(
-        ..., description="Full canonical carbon factor payload."
-    )
-    message: str | None = Field(default=None, description="Optional operator notes.")
-
-
-class CarbonFactorSetItem(BaseModel):
-    id: str
-    status: str
-    is_active: bool
-    factor_source: str
-    factor_version: str
-    factor_timestamp: str
-    methodology_version: str
-    factors_checksum_sha256: str
-    created_at: str
-    activated_at: str | None
-
-
-class CarbonFactorSetListResponse(BaseModel):
-    total: int
-    items: list[CarbonFactorSetItem]
-
-
-class CarbonFactorUpdateLogItem(BaseModel):
-    id: str
-    recorded_at: str
-    action: str
-    message: str | None
-    old_factor_set_id: str | None
-    new_factor_set_id: str | None
-    old_checksum_sha256: str | None
-    new_checksum_sha256: str | None
-    details: Dict[str, Any]
-
-
-class CarbonFactorUpdateLogListResponse(BaseModel):
-    total: int
-    items: list[CarbonFactorUpdateLogItem]
-
-
-def _factor_set_to_item(row: CarbonFactorSet) -> CarbonFactorSetItem:
-    return CarbonFactorSetItem(
-        id=str(row.id),
-        status=str(row.status),
-        is_active=bool(row.is_active),
-        factor_source=str(row.factor_source),
-        factor_version=str(row.factor_version),
-        factor_timestamp=row.factor_timestamp.isoformat(),
-        methodology_version=str(row.methodology_version),
-        factors_checksum_sha256=str(row.factors_checksum_sha256),
-        created_at=row.created_at.isoformat(),
-        activated_at=row.activated_at.isoformat() if row.activated_at else None,
-    )
-
-
-def _update_log_to_item(row: CarbonFactorUpdateLog) -> CarbonFactorUpdateLogItem:
-    return CarbonFactorUpdateLogItem(
-        id=str(row.id),
-        recorded_at=row.recorded_at.isoformat(),
-        action=str(row.action),
-        message=row.message,
-        old_factor_set_id=str(row.old_factor_set_id) if row.old_factor_set_id else None,
-        new_factor_set_id=str(row.new_factor_set_id) if row.new_factor_set_id else None,
-        old_checksum_sha256=row.old_checksum_sha256,
-        new_checksum_sha256=row.new_checksum_sha256,
-        details=row.details if isinstance(row.details, dict) else {},
-    )
-
-
-def _require_tenant_id(user: CurrentUser) -> UUID:
-    if user.tenant_id is None:
-        raise HTTPException(status_code=401, detail="Tenant context required")
-    return user.tenant_id
+_factor_set_to_item = _factor_set_to_item_impl
+_update_log_to_item = _update_log_to_item_impl
+_require_tenant_id = _require_tenant_id_impl
+_resolve_region_hint = _resolve_region_hint_impl
+_resolve_calc_region = _resolve_calc_region_impl
+_coerce_query_str = _coerce_query_str_impl
+_coerce_query_int = _coerce_query_int_impl
 
 
 def _normalize_provider(provider: str) -> str:
-    normalized = provider.strip().lower()
-    if normalized not in SUPPORTED_CARBON_PROVIDERS:
-        supported = ", ".join(sorted(SUPPORTED_CARBON_PROVIDERS))
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported provider '{provider}'. Use one of: {supported}",
-        )
-    return normalized
-
-
-def _resolve_region_hint(provider: str, requested_region: str) -> str:
-    """
-    Resolve region hint for cache keys.
-
-    API default is `global`; if no concrete region is supplied, we preserve
-    provider-aware defaults (`aws -> us-east-1`, others -> global).
-    """
-    region = requested_region.strip().lower()
-    if not region:
-        return "us-east-1" if provider == "aws" else "global"
-    if region == "global":
-        return "global"
-    if provider != "aws" and region == "us-east-1":
-        return "global"
-    return region
-
-
-def _resolve_calc_region(connection: Any, provider: str, requested_region: str) -> str:
-    """Resolve effective carbon region without leaking AWS defaults to other providers."""
-    region = requested_region.strip().lower()
-    if (
-        region
-        and region != "global"
-        and not (provider != "aws" and region == "us-east-1")
-    ):
-        return region
-    return resolve_connection_region(connection)
-
-
-def _coerce_query_str(value: Any, *, default: str) -> str:
-    if isinstance(value, Param):
-        value = value.default
-    normalized = str(value or "").strip()
-    return normalized or default
-
-
-def _coerce_query_int(
-    value: Any,
-    *,
-    default: int,
-    minimum: int,
-    maximum: int,
-) -> int:
-    if isinstance(value, Param):
-        value = value.default
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        parsed = default
-    if parsed < minimum:
-        return minimum
-    if parsed > maximum:
-        return maximum
-    return parsed
+    return _normalize_provider_impl(
+        provider,
+        supported_providers=SUPPORTED_CARBON_PROVIDERS,
+    )
 
 
 async def _get_provider_connection(

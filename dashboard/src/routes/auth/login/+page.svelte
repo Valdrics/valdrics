@@ -1,12 +1,3 @@
-<!--
-  Login Page - Premium SaaS Design
-  
-  Features:
-  - Clean centered card layout
-  - Smooth form interactions
-  - Motion-enhanced transitions
--->
-
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { createSupabaseBrowserClient } from '$lib/supabase';
@@ -391,25 +382,11 @@
 </div>
 
 <style>
-	.text-accent-400 {
-		color: var(--color-accent-400);
-	}
-	.text-danger-400 {
-		color: var(--color-danger-400);
-	}
-	.text-success-400 {
-		color: var(--color-success-400);
-	}
-	.bg-danger-500\/10 {
-		background-color: rgb(244 63 94 / 0.1);
-	}
-	.bg-success-500\/10 {
-		background-color: rgb(16 185 129 / 0.1);
-	}
-	.border-danger-500\/30 {
-		border-color: rgb(244 63 94 / 0.3);
-	}
-	.border-success-500\/30 {
-		border-color: rgb(16 185 129 / 0.3);
-	}
+	.text-accent-400 { color: var(--color-accent-400); }
+	.text-danger-400 { color: var(--color-danger-400); }
+	.text-success-400 { color: var(--color-success-400); }
+	.bg-danger-500\/10 { background-color: rgb(244 63 94 / 0.1); }
+	.bg-success-500\/10 { background-color: rgb(16 185 129 / 0.1); }
+	.border-danger-500\/30 { border-color: rgb(244 63 94 / 0.3); }
+	.border-success-500\/30 { border-color: rgb(16 185 129 / 0.3); }
 </style>

@@ -9,17 +9,9 @@ from typing import List, Dict, Any
 from collections import defaultdict
 import structlog
 
+from app.shared.analysis.usage_analyzer_numeric import safe_float
+
 logger = structlog.get_logger()
-
-
-def safe_float(value: Any, default: float = 0.0) -> float:
-    """Safely convert a value to float, returning default on failure."""
-    if value is None:
-        return default
-    try:
-        return float(value)
-    except (ValueError, TypeError):
-        return default
 
 
 class AzureUsageAnalyzer:

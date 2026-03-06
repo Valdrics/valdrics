@@ -50,6 +50,7 @@ from scripts.run_enterprise_tdd_gate import (
     ENFORCEMENT_PRICING_BENCHMARK_MAX_SOURCE_AGE_DAYS_ENV,
     ENFORCEMENT_PRICING_BENCHMARK_REGISTER_PATH_ENV,
     ENFORCEMENT_PRICING_BENCHMARK_REGISTER_REQUIRED_ENV,
+    ENFORCEMENT_RUNTIME_EVIDENCE_ONLY_ENV,
     DEFAULT_ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS,
     ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_MAX_AGE_HOURS_ENV,
     ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_PATH_ENV,
@@ -73,6 +74,9 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
     )
     env_hygiene_cmd = next(
         cmd for cmd in commands if "scripts/verify_env_hygiene.py" in cmd
+    )
+    dependency_lock_cmd = next(
+        cmd for cmd in commands if "scripts/verify_dependency_locking.py" in cmd
     )
     adapter_coverage_cmd = next(
         cmd for cmd in commands if "scripts/verify_adapter_test_coverage.py" in cmd
@@ -134,6 +138,12 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
         "run",
         "python3",
         "scripts/verify_env_hygiene.py",
+    ]
+    assert dependency_lock_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_dependency_locking.py",
     ]
     assert adapter_coverage_cmd[:4] == [
         "uv",
@@ -352,6 +362,19 @@ def test_build_gate_commands_rejects_required_pkg_fin_policy_without_path(
 
     with pytest.raises(
         ValueError, match="ENFORCEMENT_PKG_FIN_POLICY_DECISIONS_REQUIRED"
+    ):
+        build_gate_commands()
+
+
+def test_build_gate_commands_rejects_static_fallback_paths_when_runtime_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(ENFORCEMENT_RUNTIME_EVIDENCE_ONLY_ENV, "true")
+    monkeypatch.delenv(ENFORCEMENT_KEY_ROTATION_DRILL_PATH_ENV, raising=False)
+
+    with pytest.raises(
+        ValueError,
+        match=f"{ENFORCEMENT_KEY_ROTATION_DRILL_PATH_ENV} must be set",
     ):
         build_gate_commands()
 

@@ -15,6 +15,8 @@ DEFAULT_RATES = {
             "t3.micro": 0.0104,
             "t3.medium": 0.0416,
             "m5.large": 0.096,
+            # Conservative baseline for unlisted EC2 sizes.
+            "default": 0.0416,
         },
         "nat_gateway": 0.045,  # $0.045 per hour
         "elb": 0.0225,  # ~$16/month

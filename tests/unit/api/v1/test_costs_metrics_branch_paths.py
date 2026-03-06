@@ -21,6 +21,7 @@ def _scalars_result(items: list[object]) -> MagicMock:
     result = MagicMock()
     scalars = MagicMock()
     scalars.all.return_value = items
+    scalars.__iter__.side_effect = lambda: iter(items)
     result.scalars.return_value = scalars
     return result
 
@@ -34,6 +35,7 @@ def _one_result(item: object) -> MagicMock:
 def _all_result(items: list[object]) -> MagicMock:
     result = MagicMock()
     result.all.return_value = items
+    result.__iter__.side_effect = lambda: iter(items)
     return result
 
 
@@ -342,4 +344,3 @@ async def test_compute_license_governance_kpi_active_connections_and_cycle_time(
     assert metric.details["in_flight_ratio_percent"] == 10.0
     assert metric.details["avg_time_to_complete_hours"] == 5.0
     assert "80.00% completion" in metric.actual
-

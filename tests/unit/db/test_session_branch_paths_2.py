@@ -152,7 +152,23 @@ def test_register_engine_event_listeners_real_target() -> None:
     with patch("app.shared.db.session.event.listen") as mock_listen:
         session_mod._register_engine_event_listeners(engine)  # type: ignore[arg-type]
 
-    assert mock_listen.call_count == 2
+    assert mock_listen.call_count == 3
+    mock_listen.assert_any_call(
+        engine.sync_engine,
+        "before_cursor_execute",
+        session_mod.check_rls_policy,
+        retval=True,
+    )
+    mock_listen.assert_any_call(
+        engine.sync_engine,
+        "before_cursor_execute",
+        session_mod.before_cursor_execute,
+    )
+    mock_listen.assert_any_call(
+        engine.sync_engine,
+        "after_cursor_execute",
+        session_mod.after_cursor_execute,
+    )
 
 
 def test_build_db_runtime_testing_missing_db_url_and_wrappers() -> None:
@@ -317,6 +333,21 @@ def test_backend_from_url_and_session_backend_resolution_branches() -> None:
         backend4, source4 = session_mod._resolve_session_backend(session_get_bind_raises)
     assert (backend4, source4) == ("unknown", "unresolved")
     mock_logger.debug.assert_called()
+
+
+def test_session_backend_resolution_uses_and_sets_cache() -> None:
+    cached_session = MagicMock()
+    cached_session.info = {"_resolved_session_backend": ("postgresql", "cached")}
+    cached_session.bind = SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
+    backend, source = session_mod._resolve_session_backend(cached_session)
+    assert (backend, source) == ("postgresql", "cached")
+
+    session = MagicMock()
+    session.info = {}
+    session.bind = SimpleNamespace(dialect=SimpleNamespace(name="mysql"))
+    resolved = session_mod._resolve_session_backend(session)
+    assert resolved == ("mysql", "session.bind.dialect.name")
+    assert session.info["_resolved_session_backend"] == resolved
 
 
 def test_session_uses_postgresql_unknown_backend_logs_warning() -> None:

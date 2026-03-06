@@ -2,10 +2,12 @@ import pytest
 from httpx import AsyncClient
 from unittest.mock import patch
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from unittest.mock import AsyncMock
 from types import SimpleNamespace
 from datetime import datetime, timezone, timedelta
 
+from app.models.landing_telemetry_rollup import LandingTelemetryDailyRollup
 from app.models.tenant import Tenant
 from app.models.sso_domain_mapping import SsoDomainMapping
 
@@ -408,7 +410,9 @@ async def test_sso_discovery_requires_turnstile_token(async_client: AsyncClient)
 
 
 @pytest.mark.asyncio
-async def test_landing_telemetry_ingest_accepts_and_records_metrics(async_client: AsyncClient):
+async def test_landing_telemetry_ingest_accepts_and_records_metrics(
+    async_client: AsyncClient, db: AsyncSession
+):
     payload = {
         "eventId": "evt-123",
         "name": "cta_click",
@@ -438,6 +442,18 @@ async def test_landing_telemetry_ingest_accepts_and_records_metrics(async_client
     mock_events.labels.return_value.inc.assert_called_once()
     mock_outcomes.labels.assert_called_once_with(outcome="accepted")
     mock_outcomes.labels.return_value.inc.assert_called_once()
+
+    rollups = (
+        await db.execute(
+            select(LandingTelemetryDailyRollup).where(
+                LandingTelemetryDailyRollup.utm_campaign == "direct"
+            )
+        )
+    ).scalars().all()
+    assert len(rollups) == 1
+    assert rollups[0].event_name == "cta_click"
+    assert rollups[0].funnel_stage == "cta"
+    assert rollups[0].event_count == 1
 
 
 @pytest.mark.asyncio

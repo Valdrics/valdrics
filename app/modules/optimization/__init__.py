@@ -1,14 +1,27 @@
-"""
-Zombies Services Module
+"""Optimization module exports with lazy loading.
 
-Provides zombie resource detection and remediation:
-- ZombieDetector: Scans for unused AWS resources
-- RemediationService: Manages approval workflow
-- ZombieDetectorFactory: Creates provider-specific detectors
+Avoid importing heavy domain graphs at package import time, which can trigger
+unrelated adapter/provider imports and side effects in lightweight call paths.
 """
 
-from .domain.remediation import RemediationService
-from .domain.service import ZombieService
-from .domain.factory import ZombieDetectorFactory
+from __future__ import annotations
 
-__all__ = ["RemediationService", "ZombieService", "ZombieDetectorFactory"]
+from typing import Any
+
+__all__ = ("RemediationService", "ZombieService", "ZombieDetectorFactory")
+
+
+def __getattr__(name: str) -> Any:
+    if name == "RemediationService":
+        from .domain.remediation import RemediationService
+
+        return RemediationService
+    if name == "ZombieService":
+        from .domain.service import ZombieService
+
+        return ZombieService
+    if name == "ZombieDetectorFactory":
+        from .domain.factory import ZombieDetectorFactory
+
+        return ZombieDetectorFactory
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

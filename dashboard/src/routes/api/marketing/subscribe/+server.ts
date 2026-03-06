@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { json } from '@sveltejs/kit';
+import { serverLogger } from '$lib/logging/server';
 import type { RequestHandler } from './$types';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -142,7 +143,7 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
 	try {
 		await notifyWebhook(body);
 	} catch (error) {
-		console.error('marketing_subscribe_webhook_failed', {
+		serverLogger.error('marketing_subscribe_webhook_failed', {
 			emailHash: hashEmail(body.email),
 			clientKey,
 			error: error instanceof Error ? error.message : 'unknown'

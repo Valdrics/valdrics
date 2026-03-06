@@ -27,24 +27,30 @@ from app.modules.governance.api.v1.audit_compliance import (  # noqa: F401
     export_compliance_pack,
     router as compliance_router,
 )
-from app.modules.governance.api.v1.audit_evidence import (  # noqa: F401
+from app.modules.governance.api.v1.audit_evidence_carbon import (  # noqa: F401
     capture_carbon_assurance_evidence,
+    list_carbon_assurance_evidence,
+    router as evidence_carbon_router,
+)
+from app.modules.governance.api.v1.audit_evidence import (  # noqa: F401
     capture_identity_idp_smoke_evidence,
     capture_ingestion_persistence_evidence,
     capture_ingestion_soak_evidence,
-    capture_job_slo_evidence,
     capture_load_test_evidence,
     capture_sso_federation_validation_evidence,
-    capture_tenant_isolation_evidence,
-    list_carbon_assurance_evidence,
     list_identity_idp_smoke_evidence,
     list_ingestion_persistence_evidence,
     list_ingestion_soak_evidence,
-    list_job_slo_evidence,
     list_load_test_evidence,
     list_sso_federation_validation_evidence,
-    list_tenant_isolation_evidence,
     router as evidence_router,
+)
+from app.modules.governance.api.v1.audit_evidence_reliability import (  # noqa: F401
+    capture_job_slo_evidence,
+    capture_tenant_isolation_evidence,
+    list_job_slo_evidence,
+    list_tenant_isolation_evidence,
+    router as evidence_reliability_router,
 )
 from app.modules.governance.api.v1.audit_partitioning import (  # noqa: F401
     _compute_partitioning_evidence,
@@ -57,5 +63,7 @@ from app.modules.governance.api.v1.audit_schemas import *  # noqa: F401,F403
 router = APIRouter(tags=["Audit"])
 router.include_router(access_router)
 router.include_router(evidence_router)
+router.include_router(evidence_reliability_router)
+router.include_router(evidence_carbon_router)
 router.include_router(partitioning_router)
 router.include_router(compliance_router)

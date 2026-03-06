@@ -7,6 +7,7 @@
  * - Auto-save with debouncing
  * - Timezone-aware expiry
  */
+import { clientLogger } from '$lib/logging/client';
 
 const STORE_VERSION = 1;
 
@@ -45,7 +46,7 @@ export function createPersistentState<T>(key: string, initialValue: T, expiryHou
 
 			state = parsed.value;
 		} catch (e) {
-			console.warn(`Failed to load state for ${key}:`, e);
+			clientLogger.warn(`Failed to load state for ${key}:`, e);
 		}
 	}
 
@@ -60,7 +61,7 @@ export function createPersistentState<T>(key: string, initialValue: T, expiryHou
 			};
 			localStorage.setItem(storageKey, JSON.stringify(data));
 		} catch (e) {
-			console.warn(`Failed to save state for ${key}:`, e);
+			clientLogger.warn(`Failed to save state for ${key}:`, e);
 		}
 	}
 

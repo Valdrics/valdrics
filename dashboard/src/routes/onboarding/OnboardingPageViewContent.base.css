@@ -1,0 +1,71 @@
+.onboarding-container {
+	max-width: 900px;
+	margin: 2rem auto;
+	padding: 2rem;
+}
+
+h1 {
+	text-align: center;
+	margin-bottom: 2rem;
+}
+
+.loading-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(10, 13, 18, 0.8);
+	backdrop-filter: blur(8px);
+	z-index: 100;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	animation: fadeIn 0.3s ease-out;
+}
+
+.verification-section {
+	animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes fadeIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes slideUp {
+	from {
+		opacity: 0;
+		transform: translateY(20px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.spinner {
+	width: 40px;
+	height: 40px;
+	border: 3px solid var(--ink-800);
+	border-top-color: var(--accent-500);
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+@media (max-width: 768px) {
+	.onboarding-container {
+		padding: 1rem;
+	}
+}

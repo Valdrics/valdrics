@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime
 from decimal import Decimal
-import time
 from typing import Any, Callable, Mapping, cast
 from uuid import UUID
 
 from fastapi import HTTPException
-from sqlalchemy import select, update
-from sqlalchemy.engine import CursorResult
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import select
 
 from app.models.enforcement import (
     EnforcementApprovalRequest,
@@ -32,6 +28,12 @@ from app.modules.enforcement.domain.reconciliation_ops import (
     build_reconciliation_exception_payloads as _build_reconciliation_exception_payloads_impl,
     build_reservation_reconciliation_replay_payload as _build_reservation_reconciliation_replay_payload_impl,
 )
+from app.modules.enforcement.domain.service_runtime_gate_lock_ops import (
+    acquire_gate_evaluation_lock,
+)
+from app.modules.enforcement.domain.service_runtime_ledger_ops import (
+    append_decision_ledger_entry,
+)
 from app.modules.enforcement.domain.service_models import (
     DecisionLedgerRecord,
     EnforcementExportBundle,
@@ -51,7 +53,6 @@ from app.modules.enforcement.domain.service_utils import (
     _normalize_policy_document_sha256,
     _normalize_string_list,
     _parse_iso_datetime,
-    _payload_sha256,
     _quantize,
     _sanitize_csv_cell,
     _to_decimal,
@@ -65,9 +66,24 @@ from app.shared.core.approval_permissions import (
 from app.shared.core.config import get_settings
 from app.shared.core.ops_metrics import (
     ENFORCEMENT_EXPORT_EVENTS_TOTAL,
-    ENFORCEMENT_GATE_LOCK_EVENTS_TOTAL,
-    ENFORCEMENT_GATE_LOCK_WAIT_SECONDS,
 )
+
+__all__ = [
+    "normalize_policy_approval_routing_rules",
+    "resolve_policy_mode",
+    "list_active_reservations",
+    "list_decision_ledger",
+    "list_reconciliation_exceptions",
+    "build_reservation_reconciliation_idempotent_replay",
+    "build_export_bundle",
+    "resolve_export_manifest_signing_secret",
+    "resolve_export_manifest_signing_key_id",
+    "build_signed_export_manifest",
+    "render_decisions_csv",
+    "render_approvals_csv",
+    "append_decision_ledger_entry",
+    "acquire_gate_evaluation_lock",
+]
 
 
 def normalize_policy_approval_routing_rules(
@@ -430,181 +446,3 @@ def render_approvals_csv(
         sanitize_csv_cell_fn=_sanitize_csv_cell,
         iso_or_empty_fn=_iso_or_empty,
     )
-
-
-def append_decision_ledger_entry(
-    service: Any,
-    *,
-    decision_row: EnforcementDecision,
-    approval_row: EnforcementApprovalRequest | None = None,
-) -> None:
-    reserved_total = _quantize(
-        _to_decimal(decision_row.reserved_allocation_usd)
-        + _to_decimal(decision_row.reserved_credit_usd),
-        "0.0001",
-    )
-    ledger_entry = EnforcementDecisionLedger(
-        tenant_id=decision_row.tenant_id,
-        decision_id=decision_row.id,
-        source=decision_row.source,
-        environment=decision_row.environment,
-        project_id=decision_row.project_id,
-        action=decision_row.action,
-        resource_reference=decision_row.resource_reference,
-        decision=decision_row.decision,
-        reason_codes=list(decision_row.reason_codes or []),
-        policy_version=int(decision_row.policy_version),
-        policy_document_schema_version=_normalize_policy_document_schema_version(
-            decision_row.policy_document_schema_version
-        ),
-        policy_document_sha256=_normalize_policy_document_sha256(
-            decision_row.policy_document_sha256
-        ),
-        request_fingerprint=decision_row.request_fingerprint,
-        idempotency_key=decision_row.idempotency_key,
-        estimated_monthly_delta_usd=_quantize(
-            _to_decimal(decision_row.estimated_monthly_delta_usd),
-            "0.0001",
-        ),
-        estimated_hourly_delta_usd=_quantize(
-            _to_decimal(decision_row.estimated_hourly_delta_usd),
-            "0.000001",
-        ),
-        burn_rate_daily_usd=(
-            _quantize(_to_decimal(decision_row.burn_rate_daily_usd), "0.0001")
-            if decision_row.burn_rate_daily_usd is not None
-            else None
-        ),
-        forecast_eom_usd=(
-            _quantize(_to_decimal(decision_row.forecast_eom_usd), "0.0001")
-            if decision_row.forecast_eom_usd is not None
-            else None
-        ),
-        risk_class=(
-            str(decision_row.risk_class).strip().lower()
-            if decision_row.risk_class is not None
-            else None
-        ),
-        risk_score=(
-            int(decision_row.risk_score)
-            if decision_row.risk_score is not None
-            else None
-        ),
-        anomaly_signal=(
-            bool(decision_row.anomaly_signal)
-            if decision_row.anomaly_signal is not None
-            else None
-        ),
-        reserved_total_usd=reserved_total,
-        approval_required=bool(decision_row.approval_required),
-        approval_request_id=approval_row.id if approval_row is not None else None,
-        approval_status=approval_row.status if approval_row is not None else None,
-        request_payload_sha256=_payload_sha256(decision_row.request_payload or {}),
-        response_payload_sha256=_payload_sha256(decision_row.response_payload or {}),
-        created_by_user_id=decision_row.created_by_user_id,
-        decision_created_at=decision_row.created_at or _utcnow(),
-    )
-    service.db.add(ledger_entry)
-
-
-async def acquire_gate_evaluation_lock(
-    service: Any,
-    *,
-    policy: EnforcementPolicy,
-    source: EnforcementSource,
-) -> None:
-    from app.modules.enforcement.domain import service as enforcement_service_module
-
-    service_asyncio = getattr(enforcement_service_module, "asyncio", asyncio)
-    service_time = getattr(enforcement_service_module, "time", time)
-    wait_for_fn = getattr(service_asyncio, "wait_for", asyncio.wait_for)
-    perf_counter_fn = getattr(service_time, "perf_counter", time.perf_counter)
-    lock_events_total = getattr(
-        enforcement_service_module,
-        "ENFORCEMENT_GATE_LOCK_EVENTS_TOTAL",
-        ENFORCEMENT_GATE_LOCK_EVENTS_TOTAL,
-    )
-    lock_wait_seconds = getattr(
-        enforcement_service_module,
-        "ENFORCEMENT_GATE_LOCK_WAIT_SECONDS",
-        ENFORCEMENT_GATE_LOCK_WAIT_SECONDS,
-    )
-
-    lock_timeout_seconds = service._gate_lock_timeout_seconds()
-    started_at = perf_counter_fn()
-    try:
-        result = cast(
-            CursorResult[Any],
-            await wait_for_fn(
-                service.db.execute(
-                    update(EnforcementPolicy)
-                    .where(EnforcementPolicy.id == policy.id)
-                    .where(EnforcementPolicy.tenant_id == policy.tenant_id)
-                    .values(policy_version=EnforcementPolicy.policy_version)
-                ),
-                timeout=lock_timeout_seconds,
-            ),
-        )
-    except TimeoutError as exc:
-        wait_seconds = max(0.0, perf_counter_fn() - started_at)
-        lock_wait_seconds.labels(
-            source=source.value,
-            outcome="timeout",
-        ).observe(wait_seconds)
-        lock_events_total.labels(
-            source=source.value,
-            event="timeout",
-        ).inc()
-        lock_events_total.labels(
-            source=source.value,
-            event="contended",
-        ).inc()
-        await service.db.rollback()
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "code": "gate_lock_timeout",
-                "message": "Enforcement gate evaluation lock timeout",
-                "lock_timeout_seconds": f"{lock_timeout_seconds:.3f}",
-                "lock_wait_seconds": f"{wait_seconds:.3f}",
-            },
-        ) from exc
-    except (SQLAlchemyError, RuntimeError):
-        wait_seconds = max(0.0, perf_counter_fn() - started_at)
-        lock_wait_seconds.labels(
-            source=source.value,
-            outcome="error",
-        ).observe(wait_seconds)
-        lock_events_total.labels(
-            source=source.value,
-            event="error",
-        ).inc()
-        raise
-
-    wait_seconds = max(0.0, perf_counter_fn() - started_at)
-    lock_wait_seconds.labels(
-        source=source.value,
-        outcome="acquired",
-    ).observe(wait_seconds)
-    lock_events_total.labels(
-        source=source.value,
-        event="acquired",
-    ).inc()
-    if wait_seconds >= 0.05:
-        lock_events_total.labels(
-            source=source.value,
-            event="contended",
-        ).inc()
-    if result.rowcount == 0:
-        lock_events_total.labels(
-            source=source.value,
-            event="not_acquired",
-        ).inc()
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "code": "gate_lock_contended",
-                "message": "Unable to acquire enforcement gate evaluation lock",
-                "lock_wait_seconds": f"{wait_seconds:.3f}",
-            },
-        )

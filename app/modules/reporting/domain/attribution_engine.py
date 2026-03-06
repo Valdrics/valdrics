@@ -1,20 +1,41 @@
 """Attribution engine for rule-based cost allocation (BE-FIN-ATTR-1)."""
 
-from typing import Any, Dict, List, Optional
-from decimal import Decimal, InvalidOperation
-from datetime import datetime, timezone, date
-import uuid
-import structlog
+from __future__ import annotations
 
+from datetime import date, datetime
+from typing import Any
+import uuid
+
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete, select
 
 from app.models.attribution import AttributionRule, CostAllocation
 from app.models.cloud import CostRecord
+from app.modules.reporting.domain.attribution_engine_allocation_ops import (
+    apply_rules as _apply_rules_impl,
+    apply_rules_to_tenant as _apply_rules_to_tenant_impl,
+    get_allocation_coverage as _get_allocation_coverage_impl,
+    get_allocation_summary as _get_allocation_summary_impl,
+    get_unallocated_analysis as _get_unallocated_analysis_impl,
+    match_conditions as _match_conditions_impl,
+    process_cost_record as _process_cost_record_impl,
+    simulate_rule as _simulate_rule_impl,
+)
+from app.modules.reporting.domain.attribution_engine_rule_crud import (
+    create_rule as _create_rule_impl,
+    get_active_rules as _get_active_rules_impl,
+    get_rule as _get_rule_impl,
+    list_rules as _list_rules_impl,
+)
+from app.modules.reporting.domain.attribution_engine_validation import (
+    ATTRIBUTION_DECIMAL_PARSE_RECOVERABLE_EXCEPTIONS,
+    VALID_RULE_TYPES,
+    allocation_entries as _allocation_entries_impl,
+    normalize_rule_type as _normalize_rule_type_impl,
+    validate_rule_payload as _validate_rule_payload_impl,
+)
 
 logger = structlog.get_logger()
-VALID_RULE_TYPES = {"DIRECT", "PERCENTAGE", "FIXED"}
-ATTRIBUTION_DECIMAL_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (InvalidOperation, TypeError, ValueError)
 
 
 class AttributionEngine:
@@ -28,101 +49,38 @@ class AttributionEngine:
 
     def normalize_rule_type(self, rule_type: str) -> str:
         """Normalize rule type to uppercase for consistent matching."""
-        return (rule_type or "").strip().upper()
+        return _normalize_rule_type_impl(rule_type)
 
-    def validate_rule_payload(self, rule_type: str, allocation: Any) -> List[str]:
+    def validate_rule_payload(self, rule_type: str, allocation: Any) -> list[str]:
         """
         Validate allocation payload shape for a rule type.
         Returns a list of validation error messages; empty list means valid.
         """
-        errors: List[str] = []
-        normalized_type = self.normalize_rule_type(rule_type)
-        if normalized_type not in VALID_RULE_TYPES:
-            errors.append(f"rule_type must be one of {sorted(VALID_RULE_TYPES)}")
-            return errors
+        return _validate_rule_payload_impl(rule_type, allocation)
 
-        entries = self._allocation_entries(allocation)
-
-        if normalized_type == "DIRECT":
-            if len(entries) != 1:
-                errors.append("DIRECT allocation must define exactly one bucket.")
-            elif not entries[0].get("bucket"):
-                errors.append("DIRECT allocation requires a non-empty 'bucket'.")
-
-        elif normalized_type == "PERCENTAGE":
-            if not entries:
-                errors.append(
-                    "PERCENTAGE allocation requires at least one split entry."
-                )
-            total_percentage = Decimal("0")
-            for split in entries:
-                if not split.get("bucket"):
-                    errors.append(
-                        "Each PERCENTAGE split requires a non-empty 'bucket'."
-                    )
-                percentage_raw = split.get("percentage")
-                try:
-                    percentage = Decimal(str(percentage_raw))
-                except ATTRIBUTION_DECIMAL_PARSE_RECOVERABLE_EXCEPTIONS:
-                    errors.append(
-                        "Each PERCENTAGE split requires numeric 'percentage'."
-                    )
-                    continue
-                if percentage < 0:
-                    errors.append("PERCENTAGE split cannot be negative.")
-                total_percentage += percentage
-            if entries and total_percentage != Decimal("100"):
-                errors.append("PERCENTAGE split percentages must sum to 100.")
-
-        elif normalized_type == "FIXED":
-            if not entries:
-                errors.append("FIXED allocation requires at least one split entry.")
-            for split in entries:
-                if not split.get("bucket"):
-                    errors.append("Each FIXED split requires a non-empty 'bucket'.")
-                amount_raw = split.get("amount")
-                try:
-                    amount = Decimal(str(amount_raw))
-                except ATTRIBUTION_DECIMAL_PARSE_RECOVERABLE_EXCEPTIONS:
-                    errors.append("Each FIXED split requires numeric 'amount'.")
-                    continue
-                if amount < 0:
-                    errors.append("FIXED split amount cannot be negative.")
-
-        return errors
-
-    def _allocation_entries(self, allocation: Any) -> List[Dict[str, Any]]:
+    def _allocation_entries(self, allocation: Any) -> list[dict[str, Any]]:
         """Normalize allocation payload to a list of dict entries."""
-        if isinstance(allocation, list):
-            return [item for item in allocation if isinstance(item, dict)]
-        if isinstance(allocation, dict):
-            return [allocation]
-        return []
+        return _allocation_entries_impl(allocation)
 
     async def list_rules(
-        self, tenant_id: uuid.UUID, include_inactive: bool = False
-    ) -> List[AttributionRule]:
+        self,
+        tenant_id: uuid.UUID,
+        include_inactive: bool = False,
+    ) -> list[AttributionRule]:
         """List tenant attribution rules ordered by priority."""
-        query = select(AttributionRule).where(AttributionRule.tenant_id == tenant_id)
-        if not include_inactive:
-            query = query.where(AttributionRule.is_active)
-        query = query.order_by(
-            AttributionRule.priority.asc(), AttributionRule.name.asc()
+        return await _list_rules_impl(
+            self.db,
+            tenant_id,
+            include_inactive=include_inactive,
         )
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
 
     async def get_rule(
-        self, tenant_id: uuid.UUID, rule_id: uuid.UUID
-    ) -> Optional[AttributionRule]:
+        self,
+        tenant_id: uuid.UUID,
+        rule_id: uuid.UUID,
+    ) -> AttributionRule | None:
         """Fetch one attribution rule scoped to tenant."""
-        query = (
-            select(AttributionRule)
-            .where(AttributionRule.tenant_id == tenant_id)
-            .where(AttributionRule.id == rule_id)
-        )
-        result = await self.db.execute(query)
-        return result.scalar_one_or_none()
+        return await _get_rule_impl(self.db, tenant_id, rule_id)
 
     async def create_rule(
         self,
@@ -131,14 +89,15 @@ class AttributionEngine:
         name: str,
         priority: int,
         rule_type: str,
-        conditions: Dict[str, Any],
+        conditions: dict[str, Any],
         allocation: Any,
         is_active: bool = True,
     ) -> AttributionRule:
         """Create and persist a tenant attribution rule."""
         normalized_type = self.normalize_rule_type(rule_type)
-        rule = AttributionRule(
-            tenant_id=tenant_id,
+        return await _create_rule_impl(
+            self.db,
+            tenant_id,
             name=name,
             priority=priority,
             rule_type=normalized_type,
@@ -146,17 +105,13 @@ class AttributionEngine:
             allocation=allocation,
             is_active=is_active,
         )
-        self.db.add(rule)
-        await self.db.commit()
-        await self.db.refresh(rule)
-        return rule
 
     async def update_rule(
         self,
         tenant_id: uuid.UUID,
         rule_id: uuid.UUID,
-        updates: Dict[str, Any],
-    ) -> Optional[AttributionRule]:
+        updates: dict[str, Any],
+    ) -> AttributionRule | None:
         """Update an existing attribution rule."""
         rule = await self.get_rule(tenant_id, rule_id)
         if not rule:
@@ -189,234 +144,52 @@ class AttributionEngine:
         await self.db.commit()
         return True
 
-    async def get_active_rules(self, tenant_id: uuid.UUID) -> List[AttributionRule]:
+    async def get_active_rules(self, tenant_id: uuid.UUID) -> list[AttributionRule]:
         """
         Retrieve all active attribution rules for a tenant, ordered by priority.
         Lower priority numbers are evaluated first.
         """
-        query = (
-            select(AttributionRule)
-            .where(AttributionRule.tenant_id == tenant_id)
-            .where(AttributionRule.is_active)
-            .order_by(AttributionRule.priority.asc())
-        )
-        result = await self.db.execute(query)
-        return list(result.scalars().all())
+        return await _get_active_rules_impl(self.db, tenant_id)
 
-    def match_conditions(
-        self, cost_record: CostRecord, conditions: Dict[str, Any]
-    ) -> bool:
+    def match_conditions(self, cost_record: CostRecord, conditions: dict[str, Any]) -> bool:
         """
-        Check if a cost record matches the rule conditions.
+        Check if a cost record matches rule conditions.
         Supports matching on: service, region, account_id, tags.
         """
-        # Service match
-        if "service" in conditions:
-            if cost_record.service != conditions["service"]:
-                return False
-
-        # Region match
-        if "region" in conditions:
-            if cost_record.region != conditions["region"]:
-                return False
-
-        # Account match
-        if "account_id" in conditions:
-            if cost_record.account_id != conditions["account_id"]:
-                return False
-
-        # Tags match (all specified tags must match)
-        if "tags" in conditions:
-            direct_tags = getattr(cost_record, "tags", None)
-            if isinstance(direct_tags, dict):
-                cost_tags = direct_tags
-            else:
-                metadata = (
-                    cost_record.ingestion_metadata
-                    if isinstance(cost_record.ingestion_metadata, dict)
-                    else {}
-                )
-                raw_tags = metadata.get("tags", {})
-                cost_tags = raw_tags if isinstance(raw_tags, dict) else {}
-            condition_tags = (
-                conditions["tags"] if isinstance(conditions["tags"], dict) else {}
-            )
-            for tag_key, tag_value in condition_tags.items():
-                if cost_tags.get(tag_key) != tag_value:
-                    return False
-
-        # If no conditions failed, it's a match
-        return True
+        return _match_conditions_impl(cost_record, conditions)
 
     async def apply_rules(
-        self, cost_record: CostRecord, rules: List[AttributionRule]
-    ) -> List[CostAllocation]:
+        self,
+        cost_record: CostRecord,
+        rules: list[AttributionRule],
+    ) -> list[CostAllocation]:
         """
-        Apply attribution rules to a cost record and return CostAllocation records.
+        Apply attribution rules to a cost record and return allocations.
         First matching rule wins (rules are pre-sorted by priority).
         """
-        allocations = []
-
-        for rule in rules:
-            if not self.match_conditions(cost_record, rule.conditions):
-                continue
-
-            # Rule matches - create allocations based on rule type
-            if rule.rule_type == "DIRECT":
-                # Direct allocation to a single bucket
-                direct_allocation_raw: Any = rule.allocation
-                if (
-                    isinstance(direct_allocation_raw, list)
-                    and len(direct_allocation_raw) > 0
-                ):
-                    first_entry = direct_allocation_raw[0]
-                    bucket = (
-                        first_entry.get("bucket", "Unallocated")
-                        if isinstance(first_entry, dict)
-                        else "Unallocated"
-                    )
-                elif isinstance(direct_allocation_raw, dict):
-                    bucket = direct_allocation_raw.get("bucket", "Unallocated")
-                else:
-                    bucket = "Unallocated"
-
-                allocation = CostAllocation(
-                    cost_record_id=cost_record.id,
-                    recorded_at=cost_record.recorded_at,
-                    rule_id=rule.id,
-                    allocated_to=bucket,
-                    amount=cost_record.cost_usd,
-                    percentage=Decimal("100.00"),
-                    timestamp=datetime.now(timezone.utc),
-                )
-                allocations.append(allocation)
-
-            elif rule.rule_type == "PERCENTAGE":
-                # Percentage-based split across multiple buckets
-                percentage_allocation_raw: Any = rule.allocation
-                percentage_splits: list[dict[str, Any]]
-                if isinstance(percentage_allocation_raw, list):
-                    percentage_splits = [
-                        item
-                        for item in percentage_allocation_raw
-                        if isinstance(item, dict)
-                    ]
-                elif isinstance(percentage_allocation_raw, dict):
-                    percentage_splits = [percentage_allocation_raw]
-                else:
-                    percentage_splits = []
-
-                total_percentage = Decimal("0")
-                for split in percentage_splits:
-                    bucket = split.get("bucket", "Unallocated")
-                    pct = Decimal(str(split.get("percentage", 0)))
-                    total_percentage += pct
-
-                    split_amount = (cost_record.cost_usd * pct) / Decimal("100")
-                    allocation = CostAllocation(
-                        cost_record_id=cost_record.id,
-                        recorded_at=cost_record.recorded_at,
-                        rule_id=rule.id,
-                        allocated_to=bucket,
-                        amount=split_amount,
-                        percentage=pct,
-                        timestamp=datetime.now(timezone.utc),
-                    )
-                    allocations.append(allocation)
-
-                # Warn if percentages don't sum to 100
-                if total_percentage != Decimal("100"):
-                    logger.warning(
-                        "attribution_percentage_mismatch",
-                        rule_id=str(rule.id),
-                        total=float(total_percentage),
-                    )
-
-            elif rule.rule_type == "FIXED":
-                # Fixed amount allocation (remaining goes to default bucket)
-                fixed_allocation_raw: Any = rule.allocation
-                fixed_splits: list[dict[str, Any]]
-                if isinstance(fixed_allocation_raw, list):
-                    fixed_splits = [
-                        item for item in fixed_allocation_raw if isinstance(item, dict)
-                    ]
-                elif isinstance(fixed_allocation_raw, dict):
-                    fixed_splits = [fixed_allocation_raw]
-                else:
-                    fixed_splits = []
-
-                allocated_total = Decimal("0")
-                for split in fixed_splits:
-                    bucket = split.get("bucket", "Unallocated")
-                    fixed_amount = Decimal(str(split.get("amount", 0)))
-                    allocated_total += fixed_amount
-
-                    allocation = CostAllocation(
-                        cost_record_id=cost_record.id,
-                        recorded_at=cost_record.recorded_at,
-                        rule_id=rule.id,
-                        allocated_to=bucket,
-                        amount=fixed_amount,
-                        percentage=None,
-                        timestamp=datetime.now(timezone.utc),
-                    )
-                    allocations.append(allocation)
-
-                # Remaining goes to "Unallocated"
-                remaining = cost_record.cost_usd - allocated_total
-                if remaining > Decimal("0"):
-                    allocation = CostAllocation(
-                        cost_record_id=cost_record.id,
-                        recorded_at=cost_record.recorded_at,
-                        rule_id=rule.id,
-                        allocated_to="Unallocated",
-                        amount=remaining,
-                        percentage=None,
-                        timestamp=datetime.now(timezone.utc),
-                    )
-                    allocations.append(allocation)
-
-            # First matching rule wins - stop processing
-            break
-
-        # If no rule matched, create a default allocation
-        if not allocations:
-            allocations.append(
-                CostAllocation(
-                    cost_record_id=cost_record.id,
-                    recorded_at=cost_record.recorded_at,
-                    rule_id=None,
-                    allocated_to="Unallocated",
-                    amount=cost_record.cost_usd,
-                    percentage=Decimal("100.00"),
-                    timestamp=datetime.now(timezone.utc),
-                )
-            )
-
-        return allocations
+        return await _apply_rules_impl(
+            cost_record,
+            rules,
+            match_conditions_fn=self.match_conditions,
+            logger_obj=logger,
+        )
 
     async def process_cost_record(
-        self, cost_record: CostRecord, tenant_id: uuid.UUID
-    ) -> List[CostAllocation]:
+        self,
+        cost_record: CostRecord,
+        tenant_id: uuid.UUID,
+    ) -> list[CostAllocation]:
         """
         Full pipeline: Get rules for tenant, apply to cost record, persist allocations.
         """
-        rules = await self.get_active_rules(tenant_id)
-        allocations = await self.apply_rules(cost_record, rules)
-
-        # Persist allocations
-        for allocation in allocations:
-            self.db.add(allocation)
-
-        await self.db.commit()
-
-        logger.info(
-            "attribution_applied",
-            cost_record_id=str(cost_record.id),
-            allocations_count=len(allocations),
+        return await _process_cost_record_impl(
+            self.db,
+            cost_record,
+            tenant_id,
+            get_active_rules_fn=self.get_active_rules,
+            apply_rules_fn=self.apply_rules,
+            logger_obj=logger,
         )
-
-        return allocations
 
     async def apply_rules_to_tenant(
         self,
@@ -425,322 +198,110 @@ class AttributionEngine:
         end_date: date,
         *,
         commit: bool = True,
-    ) -> Dict[str, int]:
+    ) -> dict[str, int]:
         """
-        Batch apply attribution rules to all cost records for a tenant within a date range.
+        Batch apply attribution rules to all cost records for tenant/date window.
         Used for recalculation or historical reconciliation.
         """
-        # 1. Fetch all cost records in range
-        query = (
-            select(CostRecord)
-            .where(CostRecord.tenant_id == tenant_id)
-            .where(CostRecord.recorded_at >= start_date)
-            .where(CostRecord.recorded_at <= end_date)
+        return await _apply_rules_to_tenant_impl(
+            self.db,
+            tenant_id,
+            start_date,
+            end_date,
+            get_active_rules_fn=self.get_active_rules,
+            apply_rules_fn=self.apply_rules,
+            logger_obj=logger,
+            commit=commit,
         )
-        result = await self.db.execute(query)
-        records = result.scalars().all()
-
-        if not records:
-            logger.info(
-                "no_cost_records_found_for_attribution", tenant_id=str(tenant_id)
-            )
-            return {"records_processed": 0, "allocations_created": 0}
-
-        # 2. Get active rules
-        rules = await self.get_active_rules(tenant_id)
-
-        # 3. Batch delete existing allocations for these records to avoid duplicates
-        record_ids = [r.id for r in records]
-        # Perform in chunks to avoid large IN clause issues in some DBs
-        for i in range(0, len(record_ids), 1000):
-            chunk = record_ids[i : i + 1000]
-            await self.db.execute(
-                delete(CostAllocation).where(CostAllocation.cost_record_id.in_(chunk))
-            )
-
-        # 4. Process each record and accumulate allocations
-        all_allocations = []
-        for record in records:
-            allocations = await self.apply_rules(record, rules)
-            all_allocations.extend(allocations)
-
-        # 5. Bulk insert allocations
-        if all_allocations:
-            # We use add_all for simplicity with SQLAlchemy async;
-            # for even higher performance with thousands of records,
-            # bulk_insert_mappings would be preferred.
-            self.db.add_all(all_allocations)
-
-        if commit:
-            await self.db.commit()
-        else:
-            await self.db.flush()
-        logger.info(
-            "batch_attribution_complete",
-            tenant_id=str(tenant_id),
-            records_processed=len(records),
-            allocations_count=len(all_allocations),
-        )
-        return {
-            "records_processed": len(records),
-            "allocations_created": len(all_allocations),
-        }
 
     async def get_allocation_summary(
         self,
         tenant_id: uuid.UUID,
-        start_date: Optional[datetime] = None,
-        end_date: Optional[datetime] = None,
-        bucket: Optional[str] = None,
+        start_date: datetime | None = None,
+        end_date: datetime | None = None,
+        bucket: str | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> Dict[str, Any]:
-        """
-        Get aggregated allocation summary by bucket for a tenant.
-        """
-        from sqlalchemy import func
-
-        query = (
-            select(
-                CostAllocation.allocated_to,
-                func.sum(CostAllocation.amount).label("total_amount"),
-                func.count(CostAllocation.id).label("record_count"),
-            )
-            .join(
-                CostRecord,
-                (CostAllocation.cost_record_id == CostRecord.id)
-                & (CostAllocation.recorded_at == CostRecord.recorded_at),
-            )
-            .where(CostRecord.tenant_id == tenant_id)
-            .group_by(CostAllocation.allocated_to)
-            .order_by(func.sum(CostAllocation.amount).desc())
+    ) -> dict[str, Any]:
+        """Get aggregated allocation summary by bucket for a tenant."""
+        return await _get_allocation_summary_impl(
+            self.db,
+            tenant_id,
+            start_date=start_date,
+            end_date=end_date,
+            bucket=bucket,
+            limit=limit,
+            offset=offset,
         )
-
-        if start_date:
-            query = query.where(CostAllocation.timestamp >= start_date)
-        if end_date:
-            query = query.where(CostAllocation.timestamp <= end_date)
-        if bucket:
-            query = query.where(CostAllocation.allocated_to == bucket)
-
-        result = await self.db.execute(query)
-        rows = result.all()
-
-        summary = {
-            "buckets": [
-                {
-                    "name": row.allocated_to,
-                    "total_amount": float(row.total_amount),
-                    "record_count": row.record_count,
-                }
-                for row in rows
-            ],
-            "total": sum(float(row.total_amount) for row in rows),
-        }
-
-        return summary
 
     async def get_allocation_coverage(
         self,
         tenant_id: uuid.UUID,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
         target_percentage: float = 90.0,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Compute allocation coverage KPI for a tenant and date window.
 
         Coverage = allocated_cost / total_cost * 100
         """
-        from sqlalchemy import func
-
-        total_query = select(
-            func.coalesce(func.sum(CostRecord.cost_usd), 0).label("total_cost"),
-            func.count(CostRecord.id).label("total_records"),
-        ).where(CostRecord.tenant_id == tenant_id)
-        if start_date:
-            total_query = total_query.where(CostRecord.recorded_at >= start_date)
-        if end_date:
-            total_query = total_query.where(CostRecord.recorded_at <= end_date)
-
-        total_result = await self.db.execute(total_query)
-        total_row = total_result.one()
-        total_cost = float(total_row.total_cost or 0)
-        total_records = int(total_row.total_records or 0)
-
-        allocated_query = (
-            select(
-                func.coalesce(func.sum(CostAllocation.amount), 0).label(
-                    "allocated_cost"
-                ),
-                func.count(CostAllocation.id).label("allocation_rows"),
-                func.count(func.distinct(CostAllocation.cost_record_id)).label(
-                    "allocated_records"
-                ),
-            )
-            .join(
-                CostRecord,
-                (CostAllocation.cost_record_id == CostRecord.id)
-                & (CostAllocation.recorded_at == CostRecord.recorded_at),
-            )
-            .where(CostRecord.tenant_id == tenant_id)
+        return await _get_allocation_coverage_impl(
+            self.db,
+            tenant_id,
+            start_date=start_date,
+            end_date=end_date,
+            target_percentage=target_percentage,
         )
-        if start_date:
-            allocated_query = allocated_query.where(
-                CostRecord.recorded_at >= start_date
-            )
-        if end_date:
-            allocated_query = allocated_query.where(CostRecord.recorded_at <= end_date)
-
-        allocated_result = await self.db.execute(allocated_query)
-        allocated_row = allocated_result.one()
-        raw_allocated_cost = float(allocated_row.allocated_cost or 0)
-        allocated_cost = min(raw_allocated_cost, total_cost) if total_cost > 0 else 0.0
-        over_allocated_cost = max(raw_allocated_cost - total_cost, 0.0)
-        coverage_percentage = (
-            (allocated_cost / total_cost * 100.0) if total_cost > 0 else 0.0
-        )
-
-        return {
-            "target_percentage": target_percentage,
-            "coverage_percentage": round(coverage_percentage, 2),
-            "meets_target": coverage_percentage >= target_percentage
-            if total_cost > 0
-            else False,
-            "status": (
-                "no_data"
-                if total_cost <= 0
-                else ("ok" if coverage_percentage >= target_percentage else "warning")
-            ),
-            "total_cost": round(total_cost, 6),
-            "allocated_cost": round(allocated_cost, 6),
-            "unallocated_cost": round(max(total_cost - allocated_cost, 0.0), 6),
-            "over_allocated_cost": round(over_allocated_cost, 6),
-            "total_records": total_records,
-            "allocated_records": int(allocated_row.allocated_records or 0),
-            "allocation_rows": int(allocated_row.allocation_rows or 0),
-            "start_date": start_date.isoformat() if start_date else None,
-            "end_date": end_date.isoformat() if end_date else None,
-        }
 
     async def get_unallocated_analysis(
-        self, tenant_id: uuid.UUID, start_date: date, end_date: date
-    ) -> List[Dict[str, Any]]:
+        self,
+        tenant_id: uuid.UUID,
+        start_date: date,
+        end_date: date,
+    ) -> list[dict[str, Any]]:
         """
         Identify top services contributing to unallocated spend.
         Provides recommendations for attribution rules.
         """
-        from sqlalchemy import func
-
-        query = (
-            select(
-                CostRecord.service,
-                func.sum(CostRecord.cost_usd).label("total_unallocated"),
-                func.count(CostRecord.id).label("record_count"),
-            )
-            .where(CostRecord.tenant_id == tenant_id)
-            .where(CostRecord.recorded_at >= start_date)
-            .where(CostRecord.recorded_at <= end_date)
-            .where(
-                (CostRecord.allocated_to.is_(None))
-                | (CostRecord.allocated_to == "Unallocated")
-            )
-            .group_by(CostRecord.service)
-            .order_by(func.sum(CostRecord.cost_usd).desc())
-            .limit(5)
+        return await _get_unallocated_analysis_impl(
+            self.db,
+            tenant_id,
+            start_date=start_date,
+            end_date=end_date,
         )
-
-        result = await self.db.execute(query)
-        rows = result.all()
-
-        analysis = []
-        for row in rows:
-            analysis.append(
-                {
-                    "service": row.service,
-                    "amount": float(row.total_unallocated),
-                    "count": row.record_count,
-                    "recommendation": f"Create a DIRECT rule for service '{row.service}' to a specific team bucket.",
-                }
-            )
-
-        return analysis
 
     async def simulate_rule(
         self,
         tenant_id: uuid.UUID,
         *,
         rule_type: str,
-        conditions: Dict[str, Any],
+        conditions: dict[str, Any],
         allocation: Any,
         start_date: date,
         end_date: date,
         sample_limit: int = 500,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Run a dry-run simulation of one rule against tenant records in a range.
         """
-        query = (
-            select(CostRecord)
-            .where(CostRecord.tenant_id == tenant_id)
-            .where(CostRecord.recorded_at >= start_date)
-            .where(CostRecord.recorded_at <= end_date)
-            .order_by(CostRecord.recorded_at.desc())
-            .limit(sample_limit)
-        )
-        result = await self.db.execute(query)
-        records = list(result.scalars().all())
-
-        simulated_rule = AttributionRule(
-            tenant_id=tenant_id,
-            name="simulation",
-            priority=1,
-            rule_type=self.normalize_rule_type(rule_type),
+        return await _simulate_rule_impl(
+            self.db,
+            tenant_id,
+            rule_type=rule_type,
             conditions=conditions,
             allocation=allocation,
-            is_active=True,
+            start_date=start_date,
+            end_date=end_date,
+            normalize_rule_type_fn=self.normalize_rule_type,
+            match_conditions_fn=self.match_conditions,
+            apply_rules_fn=self.apply_rules,
+            sample_limit=sample_limit,
         )
 
-        matched_records = 0
-        matched_cost = Decimal("0")
-        projected_by_bucket: Dict[str, Decimal] = {}
-        for record in records:
-            if not self.match_conditions(record, conditions):
-                continue
-            matched_records += 1
-            matched_cost += record.cost_usd
-            allocations = await self.apply_rules(record, [simulated_rule])
-            for alloc in allocations:
-                projected_by_bucket[alloc.allocated_to] = (
-                    projected_by_bucket.get(
-                        alloc.allocated_to,
-                        Decimal("0"),
-                    )
-                    + alloc.amount
-                )
 
-        allocation_rows = [
-            {"bucket": bucket, "amount": float(amount)}
-            for bucket, amount in sorted(
-                projected_by_bucket.items(),
-                key=lambda item: item[1],
-                reverse=True,
-            )
-        ]
-
-        sampled_records = len(records)
-        match_rate = (
-            round((matched_records / sampled_records), 4) if sampled_records else 0.0
-        )
-        projected_total = float(sum(projected_by_bucket.values(), Decimal("0")))
-
-        return {
-            "sampled_records": sampled_records,
-            "matched_records": matched_records,
-            "match_rate": match_rate,
-            "matched_cost": float(matched_cost),
-            "projected_allocation_total": projected_total,
-            "projected_allocations": allocation_rows,
-            "start_date": start_date.isoformat(),
-            "end_date": end_date.isoformat(),
-        }
+__all__ = [
+    "AttributionEngine",
+    "VALID_RULE_TYPES",
+    "ATTRIBUTION_DECIMAL_PARSE_RECOVERABLE_EXCEPTIONS",
+]

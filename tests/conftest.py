@@ -23,6 +23,19 @@ os.environ.setdefault("CSRF_SECRET_KEY", "test-csrf-secret-key-at-least-32-bytes
 os.environ.setdefault("KDF_SALT", "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=")
 os.environ.setdefault("DB_SSL_MODE", "disable")
 os.environ.setdefault("is_production", "false")
+# Keep test startup deterministic even when local .env contains non-boolean DEBUG strings.
+if os.environ.get("DEBUG", "").strip().lower() not in {
+    "",
+    "0",
+    "1",
+    "true",
+    "false",
+    "yes",
+    "no",
+    "on",
+    "off",
+}:
+    os.environ["DEBUG"] = "false"
 
 # Mock heavy dependencies only if they cause issues in specific environments
 # sys.modules["codecarbon"] = MagicMock()

@@ -48,15 +48,20 @@ def _parse_env_file(path: Path) -> dict[str, str]:
     return data
 
 
-def _is_env_file_tracked(repo_root: Path) -> bool:
-    proc = subprocess.run(
-        ["git", "ls-files", "--error-unmatch", ".env"],
-        cwd=repo_root,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    return proc.returncode == 0
+def _tracked_env_files(repo_root: Path) -> tuple[str, ...]:
+    candidates = (".env", "dashboard/.env")
+    tracked: list[str] = []
+    for relative_path in candidates:
+        proc = subprocess.run(
+            ["git", "ls-files", "--error-unmatch", relative_path],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode == 0:
+            tracked.append(relative_path)
+    return tuple(tracked)
 
 
 def _validate_positive_integer(values: dict[str, str], key: str) -> str | None:
@@ -83,8 +88,12 @@ def verify_env_hygiene(*, repo_root: Path, template_path: Path) -> tuple[str, ..
         else (repo_root / template_path).resolve()
     )
 
-    if _is_env_file_tracked(repo_root):
-        errors.append("`.env` is tracked by git. Secrets must never be committed.")
+    tracked_env_files = _tracked_env_files(repo_root)
+    if tracked_env_files:
+        for tracked_path in tracked_env_files:
+            errors.append(
+                f"`{tracked_path}` is tracked by git. Secrets must never be committed."
+            )
 
     if not resolved_template.exists():
         errors.append(f"Template file does not exist: {resolved_template.as_posix()}")

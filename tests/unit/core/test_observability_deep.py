@@ -1,4 +1,4 @@
-import os
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 import sys
 
@@ -39,14 +39,27 @@ class TestObservabilityDeep:
 
     def test_init_sentry_no_dsn(self):
         """Test sentry init fails without DSN."""
-        with patch.dict(os.environ, {"SENTRY_DSN": ""}):
+        with patch(
+            "app.shared.core.sentry.get_settings",
+            return_value=SimpleNamespace(
+                SENTRY_DSN="",
+                ENVIRONMENT="development",
+                APP_VERSION=None,
+                VERSION="0.1.0",
+            ),
+        ):
             assert init_sentry() is False
 
     def test_init_sentry_success(self):
         """Test sentry init success with DSN."""
-        with patch.dict(
-            os.environ,
-            {"SENTRY_DSN": "https://test@sentry.io/1", "ENVIRONMENT": "production"},
+        with patch(
+            "app.shared.core.sentry.get_settings",
+            return_value=SimpleNamespace(
+                SENTRY_DSN="https://test@sentry.io/1",
+                ENVIRONMENT="production",
+                APP_VERSION=None,
+                VERSION="0.1.0",
+            ),
         ):
             with patch.object(sentry_module.sentry_sdk, "init") as mock_init:
                 init_sentry()

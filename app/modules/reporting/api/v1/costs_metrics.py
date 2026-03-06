@@ -156,13 +156,46 @@ async def compute_provider_recency_summaries(
     summaries: list[ProviderRecencyResponse] = []
     for provider, model in provider_models:
         result = await db.execute(select(model).where(model.tenant_id == tenant_id))
-        connections = list(result.scalars().all())
+        threshold = now - timedelta(hours=recency_target_hours)
+        active_connections = 0
+        recently_ingested = 0
+        stale_connections = 0
+        never_ingested = 0
+        latest_ingested_at: Optional[datetime] = None
+
+        for conn in result.scalars():
+            if not is_connection_active_state(conn):
+                continue
+            active_connections += 1
+            last_ingested_at = getattr(conn, "last_ingested_at", None)
+            if isinstance(last_ingested_at, datetime):
+                if last_ingested_at.tzinfo is None:
+                    last_ingested_at = last_ingested_at.replace(tzinfo=timezone.utc)
+                if latest_ingested_at is None or last_ingested_at > latest_ingested_at:
+                    latest_ingested_at = last_ingested_at
+                if last_ingested_at >= threshold:
+                    recently_ingested += 1
+                else:
+                    stale_connections += 1
+            else:
+                never_ingested += 1
+
         summaries.append(
-            build_provider_recency_summary(
-                provider,
-                connections,
-                now=now,
+            ProviderRecencyResponse(
+                provider=provider,
+                active_connections=active_connections,
+                recently_ingested=recently_ingested,
+                stale_connections=stale_connections,
+                never_ingested=never_ingested,
+                latest_ingested_at=latest_ingested_at.isoformat()
+                if latest_ingested_at
+                else None,
                 recency_target_hours=recency_target_hours,
+                meets_recency_target=(
+                    active_connections > 0
+                    and stale_connections == 0
+                    and never_ingested == 0
+                ),
             )
         )
     return summaries
@@ -184,25 +217,20 @@ async def compute_ingestion_sla_metrics(
             BackgroundJob.created_at >= window_start,
         )
     )
-    jobs = list(result.scalars().all())
-
-    total_jobs = len(jobs)
-    successful_jobs = sum(1 for job in jobs if job.status == JobStatus.COMPLETED.value)
-    failed_jobs = sum(
-        1
-        for job in jobs
-        if job.status in {JobStatus.FAILED.value, JobStatus.DEAD_LETTER.value}
-    )
-    success_rate_percent = (
-        round((successful_jobs / total_jobs) * 100, 2) if total_jobs else 0.0
-    )
-    meets_sla = total_jobs > 0 and success_rate_percent >= target_success_rate_percent
-
+    total_jobs = 0
+    successful_jobs = 0
+    failed_jobs = 0
     latest_completed_at_dt: Optional[datetime] = None
     duration_samples: list[float] = []
     records_ingested = 0
 
-    for job in jobs:
+    for job in result.scalars():
+        total_jobs += 1
+        if job.status == JobStatus.COMPLETED.value:
+            successful_jobs += 1
+        if job.status in {JobStatus.FAILED.value, JobStatus.DEAD_LETTER.value}:
+            failed_jobs += 1
+
         if job.completed_at and (
             latest_completed_at_dt is None or job.completed_at > latest_completed_at_dt
         ):
@@ -217,6 +245,11 @@ async def compute_ingestion_sla_metrics(
             ingested_value = job.result.get("ingested")
             if isinstance(ingested_value, (int, float)):
                 records_ingested += int(ingested_value)
+
+    success_rate_percent = (
+        round((successful_jobs / total_jobs) * 100, 2) if total_jobs else 0.0
+    )
+    meets_sla = total_jobs > 0 and success_rate_percent >= target_success_rate_percent
 
     avg_duration_seconds = (
         round(sum(duration_samples) / len(duration_samples), 2)
@@ -333,18 +366,16 @@ async def compute_license_governance_kpi(
         else 0.0
     )
 
-    completed_rows = (
-        await db.execute(
-            select(RemediationRequest.created_at, RemediationRequest.executed_at).where(
-                RemediationRequest.tenant_id == tenant_id,
-                RemediationRequest.action == RemediationAction.RECLAIM_LICENSE_SEAT,
-                RemediationRequest.status == RemediationStatus.COMPLETED,
-                RemediationRequest.created_at >= start_dt,
-                RemediationRequest.created_at < end_dt_exclusive,
-                RemediationRequest.executed_at.is_not(None),
-            )
+    completed_rows = await db.execute(
+        select(RemediationRequest.created_at, RemediationRequest.executed_at).where(
+            RemediationRequest.tenant_id == tenant_id,
+            RemediationRequest.action == RemediationAction.RECLAIM_LICENSE_SEAT,
+            RemediationRequest.status == RemediationStatus.COMPLETED,
+            RemediationRequest.created_at >= start_dt,
+            RemediationRequest.created_at < end_dt_exclusive,
+            RemediationRequest.executed_at.is_not(None),
         )
-    ).all()
+    )
     cycle_hours: list[float] = []
     for created_at, executed_at in completed_rows:
         if created_at is None or executed_at is None:

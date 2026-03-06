@@ -20,16 +20,24 @@ from app.schemas.connections import (
     DiscoveryDeepScanRequest,
     DiscoveryStageARequest,
     DiscoveryStageResponse,
-    TemplateResponse,
 )
 from app.shared.connections.aws import AWSConnectionService
 from app.shared.connections.discovery import DiscoveryWizardService
-from app.shared.connections.instructions import ConnectionInstructionService
 from app.shared.connections.organizations import OrganizationsDiscoveryService
 from app.modules.governance.api.v1.settings.connections_helpers import (
     _enforce_connection_limit,
     _require_tenant_id,
     check_idp_deep_scan_tier,
+)
+from app.modules.governance.api.v1.settings.connections_setup_snippets import (
+    get_aws_setup_templates,
+    get_azure_setup,
+    get_gcp_setup,
+    get_hybrid_setup,
+    get_license_setup,
+    get_platform_setup,
+    get_saas_setup,
+    router as setup_snippets_router,
 )
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
 from app.shared.core.logging import audit_log
@@ -38,75 +46,31 @@ from app.shared.core.rate_limit import rate_limit, standard_limit
 from app.shared.db.session import get_db
 
 router = APIRouter()
+router.include_router(setup_snippets_router)
 
-
-@router.post("/aws/setup", response_model=TemplateResponse)
-@rate_limit("10/minute")
-async def get_aws_setup_templates(request: Request) -> TemplateResponse:
-    """Get CloudFormation/Terraform templates and Magic Link for AWS setup."""
-    external_id = AWSConnection.generate_external_id()
-    templates = AWSConnectionService.get_setup_templates(external_id)
-    return TemplateResponse(**templates)
-
-
-@router.post("/azure/setup")
-async def get_azure_setup(
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
-) -> dict[str, str]:
-    """Get Azure Workload Identity setup instructions."""
-    return ConnectionInstructionService.get_azure_setup_snippet(
-        str(_require_tenant_id(current_user))
-    )
-
-
-@router.post("/gcp/setup")
-async def get_gcp_setup(
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
-) -> dict[str, str]:
-    """Get GCP Identity Federation setup instructions."""
-    return ConnectionInstructionService.get_gcp_setup_snippet(
-        str(_require_tenant_id(current_user))
-    )
-
-
-@router.post("/saas/setup")
-async def get_saas_setup(
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
-) -> dict[str, Any]:
-    """Get SaaS Cloud+ setup instructions."""
-    return ConnectionInstructionService.get_saas_setup_snippet(
-        str(_require_tenant_id(current_user))
-    )
-
-
-@router.post("/license/setup")
-async def get_license_setup(
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
-) -> dict[str, Any]:
-    """Get License/ITAM Cloud+ setup instructions."""
-    return ConnectionInstructionService.get_license_setup_snippet(
-        str(_require_tenant_id(current_user))
-    )
-
-
-@router.post("/platform/setup")
-async def get_platform_setup(
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
-) -> dict[str, Any]:
-    """Get internal platform Cloud+ setup instructions."""
-    return ConnectionInstructionService.get_platform_setup_snippet(
-        str(_require_tenant_id(current_user))
-    )
-
-
-@router.post("/hybrid/setup")
-async def get_hybrid_setup(
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
-) -> dict[str, Any]:
-    """Get private/hybrid infra Cloud+ setup instructions."""
-    return ConnectionInstructionService.get_hybrid_setup_snippet(
-        str(_require_tenant_id(current_user))
-    )
+__all__ = (
+    "router",
+    "get_aws_setup_templates",
+    "get_azure_setup",
+    "get_gcp_setup",
+    "get_saas_setup",
+    "get_license_setup",
+    "get_platform_setup",
+    "get_hybrid_setup",
+    "create_aws_connection",
+    "list_aws_connections",
+    "verify_aws_connection",
+    "delete_aws_connection",
+    "sync_aws_org",
+    "list_discovered_accounts",
+    "link_discovered_account",
+    "discovery_stage_a",
+    "discovery_deep_scan",
+    "list_discovery_candidates",
+    "accept_discovery_candidate",
+    "ignore_discovery_candidate",
+    "mark_discovery_candidate_connected",
+)
 
 
 @router.post(

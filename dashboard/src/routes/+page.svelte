@@ -1,13 +1,3 @@
-<!--
-  Dashboard Home Page - Premium SaaS Design
-  
-  Features:
-  - Stats cards with motion animations
-  - Staggered entrance effects
-  - Clean data visualization
-  - Loading skeletons
--->
-
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { assets, base } from '$app/paths';
@@ -238,13 +228,13 @@
 			</div>
 
 			<DateRangePicker onDateChange={handleDateChange} />
-		</div>
-
-		{#if error}
-			<div class="card border-danger-500/50 bg-danger-500/10">
-				<p class="text-danger-400">{error}</p>
 			</div>
-		{:else}
+
+			{#if error}
+				<div class="card bg-danger-500/10" style="border-color: rgb(244 63 94 / 0.5);">
+					<p class="text-danger-400">{error}</p>
+				</div>
+			{:else}
 			<!-- Persona Next Actions -->
 			<div class="card stagger-enter" style="animation-delay: 160ms;">
 				<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -407,9 +397,3 @@
 		}}
 	/>
 {/if}
-
-<style>
-	.border-danger-500\/50 {
-		border-color: rgb(244 63 94 / 0.5);
-	}
-</style>

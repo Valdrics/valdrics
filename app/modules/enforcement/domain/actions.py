@@ -23,6 +23,11 @@ from app.models.enforcement import (
     EnforcementPolicy,
 )
 from app.modules.enforcement.domain.policy_document import PolicyDocument
+from app.modules.enforcement.domain.actions_terminal_ops import (
+    cancel_action_impl,
+    complete_action_impl,
+    fail_action_impl,
+)
 
 _DEFAULT_ACTION_MAX_ATTEMPTS = 3
 _DEFAULT_ACTION_RETRY_BACKOFF_SECONDS = 60
@@ -424,32 +429,18 @@ class EnforcementActionOrchestrator:
         result_payload: Mapping[str, Any] | None = None,
         now: datetime | None = None,
     ) -> EnforcementActionExecution:
-        action = await self.get_action(tenant_id=tenant_id, action_id=action_id)
-        if action.status != EnforcementActionStatus.RUNNING:
-            raise HTTPException(
-                status_code=409,
-                detail="Only running actions can be completed",
-            )
-        if action.locked_by_worker_id is not None and action.locked_by_worker_id != worker_id:
-            raise HTTPException(
-                status_code=409,
-                detail="Action lease is owned by another worker",
-            )
-
-        completed_at = _as_utc(now) if now is not None else _utcnow()
-        normalized_result_payload = dict(result_payload or {})
-        action.status = EnforcementActionStatus.SUCCEEDED
-        action.result_payload = normalized_result_payload
-        action.result_payload_sha256 = _json_sha256(normalized_result_payload)
-        action.last_error_code = None
-        action.last_error_message = None
-        action.locked_by_worker_id = None
-        action.lease_expires_at = None
-        action.completed_at = completed_at
-        action.next_retry_at = completed_at
-        await self.db.commit()
-        await self.db.refresh(action)
-        return action
+        return await complete_action_impl(
+            db=self.db,
+            get_action_fn=self.get_action,
+            tenant_id=tenant_id,
+            action_id=action_id,
+            worker_id=worker_id,
+            result_payload=result_payload,
+            now=now,
+            as_utc_fn=_as_utc,
+            utcnow_fn=_utcnow,
+            json_sha256_fn=_json_sha256,
+        )
 
     async def fail_action(
         self,
@@ -463,66 +454,21 @@ class EnforcementActionOrchestrator:
         result_payload: Mapping[str, Any] | None = None,
         now: datetime | None = None,
     ) -> EnforcementActionExecution:
-        action = await self.get_action(tenant_id=tenant_id, action_id=action_id)
-        if action.status != EnforcementActionStatus.RUNNING:
-            raise HTTPException(
-                status_code=409,
-                detail="Only running actions can be failed",
-            )
-        if action.locked_by_worker_id is not None and action.locked_by_worker_id != worker_id:
-            raise HTTPException(
-                status_code=409,
-                detail="Action lease is owned by another worker",
-            )
-
-        normalized_error_code = str(error_code or "").strip().lower()
-        if not normalized_error_code:
-            raise HTTPException(status_code=422, detail="error_code is required")
-        if len(normalized_error_code) > 64:
-            raise HTTPException(
-                status_code=422,
-                detail="error_code must be <= 64 characters",
-            )
-        normalized_error_message = str(error_message or "").strip()
-        if not normalized_error_message:
-            raise HTTPException(status_code=422, detail="error_message is required")
-        if len(normalized_error_message) > 1000:
-            raise HTTPException(
-                status_code=422,
-                detail="error_message must be <= 1000 characters",
-            )
-
-        failed_at = _as_utc(now) if now is not None else _utcnow()
-        normalized_result_payload = dict(result_payload or {})
-        if not normalized_result_payload:
-            normalized_result_payload = {
-                "error_code": normalized_error_code,
-                "error_message": normalized_error_message,
-                "retryable": bool(retryable),
-            }
-
-        should_retry = bool(retryable) and int(action.attempt_count) < int(action.max_attempts)
-        action.last_error_code = normalized_error_code
-        action.last_error_message = normalized_error_message
-        action.result_payload = normalized_result_payload
-        action.result_payload_sha256 = _json_sha256(normalized_result_payload)
-        action.locked_by_worker_id = None
-        action.lease_expires_at = None
-
-        if should_retry:
-            action.status = EnforcementActionStatus.QUEUED
-            action.next_retry_at = failed_at + timedelta(
-                seconds=int(action.retry_backoff_seconds)
-            )
-            action.completed_at = None
-        else:
-            action.status = EnforcementActionStatus.FAILED
-            action.next_retry_at = failed_at
-            action.completed_at = failed_at
-
-        await self.db.commit()
-        await self.db.refresh(action)
-        return action
+        return await fail_action_impl(
+            db=self.db,
+            get_action_fn=self.get_action,
+            tenant_id=tenant_id,
+            action_id=action_id,
+            worker_id=worker_id,
+            error_code=error_code,
+            error_message=error_message,
+            retryable=retryable,
+            result_payload=result_payload,
+            now=now,
+            as_utc_fn=_as_utc,
+            utcnow_fn=_utcnow,
+            json_sha256_fn=_json_sha256,
+        )
 
     async def cancel_action(
         self,
@@ -533,33 +479,15 @@ class EnforcementActionOrchestrator:
         reason: str | None = None,
         now: datetime | None = None,
     ) -> EnforcementActionExecution:
-        action = await self.get_action(tenant_id=tenant_id, action_id=action_id)
-        if action.status in {
-            EnforcementActionStatus.SUCCEEDED,
-            EnforcementActionStatus.FAILED,
-            EnforcementActionStatus.CANCELLED,
-        }:
-            raise HTTPException(
-                status_code=409,
-                detail="Terminal action cannot be cancelled",
-            )
-
-        cancelled_at = _as_utc(now) if now is not None else _utcnow()
-        action.status = EnforcementActionStatus.CANCELLED
-        action.locked_by_worker_id = None
-        action.lease_expires_at = None
-        action.completed_at = cancelled_at
-        action.next_retry_at = cancelled_at
-        if reason is not None:
-            normalized_reason = str(reason).strip()
-            action.last_error_code = "cancelled"
-            action.last_error_message = normalized_reason[:1000] or "cancelled"
-            action.result_payload = {
-                "cancelled_by": str(actor_id),
-                "reason": action.last_error_message,
-            }
-            action.result_payload_sha256 = _json_sha256(action.result_payload)
-
-        await self.db.commit()
-        await self.db.refresh(action)
-        return action
+        return await cancel_action_impl(
+            db=self.db,
+            get_action_fn=self.get_action,
+            tenant_id=tenant_id,
+            action_id=action_id,
+            actor_id=actor_id,
+            reason=reason,
+            now=now,
+            as_utc_fn=_as_utc,
+            utcnow_fn=_utcnow,
+            json_sha256_fn=_json_sha256,
+        )

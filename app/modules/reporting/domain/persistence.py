@@ -9,14 +9,18 @@ from typing import Any, AsyncIterable
 from datetime import date, datetime, timedelta, timezone
 import uuid
 from decimal import Decimal, InvalidOperation
-from sqlalchemy import case, delete, func, literal, select, update
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 from app.models.cloud import CostRecord
 from app.schemas.costs import CloudUsageSummary
-from app.shared.core.async_utils import maybe_await
 from app.modules.reporting.domain.canonicalization import map_canonical_charge_category
+from app.modules.reporting.domain.persistence_adjustment_ops import (
+    check_for_significant_adjustments as _check_for_significant_adjustments_impl,
+)
+from app.modules.reporting.domain.persistence_upsert_ops import (
+    bulk_upsert as _bulk_upsert_impl,
+)
 
 logger = structlog.get_logger()
 
@@ -269,123 +273,7 @@ class CostPersistenceService:
 
     async def _bulk_upsert(self, values: list[dict[str, Any]]) -> None:
         """Helper for PostgreSQL ON CONFLICT DO UPDATE bulk insert."""
-        if not values:
-            return
-        bind_url = str(getattr(getattr(self.db, "bind", None), "url", ""))
-        if not bind_url:
-            bind = await maybe_await(self.db.get_bind())
-            bind_url = str(getattr(bind, "url", ""))
-        if "postgresql" in bind_url:
-            stmt = pg_insert(CostRecord).values(values)
-            # Never downgrade finalized rows back to preliminary during re-ingestion.
-            # If the incoming payload explicitly marks a row FINAL, we allow the upgrade.
-            incoming_status = stmt.excluded.cost_status
-            is_preliminary_update = case(
-                (incoming_status == "FINAL", literal(False)),
-                (CostRecord.cost_status == "FINAL", CostRecord.is_preliminary),
-                else_=stmt.excluded.is_preliminary,
-            )
-            cost_status_update = case(
-                (incoming_status == "FINAL", literal("FINAL")),
-                (CostRecord.cost_status == "FINAL", CostRecord.cost_status),
-                else_=incoming_status,
-            )
-            reconciliation_run_update = func.coalesce(
-                stmt.excluded.reconciliation_run_id,
-                CostRecord.reconciliation_run_id,
-            )
-            stmt = stmt.on_conflict_do_update(
-                constraint="uix_account_cost_granularity",
-                set_={
-                    "resource_id": stmt.excluded.resource_id,
-                    "usage_amount": stmt.excluded.usage_amount,
-                    "usage_unit": stmt.excluded.usage_unit,
-                    "cost_usd": stmt.excluded.cost_usd,
-                    "amount_raw": stmt.excluded.amount_raw,
-                    "currency": stmt.excluded.currency,
-                    "usage_type": stmt.excluded.usage_type,
-                    "canonical_charge_category": stmt.excluded.canonical_charge_category,
-                    "canonical_charge_subcategory": stmt.excluded.canonical_charge_subcategory,
-                    "canonical_mapping_version": stmt.excluded.canonical_mapping_version,
-                    "is_preliminary": is_preliminary_update,
-                    "cost_status": cost_status_update,
-                    "reconciliation_run_id": reconciliation_run_update,
-                    "ingestion_metadata": stmt.excluded.ingestion_metadata,
-                    "tags": stmt.excluded.tags,
-                },
-            )
-            await self.db.execute(stmt)
-        else:
-            # Fallback for SQLite/Testing: Manual Idempotency
-            # We use session methods directly to avoid driver-level conflicts
-            for val in values:
-                # Use a fresh select to avoid session state issues
-                select_stmt = select(CostRecord).where(
-                    CostRecord.account_id == val["account_id"],
-                    CostRecord.recorded_at == val["recorded_at"],
-                    CostRecord.timestamp == val["timestamp"],
-                    CostRecord.service == val["service"],
-                    CostRecord.region == val["region"],
-                    CostRecord.usage_type == val["usage_type"],
-                    CostRecord.resource_id == val.get("resource_id", ""),
-                )
-                # Use scalar() which is safer
-                res = await self.db.execute(select_stmt)
-                scalars_result = await maybe_await(res.scalars())
-                existing = await maybe_await(scalars_result.first())
-
-                if existing:
-                    if "resource_id" in val and val["resource_id"] is not None:
-                        existing.resource_id = str(val["resource_id"])
-                    if val.get("usage_amount") is not None:
-                        existing.usage_amount = Decimal(str(val["usage_amount"]))
-                    if val.get("usage_unit") is not None:
-                        existing.usage_unit = str(val["usage_unit"])
-                    if val.get("cost_usd") is not None:
-                        existing.cost_usd = Decimal(str(val["cost_usd"]))
-                    if val.get("amount_raw") is not None:
-                        existing.amount_raw = Decimal(str(val["amount_raw"]))
-                    if val.get("currency") is not None:
-                        existing.currency = str(val["currency"])
-                    if val.get("usage_type") is not None:
-                        existing.usage_type = val["usage_type"]
-                    if val.get("canonical_charge_category") is not None:
-                        existing.canonical_charge_category = val[
-                            "canonical_charge_category"
-                        ]
-                    if "canonical_charge_subcategory" in val:
-                        existing.canonical_charge_subcategory = val[
-                            "canonical_charge_subcategory"
-                        ]
-                    if val.get("canonical_mapping_version") is not None:
-                        existing.canonical_mapping_version = val[
-                            "canonical_mapping_version"
-                        ]
-                    incoming_status_val = str(
-                        val.get("cost_status") or existing.cost_status or "PRELIMINARY"
-                    )
-                    if incoming_status_val == "FINAL":
-                        existing.cost_status = "FINAL"
-                        existing.is_preliminary = False
-                    elif str(getattr(existing, "cost_status", "")) == "FINAL":
-                        # Never downgrade finalized rows during re-ingestion.
-                        existing.cost_status = "FINAL"
-                        existing.is_preliminary = False
-                    else:
-                        existing.cost_status = incoming_status_val
-                        existing.is_preliminary = bool(
-                            val.get("is_preliminary", existing.is_preliminary)
-                        )
-                    if val.get("reconciliation_run_id") is not None:
-                        existing.reconciliation_run_id = val.get(
-                            "reconciliation_run_id"
-                        )
-                    existing.ingestion_metadata = val.get("ingestion_metadata")
-                    existing.tags = val.get("tags")
-                else:
-                    self.db.add(CostRecord(**val))
-
-            await self.db.flush()
+        await _bulk_upsert_impl(self.db, values)
 
     async def _check_for_significant_adjustments(
         self,
@@ -398,116 +286,13 @@ class CostPersistenceService:
         Essential for financial reconciliation (Phase 2).
         Now logs to Forensic Audit Trail (Phase 1.1).
         """
-        if not new_records:
-            return
-
-        from app.models.cost_audit import CostAuditLog
-
-        # 1. Fetch existing costs for these specific records to detect deltas
-        dates: set[date] = set()
-        services: set[str] = set()
-        for record in new_records:
-            ts = record.get("timestamp")
-            if isinstance(ts, datetime):
-                dates.add(ts.date())
-            elif isinstance(record.get("recorded_at"), date):
-                dates.add(record["recorded_at"])
-            services.add(str(record.get("service", "Unknown") or "Unknown"))
-
-        stmt = select(
-            CostRecord.id,
-            CostRecord.timestamp,
-            CostRecord.service,
-            CostRecord.region,
-            CostRecord.usage_type,
-            CostRecord.resource_id,
-            CostRecord.cost_usd,
-        ).where(
-            CostRecord.tenant_id == tenant_id,
-            CostRecord.account_id == account_id,
-            CostRecord.recorded_at.in_(dates),
-            CostRecord.service.in_(services),
-            CostRecord.cost_status == "FINAL",
+        await _check_for_significant_adjustments_impl(
+            self.db,
+            tenant_id=tenant_id,
+            account_id=account_id,
+            new_records=new_records,
+            logger_obj=logger,
         )
-
-        result = await self.db.execute(stmt)
-        existing: dict[tuple[datetime, str, str, str, str], tuple[Any, float]] = {}
-        for row in result.all():
-            ts = getattr(row, "timestamp", None)
-            if not isinstance(ts, datetime):
-                continue
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            service = str(getattr(row, "service", "") or "Unknown")
-            region = str(getattr(row, "region", "") or "Global")
-            usage_type = str(getattr(row, "usage_type", "") or "")
-            resource_id = str(getattr(row, "resource_id", "") or "")
-            key = (ts, service, region, usage_type, resource_id)
-            existing[key] = (
-                getattr(row, "id"),
-                float(getattr(row, "cost_usd", 0) or 0),
-            )
-
-        audit_logs = []
-        for nr in new_records:
-            ts = nr.get("timestamp")
-            if not isinstance(ts, datetime):
-                continue
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=timezone.utc)
-            key = (
-                ts,
-                str(nr.get("service", "Unknown") or "Unknown"),
-                str(nr.get("region", "Global") or "Global"),
-                str(nr.get("usage_type", "") or ""),
-                str(nr.get("resource_id", "") or ""),
-            )
-            existing_data = existing.get(key)
-            if not existing_data:
-                continue
-
-            record_id, old_cost = existing_data
-            new_cost = float(nr.get("cost_usd") or 0)
-
-            if new_cost == old_cost:
-                continue
-
-            # Always log changes; % deltas are computed when a baseline exists.
-            audit_logs.append(
-                CostAuditLog(
-                    cost_record_id=record_id,
-                    cost_recorded_at=ts.date(),
-                    old_cost=Decimal(str(old_cost)),
-                    new_cost=Decimal(str(new_cost)),
-                    reason="RESTATEMENT",
-                    ingestion_batch_id=nr.get("reconciliation_run_id"),
-                )
-            )
-
-            delta_ratio: float | None = None
-            if old_cost and old_cost != 0:
-                delta_ratio = abs(new_cost - old_cost) / abs(old_cost)
-            elif new_cost != 0:
-                delta_ratio = 1.0
-
-            if delta_ratio is not None and delta_ratio > 0.02:  # 2% threshold
-                logger.critical(
-                    "significant_cost_adjustment_detected",
-                    tenant_id=tenant_id,
-                    account_id=account_id,
-                    service=key[1],
-                    timestamp=ts.isoformat(),
-                    old_cost=old_cost,
-                    new_cost=new_cost,
-                    delta_percent=round(delta_ratio * 100, 2),
-                    record_id=str(record_id),
-                )
-
-        if audit_logs:
-            self.db.add_all(audit_logs)
-            await (
-                self.db.flush()
-            )  # Ensure logs are sent before main records are updated
 
     async def clear_range(
         self, tenant_id: str, account_id: str, start_date: Any, end_date: Any

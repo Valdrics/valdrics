@@ -6,10 +6,9 @@ import LandingRoiSimulator from '$lib/components/landing/LandingRoiSimulator.sve
 import LandingRoiCalculator from '$lib/components/landing/LandingRoiCalculator.svelte';
 import LandingRoiPlannerCta from '$lib/components/landing/LandingRoiPlannerCta.svelte';
 import LandingTrustSection from '$lib/components/landing/LandingTrustSection.svelte';
-import LandingLeadCaptureSection from '$lib/components/landing/LandingLeadCaptureSection.svelte';
-import LandingExitIntentPrompt from '$lib/components/landing/LandingExitIntentPrompt.svelte';
 import { REALTIME_SIGNAL_SNAPSHOTS } from '$lib/landing/realtimeSignalMap';
 import { calculateLandingRoi, normalizeLandingRoiInputs } from '$lib/landing/roiCalculator';
+import './landing_decomposition.lead_exit.svelte.test';
 
 describe('Landing component decomposition', () => {
 	it('renders hero copy and keeps CTA tracking callbacks wired', async () => {
@@ -389,80 +388,4 @@ describe('Landing component decomposition', () => {
 		expect(onRoiCta).toHaveBeenCalledTimes(1);
 	});
 
-	it('submits newsletter capture and routes CTA interactions', async () => {
-		const onTrackCta = vi.fn();
-		const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-			new Response(JSON.stringify({ ok: true, accepted: true }), {
-				status: 202,
-				headers: { 'content-type': 'application/json' }
-			})
-		);
-
-		render(LandingLeadCaptureSection, {
-			props: {
-				subscribeApiPath: '/api/marketing/subscribe',
-				startFreeHref: '/auth/login?intent=start_free',
-				resourcesHref: '/resources',
-				onTrackCta
-			}
-		});
-
-		await fireEvent.input(screen.getByLabelText(/work email/i), {
-			target: { value: 'buyer@example.com' }
-		});
-		const submitButton = screen.getByRole('button', { name: /send me weekly insights/i });
-		const form = submitButton.closest('form');
-		expect(form).toBeTruthy();
-		if (!form) {
-			return;
-		}
-		await fireEvent.submit(form);
-
-		expect(fetchSpy).toHaveBeenCalledTimes(1);
-		expect(onTrackCta).toHaveBeenCalledWith(
-			'cta_click',
-			'lead_capture',
-			'newsletter_subscribe_success'
-		);
-		expect(screen.getByText(/subscribed\. check your inbox/i)).toBeTruthy();
-	});
-
-	it('opens exit intent prompt on desktop mouseout and supports dismissal', async () => {
-		Object.defineProperty(window, 'matchMedia', {
-			writable: true,
-			value: vi.fn().mockReturnValue({ matches: false })
-		});
-		localStorage.clear();
-		const onTrackCta = vi.fn();
-		vi.spyOn(globalThis, 'fetch').mockResolvedValue(
-			new Response(JSON.stringify({ ok: true, accepted: true }), {
-				status: 202,
-				headers: { 'content-type': 'application/json' }
-			})
-		);
-
-		render(LandingExitIntentPrompt, {
-			props: {
-				startFreeHref: '/auth/login?intent=start_free',
-				resourcesHref: '/resources',
-				subscribeApiPath: '/api/marketing/subscribe',
-				onTrackCta
-			}
-		});
-
-		window.dispatchEvent(
-			new MouseEvent('mouseout', {
-				clientY: 0,
-				relatedTarget: null
-			})
-		);
-
-		expect(
-			await screen.findByRole('heading', { name: /want a weekly spend-control brief instead/i })
-		).toBeTruthy();
-		expect(onTrackCta).toHaveBeenCalledWith('cta_view', 'exit_prompt', 'desktop_exit_intent');
-
-		await fireEvent.click(screen.getByRole('button', { name: /close prompt/i }));
-		expect(localStorage.getItem('valdrics.landing.exit_prompt.dismissed.v1')).toBe('1');
-	});
 });

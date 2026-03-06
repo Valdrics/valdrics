@@ -1,14 +1,23 @@
 from functools import lru_cache
 from threading import Lock
 from typing import Optional
-import base64
-import binascii
-import ipaddress
-import os
 import structlog
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, model_validator
 from app.shared.core.constants import AWS_SUPPORTED_REGIONS
+from app.shared.core.config_validation import (
+    normalize_branding as _normalize_branding_impl,
+    validate_all_config as _validate_all_config_impl,
+    validate_billing_config as _validate_billing_config_impl,
+    validate_core_secrets as _validate_core_secrets_impl,
+    validate_database_config as _validate_database_config_impl,
+    validate_enforcement_guardrails as _validate_enforcement_guardrails_impl,
+    validate_environment_safety as _validate_environment_safety_impl,
+    validate_integration_config as _validate_integration_config_impl,
+    validate_llm_config as _validate_llm_config_impl,
+    validate_remediation_guardrails as _validate_remediation_guardrails_impl,
+    validate_turnstile_config as _validate_turnstile_config_impl,
+)
 
 # Environment Constants (Finding #10)
 ENV_PRODUCTION = "production"
@@ -53,6 +62,7 @@ class Settings(BaseSettings):
 
     APP_NAME: str = "Valdrics"
     VERSION: str = "0.1.0"
+    APP_VERSION: Optional[str] = None
     DEBUG: bool = False
     # ENVIRONMENT options: local, development, staging, production
     # is_production property ensures strict security for 'production'
@@ -61,7 +71,11 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None  # Added for D5: Telemetry Sink
     OTEL_EXPORTER_OTLP_INSECURE: bool = False  # SEC-07: Secure Tracing
     CSRF_SECRET_KEY: Optional[str] = None  # SEC-01: CSRF
+    CSRF_TEST_SECRET_KEY: Optional[str] = None
     TESTING: bool = False
+    PYTEST_CURRENT_TEST: Optional[str] = None
+    SENTRY_DSN: Optional[str] = None
+    WEB_CONCURRENCY: int = 1
     RATELIMIT_ENABLED: bool = True
     # In staging/production, distributed rate limiting is required by default.
     # This override exists only for controlled break-glass situations.
@@ -98,398 +112,64 @@ class Settings(BaseSettings):
         PRODUCTION-GRADE: Centralized validation orchestrator.
         Groups validation by concern for clarity and specificity.
         """
-        self._normalize_branding()
-        if self.TESTING and self.ENVIRONMENT in {ENV_PRODUCTION, ENV_STAGING}:
-            raise ValueError(
-                "TESTING must be false in staging/production runtime environments."
-            )
-        if self.TESTING:
-            return self
-
-        self._validate_core_secrets()
-        self._validate_database_config()
-        self._validate_llm_config()
-        self._validate_billing_config()
-        self._validate_integration_config()
-        self._validate_turnstile_config()
-        self._validate_remediation_guardrails()
-        self._validate_enforcement_guardrails()
-        self._validate_environment_safety()
-
+        _validate_all_config_impl(
+            self,
+            env_production=ENV_PRODUCTION,
+            env_staging=ENV_STAGING,
+        )
         return self
 
     def _normalize_branding(self) -> None:
-        """Normalize legacy product names to canonical Valdrics branding."""
-        token = str(self.APP_NAME or "").strip().lower()
-        legacy_names = {
-            "valdrics",
-            "valdrics",
-            "valdrics-ai",
-            "valdrics",
-            "valdrics ai",
-        }
-        if token in legacy_names:
-            structlog.get_logger().warning(
-                "legacy_app_name_normalized",
-                provided_app_name=self.APP_NAME,
-                normalized_app_name="Valdrics",
-            )
-            self.APP_NAME = "Valdrics"
+        """Normalize branding aliases to canonical public product name."""
+        _normalize_branding_impl(self)
 
     def _validate_core_secrets(self) -> None:
-        """Validates critical security primitives (SEC-01, SEC-02, SEC-06)."""
-        # Always require these to prevent encryption instability or insecure defaults.
-        critical_keys = {
-            "CSRF_SECRET_KEY": self.CSRF_SECRET_KEY,
-            "ENCRYPTION_KEY": self.ENCRYPTION_KEY,
-            "SUPABASE_JWT_SECRET": self.SUPABASE_JWT_SECRET,
-        }
-
-        for name, value in critical_keys.items():
-            if not value or len(value) < 32:
-                # Finding #C4: Explicitly reject placeholders or inadequate keys
-                raise ValueError(f"{name} must be set to a secure value (>= 32 chars).")
-
-        csrf_value = str(self.CSRF_SECRET_KEY or "").strip().lower()
-        if csrf_value in {
-            "dev_secret_key_change_me_in_prod",
-            "change_me",
-            "changeme",
-            "default",
-            "csrf_secret_key",
-        }:
-            raise ValueError(
-                "SECURITY ERROR: CSRF_SECRET_KEY must be set to a non-default secure value."
-            )
-
-        # KDF_SALT validation (Base64 check)
-        if not self.KDF_SALT:
-            raise ValueError("KDF_SALT must be set (base64-encoded random 32 bytes).")
-        try:
-            decoded_salt = base64.b64decode(self.KDF_SALT)
-            if len(decoded_salt) != 32:
-                raise ValueError("KDF_SALT must decode to exactly 32 bytes.")
-        except (binascii.Error, TypeError, ValueError) as exc:
-            raise ValueError("KDF_SALT must be valid base64.") from exc
-
-        if self.ENCRYPTION_KEY_CACHE_TTL_SECONDS < 60:
-            raise ValueError("ENCRYPTION_KEY_CACHE_TTL_SECONDS must be >= 60.")
-        if self.ENCRYPTION_KEY_CACHE_MAX_SIZE < 10:
-            raise ValueError("ENCRYPTION_KEY_CACHE_MAX_SIZE must be >= 10.")
-        if self.BLIND_INDEX_KDF_ITERATIONS < 10000:
-            raise ValueError("BLIND_INDEX_KDF_ITERATIONS must be >= 10000.")
+        """Validate critical security primitives (SEC-01/SEC-02/SEC-06)."""
+        _validate_core_secrets_impl(self)
 
     def _validate_database_config(self) -> None:
-        """Validates database and redis connectivity settings."""
-        if self.is_production:
-            if not self.DATABASE_URL:
-                raise ValueError("DATABASE_URL is required in production.")
-
-            # SEC-04: Database SSL Mode handled by Enum/Literal validation
-            # in session.py, but we enforce production levels here.
-            if self.DB_SSL_MODE not in ["require", "verify-ca", "verify-full"]:
-                raise ValueError(
-                    f"SECURITY ERROR: DB_SSL_MODE must be secure in production (current: {self.DB_SSL_MODE})."
-                )
-            if self.DB_SSL_MODE in {"verify-ca", "verify-full"} and not self.DB_SSL_CA_CERT_PATH:
-                raise ValueError(
-                    "DB_SSL_CA_CERT_PATH is mandatory when DB_SSL_MODE is verify-ca or verify-full in production."
-                )
-            if self.DB_USE_NULL_POOL and not self.DB_EXTERNAL_POOLER:
-                raise ValueError(
-                    "DB_USE_NULL_POOL=true requires DB_EXTERNAL_POOLER=true in production."
-                )
-
-        # Redis URL construction fallback
-        if not self.REDIS_URL and self.REDIS_HOST and self.REDIS_PORT:
-            self.REDIS_URL = f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}"
-
-        if self.DB_SLOW_QUERY_THRESHOLD_SECONDS <= 0:
-            raise ValueError("DB_SLOW_QUERY_THRESHOLD_SECONDS must be > 0.")
+        """Validate database and cache connectivity settings."""
+        _validate_database_config_impl(self, is_production=self.is_production)
 
     def _validate_llm_config(self) -> None:
-        """Validates LLM provider keys based on selection."""
-        provider_keys = {
-            "openai": self.OPENAI_API_KEY,
-            "claude": self.CLAUDE_API_KEY,
-            "anthropic": self.ANTHROPIC_API_KEY or self.CLAUDE_API_KEY,
-            "google": self.GOOGLE_API_KEY,
-            "groq": self.GROQ_API_KEY,
-        }
-
-        if self.LLM_PROVIDER in provider_keys and not provider_keys[self.LLM_PROVIDER]:
-            if self.is_production:
-                raise ValueError(
-                    f"LLM_PROVIDER is '{self.LLM_PROVIDER}' but its API key is missing."
-                )
-            else:
-                structlog.get_logger().info(
-                    "llm_provider_key_missing_non_prod", provider=self.LLM_PROVIDER
-                )
-
-        if self.LLM_GLOBAL_ABUSE_PER_MINUTE_CAP < 1:
-            raise ValueError("LLM_GLOBAL_ABUSE_PER_MINUTE_CAP must be >= 1.")
-        if self.LLM_GLOBAL_ABUSE_PER_MINUTE_CAP > 100000:
-            raise ValueError("LLM_GLOBAL_ABUSE_PER_MINUTE_CAP must be <= 100000.")
-        if self.LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD < 1:
-            raise ValueError(
-                "LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD must be >= 1."
-            )
-        if self.LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD > 10000:
-            raise ValueError(
-                "LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD must be <= 10000."
-            )
-        if self.LLM_GLOBAL_ABUSE_BLOCK_SECONDS < 30:
-            raise ValueError("LLM_GLOBAL_ABUSE_BLOCK_SECONDS must be >= 30.")
-        if self.LLM_GLOBAL_ABUSE_BLOCK_SECONDS > 86400:
-            raise ValueError("LLM_GLOBAL_ABUSE_BLOCK_SECONDS must be <= 86400.")
+        """Validate LLM provider key posture and abuse bounds."""
+        _validate_llm_config_impl(self, is_production=self.is_production)
 
     def _validate_billing_config(self) -> None:
-        """Validates Paystack credentials (SEC-P0)."""
-        default_currency = (
-            str(self.PAYSTACK_DEFAULT_CHECKOUT_CURRENCY or "NGN").strip().upper()
-        )
-        if default_currency not in {"NGN", "USD"}:
-            raise ValueError(
-                "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY must be one of: NGN, USD."
-            )
-
-        if self.is_production:
-            if not self.PAYSTACK_SECRET_KEY or self.PAYSTACK_SECRET_KEY.startswith(
-                "sk_test"
-            ):
-                raise ValueError(
-                    "PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production."
-                )
-            if not self.PAYSTACK_PUBLIC_KEY:
-                raise ValueError("PAYSTACK_PUBLIC_KEY is required in production.")
-
-            if default_currency == "USD" and not self.PAYSTACK_ENABLE_USD_CHECKOUT:
-                raise ValueError(
-                    "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY cannot be USD when PAYSTACK_ENABLE_USD_CHECKOUT is false."
-                )
-
-        paystack_webhook_ips = [
-            str(value).strip()
-            for value in self.PAYSTACK_WEBHOOK_ALLOWED_IPS
-            if str(value).strip()
-        ]
-        if not paystack_webhook_ips:
-            raise ValueError("PAYSTACK_WEBHOOK_ALLOWED_IPS must contain at least one IP.")
-        for ip_value in paystack_webhook_ips:
-            try:
-                ipaddress.ip_address(ip_value)
-            except ValueError as exc:
-                raise ValueError(
-                    f"PAYSTACK_WEBHOOK_ALLOWED_IPS contains invalid IP address: {ip_value}"
-                ) from exc
+        """Validate billing/provider credentials and webhook allowlist."""
+        _validate_billing_config_impl(self, is_production=self.is_production)
 
     def _validate_turnstile_config(self) -> None:
-        """Validates Turnstile anti-bot controls for public/auth attack surfaces."""
-        if self.TURNSTILE_TIMEOUT_SECONDS <= 0:
-            raise ValueError("TURNSTILE_TIMEOUT_SECONDS must be > 0.")
-        if self.TURNSTILE_TIMEOUT_SECONDS > 15:
-            raise ValueError("TURNSTILE_TIMEOUT_SECONDS must be <= 15.")
-
-        verify_url = str(self.TURNSTILE_VERIFY_URL or "").strip().lower()
-        if not verify_url.startswith("https://"):
-            raise ValueError("TURNSTILE_VERIFY_URL must use https://.")
-
-        turnstile_required = (
-            self.TURNSTILE_REQUIRE_PUBLIC_ASSESSMENT
-            or self.TURNSTILE_REQUIRE_SSO_DISCOVERY
-            or self.TURNSTILE_REQUIRE_ONBOARD
+        """Validate Turnstile anti-bot controls for public/auth surfaces."""
+        _validate_turnstile_config_impl(
+            self,
+            env_production=ENV_PRODUCTION,
+            env_staging=ENV_STAGING,
         )
-        if (
-            self.TURNSTILE_ENABLED
-            and turnstile_required
-            and self.ENVIRONMENT in {ENV_PRODUCTION, ENV_STAGING}
-        ):
-            secret = str(self.TURNSTILE_SECRET_KEY or "").strip()
-            if len(secret) < 16:
-                raise ValueError(
-                    "TURNSTILE_SECRET_KEY must be configured when Turnstile is enabled in staging/production."
-                )
-            if self.TURNSTILE_FAIL_OPEN:
-                raise ValueError(
-                    "TURNSTILE_FAIL_OPEN must be false in staging/production."
-                )
 
     def _validate_integration_config(self) -> None:
-        """Validates SaaS integration constraints."""
-        if self.SAAS_STRICT_INTEGRATIONS:
-            # Check if any env-based integration settings are accidentally used
-            sconf = [
-                self.SLACK_CHANNEL_ID,
-                self.JIRA_BASE_URL,
-                self.GITHUB_ACTIONS_TOKEN,
-            ]
-            if any(sconf) and self.is_production:
-                raise ValueError(
-                    "SAAS_STRICT_INTEGRATIONS forbids env-based settings in production."
-                )
+        """Validate SaaS integration strict-mode constraints."""
+        _validate_integration_config_impl(self, is_production=self.is_production)
 
     def _validate_environment_safety(self) -> None:
-        """Validates network and deployment safety (SEC-A1, SEC-A2)."""
-        if self.TRUSTED_PROXY_HOPS < 1 or self.TRUSTED_PROXY_HOPS > 5:
-            raise ValueError("TRUSTED_PROXY_HOPS must be between 1 and 5.")
-        trusted_proxy_cidrs = [str(cidr).strip() for cidr in self.TRUSTED_PROXY_CIDRS if str(cidr).strip()]
-        for cidr in trusted_proxy_cidrs:
-            try:
-                ipaddress.ip_network(cidr, strict=False)
-            except ValueError as exc:
-                raise ValueError(
-                    f"TRUSTED_PROXY_CIDRS contains invalid CIDR: {cidr}"
-                ) from exc
-
-        if (
-            self.TRUST_PROXY_HEADERS
-            and self.ENVIRONMENT in {ENV_PRODUCTION, ENV_STAGING}
-            and not trusted_proxy_cidrs
-        ):
-            raise ValueError(
-                "TRUSTED_PROXY_CIDRS must be configured when TRUST_PROXY_HEADERS=true in staging/production."
-            )
-
-        if self.is_production or self.ENVIRONMENT == "staging":
-            if not self.ADMIN_API_KEY or len(self.ADMIN_API_KEY) < 32:
-                raise ValueError(
-                    "ADMIN_API_KEY must be >= 32 chars in staging/production."
-                )
-
-            web_concurrency_raw = os.getenv("WEB_CONCURRENCY", "1").strip()
-            try:
-                web_concurrency = int(web_concurrency_raw)
-            except ValueError:
-                web_concurrency = 1
-            if web_concurrency > 1 and (
-                not self.CIRCUIT_BREAKER_DISTRIBUTED_STATE or not self.REDIS_URL
-            ):
-                raise ValueError(
-                    "WEB_CONCURRENCY > 1 requires CIRCUIT_BREAKER_DISTRIBUTED_STATE=true "
-                    "and REDIS_URL configured in staging/production."
-                )
-
-            if (
-                self.RATELIMIT_ENABLED
-                and not self.REDIS_URL
-                and not self.ALLOW_IN_MEMORY_RATE_LIMITS
-            ):
-                raise ValueError(
-                    "REDIS_URL is required for distributed rate limiting in "
-                    "staging/production. Set ALLOW_IN_MEMORY_RATE_LIMITS=true only "
-                    "for temporary break-glass usage."
-                )
-
-            # Safety Warnings (non-blocking but logged)
-            logger = structlog.get_logger()
-
-            # CORS localhost check
-            if any("localhost" in o or "127.0.0.1" in o for o in self.CORS_ORIGINS):
-                logger.warning("cors_localhost_in_production")
-
-            # HTTPS Enforcement
-            for url in [self.API_URL, self.FRONTEND_URL]:
-                if url and url.startswith("http://"):
-                    logger.warning("insecure_url_in_production", url=url)
+        """Validate network and deployment safety (SEC-A1/SEC-A2)."""
+        _validate_environment_safety_impl(
+            self,
+            env_production=ENV_PRODUCTION,
+            env_staging=ENV_STAGING,
+        )
 
     def _validate_remediation_guardrails(self) -> None:
-        """Validates safety guardrail configuration for remediation execution."""
-        normalized_scope = (
-            str(self.REMEDIATION_KILL_SWITCH_SCOPE or "tenant").strip().lower()
+        """Validate remediation kill-switch and scope guardrails."""
+        _validate_remediation_guardrails_impl(
+            self,
+            env_production=ENV_PRODUCTION,
+            env_staging=ENV_STAGING,
         )
-        if normalized_scope not in {"tenant", "global"}:
-            raise ValueError(
-                "REMEDIATION_KILL_SWITCH_SCOPE must be one of: tenant, global."
-            )
-        self.REMEDIATION_KILL_SWITCH_SCOPE = normalized_scope
-
-        if (
-            self.ENVIRONMENT in {ENV_PRODUCTION, ENV_STAGING}
-            and normalized_scope == "global"
-            and not self.REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE
-        ):
-            raise ValueError(
-                "REMEDIATION_KILL_SWITCH_SCOPE=global requires "
-                "REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE=true in staging/production."
-            )
 
     def _validate_enforcement_guardrails(self) -> None:
-        """Validates enforcement gate runtime safety controls."""
-        if self.ENFORCEMENT_GATE_TIMEOUT_SECONDS <= 0:
-            raise ValueError("ENFORCEMENT_GATE_TIMEOUT_SECONDS must be > 0.")
-        if self.ENFORCEMENT_GATE_TIMEOUT_SECONDS > 30:
-            raise ValueError(
-                "ENFORCEMENT_GATE_TIMEOUT_SECONDS must be <= 30."
-            )
-        if self.ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP < 1:
-            raise ValueError("ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP must be >= 1.")
-        if self.ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP > 100000:
-            raise ValueError(
-                "ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP must be <= 100000."
-            )
-        export_signing_secret = str(
-            getattr(self, "ENFORCEMENT_EXPORT_SIGNING_SECRET", "") or ""
-        ).strip()
-        if export_signing_secret and len(export_signing_secret) < 32:
-            raise ValueError(
-                "ENFORCEMENT_EXPORT_SIGNING_SECRET must be >= 32 chars when provided."
-            )
-        export_signing_kid = str(
-            getattr(self, "ENFORCEMENT_EXPORT_SIGNING_KID", "") or ""
-        ).strip()
-        if export_signing_kid and len(export_signing_kid) > 64:
-            raise ValueError(
-                "ENFORCEMENT_EXPORT_SIGNING_KID must be <= 64 chars."
-            )
-        if self.ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS < 60:
-            raise ValueError(
-                "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS must be >= 60."
-            )
-        if self.ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS > 604800:
-            raise ValueError(
-                "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS must be <= 604800."
-            )
-        if self.ENFORCEMENT_RECONCILIATION_SWEEP_MAX_RELEASES < 1:
-            raise ValueError("ENFORCEMENT_RECONCILIATION_SWEEP_MAX_RELEASES must be >= 1.")
-        if self.ENFORCEMENT_RECONCILIATION_SWEEP_MAX_RELEASES > 1000:
-            raise ValueError(
-                "ENFORCEMENT_RECONCILIATION_SWEEP_MAX_RELEASES must be <= 1000."
-            )
-        if self.ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT < 1:
-            raise ValueError(
-                "ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT must be >= 1."
-            )
-        if self.ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT > 1000:
-            raise ValueError(
-                "ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT must be <= 1000."
-            )
-        if self.ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_THRESHOLD_USD < 0:
-            raise ValueError(
-                "ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_THRESHOLD_USD must be >= 0."
-            )
-        if self.ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_EXCEPTION_COUNT < 1:
-            raise ValueError(
-                "ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_EXCEPTION_COUNT must be >= 1."
-            )
-        if self.ENFORCEMENT_EXPORT_MAX_DAYS < 1:
-            raise ValueError("ENFORCEMENT_EXPORT_MAX_DAYS must be >= 1.")
-        if self.ENFORCEMENT_EXPORT_MAX_DAYS > 3650:
-            raise ValueError("ENFORCEMENT_EXPORT_MAX_DAYS must be <= 3650.")
-        if self.ENFORCEMENT_EXPORT_MAX_ROWS < 1:
-            raise ValueError("ENFORCEMENT_EXPORT_MAX_ROWS must be >= 1.")
-        if self.ENFORCEMENT_EXPORT_MAX_ROWS > 50000:
-            raise ValueError("ENFORCEMENT_EXPORT_MAX_ROWS must be <= 50000.")
-        fallback_signing_keys = list(self.ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS or [])
-        if len(fallback_signing_keys) > 5:
-            raise ValueError(
-                "ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS must contain at most 5 keys."
-            )
-        for fallback_secret in fallback_signing_keys:
-            if len(str(fallback_secret or "").strip()) < 32:
-                raise ValueError(
-                    "Each ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS key must be >= 32 chars."
-                )
+        """Validate enforcement gate runtime safety controls."""
+        _validate_enforcement_guardrails_impl(self)
 
     # AWS Credentials
     AWS_ACCESS_KEY_ID: Optional[str] = None

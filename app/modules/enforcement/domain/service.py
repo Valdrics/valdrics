@@ -53,6 +53,7 @@ from app.modules.enforcement.domain.policy_contract_ops import (
     update_policy as _update_policy_impl,
 )
 import app.modules.enforcement.domain.service_private_ops as _service_private_ops_module
+import app.modules.enforcement.domain.service_gate_lock_ops as _service_gate_lock_ops_module
 from app.modules.enforcement.domain.service_private_ops import (
     EnforcementServicePrivateOps,
 )
@@ -76,11 +77,16 @@ from app.modules.enforcement.domain.service_models import (
     OverdueReservationReconciliationResult,
     ReservationReconciliationResult,
 )
+from app.modules.enforcement.domain.service_gate_lock_ops import (
+    gate_lock_timeout_seconds as _gate_lock_timeout_seconds,
+)
+from app.modules.enforcement.domain.service_response_ops import (
+    gate_result_to_response,  # noqa: F401
+)
 from app.modules.enforcement.domain.service_utils import (
     _as_utc,
     _computed_context_snapshot,  # noqa: F401
     _default_required_permission_for_environment,  # noqa: F401
-    _gate_lock_timeout_seconds as _gate_lock_timeout_seconds_impl,
     _is_production_environment,
     _json_default,  # noqa: F401
     _month_bounds,
@@ -132,19 +138,7 @@ setattr(
 )
 setattr(_service_private_ops_module, "_to_decimal", lambda value: _to_decimal(value))
 setattr(_service_private_ops_module, "jwt", jwt)
-
-
-def _gate_lock_timeout_seconds() -> float:
-    # Preserve service-module monkeypatch seam used in helper tests.
-    raw = getattr(get_settings(), "ENFORCEMENT_GATE_TIMEOUT_SECONDS", 2.0)
-    try:
-        gate_timeout = float(raw)
-    except (TypeError, ValueError):
-        return _gate_lock_timeout_seconds_impl()
-    gate_timeout = max(0.05, min(gate_timeout, 30.0))
-    return max(0.05, min(gate_timeout * 0.8, 5.0))
-
-
+setattr(_service_gate_lock_ops_module, "get_settings", lambda: get_settings())
 class EnforcementService(EnforcementServicePrivateOps):
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -501,27 +495,3 @@ class EnforcementService(EnforcementServicePrivateOps):
         return _gate_lock_timeout_seconds()
 
     _acquire_gate_evaluation_lock = _acquire_gate_evaluation_lock_impl
-
-
-def gate_result_to_response(
-    result: GateEvaluationResult,
-) -> Mapping[str, Any]:
-    decision = result.decision
-    approval = result.approval
-    response_payload = decision.response_payload if isinstance(decision.response_payload, dict) else {}
-    computed_context = response_payload.get("computed_context")
-
-    return {
-        "decision": decision.decision.value,
-        "reason_codes": list(decision.reason_codes or []),
-        "decision_id": decision.id,
-        "policy_version": int(decision.policy_version),
-        "approval_required": bool(decision.approval_required),
-        "approval_request_id": approval.id if approval is not None else None,
-        "approval_token": result.approval_token,
-        "approval_token_contract": "approval_flow_only",
-        "ttl_seconds": int(result.ttl_seconds),
-        "request_fingerprint": decision.request_fingerprint,
-        "reservation_active": bool(decision.reservation_active),
-        "computed_context": computed_context if isinstance(computed_context, dict) else None,
-    }

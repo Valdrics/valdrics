@@ -43,12 +43,14 @@ export function allowedNavHrefs(persona: unknown, role: unknown): Set<string> {
 
 	// Subscription management is an admin concern, regardless of persona.
 	if (isAdmin) {
-		hrefs.push('/billing');
+		hrefs.push('/billing', '/admin/health', '/admin/landing-campaigns');
 	}
 
-	// Hide admin health unless admin/owner.
+	// Hide admin-only routes unless admin/owner.
 	if (!isAdmin) {
-		hrefs = hrefs.filter((href) => href !== '/admin/health');
+		hrefs = hrefs.filter(
+			(href) => href !== '/admin/health' && href !== '/admin/landing-campaigns'
+		);
 	}
 
 	return new Set(hrefs);

@@ -1,153 +1,174 @@
-from typing import List, Dict, Any
-from datetime import datetime, timedelta, timezone
-from botocore.exceptions import ClientError
+from __future__ import annotations
+
+from typing import Any
+
+import structlog
+from botocore.exceptions import BotoCoreError, ClientError
+
+from app.modules.optimization.adapters.common.rightsizing_common import (
+    build_rightsizing_finding,
+    evaluate_max_samples,
+    is_small_shape,
+    utc_window,
+)
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
-import structlog
+from app.modules.reporting.domain.pricing.service import PricingService
 
 logger = structlog.get_logger()
+
+CPU_MAX_THRESHOLD_PERCENT = 10.0
+SKIPPED_INSTANCE_TOKENS: tuple[str, ...] = ("nano", "micro")
 AWS_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS = (
     ClientError,
+    BotoCoreError,
     OSError,
-    RuntimeError,
-    TypeError,
-    ValueError,
+    TimeoutError,
 )
+
 
 @registry.register("aws")
 class OverprovisionedEc2Plugin(ZombiePlugin):
-    """
-    Detects Active instances (not zombies) that are significantly overprovisioned.
-    Criteria: 
-    - State: Running
-    - Avg CPU > 1% (Not Idle/Zombie)
-    - Max CPU < 10% (Overprovisioned) over 7 days
-    """
+    """Detect running EC2 instances with persistently low peak CPU usage."""
+
     @property
     def category_key(self) -> str:
         return "overprovisioned_ec2_instances"
 
+    @staticmethod
+    def _estimate_monthly_cost(instance_type: str, region: str) -> float:
+        estimated = PricingService.estimate_monthly_waste(
+            provider="aws",
+            resource_type="instance",
+            resource_size=instance_type,
+            region=region,
+        )
+        return round(float(estimated), 2)
+
     async def scan(
+        self,
+        session: Any,
+        region: str,
+        credentials: dict[str, Any] | None = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
+    ) -> list[dict[str, Any]]:
+        del inventory, kwargs
+        findings: list[dict[str, Any]] = []
 
-
-    
-
-    self,
-
-
-    
-
-    session: Any,
-
-
-    
-
-    region: str,
-
-
-    
-
-    credentials: Dict[str, Any] | None = None,
-
-
-    
-
-    config: Any = None,
-
-
-    
-
-    inventory: Any = None,
-
-
-    
-
-    **kwargs: Any,
-
-
-    ) -> List[Dict[str, Any]]:
-        zombies = []
-        
         try:
             async with self._get_client(
-                session, "ec2", region, credentials, config=config
-            ) as ec2, self._get_client(
-                session, "cloudwatch", region, credentials, config=config
-            ) as cloudwatch:
-                
-                paginator = ec2.get_paginator("describe_instances")
-                async for page in paginator.paginate(Filters=[{"Name": "instance-state-name", "Values": ["running"]}]):
-                    for reservation in page["Reservations"]:
-                        for instance in reservation["Instances"]:
-                            instance_id = instance["InstanceId"]
-                            instance_type = instance["InstanceType"]
-                            
-                            # Skip if instance type is already very small (t3.nano/micro) 
-                            # or if we want to exclude spot/autoscaling (out of scope for PoC)
-                            if "nano" in instance_type or "micro" in instance_type:
-                                continue
-
-                            now = datetime.now(timezone.utc)
-                            start_time = now - timedelta(days=7)
-                            end_time = now
-
-                            # Get Maximum CPU to be safe (conservative rightsizing)
-                            stats = await cloudwatch.get_metric_statistics(
-                                Namespace="AWS/EC2",
-                                MetricName="CPUUtilization",
-                                Dimensions=[{"Name": "InstanceId", "Value": instance_id}],
-                                StartTime=start_time,
-                                EndTime=end_time,
-                                Period=86400, # Daily aggregation
-                                Statistics=["Maximum"]
+                session,
+                "ec2",
+                region,
+                credentials,
+                config=config,
+            ) as ec2_client, self._get_client(
+                session,
+                "cloudwatch",
+                region,
+                credentials,
+                config=config,
+            ) as cloudwatch_client:
+                paginator = ec2_client.get_paginator("describe_instances")
+                async for page in paginator.paginate(
+                    Filters=[{"Name": "instance-state-name", "Values": ["running"]}]
+                ):
+                    reservations = page.get("Reservations", [])
+                    for reservation in reservations:
+                        for instance in reservation.get("Instances", []):
+                            finding = await self._scan_instance(
+                                cloudwatch_client=cloudwatch_client,
+                                instance=instance,
+                                region=region,
                             )
-                            
-                            datapoints = stats.get("Datapoints", [])
-                            if not datapoints:
-                                continue
-                                
-                            # Check if ALL daily maxes are below 10%
-                            max_cpu_observed = 0.0
-                            below_threshold = True
-                            threshold = 10.0 
-                            
-                            for dp in datapoints:
-                                val = dp.get("Maximum", 0)
-                                if val > max_cpu_observed:
-                                    max_cpu_observed = val
-                                if val >= threshold:
-                                    below_threshold = False
-                                    break
-                            
-                            if below_threshold:
-                                # This is an overprovisioned instance
-                                # Recommendation name: "Resize {instance_type}"
-                                
-                                # Rudimentary cost calc (approx saving ~50% if downgraded one tier)
-                                # Real implementation needs pricing api
-                                estimated_monthly_cost = 0.0 # Placeholder
-                                
-                                zombies.append({
-                                    "resource_id": instance_id,
-                                    "resource_type": "AWS EC2 Instance",
-                                    "resource_name": self._get_name_tag(instance),
-                                    "region": region,
-                                    "monthly_cost": estimated_monthly_cost,
-                                    "recommendation": f"Resize {instance_type} (Max CPU {max_cpu_observed:.1f}%)",
-                                    "action": "resize_ec2_instance",
-                                    # Fact-based confidence input
-                                    "utilization_percent": max_cpu_observed, 
-                                    "confidence_score": 0.85, # Base, will be adjusted by Recommendation Engine
-                                    "explainability_notes": f"Instance {instance_type} had Max CPU of {max_cpu_observed:.1f}% over the last 7 days (Threshold: {threshold}%)."
-                                })
+                            if finding is not None:
+                                findings.append(finding)
+        except AWS_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS as exc:
+            logger.error(
+                "aws_rightsizing_scan_error",
+                error=str(exc),
+                region=region,
+            )
 
-        except AWS_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS as e:
-            logger.error("aws_rightsizing_scan_error", error=str(e))
-            
-        return zombies
+        return findings
 
-    def _get_name_tag(self, instance: Dict[str, Any]) -> str:
+    async def _scan_instance(
+        self,
+        *,
+        cloudwatch_client: Any,
+        instance: dict[str, Any],
+        region: str,
+    ) -> dict[str, Any] | None:
+        instance_id = str(instance.get("InstanceId") or "").strip()
+        instance_type = str(instance.get("InstanceType") or "").strip()
+        if not instance_id or not instance_type:
+            return None
+        if is_small_shape(instance_type, tokens=SKIPPED_INSTANCE_TOKENS):
+            return None
+
+        start_time, end_time = utc_window(7)
+        try:
+            stats = await cloudwatch_client.get_metric_statistics(
+                Namespace="AWS/EC2",
+                MetricName="CPUUtilization",
+                Dimensions=[{"Name": "InstanceId", "Value": instance_id}],
+                StartTime=start_time,
+                EndTime=end_time,
+                Period=86400,
+                Statistics=["Maximum"],
+            )
+        except AWS_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS as exc:
+            logger.warning(
+                "aws_rightsizing_instance_metric_error",
+                instance_id=instance_id,
+                error=str(exc),
+            )
+            return None
+
+        datapoints = stats.get("Datapoints", [])
+        evaluation = evaluate_max_samples(
+            (
+                point.get("Maximum", 0.0)
+                for point in datapoints
+                if isinstance(point, dict)
+            ),
+            threshold=CPU_MAX_THRESHOLD_PERCENT,
+        )
+        if not evaluation.has_data or not evaluation.below_threshold:
+            return None
+
+        estimated_monthly_cost = self._estimate_monthly_cost(
+            instance_type=instance_type,
+            region=region,
+        )
+        if estimated_monthly_cost <= 0.0:
+            logger.warning(
+                "aws_rightsizing_pricing_unavailable",
+                instance_id=instance_id,
+                instance_type=instance_type,
+                region=region,
+            )
+            return None
+
+        return build_rightsizing_finding(
+            resource_id=instance_id,
+            resource_type="AWS EC2 Instance",
+            resource_name=self._get_name_tag(instance),
+            region=region,
+            monthly_cost=estimated_monthly_cost,
+            current_size=instance_type,
+            max_cpu_percent=evaluation.max_observed,
+            threshold_percent=CPU_MAX_THRESHOLD_PERCENT,
+            action="resize_ec2_instance",
+            confidence_score=0.85,
+        )
+
+    def _get_name_tag(self, instance: dict[str, Any]) -> str:
         for tag in instance.get("Tags", []):
-            if tag["Key"] == "Name":
-                return str(tag["Value"])
+            if not isinstance(tag, dict):
+                continue
+            if tag.get("Key") == "Name":
+                return str(tag.get("Value") or "")
         return str(instance.get("InstanceId", "unknown"))

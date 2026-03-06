@@ -5,6 +5,11 @@ This module exists to make sure SQLAlchemy's registry is populated in any runtim
 that uses the ORM outside of `app/main.py` (scripts, workers, one-off jobs).
 """
 
+from sqlalchemy import event
+from sqlalchemy.orm import Mapper, configure_mappers
+
+from app.shared.db.base import Base
+
 # Import side-effects: register ORM mappings.
 from app.models import (  # noqa: F401
     anomaly_marker,
@@ -23,6 +28,7 @@ from app.models import (  # noqa: F401
     hybrid_connection,
     invoice,
     license_connection,
+    landing_telemetry_rollup,
     llm,
     notification_settings,
     optimization,
@@ -39,3 +45,30 @@ from app.models import (  # noqa: F401
     tenant_identity_settings,
     unit_economics_settings,
 )
+
+
+def _apply_relationship_loader_policy() -> None:
+    """
+    Force non-N+1 defaults across ORM relationships.
+
+    We upgrade SQLAlchemy's implicit ``lazy='select'`` strategy to ``raise_on_sql``
+    for all mapped relationships unless a model explicitly opts into a different
+    loader strategy. This fail-fast policy prevents accidental N+1 query patterns
+    from shipping silently.
+    """
+
+    configure_mappers()
+    for mapper in Base.registry.mappers:
+        for relation in mapper.relationships:
+            if relation.lazy == "select":
+                relation.lazy = "raise_on_sql"
+
+
+@event.listens_for(Mapper, "mapper_configured")
+def _on_mapper_configured(mapper: Mapper, _class: type[object]) -> None:
+    for relation in mapper.relationships:
+        if relation.lazy == "select":
+            relation.lazy = "raise_on_sql"
+
+
+_apply_relationship_loader_policy()

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import date, datetime, time as dt_time, timedelta, timezone
+from statistics import fmean, pstdev
 from typing import Any, Dict, List, TYPE_CHECKING
 from uuid import UUID
 
@@ -7,6 +9,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.cloud import CloudAccount, CostRecord
 from app.shared.core.service import BaseService
 
 if TYPE_CHECKING:
@@ -15,24 +18,313 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 
-class OptimizationService(BaseService):
-    """
-    Orchestrates FinOps optimization strategies (RIs, Savings Plans).
-    """
+def build_default_strategies(
+    *,
+    optimization_strategy_cls: Any,
+    strategy_type_enum: Any,
+) -> list[Any]:
+    return [
+        optimization_strategy_cls(
+            name="AWS Compute Savings Plan",
+            description="Baseline-based compute commitment recommendation (Savings Plans).",
+            type=strategy_type_enum.SAVINGS_PLAN.value,
+            provider="aws",
+            config={
+                "min_hourly_threshold": 0.05,
+                "hours_per_month": 730.0,
+                "savings_rate": 0.25,
+                "savings_rate_low": 0.20,
+                "savings_rate_high": 0.30,
+                "backtest_tolerance": 0.30,
+            },
+            is_active=True,
+        ),
+        optimization_strategy_cls(
+            name="AWS EC2 Reserved Instances",
+            description="Baseline-based EC2 Reserved Instance guidance (regional).",
+            type=strategy_type_enum.RI.value,
+            provider="aws",
+            config={
+                "commitment_label": "EC2 Reserved Instances",
+                "region_scope": "top_region",
+                "min_hourly_threshold": 0.05,
+                "hours_per_month": 730.0,
+                "backtest_tolerance": 0.30,
+                "offers": [
+                    {
+                        "term": "1_year",
+                        "payment_option": "no_upfront",
+                        "savings_rate": 0.30,
+                        "savings_rate_low": 0.25,
+                        "savings_rate_high": 0.35,
+                        "upfront_cost": 0.0,
+                    },
+                    {
+                        "term": "3_year",
+                        "payment_option": "all_upfront",
+                        "savings_rate": 0.45,
+                        "savings_rate_low": 0.38,
+                        "savings_rate_high": 0.52,
+                        "upfront_cost": 0.0,
+                    },
+                ],
+            },
+            is_active=True,
+        ),
+        optimization_strategy_cls(
+            name="Azure VM Reservations",
+            description="Baseline-based Azure reservation guidance (regional).",
+            type=strategy_type_enum.AZURE_RESERVATION.value,
+            provider="azure",
+            config={
+                "commitment_label": "Azure VM Reservations",
+                "region_scope": "top_region",
+                "min_hourly_threshold": 0.05,
+                "hours_per_month": 730.0,
+                "backtest_tolerance": 0.30,
+                "offers": [
+                    {
+                        "term": "1_year",
+                        "payment_option": "no_upfront",
+                        "savings_rate": 0.25,
+                        "savings_rate_low": 0.20,
+                        "savings_rate_high": 0.30,
+                        "upfront_cost": 0.0,
+                    },
+                    {
+                        "term": "3_year",
+                        "payment_option": "all_upfront",
+                        "savings_rate": 0.40,
+                        "savings_rate_low": 0.32,
+                        "savings_rate_high": 0.48,
+                        "upfront_cost": 0.0,
+                    },
+                ],
+            },
+            is_active=True,
+        ),
+        optimization_strategy_cls(
+            name="GCP Compute Engine CUD",
+            description="Baseline-based GCP Committed Use Discount guidance (regional).",
+            type=strategy_type_enum.CUD.value,
+            provider="gcp",
+            config={
+                "commitment_label": "GCP CUD (Compute Engine)",
+                "region_scope": "top_region",
+                "min_hourly_threshold": 0.05,
+                "hours_per_month": 730.0,
+                "backtest_tolerance": 0.30,
+                "offers": [
+                    {
+                        "term": "1_year",
+                        "payment_option": "no_upfront",
+                        "savings_rate": 0.20,
+                        "savings_rate_low": 0.15,
+                        "savings_rate_high": 0.25,
+                        "upfront_cost": 0.0,
+                    },
+                    {
+                        "term": "3_year",
+                        "payment_option": "all_upfront",
+                        "savings_rate": 0.35,
+                        "savings_rate_low": 0.28,
+                        "savings_rate_high": 0.42,
+                        "upfront_cost": 0.0,
+                    },
+                ],
+            },
+            is_active=True,
+        ),
+    ]
 
+
+def percentile(values: list[float], percentile_value: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(float(v) for v in values)
+    if len(ordered) == 1:
+        return ordered[0]
+
+    pct = max(0.0, min(percentile_value, 1.0))
+    rank = pct * (len(ordered) - 1)
+    lower_idx = int(rank)
+    upper_idx = min(lower_idx + 1, len(ordered) - 1)
+    frac = rank - lower_idx
+    return ordered[lower_idx] + ((ordered[upper_idx] - ordered[lower_idx]) * frac)
+
+
+def _normalize_scope_key(value: str | None) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip().lower()
+    return None
+
+
+async def aggregate_usage_baseline(
+    *,
+    db: Any,
+    tenant_id: UUID,
+    provider: str | None = None,
+    canonical_charge_category: str | None = "compute",
+    lookback_days: int = 30,
+    percentile_fn: Any = percentile,
+) -> dict[str, Any]:
+    provider_key = _normalize_scope_key(provider)
+    category_key = _normalize_scope_key(canonical_charge_category)
+
+    safe_lookback = max(1, min(int(lookback_days or 30), 365))
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=safe_lookback)
+
+    base_stmt = (
+        select(
+            CostRecord.timestamp,
+            CostRecord.recorded_at,
+            CostRecord.region,
+            CostRecord.cost_usd,
+        )
+        .select_from(CostRecord)
+        .join(CloudAccount, CostRecord.account_id == CloudAccount.id)
+        .where(CostRecord.tenant_id == tenant_id)
+        .where(CostRecord.recorded_at >= thirty_days_ago.date())
+    )
+    if provider_key:
+        base_stmt = base_stmt.where(CloudAccount.provider == provider_key)
+    if category_key:
+        base_stmt = base_stmt.where(CostRecord.canonical_charge_category == category_key)
+
+    stmt = base_stmt.where(CostRecord.cost_status == "FINAL")
+    result = await db.execute(stmt)
+    rows = result.all()
+    source_status = "FINAL"
+    if not rows:
+        result = await db.execute(base_stmt)
+        rows = result.all()
+        source_status = "any"
+
+    bucket_totals: dict[datetime, float] = {}
+    region_totals: dict[str, float] = {}
+    total_spend = 0.0
+    for timestamp_value, recorded_at, region_value, cost_raw in rows:
+        if cost_raw is None:
+            continue
+        cost = float(cost_raw)
+        total_spend += cost
+
+        region_key = str(region_value or "Unknown")
+        region_totals[region_key] = region_totals.get(region_key, 0.0) + cost
+
+        if timestamp_value is not None:
+            bucket_key = timestamp_value
+            if bucket_key.tzinfo is None:
+                bucket_key = bucket_key.replace(tzinfo=timezone.utc)
+            bucket_key = bucket_key.astimezone(timezone.utc).replace(
+                minute=0,
+                second=0,
+                microsecond=0,
+            )
+        else:
+            bucket_key = datetime.combine(recorded_at, dt_time.min, tzinfo=timezone.utc)
+
+        bucket_totals[bucket_key] = bucket_totals.get(bucket_key, 0.0) + cost
+
+    observed_buckets = len(bucket_totals)
+    unique_days = {key.date() for key in bucket_totals}
+    is_daily_resolution = observed_buckets <= max(1, len(unique_days) * 2)
+
+    if is_daily_resolution:
+        daily_totals: dict[date, float] = {}
+        for key, cost in bucket_totals.items():
+            daily_totals[key.date()] = daily_totals.get(key.date(), 0.0) + float(cost)
+
+        values = list(daily_totals.values())
+        non_zero = [v for v in values if v > 0]
+        expected_days = 30
+        observed_days = len(daily_totals)
+        coverage_ratio = min(1.0, observed_days / expected_days) if expected_days else 0.0
+
+        average_daily = float(fmean(values)) if values else 0.0
+        baseline_daily = percentile_fn(non_zero, 0.25) if non_zero else 0.0
+        average_hourly_spend = average_daily / 24.0
+        baseline_hourly_spend = baseline_daily / 24.0
+        volatility = (
+            float(pstdev(values) / average_daily)
+            if len(values) > 1 and average_daily > 0
+            else 0.0
+        )
+        granularity = "daily"
+        expected_buckets = expected_days
+        observed_buckets = observed_days
+
+        hourly_cost_series: list[float] = []
+        for day_key in sorted(daily_totals):
+            per_hour = float(daily_totals[day_key]) / 24.0
+            hourly_cost_series.extend([per_hour] * 24)
+    else:
+        values = list(bucket_totals.values())
+        non_zero = [v for v in values if v > 0]
+        expected_hours = 30 * 24
+        coverage_ratio = min(1.0, observed_buckets / expected_hours) if expected_hours else 0.0
+
+        average_hourly_spend = float(fmean(values)) if values else 0.0
+        baseline_hourly_spend = percentile_fn(non_zero, 0.25) if non_zero else 0.0
+        volatility = (
+            float(pstdev(values) / average_hourly_spend)
+            if len(values) > 1 and average_hourly_spend > 0
+            else 0.0
+        )
+        granularity = "hourly"
+        expected_buckets = expected_hours
+
+        hourly_cost_series = []
+        sorted_keys = sorted(bucket_totals)
+        if sorted_keys:
+            cursor = sorted_keys[0]
+            end = sorted_keys[-1]
+            while cursor <= end:
+                hourly_cost_series.append(float(bucket_totals.get(cursor, 0.0) or 0.0))
+                cursor = cursor + timedelta(hours=1)
+
+    confidence_score = round(
+        max(
+            0.0,
+            min(
+                1.0,
+                (coverage_ratio * 0.6) + ((1.0 - min(volatility, 1.0)) * 0.4),
+            ),
+        ),
+        3,
+    )
+
+    top_region = "Unknown"
+    if region_totals:
+        top_region = max(region_totals.items(), key=lambda kv: kv[1])[0]
+
+    return {
+        "total_monthly_spend": float(total_spend),
+        "average_hourly_spend": float(average_hourly_spend),
+        "baseline_hourly_spend": float(baseline_hourly_spend),
+        "observed_buckets": int(observed_buckets),
+        "expected_buckets": int(expected_buckets),
+        "coverage_ratio": float(coverage_ratio),
+        "volatility": float(volatility),
+        "confidence_score": float(confidence_score),
+        "granularity": granularity,
+        "provider": provider_key,
+        "canonical_charge_category": category_key,
+        "source_status": source_status,
+        "region": "global",
+        "top_region": top_region,
+        "region_totals": region_totals,
+        "hourly_cost_series": hourly_cost_series,
+    }
+
+
+class OptimizationService(BaseService):
     def __init__(self, db: AsyncSession):
         super().__init__(db)
 
     async def generate_recommendations(
         self, tenant_id: UUID
     ) -> List["StrategyRecommendation"]:
-        """
-        Runs available optimization strategies against tenant usage.
-
-        Production contract:
-        - Strategies are DB-backed (no dummy configs).
-        - Each scan is idempotent per (tenant_id, strategy_id): we replace existing OPEN recs.
-        """
         import sqlalchemy as sa
 
         from app.models.optimization import OptimizationStrategy, StrategyRecommendation
@@ -123,9 +415,6 @@ class OptimizationService(BaseService):
         return all_recommendations
 
     def _get_strategy_impl(self, strategy: Any) -> Any | None:
-        """
-        Instantiate a concrete strategy implementation for a DB-backed OptimizationStrategy.
-        """
         raw_type = getattr(strategy, "type", None)
         type_value = (
             raw_type.value
@@ -161,11 +450,6 @@ class OptimizationService(BaseService):
         return None
 
     async def _seed_default_strategies(self) -> list[Any]:
-        """
-        Seed a minimal set of default strategies so the product works out-of-the-box.
-
-        This keeps the initial strategy surface deterministic without per-tenant overrides.
-        """
         from app.models.optimization import OptimizationStrategy, StrategyType
 
         existing_q = await self.db.execute(
@@ -175,119 +459,10 @@ class OptimizationService(BaseService):
         if existing:
             return existing
 
-        defaults = [
-            OptimizationStrategy(
-                name="AWS Compute Savings Plan",
-                description="Baseline-based compute commitment recommendation (Savings Plans).",
-                type=StrategyType.SAVINGS_PLAN.value,
-                provider="aws",
-                config={
-                    "min_hourly_threshold": 0.05,
-                    "hours_per_month": 730.0,
-                    "savings_rate": 0.25,
-                    "savings_rate_low": 0.20,
-                    "savings_rate_high": 0.30,
-                    "backtest_tolerance": 0.30,
-                },
-                is_active=True,
-            ),
-            OptimizationStrategy(
-                name="AWS EC2 Reserved Instances",
-                description="Baseline-based EC2 Reserved Instance guidance (regional).",
-                type=StrategyType.RI.value,
-                provider="aws",
-                config={
-                    "commitment_label": "EC2 Reserved Instances",
-                    "region_scope": "top_region",
-                    "min_hourly_threshold": 0.05,
-                    "hours_per_month": 730.0,
-                    "backtest_tolerance": 0.30,
-                    "offers": [
-                        {
-                            "term": "1_year",
-                            "payment_option": "no_upfront",
-                            "savings_rate": 0.30,
-                            "savings_rate_low": 0.25,
-                            "savings_rate_high": 0.35,
-                            "upfront_cost": 0.0,
-                        },
-                        {
-                            "term": "3_year",
-                            "payment_option": "all_upfront",
-                            "savings_rate": 0.45,
-                            "savings_rate_low": 0.38,
-                            "savings_rate_high": 0.52,
-                            "upfront_cost": 0.0,
-                        },
-                    ],
-                },
-                is_active=True,
-            ),
-            OptimizationStrategy(
-                name="Azure VM Reservations",
-                description="Baseline-based Azure reservation guidance (regional).",
-                type=StrategyType.AZURE_RESERVATION.value,
-                provider="azure",
-                config={
-                    "commitment_label": "Azure VM Reservations",
-                    "region_scope": "top_region",
-                    "min_hourly_threshold": 0.05,
-                    "hours_per_month": 730.0,
-                    "backtest_tolerance": 0.30,
-                    "offers": [
-                        {
-                            "term": "1_year",
-                            "payment_option": "no_upfront",
-                            "savings_rate": 0.25,
-                            "savings_rate_low": 0.20,
-                            "savings_rate_high": 0.30,
-                            "upfront_cost": 0.0,
-                        },
-                        {
-                            "term": "3_year",
-                            "payment_option": "all_upfront",
-                            "savings_rate": 0.40,
-                            "savings_rate_low": 0.32,
-                            "savings_rate_high": 0.48,
-                            "upfront_cost": 0.0,
-                        },
-                    ],
-                },
-                is_active=True,
-            ),
-            OptimizationStrategy(
-                name="GCP Compute Engine CUD",
-                description="Baseline-based GCP Committed Use Discount guidance (regional).",
-                type=StrategyType.CUD.value,
-                provider="gcp",
-                config={
-                    "commitment_label": "GCP CUD (Compute Engine)",
-                    "region_scope": "top_region",
-                    "min_hourly_threshold": 0.05,
-                    "hours_per_month": 730.0,
-                    "backtest_tolerance": 0.30,
-                    "offers": [
-                        {
-                            "term": "1_year",
-                            "payment_option": "no_upfront",
-                            "savings_rate": 0.20,
-                            "savings_rate_low": 0.15,
-                            "savings_rate_high": 0.25,
-                            "upfront_cost": 0.0,
-                        },
-                        {
-                            "term": "3_year",
-                            "payment_option": "all_upfront",
-                            "savings_rate": 0.35,
-                            "savings_rate_low": 0.28,
-                            "savings_rate_high": 0.42,
-                            "upfront_cost": 0.0,
-                        },
-                    ],
-                },
-                is_active=True,
-            ),
-        ]
+        defaults = build_default_strategies(
+            optimization_strategy_cls=OptimizationStrategy,
+            strategy_type_enum=StrategyType,
+        )
         self.db.add_all(defaults)
         await self.db.commit()
         for seeded in defaults:
@@ -308,203 +483,14 @@ class OptimizationService(BaseService):
         canonical_charge_category: str | None = "compute",
         lookback_days: int = 30,
     ) -> Dict[str, Any]:
-        """
-        Aggregate recent ledger rows into a stable baseline for commitment strategies.
-
-        This function explicitly handles daily-resolution ledgers by converting day-buckets into
-        an hourly baseline to keep commitment math consistent.
-        """
-        from datetime import date, datetime, time as dt_time, timedelta, timezone
-        from statistics import fmean, pstdev
-
-        from app.models.cloud import CloudAccount, CostRecord
-
-        provider_key = (
-            provider.strip().lower()
-            if isinstance(provider, str) and provider.strip()
-            else None
-        )
-        category_key = (
-            canonical_charge_category.strip().lower()
-            if isinstance(canonical_charge_category, str)
-            and canonical_charge_category.strip()
-            else None
+        return await aggregate_usage_baseline(
+            db=self.db,
+            tenant_id=tenant_id,
+            provider=provider,
+            canonical_charge_category=canonical_charge_category,
+            lookback_days=lookback_days,
+            percentile_fn=self._percentile,
         )
 
-        safe_lookback = max(1, min(int(lookback_days or 30), 365))
-        thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=safe_lookback)
-
-        base_stmt = (
-            select(
-                CostRecord.timestamp,
-                CostRecord.recorded_at,
-                CostRecord.region,
-                CostRecord.cost_usd,
-            )
-            .select_from(CostRecord)
-            .join(CloudAccount, CostRecord.account_id == CloudAccount.id)
-            .where(CostRecord.tenant_id == tenant_id)
-            .where(CostRecord.recorded_at >= thirty_days_ago.date())
-        )
-        if provider_key:
-            base_stmt = base_stmt.where(CloudAccount.provider == provider_key)
-        if category_key:
-            base_stmt = base_stmt.where(
-                CostRecord.canonical_charge_category == category_key
-            )
-
-        # Prefer FINAL-only for commitment baselines; fall back to whatever exists if FINAL is missing.
-        stmt = base_stmt.where(CostRecord.cost_status == "FINAL")
-        result = await self.db.execute(stmt)
-        rows = result.all()
-        source_status = "FINAL"
-        if not rows:
-            result = await self.db.execute(base_stmt)
-            rows = result.all()
-            source_status = "any"
-
-        bucket_totals: Dict[datetime, float] = {}
-        region_totals: Dict[str, float] = {}
-        total_spend = 0.0
-        for timestamp_value, recorded_at, region_value, cost_raw in rows:
-            if cost_raw is None:
-                continue
-            cost = float(cost_raw)
-            total_spend += cost
-
-            region_key = str(region_value or "Unknown")
-            region_totals[region_key] = region_totals.get(region_key, 0.0) + cost
-
-            if timestamp_value is not None:
-                bucket_key = timestamp_value
-                if bucket_key.tzinfo is None:
-                    bucket_key = bucket_key.replace(tzinfo=timezone.utc)
-                bucket_key = bucket_key.astimezone(timezone.utc).replace(
-                    minute=0,
-                    second=0,
-                    microsecond=0,
-                )
-            else:
-                bucket_key = datetime.combine(
-                    recorded_at, dt_time.min, tzinfo=timezone.utc
-                )
-
-            bucket_totals[bucket_key] = bucket_totals.get(bucket_key, 0.0) + cost
-
-        observed_buckets = len(bucket_totals)
-        unique_days = {key.date() for key in bucket_totals}
-
-        # Heuristic: if we have ~1-2 buckets per day, treat it as daily-resolution.
-        is_daily_resolution = observed_buckets <= max(1, len(unique_days) * 2)
-
-        if is_daily_resolution:
-            daily_totals: Dict[date, float] = {}
-            for key, cost in bucket_totals.items():
-                daily_totals[key.date()] = daily_totals.get(key.date(), 0.0) + float(
-                    cost
-                )
-
-            values = list(daily_totals.values())
-            non_zero = [v for v in values if v > 0]
-            expected_days = 30
-            observed_days = len(daily_totals)
-            coverage_ratio = (
-                min(1.0, observed_days / expected_days) if expected_days else 0.0
-            )
-
-            average_daily = float(fmean(values)) if values else 0.0
-            baseline_daily = self._percentile(non_zero, 0.25) if non_zero else 0.0
-            average_hourly_spend = average_daily / 24.0
-            baseline_hourly_spend = baseline_daily / 24.0
-            volatility = (
-                float(pstdev(values) / average_daily)
-                if len(values) > 1 and average_daily > 0
-                else 0.0
-            )
-            granularity = "daily"
-            expected_buckets = expected_days
-            observed_buckets = observed_days
-
-            hourly_cost_series: list[float] = []
-            for day_key in sorted(daily_totals):
-                per_hour = float(daily_totals[day_key]) / 24.0
-                hourly_cost_series.extend([per_hour] * 24)
-        else:
-            values = list(bucket_totals.values())
-            non_zero = [v for v in values if v > 0]
-            expected_hours = 30 * 24
-            coverage_ratio = (
-                min(1.0, observed_buckets / expected_hours) if expected_hours else 0.0
-            )
-
-            average_hourly_spend = float(fmean(values)) if values else 0.0
-            baseline_hourly_spend = (
-                self._percentile(non_zero, 0.25) if non_zero else 0.0
-            )
-            volatility = (
-                float(pstdev(values) / average_hourly_spend)
-                if len(values) > 1 and average_hourly_spend > 0
-                else 0.0
-            )
-            granularity = "hourly"
-            expected_buckets = expected_hours
-
-            hourly_cost_series = []
-            sorted_keys = sorted(bucket_totals)
-            if sorted_keys:
-                cursor = sorted_keys[0]
-                end = sorted_keys[-1]
-                while cursor <= end:
-                    hourly_cost_series.append(
-                        float(bucket_totals.get(cursor, 0.0) or 0.0)
-                    )
-                    cursor = cursor + timedelta(hours=1)
-
-        confidence_score = round(
-            max(
-                0.0,
-                min(
-                    1.0,
-                    (coverage_ratio * 0.6) + ((1.0 - min(volatility, 1.0)) * 0.4),
-                ),
-            ),
-            3,
-        )
-
-        top_region = "Unknown"
-        if region_totals:
-            top_region = max(region_totals.items(), key=lambda kv: kv[1])[0]
-
-        return {
-            "total_monthly_spend": float(total_spend),
-            "average_hourly_spend": float(average_hourly_spend),
-            "baseline_hourly_spend": float(baseline_hourly_spend),
-            "observed_buckets": int(observed_buckets),
-            "expected_buckets": int(expected_buckets),
-            "coverage_ratio": float(coverage_ratio),
-            "volatility": float(volatility),
-            "confidence_score": float(confidence_score),
-            "granularity": granularity,
-            "provider": provider_key,
-            "canonical_charge_category": category_key,
-            "source_status": source_status,
-            "region": "global",
-            "top_region": top_region,
-            "region_totals": region_totals,
-            "hourly_cost_series": hourly_cost_series,
-        }
-
-    def _percentile(self, values: List[float], percentile: float) -> float:
-        """Return linear interpolation percentile for deterministic baseline computation."""
-        if not values:
-            return 0.0
-        ordered = sorted(float(v) for v in values)
-        if len(ordered) == 1:
-            return ordered[0]
-
-        pct = max(0.0, min(percentile, 1.0))
-        rank = pct * (len(ordered) - 1)
-        lower_idx = int(rank)
-        upper_idx = min(lower_idx + 1, len(ordered) - 1)
-        frac = rank - lower_idx
-        return ordered[lower_idx] + ((ordered[upper_idx] - ordered[lower_idx]) * frac)
+    def _percentile(self, values: List[float], percentile_value: float) -> float:
+        return percentile(values, percentile_value)
