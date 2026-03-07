@@ -10,12 +10,14 @@ from httpx import AsyncClient
 import respx
 from sqlalchemy import select
 from app.shared.core.config import get_settings
+from app.models.background_job import BackgroundJob, JobType
 from app.models.tenant import Tenant, User, UserRole
 from app.shared.core.pricing import PricingTier
 from app.modules.billing.domain.billing.paystack_billing import (
     TenantSubscription,
     SubscriptionStatus,
 )
+from app.modules.billing.domain.billing.webhook_retry import process_paystack_webhook
 
 settings = get_settings()
 
@@ -146,7 +148,22 @@ async def test_webhook_charge_success_activates_subscription(
             "/api/v1/billing/webhook", content=payload_bytes, headers=headers
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 202
+        body = response.json()
+        assert body["status"] == "accepted"
+        assert body["delivery_mode"] == "async_durable"
+
+        queued_job_result = await db.execute(
+            select(BackgroundJob)
+            .where(BackgroundJob.job_type == JobType.WEBHOOK_RETRY.value)
+            .order_by(BackgroundJob.created_at.desc())
+        )
+        queued_job = queued_job_result.scalars().first()
+        assert queued_job is not None
+
+        # Simulate worker execution to validate eventual consistency.
+        process_result = await process_paystack_webhook(queued_job, db)
+        assert process_result["status"] == "processed"
 
         # Verify DB state
         result = await db.execute(

@@ -11,7 +11,7 @@ definition:
     dockerfile: Dockerfile
 
   scaling:
-    min: 1
+    min: 2
     max: 3
     targets:
       cpu:
@@ -29,7 +29,7 @@ definition:
 
   health_checks:
     - type: http
-      path: /health
+      path: /health/live
       port: 8000
       interval_seconds: 30
       timeout_seconds: 10
@@ -40,7 +40,7 @@ definition:
     - name: ENVIRONMENT
       value: production
     - name: WEB_CONCURRENCY
-      value: "1"
+      value: "2"
     - name: LOG_LEVEL
       value: INFO
     - name: LLM_PROVIDER
@@ -49,13 +49,14 @@ definition:
       value: "true"
     - name: CORS_ORIGINS
       value: "[\"https://dashboard.valdrics.ai\"]"
-    # Prophet is not bundled by default; use controlled break-glass fallback metadata.
+    # Prophet fallback is break-glass only. Provision these secrets only for an
+    # audited short-lived exception; otherwise the runtime should fail closed.
     - name: FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK
-      value: "true"
+      secret: valdrics-forecaster-break-glass-enabled
     - name: FORECASTER_BREAK_GLASS_REASON
-      value: "Koyeb deployment baseline while Prophet is not bundled."
+      secret: valdrics-forecaster-break-glass-reason
     - name: FORECASTER_BREAK_GLASS_EXPIRES_AT
-      value: "2099-01-01T00:00:00Z"
+      secret: valdrics-forecaster-break-glass-expires-at
     # Secrets - set via Koyeb dashboard
     - name: DATABASE_URL
       secret: valdrics-database-url

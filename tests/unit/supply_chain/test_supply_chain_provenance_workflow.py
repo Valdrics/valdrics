@@ -44,9 +44,30 @@ def test_ci_workflow_enforces_enterprise_placeholder_guard() -> None:
     assert "scripts/verify_enterprise_placeholder_guards.py" in text
 
 
+def test_ci_workflow_runs_pip_audit_on_pull_requests() -> None:
+    text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "Enforce Python Dependency Vulnerability Gate (pip-audit)" in text
+    assert "uv run pip-audit --ignore-vuln CVE-2026-1703" in text
+
+
 def test_ci_workflow_has_enterprise_tdd_quality_gate_job() -> None:
     text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 
     assert "enterprise-tdd-quality-gate:" in text
     assert "Enterprise TDD Quality Gate" in text
     assert "scripts/run_enterprise_tdd_gate.py" in text
+
+
+def test_workflows_pin_uv_bootstrap_version() -> None:
+    workflow_paths = (
+        REPO_ROOT / ".github/workflows/ci.yml",
+        REPO_ROOT / ".github/workflows/sbom.yml",
+        REPO_ROOT / ".github/workflows/security-scan.yml",
+        REPO_ROOT / ".github/workflows/performance-gate.yml",
+    )
+
+    for workflow_path in workflow_paths:
+        text = workflow_path.read_text(encoding="utf-8")
+        assert 'version: "latest"' not in text
+        assert "${{ env.UV_VERSION }}" in text

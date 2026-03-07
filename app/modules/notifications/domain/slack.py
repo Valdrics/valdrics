@@ -8,8 +8,10 @@ from typing import Any
 import asyncio
 import hashlib
 import time
+from threading import Lock
 from uuid import UUID
 
+from redis.exceptions import RedisError
 from slack_sdk.web.async_client import AsyncWebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy import select
@@ -23,6 +25,16 @@ SLACK_CLIENT_RECOVERABLE_EXCEPTIONS = (
     OSError,
     ValueError,
 )
+SLACK_DEDUP_REDIS_RECOVERABLE_EXCEPTIONS = (
+    RedisError,
+    RuntimeError,
+    TypeError,
+    AttributeError,
+    OSError,
+    ValueError,
+)
+_service_cache: dict[tuple[str, str], "SlackService"] = {}
+_service_cache_lock = Lock()
 
 
 class SlackService:
@@ -48,11 +60,47 @@ class SlackService:
     def __init__(self, bot_token: str, channel_id: str):
         """Initialize with bot token and target channel."""
         self.client = AsyncWebClient(token=bot_token)
+        self.bot_token = bot_token
         self.channel_id = channel_id
 
-        # BE-NOTIF-4: Alert deduplication cache (stores alert hashes with timestamps)
+        # Local fallback when distributed Redis-backed deduplication is unavailable.
         self._sent_alerts: dict[str, float] = {}
         self._dedup_window_seconds = 3600  # 1 hour deduplication window
+
+    @staticmethod
+    def _dedup_cache_key(channel_id: str, alert_hash: str) -> str:
+        return f"notifications:slack:dedup:{channel_id}:{alert_hash}"
+
+    async def _is_duplicate_alert(self, alert_hash: str, current_time: float) -> bool:
+        try:
+            from app.shared.core.rate_limit import get_redis_client
+
+            redis_client = get_redis_client()
+            if redis_client is not None:
+                cache_key = self._dedup_cache_key(self.channel_id, alert_hash)
+                recorded = await redis_client.set(
+                    cache_key,
+                    str(int(current_time)),
+                    ex=int(self._dedup_window_seconds),
+                    nx=True,
+                )
+                return not bool(recorded)
+        except SLACK_DEDUP_REDIS_RECOVERABLE_EXCEPTIONS as exc:
+            logger.warning("slack_dedup_redis_unavailable", error=str(exc))
+
+        last_sent = self._sent_alerts.get(alert_hash)
+        if last_sent is not None and (
+            current_time - last_sent < self._dedup_window_seconds
+        ):
+            return True
+
+        self._sent_alerts[alert_hash] = current_time
+        self._sent_alerts = {
+            key: value
+            for key, value in self._sent_alerts.items()
+            if current_time - value < self._dedup_window_seconds
+        }
+        return False
 
     async def _send_with_retry(self, method: str, **kwargs: Any) -> bool:
         """Generic Slack API call with exponential backoff for rate limiting."""
@@ -103,21 +151,9 @@ class SlackService:
         ).hexdigest()
         current_time = time.time()
 
-        if alert_hash in self._sent_alerts:
-            last_sent = self._sent_alerts[alert_hash]
-            if current_time - last_sent < self._dedup_window_seconds:
-                logger.info("duplicate_alert_suppressed", title=title)
-                return True  # Suppress duplicate
-
-        # Record this alert
-        self._sent_alerts[alert_hash] = current_time
-
-        # Cleanup old entries (simple garbage collection)
-        self._sent_alerts = {
-            k: v
-            for k, v in self._sent_alerts.items()
-            if current_time - v < self._dedup_window_seconds
-        }
+        if await self._is_duplicate_alert(alert_hash, current_time):
+            logger.info("duplicate_alert_suppressed", title=title)
+            return True  # Suppress duplicate
 
         color = self.SEVERITY_COLORS.get(severity, self.SEVERITY_COLORS["warning"])
         return await self._send_with_retry(
@@ -255,7 +291,13 @@ def get_slack_service() -> SlackService | None:
         return None
 
     if settings.SLACK_BOT_TOKEN and settings.SLACK_CHANNEL_ID:
-        return SlackService(settings.SLACK_BOT_TOKEN, settings.SLACK_CHANNEL_ID)
+        cache_key = (settings.SLACK_BOT_TOKEN, settings.SLACK_CHANNEL_ID)
+        with _service_cache_lock:
+            service = _service_cache.get(cache_key)
+            if service is None:
+                service = SlackService(settings.SLACK_BOT_TOKEN, settings.SLACK_CHANNEL_ID)
+                _service_cache[cache_key] = service
+            return service
     return None
 
 
@@ -299,4 +341,10 @@ async def get_tenant_slack_service(
         )
         return None
 
-    return SlackService(settings.SLACK_BOT_TOKEN, channel)
+    cache_key = (settings.SLACK_BOT_TOKEN, channel)
+    with _service_cache_lock:
+        service = _service_cache.get(cache_key)
+        if service is None:
+            service = SlackService(settings.SLACK_BOT_TOKEN, channel)
+            _service_cache[cache_key] = service
+        return service

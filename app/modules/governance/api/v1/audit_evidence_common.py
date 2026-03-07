@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import inspect
 from typing import Annotated, Any
 
 import structlog
@@ -123,7 +124,11 @@ async def list_evidence_items(
         .limit(int(limit))
     )
     items: list[Any] = []
-    for row in (await db.execute(stmt)).scalars():
+    scalar_result = (await db.execute(stmt)).scalars()
+    rows = scalar_result.all() if hasattr(scalar_result, "all") else scalar_result
+    if inspect.isawaitable(rows):
+        rows = await rows
+    for row in rows:
         details = row.details or {}
         evidence_payload = validate_evidence_payload(
             raw=details.get(payload_key),

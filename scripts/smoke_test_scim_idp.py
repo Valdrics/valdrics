@@ -20,8 +20,7 @@ import argparse
 import json
 import os
 import time
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from dataclasses import asdict
 from typing import Any
 from uuid import uuid4
 from urllib.parse import urljoin
@@ -29,14 +28,20 @@ from urllib.parse import urljoin
 import httpx
 
 from app.shared.core.evidence_capture import sanitize_bearer_token
-
-SCIM_SMOKE_RECOVERABLE_EXCEPTIONS = (
-    httpx.HTTPError,
-    json.JSONDecodeError,
-    OSError,
-    RuntimeError,
-    TypeError,
-    ValueError,
+from scripts.smoke_test_scim_helpers import (
+    Check as _Check,
+    SCIM_SMOKE_RECOVERABLE_EXCEPTIONS,
+    auth_headers as _auth_headers,
+    build_group_add_member_patch as _build_group_add_member_patch,
+    build_group_payload as _build_group_payload,
+    build_user_payload as _build_user_payload,
+    ensure_url as _ensure_url,
+    now_iso as _now_iso,
+    record_check as _check,
+    require_success as _require_success,
+    safe_json as _safe_json,
+    scim_url as _scim_url,
+    write_out as _write_out,
 )
 
 
@@ -100,122 +105,6 @@ def _parse_args() -> argparse.Namespace:
         help="API base URL used for --publish (defaults to VALDRICS_API_URL)",
     )
     return parser.parse_args()
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _ensure_url(value: str, *, name: str) -> str:
-    url = str(value or "").strip()
-    if not url:
-        raise SystemExit(f"{name} is required.")
-    return url.rstrip("/")
-
-
-def _auth_headers(token: str) -> dict[str, str]:
-    token = str(token or "").strip()
-    if not token:
-        raise SystemExit("VALDRICS_SCIM_TOKEN/--scim-token is required.")
-    return {"Authorization": f"Bearer {token}"}
-
-
-@dataclass(frozen=True)
-class _Check:
-    name: str
-    passed: bool
-    status_code: int | None = None
-    detail: str | None = None
-    duration_ms: float | None = None
-
-
-def _extract_scim_error_detail(payload: Any) -> str:
-    if not payload or not isinstance(payload, dict):
-        return ""
-    for key in ("detail", "message"):
-        value = payload.get(key)
-        if isinstance(value, str) and value.strip():
-            return value.strip()
-    return ""
-
-
-def _safe_json(resp: httpx.Response) -> Any:
-    try:
-        return resp.json()
-    except json.JSONDecodeError:
-        return None
-
-
-def _scim_url(base: str, path: str) -> str:
-    # Ensure urljoin keeps /scim/v2 root.
-    return urljoin(base.rstrip("/") + "/", path.lstrip("/"))
-
-
-def _check(
-    checks: list[_Check],
-    *,
-    name: str,
-    resp: httpx.Response | None,
-    started: float,
-    ok: bool,
-    detail: str | None = None,
-) -> None:
-    duration_ms = (time.time() - started) * 1000.0
-    status_code = resp.status_code if resp is not None else None
-    checks.append(
-        _Check(
-            name=name,
-            passed=bool(ok),
-            status_code=status_code,
-            detail=detail,
-            duration_ms=round(duration_ms, 2),
-        )
-    )
-
-
-def _require_success(resp: httpx.Response) -> tuple[bool, str | None]:
-    if resp.is_success:
-        return True, None
-    payload = _safe_json(resp)
-    detail = _extract_scim_error_detail(payload) or resp.text
-    return False, detail.strip() if isinstance(detail, str) else None
-
-
-def _build_user_payload(email: str) -> dict[str, Any]:
-    return {
-        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
-        "userName": email,
-        "active": True,
-        "emails": [{"value": email, "primary": True}],
-    }
-
-
-def _build_group_payload(display_name: str) -> dict[str, Any]:
-    return {
-        "schemas": ["urn:ietf:params:scim:schemas:core:2.0:Group"],
-        "displayName": display_name,
-        "members": [],
-    }
-
-
-def _build_group_add_member_patch(user_id: str) -> dict[str, Any]:
-    return {
-        "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
-        "Operations": [
-            {
-                "op": "add",
-                "path": "members",
-                "value": [{"value": user_id}],
-            }
-        ],
-    }
-
-
-def _write_out(path: str, payload: dict[str, Any]) -> None:
-    if not path:
-        return
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=2, sort_keys=True)
 
 
 def main() -> int:

@@ -23,7 +23,11 @@ from app.modules.optimization.domain.remediation_execute_helpers import (
     should_notify_completion_workflow,
 )
 from app.shared.core.constants import SYSTEM_USER_ID
-from app.shared.core.exceptions import ExternalAPIError, ResourceNotFoundError
+from app.shared.core.exceptions import (
+    ExternalAPIError,
+    KillSwitchTriggeredError,
+    ResourceNotFoundError,
+)
 from app.shared.core.ops_metrics import REMEDIATION_DURATION_SECONDS
 from app.shared.core.pricing import PricingTier
 from app.shared.core.security_metrics import REMEDIATION_TOTAL
@@ -47,6 +51,7 @@ REMEDIATION_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS = (
 REMEDIATION_ACTION_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (ValueError, TypeError, AttributeError)
 REMEDIATION_EXECUTION_RECOVERABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
     ExternalAPIError,
+    KillSwitchTriggeredError,
     *_REMEDIATION_COMMON_RECOVERABLE_EXCEPTIONS,
 )
 

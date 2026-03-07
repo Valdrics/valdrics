@@ -134,6 +134,50 @@ async def test_get_ingestion_sla_includes_dead_letter_and_duration_filters() -> 
     assert response.latest_completed_at is not None
 
 
+@pytest.mark.asyncio
+async def test_get_ingestion_sla_supports_awaitable_scalar_materialization() -> None:
+    user = _user()
+    now = datetime.now(timezone.utc)
+
+    jobs = [
+        SimpleNamespace(
+            status=JobStatus.COMPLETED.value,
+            started_at=now,
+            completed_at=now + timedelta(seconds=15),
+            result={"ingested": 3},
+        ),
+        SimpleNamespace(
+            status=JobStatus.DEAD_LETTER.value,
+            started_at=now,
+            completed_at=now + timedelta(seconds=20),
+            result={},
+        ),
+    ]
+
+    result = MagicMock()
+    scalars = MagicMock()
+    scalars.all = AsyncMock(return_value=jobs)
+    result.scalars.return_value = scalars
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=result)
+
+    response = await costs_api.get_ingestion_sla(
+        window_hours=6,
+        target_success_rate_percent=20.0,
+        user=user,
+        db=db,
+    )
+
+    assert response.total_jobs == 2
+    assert response.successful_jobs == 1
+    assert response.failed_jobs == 1
+    assert response.records_ingested == 3
+    assert response.avg_duration_seconds == 17.5
+    assert response.p95_duration_seconds == 20.0
+    assert response.meets_sla is True
+
+
 def test_build_provider_recency_summary_counts_recent_stale_and_never() -> None:
     now = datetime.now(timezone.utc)
     connections = [

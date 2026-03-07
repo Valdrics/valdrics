@@ -38,14 +38,15 @@ uv run uvicorn app.main:app --reload
 
 ```bash
 # Build
-docker build -t valdrics/api:latest .
+export VERSION=2026.03.06
+docker build -t valdrics/api:${VERSION} .
 
 # Run
 docker run -d \
   --name valdrics-api \
   -p 8000:8000 \
   --env-file .env \
-  valdrics/api:latest
+  valdrics/api:${VERSION}
 ```
 
 ---
@@ -66,10 +67,10 @@ kubectl get pods -n valdrics -l app.kubernetes.io/name=valdrics
 
 | Component | Description |
 |---|---|
-| `templates/deployment.yaml` | API + Worker pods |
+| `templates/deployment.yaml` | API deployment and probes |
+| `templates/worker-deployment.yaml` | Background worker deployment |
 | `templates/service.yaml` | Internal services |
-| `templates/configmap.yaml` | Configuration |
-| `templates/hpa.yaml` | Autoscaling (3→20 replicas) |
+| `templates/hpa.yaml` | Optional autoscaling |
 | `templates/ingress.yaml` | External access with TLS |
 
 ### Required Secrets
@@ -77,9 +78,9 @@ kubectl get pods -n valdrics -l app.kubernetes.io/name=valdrics
 Create before deployment:
 ```bash
 kubectl create secret generic valdrics-secrets \
-  --from-literal=database-url='postgresql://...' \
-  --from-literal=encryption-key='your-key' \
-  --from-literal=openai-api-key='sk-...'
+  --from-literal=DATABASE_URL='postgresql://...' \
+  --from-literal=ENCRYPTION_KEY='your-key' \
+  --from-literal=OPENAI_API_KEY='sk-...'
 ```
 
 ---
@@ -105,12 +106,39 @@ k6 run loadtest/k6-test.js
 ## Monitoring
 
 ### Prometheus Metrics
-- Endpoint: `/metrics`
+- Endpoint: `/_internal/metrics`
+- Exposure: cluster-internal only; ingress blocks public access
 - Includes: request latency, error rates, active connections
 
 ### Health Check
-- Endpoint: `/health`
-- Returns: `{"status": "healthy"}`
+- Liveness: `/health/live`
+- Readiness/dependency health: `/health`
+- `/health` returns a detailed dependency payload and can return HTTP `503` when critical dependencies are unavailable
+
+---
+
+## DB Pool Sizing Matrix (Enterprise)
+
+Use an explicit capacity budget instead of static defaults when scaling:
+
+```
+max_db_connections_required =
+  api_replicas * WEB_CONCURRENCY * (DB_POOL_SIZE + DB_MAX_OVERFLOW)
+```
+
+Target `max_db_connections_required <= 0.8 * database_max_connections` to preserve headroom for migrations, admin sessions, and background jobs.
+
+| Profile | API Replicas | WEB_CONCURRENCY | DB_POOL_SIZE | DB_MAX_OVERFLOW | Max DB Connections |
+|---|---:|---:|---:|---:|---:|
+| Dev/Single node | 1 | 2 | 20 | 10 | 60 |
+| Production (small) | 2 | 2 | 15 | 5 | 80 |
+| Production (medium) | 4 | 3 | 12 | 4 | 192 |
+| Production (large) | 6 | 4 | 10 | 3 | 312 |
+
+Scaling rule:
+- Scale pods first when CPU saturation or request concurrency rises.
+- Increase `DB_POOL_SIZE` only when query queueing persists and DB connection headroom remains.
+- For dedicated databases, tune `DB_POOL_SIZE` with worker count and node cores; do not keep free-tier defaults unchanged.
 
 ---
 

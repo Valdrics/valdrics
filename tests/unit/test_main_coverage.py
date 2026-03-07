@@ -41,7 +41,10 @@ async def test_lifespan_flow(mock_lifespan_deps):
     from app.main import lifespan, app
 
     async with lifespan(app):
-        mock_lifespan_deps["makedirs"].assert_called_with("data", exist_ok=True)
+        mock_lifespan_deps["makedirs"].assert_called_with(
+            "/tmp/valdrics",
+            exist_ok=True,
+        )
 
     mock_lifespan_deps["dispose"].assert_called_once()
 
@@ -104,7 +107,7 @@ def test_generic_exception_handler(client):
 
 def test_docs_endpoints(client):
     # Swagger
-    with patch("app.main.get_swagger_ui_html") as mock_swagger:
+    with patch("app.main.render_swagger_ui_html") as mock_swagger:
         mock_swagger.return_value = MagicMock()
         mock_swagger.return_value.body = b"<html></html>"
         mock_swagger.return_value.status_code = 200
@@ -112,7 +115,7 @@ def test_docs_endpoints(client):
         assert response.status_code == 200
 
     # Redoc
-    with patch("app.main.get_redoc_html") as mock_redoc:
+    with patch("app.main.render_redoc_ui_html") as mock_redoc:
         mock_redoc.return_value = MagicMock()
         mock_redoc.return_value.body = b"<html></html>"
         mock_redoc.return_value.status_code = 200

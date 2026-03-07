@@ -186,3 +186,64 @@ async def test_handle_check_errors():
     result = await service._handle_check_errors(boom())
     assert result["status"] == "error"
     assert "boom" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_comprehensive_health_check_contains_unexpected_subcheck_exceptions():
+    service = HealthService()
+
+    with (
+        patch.object(service, "_check_database", side_effect=Exception("db down")),
+        patch.object(
+            service,
+            "_check_cache",
+            return_value={"status": "healthy", "latency_ms": 1},
+        ),
+        patch.object(
+            service,
+            "_check_external_services",
+            return_value={
+                "status": "healthy",
+                "services": {"aws_sts": {"status": "healthy"}},
+            },
+        ),
+        patch.object(
+            service,
+            "_check_circuit_breakers",
+            return_value={"status": "healthy"},
+        ),
+        patch.object(
+            service,
+            "_check_system_resources",
+            return_value={"status": "healthy"},
+        ),
+        patch.object(
+            service,
+            "_check_background_jobs",
+            side_effect=Exception("jobs down"),
+        ),
+    ):
+        result = await service.comprehensive_health_check()
+
+    assert result["status"] == "unhealthy"
+    assert result["checks"]["database"]["status"] == "down"
+    assert result["checks"]["database"]["error"] == "db down"
+    assert result["checks"]["background_jobs"]["status"] == "unknown"
+    assert result["checks"]["background_jobs"]["error"] == "jobs down"
+
+
+@pytest.mark.asyncio
+async def test_run_health_check_rejects_non_mapping_payload():
+    service = HealthService()
+
+    async def invalid_payload():
+        return "not-a-dict"
+
+    result = await service._run_health_check(
+        invalid_payload(),
+        component="cache",
+    )
+
+    assert result["status"] == "unhealthy"
+    assert result["component"] == "cache"
+    assert result["error"] == "Health check returned non-dict payload"

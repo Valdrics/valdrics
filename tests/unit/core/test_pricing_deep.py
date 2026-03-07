@@ -221,6 +221,19 @@ class TestPricingDeep:
             mock_logger.error.assert_called()
 
     @pytest.mark.asyncio
+    async def test_get_tenant_tier_awaits_async_scalar_result(self, mock_db):
+        mock_tenant = MagicMock()
+        mock_tenant.plan = PricingTier.PRO.value
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none = AsyncMock(return_value=mock_tenant)
+        mock_db.execute.return_value = mock_result
+
+        tier = await get_tenant_tier(uuid.uuid4(), mock_db)
+
+        assert tier == PricingTier.PRO
+        mock_result.scalar_one_or_none.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_requires_feature_invalid_tier_string_deep(self):
         """Test requires_feature handles invalid tier string by defaulting to STARTER."""
         # Line 312-313

@@ -149,11 +149,11 @@ async def test_handle_webhook_success(
 
     mock_handler = mock_handler_class.return_value
     mock_handler.verify_signature.return_value = True
-    mock_handler.handle = AsyncMock(return_value={"status": "success"})
 
     mock_retry = mock_retry_class.return_value
-    mock_retry.store_webhook = AsyncMock(return_value=MagicMock())
-    mock_retry.mark_inline_processed = AsyncMock()
+    queued_job = MagicMock()
+    queued_job.id = "job-123"
+    mock_retry.store_webhook = AsyncMock(return_value=queued_job)
 
     try:
         response = await handle_webhook(request, mock_db)
@@ -162,15 +162,16 @@ async def test_handle_webhook_success(
 
         traceback.print_exc()
         raise
-    assert response == {"status": "success"}
-    mock_retry.mark_inline_processed.assert_awaited_once()
+    assert response["status"] == "accepted"
+    assert response["delivery_mode"] == "async_durable"
+    assert response["job_id"] == "job-123"
 
 
 @pytest.mark.asyncio
 @patch("app.modules.billing.domain.billing.paystack_billing.WebhookHandler")
 @patch("app.modules.billing.domain.billing.webhook_retry.WebhookRetryService")
 @patch("app.modules.billing.api.v1.billing.settings")
-async def test_handle_webhook_success_when_inline_completion_mark_fails(
+async def test_handle_webhook_duplicate_short_circuits_to_duplicate_response(
     mock_settings: MagicMock,
     mock_retry_class: MagicMock,
     mock_handler_class: MagicMock,
@@ -190,17 +191,12 @@ async def test_handle_webhook_success_when_inline_completion_mark_fails(
 
     mock_handler = mock_handler_class.return_value
     mock_handler.verify_signature.return_value = True
-    mock_handler.handle = AsyncMock(return_value={"status": "success"})
 
     mock_retry = mock_retry_class.return_value
-    mock_retry.store_webhook = AsyncMock(return_value=MagicMock())
-    mock_retry.mark_inline_processed = AsyncMock(
-        side_effect=RuntimeError("mark failed")
-    )
+    mock_retry.store_webhook = AsyncMock(return_value=None)
 
     response = await handle_webhook(request, mock_db)
-    assert response == {"status": "success"}
-    mock_retry.mark_inline_processed.assert_awaited_once()
+    assert response == {"status": "duplicate", "message": "Already queued or processed"}
 
 
 @pytest.mark.asyncio

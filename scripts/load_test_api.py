@@ -32,9 +32,13 @@ from app.shared.core.performance_testing import (
     LoadTester,
     format_exception_message,
 )
-from app.shared.core.performance_evidence import (
-    LoadTestThresholds,
-    evaluate_load_test_result,
+from scripts.load_test_api_cli import parse_load_test_args
+from scripts.load_test_api_reporting import (
+    aggregate_load_results,
+    attach_threshold_evaluation,
+    build_preflight_failure_payload,
+    resolve_threshold_inputs,
+    result_to_payload,
 )
 
 LIVENESS_ENDPOINT = "/health/live"
@@ -50,146 +54,7 @@ LOAD_TEST_PROBE_RECOVERABLE_EXCEPTIONS = (
 
 
 def _parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run a small API load test.")
-    parser.add_argument(
-        "--url", dest="url", default="http://127.0.0.1:8000", help="Base URL"
-    )
-    parser.add_argument(
-        "--profile",
-        dest="profile",
-        choices=[
-            "health",
-            "health_deep",
-            "dashboard",
-            "ops",
-            "scale",
-            "soak",
-            "enforcement",
-        ],
-        default="health",
-        help="Use a pre-defined endpoint profile when --endpoint is not supplied.",
-    )
-    parser.add_argument(
-        "--endpoint",
-        dest="endpoints",
-        action="append",
-        default=[],
-        help=f"Endpoint path (repeatable). Default: {LIVENESS_ENDPOINT}",
-    )
-    parser.add_argument(
-        "--include-deep-health",
-        dest="include_deep_health",
-        action="store_true",
-        help=f"Include {DEEP_HEALTH_ENDPOINT} in generated profile endpoints.",
-    )
-    parser.add_argument(
-        "--start-date", dest="start_date", default="", help="ISO date (YYYY-MM-DD)"
-    )
-    parser.add_argument(
-        "--end-date", dest="end_date", default="", help="ISO date (YYYY-MM-DD)"
-    )
-    parser.add_argument(
-        "--provider",
-        dest="provider",
-        default="",
-        help="Provider filter (aws/azure/gcp/...)",
-    )
-    parser.add_argument(
-        "--duration", dest="duration", type=int, default=30, help="Duration in seconds"
-    )
-    parser.add_argument(
-        "--users", dest="users", type=int, default=10, help="Concurrent users"
-    )
-    parser.add_argument(
-        "--ramp", dest="ramp", type=int, default=5, help="Ramp-up seconds"
-    )
-    parser.add_argument(
-        "--timeout",
-        dest="timeout",
-        type=float,
-        default=15.0,
-        help="Request timeout seconds",
-    )
-    parser.add_argument(
-        "--skip-preflight",
-        dest="skip_preflight",
-        action="store_true",
-        help="Skip preflight endpoint validation before the load run.",
-    )
-    parser.add_argument(
-        "--allow-preflight-failures",
-        dest="allow_preflight_failures",
-        action="store_true",
-        help="Continue load run even if preflight checks fail.",
-    )
-    parser.add_argument(
-        "--preflight-attempts",
-        dest="preflight_attempts",
-        type=int,
-        default=2,
-        help="Number of preflight attempts per endpoint.",
-    )
-    parser.add_argument(
-        "--preflight-timeout",
-        dest="preflight_timeout",
-        type=float,
-        default=5.0,
-        help="Timeout (seconds) per preflight request.",
-    )
-    parser.add_argument(
-        "--rounds",
-        dest="rounds",
-        type=int,
-        default=1,
-        help="Repeat the run N times (soak). Aggregates worst-case p95/error-rate for evidence.",
-    )
-    parser.add_argument(
-        "--pause",
-        dest="pause",
-        type=float,
-        default=0.0,
-        help="Pause in seconds between rounds (soak).",
-    )
-    parser.add_argument(
-        "--out",
-        dest="out",
-        default="",
-        help="Write JSON results to this path (optional)",
-    )
-    parser.add_argument(
-        "--p95-target",
-        dest="p95_target",
-        type=float,
-        default=None,
-        help="Fail if p95 response time exceeds this value (seconds).",
-    )
-    parser.add_argument(
-        "--max-error-rate",
-        dest="max_error_rate",
-        type=float,
-        default=None,
-        help="Fail if failed request rate exceeds this value (percent).",
-    )
-    parser.add_argument(
-        "--min-throughput",
-        dest="min_throughput",
-        type=float,
-        default=None,
-        help="Fail if throughput is below this value (requests per second).",
-    )
-    parser.add_argument(
-        "--enforce-thresholds",
-        dest="enforce_thresholds",
-        action="store_true",
-        help="Exit non-zero if the evaluated thresholds are not met.",
-    )
-    parser.add_argument(
-        "--publish",
-        dest="publish",
-        action="store_true",
-        help="Publish the load test evidence to the tenant audit log (Pro+ admin only).",
-    )
-    return parser.parse_args()
+    return parse_load_test_args()
 
 
 def _resolve_date_window(args: argparse.Namespace) -> tuple[str, str]:
@@ -482,33 +347,13 @@ async def main() -> None:
             timeout_seconds=preflight_timeout,
         )
         if not preflight.get("passed") and not allow_preflight_failures:
-            failure_payload = {
-                "profile": str(args.profile),
-                "target_url": str(config.target_url),
-                "endpoints": list(endpoints),
-                "captured_at": datetime.now(timezone.utc).isoformat(),
-                "runner": "scripts/load_test_api.py",
-                "status": "preflight_failed",
-                "preflight": preflight,
-                "runtime": runtime_snapshot,
-                "meets_targets": False,
-                "results": {
-                    "total_requests": 0,
-                    "successful_requests": 0,
-                    "failed_requests": 0,
-                    "throughput_rps": 0.0,
-                    "avg_response_time": 0.0,
-                    "median_response_time": 0.0,
-                    "p95_response_time": 0.0,
-                    "p99_response_time": 0.0,
-                    "min_response_time": 0.0,
-                    "max_response_time": 0.0,
-                    "errors_sample": [
-                        f"Preflight failed for {item['endpoint']}: {item['error']}"
-                        for item in list(preflight.get("failures", []))[:10]
-                    ],
-                },
-            }
+            failure_payload = build_preflight_failure_payload(
+                profile=str(args.profile),
+                target_url=str(config.target_url),
+                endpoints=list(endpoints),
+                preflight=preflight,
+                runtime_snapshot=runtime_snapshot,
+            )
             print(json.dumps(failure_payload, indent=2, sort_keys=True))
             if args.out:
                 with open(args.out, "w", encoding="utf-8") as f:
@@ -522,33 +367,6 @@ async def main() -> None:
             headers=headers,
             timeout_seconds=preflight_timeout,
         )
-
-    def result_to_payload(result: object) -> dict[str, object]:
-        return {
-            "total_requests": int(getattr(result, "total_requests", 0) or 0),
-            "successful_requests": int(getattr(result, "successful_requests", 0) or 0),
-            "failed_requests": int(getattr(result, "failed_requests", 0) or 0),
-            "throughput_rps": float(getattr(result, "throughput_rps", 0.0) or 0.0),
-            "avg_response_time": float(
-                getattr(result, "avg_response_time", 0.0) or 0.0
-            ),
-            "median_response_time": float(
-                getattr(result, "median_response_time", 0.0) or 0.0
-            ),
-            "p95_response_time": float(
-                getattr(result, "p95_response_time", 0.0) or 0.0
-            ),
-            "p99_response_time": float(
-                getattr(result, "p99_response_time", 0.0) or 0.0
-            ),
-            "min_response_time": float(
-                getattr(result, "min_response_time", 0.0) or 0.0
-            ),
-            "max_response_time": float(
-                getattr(result, "max_response_time", 0.0) or 0.0
-            ),
-            "errors_sample": list(getattr(result, "errors", [])[:10]),
-        }
 
     run_payloads: list[dict[str, object]] = []
     raw_results = []
@@ -566,63 +384,7 @@ async def main() -> None:
         )
         if pause_seconds and idx < rounds - 1:
             await asyncio.sleep(pause_seconds)
-
-    # Aggregate worst-case evidence for procurement/perf sign-off.
-    total_requests = sum(int(getattr(r, "total_requests", 0) or 0) for r in raw_results)
-    successful_requests = sum(
-        int(getattr(r, "successful_requests", 0) or 0) for r in raw_results
-    )
-    failed_requests = sum(
-        int(getattr(r, "failed_requests", 0) or 0) for r in raw_results
-    )
-    worst_p95 = max(
-        float(getattr(r, "p95_response_time", 0.0) or 0.0) for r in raw_results
-    )
-    worst_p99 = max(
-        float(getattr(r, "p99_response_time", 0.0) or 0.0) for r in raw_results
-    )
-    min_throughput = min(
-        float(getattr(r, "throughput_rps", 0.0) or 0.0) for r in raw_results
-    )
-    avg_throughput = sum(
-        float(getattr(r, "throughput_rps", 0.0) or 0.0) for r in raw_results
-    ) / max(1, rounds)
-    min_response = min(
-        float(getattr(r, "min_response_time", 0.0) or 0.0) for r in raw_results
-    )
-    max_response = max(
-        float(getattr(r, "max_response_time", 0.0) or 0.0) for r in raw_results
-    )
-
-    errors_sample: list[str] = []
-    for raw in raw_results:
-        for err in list(getattr(raw, "errors", [])[:10]):
-            if err not in errors_sample:
-                errors_sample.append(err)
-        if len(errors_sample) >= 10:
-            break
-
-    # Keep median/avg as averages to avoid misleading "worst median" values.
-    avg_response_time = sum(
-        float(getattr(r, "avg_response_time", 0.0) or 0.0) for r in raw_results
-    ) / max(1, rounds)
-    median_response_time = sum(
-        float(getattr(r, "median_response_time", 0.0) or 0.0) for r in raw_results
-    ) / max(1, rounds)
-
-    results_payload = {
-        "total_requests": total_requests,
-        "successful_requests": successful_requests,
-        "failed_requests": failed_requests,
-        "throughput_rps": round(avg_throughput, 4),
-        "avg_response_time": round(avg_response_time, 4),
-        "median_response_time": round(median_response_time, 4),
-        "p95_response_time": round(worst_p95, 4),
-        "p99_response_time": round(worst_p99, 4),
-        "min_response_time": round(min_response, 4),
-        "max_response_time": round(max_response, 4),
-        "errors_sample": errors_sample[:10],
-    }
+    aggregate = aggregate_load_results(raw_results)
 
     evidence_payload: dict[str, object] = {
         "profile": str(args.profile),
@@ -632,82 +394,30 @@ async def main() -> None:
         "concurrent_users": int(config.concurrent_users),
         "ramp_up_seconds": int(config.ramp_up_seconds),
         "request_timeout": float(config.request_timeout),
-        "results": results_payload,
+        "results": aggregate.results_payload,
         "rounds": rounds,
         "runs": run_payloads,
-        "min_throughput_rps": round(min_throughput, 4),
+        "min_throughput_rps": round(aggregate.min_throughput, 4),
         "captured_at": datetime.now(timezone.utc).isoformat(),
         "runner": "scripts/load_test_api.py",
         "preflight": preflight,
         "runtime": runtime_snapshot,
     }
 
-    profile_defaults: dict[str, LoadTestThresholds] = {
-        "health": LoadTestThresholds(
-            max_p95_seconds=1.0, max_error_rate_percent=1.0, min_throughput_rps=1.0
-        ),
-        "health_deep": LoadTestThresholds(
-            max_p95_seconds=4.0, max_error_rate_percent=2.0, min_throughput_rps=0.2
-        ),
-        "dashboard": LoadTestThresholds(
-            max_p95_seconds=2.5, max_error_rate_percent=1.0, min_throughput_rps=0.5
-        ),
-        "ops": LoadTestThresholds(
-            max_p95_seconds=2.5, max_error_rate_percent=1.0, min_throughput_rps=0.5
-        ),
-        "scale": LoadTestThresholds(
-            max_p95_seconds=4.0, max_error_rate_percent=2.0, min_throughput_rps=0.2
-        ),
-        "soak": LoadTestThresholds(
-            max_p95_seconds=4.0, max_error_rate_percent=2.0, min_throughput_rps=0.2
-        ),
-        "enforcement": LoadTestThresholds(
-            max_p95_seconds=2.0, max_error_rate_percent=1.0, min_throughput_rps=0.5
-        ),
-    }
-
-    thresholds: LoadTestThresholds | None = None
-    enforce = bool(args.enforce_thresholds)
-    explicit_thresholds = (
-        args.p95_target is not None
-        or args.max_error_rate is not None
-        or args.min_throughput is not None
+    thresholds, enforce = resolve_threshold_inputs(
+        profile=str(args.profile),
+        p95_target=args.p95_target,
+        max_error_rate=args.max_error_rate,
+        min_throughput=args.min_throughput,
+        enforce_thresholds=bool(args.enforce_thresholds),
     )
-    if explicit_thresholds:
-        thresholds = LoadTestThresholds(
-            max_p95_seconds=float(args.p95_target or 999999),
-            max_error_rate_percent=float(args.max_error_rate or 100),
-            min_throughput_rps=float(args.min_throughput)
-            if args.min_throughput is not None
-            else None,
-        )
-        # Keep the legacy behavior: if the operator set explicit targets, enforce them.
-        enforce = True
-    else:
-        thresholds = profile_defaults.get(str(args.profile))
-
     if thresholds is not None:
-        per_round = [evaluate_load_test_result(raw, thresholds) for raw in raw_results]
-        evidence = (
-            per_round[-1]
-            if per_round
-            else evaluate_load_test_result(raw_results[-1], thresholds)
-        )
-        evidence_payload["thresholds"] = {
-            "max_p95_seconds": evidence.thresholds.max_p95_seconds,
-            "max_error_rate_percent": evidence.thresholds.max_error_rate_percent,
-            "min_throughput_rps": evidence.thresholds.min_throughput_rps,
-        }
-        evidence_payload["evaluation"] = {
-            "rounds": [item.model_dump() for item in per_round],
-            "overall_meets_targets": all(item.meets_targets for item in per_round)
-            if per_round
-            else None,
-            "worst_p95_seconds": float(worst_p95),
-            "min_throughput_rps": float(min_throughput),
-        }
-        evidence_payload["meets_targets"] = (
-            all(item.meets_targets for item in per_round) if per_round else None
+        attach_threshold_evaluation(
+            evidence_payload=evidence_payload,
+            raw_results=raw_results,
+            thresholds=thresholds,
+            worst_p95=aggregate.worst_p95,
+            min_throughput=aggregate.min_throughput,
         )
 
     print(json.dumps(evidence_payload, indent=2, sort_keys=True))

@@ -97,7 +97,7 @@ class TestCloudConnectionsDeep:
             assert res["code"] == "AUTH_FAILED"
 
     @pytest.mark.asyncio
-    async def test_aws_verify_connection_unexpected_error(self, mock_db):
+    async def test_aws_verify_connection_unexpected_error_propagates(self, mock_db):
         service = AWSConnectionService(mock_db)
         mock_conn = AWSConnection(id=uuid4(), status="pending", region="us-east-1")
         mock_result = MagicMock()
@@ -110,10 +110,8 @@ class TestCloudConnectionsDeep:
         with patch(
             "app.shared.connections.aws.AWSConnectionService._build_verification_adapter",
             return_value=mock_adapter,
-        ):
-            res = await service.verify_connection(mock_conn.id, uuid4())
-            assert res["status"] == "error"
-            assert "unexpected error" in res["message"].lower()
+        ), pytest.raises(Exception, match="System Crash"):
+            await service.verify_connection(mock_conn.id, uuid4())
 
     @pytest.mark.asyncio
     async def test_azure_verify_connection_success(self, mock_db):

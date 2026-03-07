@@ -24,7 +24,6 @@ HYBRID_CURRENCY_CONVERSION_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     ValueError,
 )
 
-
 class HybridNativeConnectorMixin:
     def _resolve_openstack_auth_url(self: Any) -> str:
         raw = self._connector_config.get("auth_url")

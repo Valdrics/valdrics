@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import uuid
 from contextlib import suppress
 from functools import wraps
@@ -236,6 +237,8 @@ async def get_tenant_tier(
         tenant: Any = None
         if callable(scalar_one_or_none):
             tenant = scalar_one_or_none()
+            if inspect.isawaitable(tenant):
+                tenant = await tenant
         if tenant is not None and not hasattr(tenant, "plan"):
             logger.error(
                 "tenant_lookup_invalid_result_type",

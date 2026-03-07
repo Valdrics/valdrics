@@ -35,7 +35,7 @@ RUNTIME_PROBES: tuple[RuntimeProbe, ...] = (
             sys.executable,
             "scripts/verify_python_module_size_budget.py",
             "--enforcement-mode",
-            "advisory",
+            "strict",
         ),
     ),
     RuntimeProbe(

@@ -4,9 +4,11 @@ from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
+from botocore.exceptions import ClientError
 
 from app.models.remediation import RemediationAction
 from app.modules.optimization.domain.actions.base import (
+    BaseRemediationAction,
     ExecutionStatus,
     RemediationContext,
 )
@@ -25,6 +27,63 @@ def _context(credentials: dict[str, object] | None = None) -> RemediationContext
         credentials=credentials,
         parameters={},
     )
+
+
+class _ClientErrorAction(BaseRemediationAction):
+    async def validate(self, resource_id: str, context: RemediationContext) -> bool:
+        del resource_id, context
+        return True
+
+    async def create_backup(
+        self, resource_id: str, context: RemediationContext
+    ) -> None:
+        del resource_id, context
+        return None
+
+    async def _perform_action(
+        self, resource_id: str, context: RemediationContext
+    ) -> object:
+        del resource_id, context
+        raise ClientError(
+            {"Error": {"Code": "UnauthorizedOperation", "Message": "Access Denied"}},
+            "TerminateInstances",
+        )
+
+
+class _UnexpectedErrorAction(BaseRemediationAction):
+    async def validate(self, resource_id: str, context: RemediationContext) -> bool:
+        del resource_id, context
+        return True
+
+    async def create_backup(
+        self, resource_id: str, context: RemediationContext
+    ) -> None:
+        del resource_id, context
+        return None
+
+    async def _perform_action(
+        self, resource_id: str, context: RemediationContext
+    ) -> object:
+        del resource_id, context
+        raise RuntimeError("unexpected provider failure")
+
+
+class _NonRecoverableAction(BaseRemediationAction):
+    async def validate(self, resource_id: str, context: RemediationContext) -> bool:
+        del resource_id, context
+        return True
+
+    async def create_backup(
+        self, resource_id: str, context: RemediationContext
+    ) -> None:
+        del resource_id, context
+        return None
+
+    async def _perform_action(
+        self, resource_id: str, context: RemediationContext
+    ) -> object:
+        del resource_id, context
+        raise LookupError("non-recoverable provider error")
 
 
 @pytest.mark.asyncio
@@ -88,6 +147,40 @@ async def test_license_action_generic_exception_returns_failed() -> None:
 
 
 @pytest.mark.asyncio
+async def test_base_action_client_error_returns_failed_status() -> None:
+    action = _ClientErrorAction()
+
+    result = await action.execute("i-unauthorized", _context())
+
+    assert result.status == ExecutionStatus.FAILED
+    assert result.action_taken == "_ClientErrorAction"
+    assert result.error_message is not None
+    assert "Access Denied" in result.error_message
+
+
+@pytest.mark.asyncio
+async def test_base_action_recoverable_runtime_error_returns_failed_status() -> None:
+    action = _UnexpectedErrorAction()
+
+    result = await action.execute("vol-fail", _context())
+
+    assert result.status == ExecutionStatus.FAILED
+    assert result.action_taken == "_UnexpectedErrorAction"
+    assert result.error_message == "unexpected provider failure"
+
+
+@pytest.mark.asyncio
+async def test_base_action_non_recoverable_exception_returns_failed_status() -> None:
+    action = _NonRecoverableAction()
+
+    result = await action.execute("vol-fail", _context())
+
+    assert result.status == ExecutionStatus.FAILED
+    assert result.action_taken == "_NonRecoverableAction"
+    assert result.error_message == "non-recoverable provider error"
+
+
+@pytest.mark.asyncio
 async def test_hybrid_base_methods_and_credential_build_guards() -> None:
     action = HybridManualReviewAction()
 
@@ -117,4 +210,3 @@ async def test_platform_base_methods_and_credential_build_guards() -> None:
 
     with pytest.raises(ValueError, match="Invalid platform credentials payload"):
         action._build_credentials(object())
-

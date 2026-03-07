@@ -200,6 +200,7 @@ async def test_send_alert_builds_expected_payload_and_filters_actions() -> None:
     assert title_block["color"] == "warning"
     assert len(card["actions"]) == 1
     assert card["actions"][0]["title"] == "Open"
+    assert client.post.await_args.kwargs["timeout"] == 3.0
 
 
 @pytest.mark.asyncio

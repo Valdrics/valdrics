@@ -27,7 +27,7 @@ scrape_configs:
   - job_name: 'valdrics-api'
     static_configs:
       - targets: ['api:8000']
-    metrics_path: /metrics
+    metrics_path: /_internal/metrics
     scrape_interval: 10s
 
   # Valdrics Worker (if running separately)

@@ -12,7 +12,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Literal, Dict, Any, List
 from datetime import datetime, timezone
 import sqlalchemy as sa
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Header, Query, Request
 from sqlalchemy import select, func, desc, asc
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,7 +44,11 @@ SSE_STREAM_RECOVERABLE_EXCEPTIONS = (
 
 
 async def require_internal_job_secret(
-    secret: str = Query(..., description="Internal secret for pg_cron"),
+    secret: str = Header(
+        ...,
+        alias="X-Internal-Job-Secret",
+        description="Internal scheduler secret for /jobs/internal/process",
+    ),
 ) -> None:
     """
     Enforce internal scheduler authentication for /jobs/internal/process.

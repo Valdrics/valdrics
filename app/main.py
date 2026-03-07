@@ -2,6 +2,7 @@ import asyncio
 import hashlib
 import inspect
 import os
+import tempfile
 from contextlib import asynccontextmanager
 from typing import Any, AsyncGenerator, Awaitable, Callable, TypeVar, cast
 
@@ -45,7 +46,6 @@ from app.shared.core.rate_limit import (
 
 # Ensure all models are registered with SQLAlchemy
 
-
 from app.modules.governance.api.v1.scim import (
     ScimError,
     scim_error_response,
@@ -55,18 +55,15 @@ from app.modules.governance.api.v1.scim import (
 setup_logging()
 settings = get_settings()
 
-
 class CsrfSettings(BaseModel):
     """Configuration for CSRF protection (Finding #5)."""
     secret_key: str
     cookie_samesite: str = "lax"
 
-
 # fastapi-csrf-protect uses a decorator with a dynamic callable signature.
 # Cast once to keep runtime behavior while avoiding type-ignore noise.
 F = TypeVar("F", bound=Callable[..., Any])
 _csrf_load_config = cast(Callable[[F], F], CsrfProtect.load_config)
-
 
 def _resolve_csrf_settings() -> CsrfSettings:
     """
@@ -78,26 +75,33 @@ def _resolve_csrf_settings() -> CsrfSettings:
     if settings.TESTING:
         # Tests may provide an explicit key; otherwise derive an ephemeral key so
         # no hardcoded fallback secret can leak across environments.
-        explicit_test_key = (settings.CSRF_TEST_SECRET_KEY or "").strip()
+        explicit_test_key_raw = getattr(settings, "CSRF_TEST_SECRET_KEY", None)
+        if not isinstance(explicit_test_key_raw, str):
+            explicit_test_key_raw = os.getenv("CSRF_TEST_SECRET_KEY", "")
+        explicit_test_key = explicit_test_key_raw.strip()
         if explicit_test_key:
             return CsrfSettings(secret_key=explicit_test_key)
-        test_seed = f"{settings.PYTEST_CURRENT_TEST or 'pytest'}:{os.getpid()}"
+        pytest_current_test = getattr(settings, "PYTEST_CURRENT_TEST", None)
+        if not isinstance(pytest_current_test, str):
+            pytest_current_test = os.getenv("PYTEST_CURRENT_TEST")
+        test_seed = f"{pytest_current_test or 'pytest'}:{os.getpid()}"
         derived_key = hashlib.sha256(test_seed.encode("utf-8")).hexdigest()
         return CsrfSettings(secret_key=f"test_csrf_{derived_key}")
     raise ValueError("CSRF_SECRET_KEY must be configured")
-
 
 @_csrf_load_config
 def get_csrf_config() -> CsrfSettings:
     return _resolve_csrf_settings()
 
-
 logger = structlog.get_logger()
-
+INTERNAL_METRICS_PATH = "/_internal/metrics"
 
 def _is_test_mode() -> bool:
     return settings.TESTING or bool(settings.PYTEST_CURRENT_TEST)
 
+def _runtime_data_dir() -> str:
+    configured = str(getattr(settings, "APP_RUNTIME_DATA_DIR", "") or "").strip()
+    return configured or os.path.join(tempfile.gettempdir(), "valdrics")
 
 def _load_emissions_tracker() -> Any:
     if _is_test_mode():
@@ -117,10 +121,7 @@ def _load_emissions_tracker() -> Any:
         logger.warning("emissions_tracker_unavailable", error=str(exc))
         return None
 
-
 EmissionsTracker = _load_emissions_tracker()
-
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -132,8 +133,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Setup: Initialize scheduler and emissions tracker
     logger.info("app_starting", app_name=settings.APP_NAME)
 
-    # Ensure data directory exists
-    os.makedirs("data", exist_ok=True)
+    runtime_data_dir = _runtime_data_dir()
+    os.makedirs(runtime_data_dir, exist_ok=True)
 
     # Track app's own carbon footprint (GreenOps)
     tracker = None
@@ -142,7 +143,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             project_name=settings.APP_NAME,
             measure_power_secs=300,
             save_to_file=True,
-            output_dir="data",
+            output_dir=runtime_data_dir,
             allow_multiple_runs=True,
         )
         tracker.start()
@@ -233,7 +234,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except RuntimeError as exc:
         logger.warning("db_engine_dispose_skipped_loop_closed", error=str(exc))
 
-
 # Application instance
 valdrics_app = FastAPI(
     title=settings.APP_NAME,
@@ -252,7 +252,6 @@ __all__ = ["app", "valdrics_app", "lifespan"]
 # Initialize Tracing
 setup_tracing(valdrics_app)
 
-
 @valdrics_app.exception_handler(ValdricsException)
 async def valdrics_exception_handler(
     request: Request, exc: ValdricsException
@@ -260,7 +259,6 @@ async def valdrics_exception_handler(
     """Handle custom application exceptions."""
     from app.shared.core.error_governance import handle_exception
     return handle_exception(request, exc)
-
 
 @valdrics_app.exception_handler(CsrfProtectError)
 async def csrf_protect_exception_handler(
@@ -270,7 +268,6 @@ async def csrf_protect_exception_handler(
     CSRF_ERRORS.labels(path=request.url.path, method=request.method).inc()
     from app.shared.core.error_governance import handle_exception
     return handle_exception(request, exc)
-
 
 @valdrics_app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
@@ -296,7 +293,6 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
         },
     )
 
-
 @valdrics_app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
     request: Request, exc: RequestValidationError
@@ -316,19 +312,16 @@ async def validation_exception_handler(
         },
     )
 
-
 @valdrics_app.exception_handler(ValueError)
 async def value_error_handler(request: Request, exc: ValueError) -> JSONResponse:
     """Handle business logic ValueErrors via central governance."""
     from app.shared.core.error_governance import handle_exception
     return handle_exception(request, exc)
 
-
 @valdrics_app.exception_handler(ScimError)
 async def scim_error_handler(_request: Request, exc: ScimError) -> JSONResponse:
     """Return SCIM-compliant error responses for /scim/v2 endpoints."""
     return scim_error_response(exc)
-
 
 # Setup rate limiting early for test visibility
 setup_rate_limiting(valdrics_app)
@@ -336,23 +329,19 @@ setup_rate_limiting(valdrics_app)
 # Serve static files for local Swagger UI
 valdrics_app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-
 @valdrics_app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html() -> Any:
     return await render_swagger_ui_html(valdrics_app, logger=logger)
 
-
 @valdrics_app.get("/redoc", include_in_schema=False)
 async def redoc_html() -> Any:
     return await render_redoc_ui_html(valdrics_app, logger=logger)
-
 
 # Override handler to include metrics (SEC-03)
 # MyPy: 'exception_handlers' is dynamic on FastAPI instance
 original_handler = valdrics_app.exception_handlers.get(
     RateLimitExceeded, _rate_limit_exceeded_handler
 )
-
 
 async def custom_rate_limit_handler(request: Request, exc: Exception) -> Response:
     if not isinstance(exc, RateLimitExceeded):
@@ -372,9 +361,7 @@ async def custom_rate_limit_handler(request: Request, exc: Exception) -> Respons
         return await res
     return res
 
-
 valdrics_app.add_exception_handler(RateLimitExceeded, custom_rate_limit_handler)
-
 
 @valdrics_app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -393,9 +380,12 @@ register_lifecycle_routes(
     version=settings.VERSION,
 )
 
-
 # Initialize Prometheus Metrics
-Instrumentator().instrument(valdrics_app).expose(valdrics_app)
+Instrumentator().instrument(valdrics_app).expose(
+    valdrics_app,
+    endpoint=INTERNAL_METRICS_PATH,
+    include_in_schema=False,
+)
 
 # IMPORTANT: Middleware order matters in FastAPI!
 # Middleware is processed in REVERSE order of addition.
@@ -433,7 +423,6 @@ valdrics_app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "X-CSRF-Token", "X-Requested-With"],
 )
-
 
 # CSRF Protection Middleware - processes after CORS but before auth
 @valdrics_app.middleware("http")
@@ -475,7 +464,6 @@ async def csrf_protect_middleware(
             return await csrf_protect_exception_handler(request, e)
 
     return await call_next(request)
-
 
 # Register API routers in a dedicated registry module for maintainability.
 register_api_routers(valdrics_app)

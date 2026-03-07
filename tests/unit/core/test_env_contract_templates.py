@@ -41,6 +41,8 @@ def test_env_example_contains_required_runtime_contract_keys() -> None:
         "LLM_PROVIDER",
         "REDIS_URL",
         "SENTRY_DSN",
+        "APP_RUNTIME_DATA_DIR",
+        "CIRCUIT_BREAKER_DISTRIBUTED_STATE",
     }
 
     missing = required - keys
@@ -66,6 +68,8 @@ def test_prod_env_template_contains_required_runtime_contract_keys() -> None:
         "PAYSTACK_PUBLIC_KEY",
         "SAAS_STRICT_INTEGRATIONS",
         "SENTRY_DSN",
+        "APP_RUNTIME_DATA_DIR",
+        "CIRCUIT_BREAKER_DISTRIBUTED_STATE",
     }
 
     missing = required - keys

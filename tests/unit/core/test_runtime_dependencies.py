@@ -16,6 +16,7 @@ def _settings(
     allow_prophet_fallback: bool = True,
     break_glass_reason: str | None = "Temporary dependency incident",
     break_glass_expires_at: str | None = None,
+    break_glass_max_duration_hours: int = 168,
     sentry_dsn: str | None = None,
 ) -> SimpleNamespace:
     if break_glass_expires_at is None:
@@ -28,6 +29,7 @@ def _settings(
         FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=allow_prophet_fallback,
         FORECASTER_BREAK_GLASS_REASON=break_glass_reason,
         FORECASTER_BREAK_GLASS_EXPIRES_AT=break_glass_expires_at,
+        FORECASTER_BREAK_GLASS_MAX_DURATION_HOURS=break_glass_max_duration_hours,
         SENTRY_DSN=sentry_dsn,
     )
 
@@ -127,6 +129,19 @@ def test_validate_runtime_dependencies_rejects_break_glass_invalid_expiry() -> N
     )
 
     with pytest.raises(RuntimeError, match="ISO-8601"):
+        validate_runtime_dependencies(settings)  # type: ignore[arg-type]
+
+
+def test_validate_runtime_dependencies_rejects_break_glass_exceeding_max_window() -> None:
+    too_far = (datetime.now(timezone.utc) + timedelta(days=8)).isoformat()
+    settings = _settings(
+        environment="production",
+        allow_prophet_fallback=True,
+        break_glass_expires_at=too_far,
+        break_glass_max_duration_hours=24 * 7,
+    )
+
+    with pytest.raises(RuntimeError, match="exceeds the allowed strict-environment window"):
         validate_runtime_dependencies(settings)  # type: ignore[arg-type]
 
 

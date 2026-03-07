@@ -99,6 +99,38 @@ async def test_check_budget_state_cache_error_is_fail_closed() -> None:
 
 
 @pytest.mark.asyncio
+async def test_check_budget_state_lookup_cache_error_fails_closed() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    cache = SimpleNamespace(
+        enabled=True,
+        client=SimpleNamespace(get=AsyncMock(side_effect=LookupError("redis-timeout"))),
+    )
+    with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache):
+        with pytest.raises(manager_module.BudgetExceededError) as exc:
+            await budget_execution.check_budget_state(_Manager, tenant_id, db)
+
+    assert exc.value.details["error"] == "service_unavailable"
+    assert exc.value.details["reason"] == "redis-timeout"
+
+
+@pytest.mark.asyncio
+async def test_check_budget_state_unhandled_cache_error_fails_closed() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    cache = SimpleNamespace(
+        enabled=True,
+        client=SimpleNamespace(get=AsyncMock(side_effect=Exception("redis-timeout"))),
+    )
+    with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache):
+        with pytest.raises(manager_module.BudgetExceededError) as exc:
+            await budget_execution.check_budget_state(_Manager, tenant_id, db)
+
+    assert exc.value.details["error"] == "service_unavailable"
+    assert exc.value.details["reason"] == "redis-timeout"
+
+
+@pytest.mark.asyncio
 async def test_check_budget_state_budget_paths() -> None:
     tenant_id = uuid4()
     cache = SimpleNamespace(

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from importlib.util import find_spec
 
 import structlog
@@ -65,6 +65,19 @@ def _validate_prophet_break_glass(settings: Settings, strict_env: bool) -> tuple
         raise RuntimeError(
             "FORECASTER_BREAK_GLASS_EXPIRES_AT is in the past. "
             "Renew or disable FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK."
+        )
+    max_duration_hours = int(
+        getattr(settings, "FORECASTER_BREAK_GLASS_MAX_DURATION_HOURS", 168)
+    )
+    if max_duration_hours <= 0:
+        raise RuntimeError(
+            "FORECASTER_BREAK_GLASS_MAX_DURATION_HOURS must be >= 1 in strict environments."
+        )
+    max_expires_at = now_utc + timedelta(hours=max_duration_hours)
+    if expires_at > max_expires_at:
+        raise RuntimeError(
+            "FORECASTER_BREAK_GLASS_EXPIRES_AT exceeds the allowed strict-environment "
+            f"window of {max_duration_hours} hour(s)."
         )
 
     return reason, expires_at

@@ -34,3 +34,28 @@ variable "active_enforcement_resource_tag_value" {
   type        = string
   default     = "true"
 }
+
+variable "enable_secret_rotation" {
+  description = "Enable 90-day automatic Secrets Manager rotation for runtime secrets."
+  type        = bool
+  default     = false
+}
+
+variable "secret_rotation_lambda_arn" {
+  description = "Rotation Lambda ARN for Secrets Manager rotation (required when enable_secret_rotation=true)."
+  type        = string
+  default     = ""
+}
+
+variable "runtime_secret_name" {
+  description = "Secrets Manager secret name read by Kubernetes ExternalSecrets."
+  type        = string
+  default     = ""
+}
+
+variable "runtime_secret_initial_json" {
+  description = "Optional initial JSON payload for the runtime secret."
+  type        = string
+  default     = ""
+  sensitive   = true
+}

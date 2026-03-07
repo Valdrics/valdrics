@@ -37,10 +37,8 @@ _RATES_CACHE: dict[str, tuple[Decimal, float, Optional[str]]] = {
 }
 _L1_TTL_SECONDS = 300.0
 
-
 class ExchangeRateUnavailableError(RuntimeError):
     """Raised when strict callers cannot obtain a trustworthy FX rate."""
-
 
 class ExchangeRateService:
     """Canonical FX service used by billing and non-billing consumers."""
@@ -443,18 +441,15 @@ class ExchangeRateService:
 
         return rates
 
-
 async def get_exchange_rate(to_currency: str, *, strict: bool = False) -> Decimal:
     """Convenience function for existing call sites."""
     service = ExchangeRateService()
     return await service.get_rate(to_currency, strict=strict)
 
-
 async def list_exchange_rates() -> dict[str, Decimal]:
     """Return cached exchange rates for diagnostics and internal APIs."""
     service = ExchangeRateService()
     return await service.list_cached_rates()
-
 
 async def convert_usd(
     amount_usd: float | Decimal,
@@ -469,7 +464,6 @@ async def convert_usd(
     rate = await get_exchange_rate(currency, strict=strict)
     return Decimal(str(amount_usd)) * rate
 
-
 async def convert_to_usd(
     amount: float | Decimal,
     from_currency: str,
@@ -482,7 +476,6 @@ async def convert_to_usd(
         return Decimal(str(amount))
     rate = await get_exchange_rate(currency, strict=strict)
     return convert_to_usd_amount(amount, rate)
-
 
 async def format_currency(
     amount_usd: float | Decimal,

@@ -1,7 +1,7 @@
 services:
   api:
     container_name: valdrics-api-prod
-    image: ${REGISTRY:-ghcr.io/valdrics}/valdrics-backend:${VERSION:-latest}
+    image: "${REGISTRY:-ghcr.io/valdrics}/valdrics-backend:${VERSION:?Set VERSION to an immutable release tag}"
     pull_policy: always
     ports:
       - "8000:8000"
@@ -10,14 +10,14 @@ services:
     environment:
       - DEBUG=False
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD-SHELL", "curl --fail --silent --show-error http://localhost:8000/health/live || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 3
 
   dashboard:
     container_name: valdrics-dashboard-prod
-    image: ${REGISTRY:-ghcr.io/valdrics}/valdrics-dashboard:${VERSION:-latest}
+    image: "${REGISTRY:-ghcr.io/valdrics}/valdrics-dashboard:${VERSION:?Set VERSION to an immutable release tag}"
     pull_policy: always
     ports:
       - "3000:3000"

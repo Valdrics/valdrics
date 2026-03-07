@@ -28,20 +28,21 @@ resource "aws_security_group" "redis" {
 }
 
 resource "aws_elasticache_replication_group" "main" {
-  replication_group_id = "valdrics-redis-${var.environment}"
-  description          = "Valdrics Redis cache (${var.environment})"
-  engine               = "redis"
-  engine_version       = "7.0"
-  node_type            = "cache.t3.micro"
-  num_cache_clusters   = 1
-  parameter_group_name = "default.redis7"
-  port                 = 6379
-  subnet_group_name    = aws_elasticache_subnet_group.main.name
-  security_group_ids   = [aws_security_group.redis.id]
+  replication_group_id       = "valdrics-redis-${var.environment}"
+  description                = "Valdrics Redis cache (${var.environment})"
+  engine                     = "redis"
+  engine_version             = "7.0"
+  node_type                  = "cache.t3.micro"
+  num_cache_clusters         = 2
+  parameter_group_name       = "default.redis7"
+  port                       = 6379
+  subnet_group_name          = aws_elasticache_subnet_group.main.name
+  security_group_ids         = [aws_security_group.redis.id]
   at_rest_encryption_enabled = true
   transit_encryption_enabled = true
-  automatic_failover_enabled = false
-  multi_az_enabled           = false
+  automatic_failover_enabled = true
+  multi_az_enabled           = true
+  snapshot_retention_limit   = 7
 
   tags = {
     Name        = "valdrics-redis-${var.environment}"

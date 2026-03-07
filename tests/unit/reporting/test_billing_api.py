@@ -402,7 +402,7 @@ async def test_handle_webhook_no_signature():
 
 
 @pytest.mark.asyncio
-async def test_handle_webhook_processing_error(mock_db):
+async def test_handle_webhook_returns_accepted_when_payload_is_queued(mock_db):
     payload = {"event": "charge.success", "data": {"reference": "ref_123"}}
     with (
         patch(
@@ -414,7 +414,6 @@ async def test_handle_webhook_processing_error(mock_db):
     ):
         mock_handler = mock_handler_cls.return_value
         mock_handler.verify_signature.return_value = True
-        mock_handler.handle.side_effect = RuntimeError("Process Error")
         mock_retry = mock_retry_cls.return_value
         mock_job = MagicMock()
         mock_job.id = uuid4()
@@ -425,7 +424,10 @@ async def test_handle_webhook_processing_error(mock_db):
                 json=payload,
                 headers={"X-Paystack-Signature": "valid"},
             )
-    assert response.json()["status"] == "queued"
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "accepted"
+    assert body["delivery_mode"] == "async_durable"
 
 
 @pytest.mark.asyncio

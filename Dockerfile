@@ -11,6 +11,8 @@ LABEL org.opencontainers.image.licenses="BUSL-1.1"
 
 WORKDIR /app
 
+ARG UV_VERSION=0.9.21
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
@@ -18,14 +20,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for fast dependency management
-ENV UV_SYSTEM_PYTHON=1
-RUN pip install --no-cache-dir uv
+ENV UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/opt/venv
+RUN pip install --no-cache-dir "uv==${UV_VERSION}"
 
 # Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies into a dedicated path
-RUN uv pip install --no-cache -r pyproject.toml
+# Install third-party dependencies from the committed lockfile before copying app code.
+RUN uv sync --frozen --no-dev --no-editable --no-install-project
+
+# Copy application code and install the project itself from the same lockfile.
+COPY app ./app
+RUN uv sync --frozen --no-dev --no-editable
 
 # ============================================================
 # STAGE 2: Runtime (minimal image)
@@ -34,13 +41,18 @@ FROM python:3.12-slim@sha256:f3fa41d74a768c2fce8016b98c191ae8c1bacd8f1152870a3f9
 
 WORKDIR /app
 
+# Runtime healthchecks use curl-based liveness probes.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 # Security: Run as non-root user
 RUN useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app
 
-# Copy installed packages from builder
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Copy the lock-synchronized virtual environment from the builder image.
+COPY --from=builder /opt/venv /opt/venv
 
 # Copy application code
 COPY --chown=appuser:appuser app ./app
@@ -48,13 +60,14 @@ COPY --chown=appuser:appuser app ./app
 # Metadata and Environment
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app
+    PYTHONPATH=/app \
+    PATH=/opt/venv/bin:$PATH
 
 USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live', timeout=5)"
+    CMD curl --fail --silent --show-error http://127.0.0.1:8000/health/live || exit 1
 
 EXPOSE 8000
 

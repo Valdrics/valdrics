@@ -8,6 +8,7 @@ from google.cloud import aiplatform_v1
 from google.cloud import monitoring_v3
 from google.oauth2 import service_account  # noqa: F401
 
+from app.modules.optimization.adapters.common import build_google_recoverable_exceptions
 from app.modules.optimization.adapters.common.credentials import resolve_gcp_credentials
 from app.modules.optimization.adapters.common.sync_bridge import materialize_iterable
 from app.modules.optimization.domain.cloud_api_budget import (
@@ -18,20 +19,7 @@ from app.modules.optimization.domain.registry import registry
 from app.modules.reporting.domain.pricing.service import PricingService
 
 logger = structlog.get_logger()
-
-def _resolve_google_api_error_base() -> type[Exception]:
-    try:
-        from google.api_core.exceptions import GoogleAPIError
-    except ImportError:  # pragma: no cover - fallback for SDK-mocked test envs
-        return Exception
-    return GoogleAPIError
-
-GCP_VERTEX_SCAN_RECOVERABLE_EXCEPTIONS = (
-    _resolve_google_api_error_base(),
-    OSError,
-    TimeoutError,
-    ValueError,
-)
+GCP_VERTEX_SCAN_RECOVERABLE_EXCEPTIONS = build_google_recoverable_exceptions()
 
 
 @registry.register("gcp")

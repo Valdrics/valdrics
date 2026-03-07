@@ -13,6 +13,7 @@ import asyncio
 from app.modules.optimization.domain.service import ZombieService
 from app.shared.core.health import HealthService
 from app.shared.core.notifications import NotificationDispatcher
+from app.shared.core.pricing import PricingTier
 from app.shared.db.session import get_db, set_session_tenant_id
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
@@ -71,10 +72,15 @@ class TestZombieServiceEdgeCases:
             patch(
                 "app.modules.optimization.domain.service.ZombieDetectorFactory"
             ) as mock_factory,
+            patch(
+                "app.shared.core.pricing.get_tenant_tier",
+                new=AsyncMock(return_value=PricingTier.FREE),
+            ),
+            patch.object(zombie_service, "_send_notifications", new=AsyncMock()),
         ):
             mock_detector = AsyncMock()
             # Mock scan_all to raise exception
-            mock_detector.scan_all.side_effect = Exception("AWS API failure")
+            mock_detector.scan_all.side_effect = RuntimeError("AWS API failure")
             mock_factory.get_detector.return_value = mock_detector
 
             result = await zombie_service.scan_for_tenant(tenant_id)
@@ -115,6 +121,11 @@ class TestZombieServiceEdgeCases:
             patch(
                 "app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery"
             ) as MockRD,
+            patch(
+                "app.shared.core.pricing.get_tenant_tier",
+                new=AsyncMock(return_value=PricingTier.FREE),
+            ),
+            patch.object(zombie_service, "_send_notifications", new=AsyncMock()),
         ):
             # AWS Success - Mock Region Discovery
             MockRD.return_value.get_enabled_regions = AsyncMock(
@@ -130,7 +141,7 @@ class TestZombieServiceEdgeCases:
             # Azure Failure
             mock_azure_detector = AsyncMock()
             mock_azure_detector.provider_name = "azure"
-            mock_azure_detector.scan_all.side_effect = Exception("Azure API failure")
+            mock_azure_detector.scan_all.side_effect = RuntimeError("Azure API failure")
 
             # Mock factory.get_detector
             def get_detector_side_effect(conn, **kwargs):
@@ -183,6 +194,11 @@ class TestZombieServiceEdgeCases:
             patch(
                 "app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery"
             ) as MockRD,
+            patch(
+                "app.shared.core.pricing.get_tenant_tier",
+                new=AsyncMock(return_value=PricingTier.FREE),
+            ),
+            patch.object(zombie_service, "_send_notifications", new=AsyncMock()),
         ):
             MockRD.return_value.get_enabled_regions = AsyncMock(
                 return_value=["us-east-1"]
@@ -236,6 +252,15 @@ class TestZombieServiceEdgeCases:
             patch(
                 "app.modules.optimization.domain.service.ZombieDetectorFactory"
             ) as mock_factory,
+            patch(
+                "app.shared.core.pricing.get_tenant_tier",
+                new=AsyncMock(return_value=PricingTier.FREE),
+            ),
+            patch(
+                "app.modules.optimization.domain.service.enqueue_zombie_analysis",
+                new=AsyncMock(return_value={"status": "pending", "job_id": "job-1"}),
+            ),
+            patch.object(zombie_service, "_send_notifications", new=AsyncMock()),
         ):
             mock_detector = AsyncMock()
             mock_detector.provider_name = "aws"
@@ -489,7 +514,7 @@ class TestDatabaseSessionIntegration:
 
         # First call fails, second succeeds
         mock_session.execute = AsyncMock(
-            side_effect=[Exception("Connection lost"), MagicMock()]
+            side_effect=[RuntimeError("Connection lost"), MagicMock()]
         )
         mock_session.connection = AsyncMock(return_value=AsyncMock())
         mock_session.close = AsyncMock()

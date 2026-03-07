@@ -78,6 +78,9 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
     dependency_lock_cmd = next(
         cmd for cmd in commands if "scripts/verify_dependency_locking.py" in cmd
     )
+    image_pinning_cmd = next(
+        cmd for cmd in commands if "scripts/verify_container_image_pinning.py" in cmd
+    )
     adapter_coverage_cmd = next(
         cmd for cmd in commands if "scripts/verify_adapter_test_coverage.py" in cmd
     )
@@ -144,6 +147,12 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
         "run",
         "python3",
         "scripts/verify_dependency_locking.py",
+    ]
+    assert image_pinning_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_container_image_pinning.py",
     ]
     assert adapter_coverage_cmd[:4] == [
         "uv",

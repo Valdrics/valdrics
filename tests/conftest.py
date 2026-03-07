@@ -9,6 +9,8 @@ Provides:
 - Test isolation utilities
 """
 
+pytest_plugins = ("tests.unit.shared.adapters.aws_cur_test_helpers",)
+
 import os
 import sys
 from pathlib import Path
@@ -55,7 +57,10 @@ from typing import AsyncGenerator, Generator, Optional
 from datetime import datetime, timezone
 from app.models.tenant import UserRole
 from app.shared.core.pricing import PricingTier
-from app.shared.testing.sqlite_artifact_cleanup import cleanup_sqlite_test_artifacts
+from app.shared.testing.sqlite_artifact_cleanup import (
+    build_sqlite_test_database_path,
+    cleanup_sqlite_test_artifacts,
+)
 
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
@@ -152,21 +157,19 @@ tenacity.retry = mock_retry
 
 
 @pytest_asyncio.fixture
-async def async_engine():
+async def async_engine(tmp_path_factory):
     """Create async SQLite engine for testing using a temporary file."""
     from sqlalchemy.ext.asyncio import create_async_engine
-    import os
 
-    db_file = f"test_{uuid4().hex}.sqlite"
-    db_url = f"sqlite+aiosqlite:///{db_file}"
+    db_path = build_sqlite_test_database_path(tmp_path_factory.mktemp("sqlite-db"))
+    db_url = f"sqlite+aiosqlite:///{db_path.as_posix()}"
 
     engine = create_async_engine(db_url, echo=False)
     yield engine
     await engine.dispose()
 
-    # Cleanup
-    if os.path.exists(db_file):
-        os.remove(db_file)
+    for suffix in ("", "-journal", "-shm", "-wal"):
+        Path(f"{db_path}{suffix}").unlink(missing_ok=True)
 
 
 @pytest_asyncio.fixture

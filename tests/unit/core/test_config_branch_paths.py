@@ -74,9 +74,14 @@ def _settings() -> Settings:
 
 
 def test_reload_settings_from_environment_success_and_cache_warm() -> None:
-    refreshed = object()
-    get_settings_mock = MagicMock(return_value=refreshed)
-    get_settings_mock.cache_clear = MagicMock()
+    current = types.SimpleNamespace(APP_NAME="old-name", ENVIRONMENT="development")
+    refreshed = MagicMock()
+    refreshed.APP_NAME = "new-name"
+    refreshed.ENVIRONMENT = "production"
+    refreshed.model_dump.return_value = {
+        "APP_NAME": refreshed.APP_NAME,
+        "ENVIRONMENT": refreshed.ENVIRONMENT,
+    }
     logger = MagicMock()
 
     fake_security_module = types.ModuleType("app.shared.core.security")
@@ -87,23 +92,26 @@ def test_reload_settings_from_environment_success_and_cache_warm() -> None:
     fake_security_module.EncryptionKeyManager = _KeyManager
 
     with (
-        patch("app.shared.core.config.get_settings", get_settings_mock),
+        patch("app.shared.core.config.get_settings", return_value=current),
+        patch("app.shared.core.config.Settings", return_value=refreshed),
         patch("app.shared.core.config.structlog.get_logger", return_value=logger),
         patch.dict("sys.modules", {"app.shared.core.security": fake_security_module}),
     ):
         result = reload_settings_from_environment()
 
-    assert result is refreshed
-    get_settings_mock.cache_clear.assert_called_once()
+    assert result is current
+    assert current.APP_NAME == "new-name"
+    assert current.ENVIRONMENT == "production"
     _KeyManager.clear_key_caches.assert_called_once_with(warm=True)
     logger.info.assert_any_call("settings_reload_started")
     logger.info.assert_any_call("settings_reload_completed")
 
 
 def test_reload_settings_from_environment_logs_warning_when_cache_refresh_fails() -> None:
-    refreshed = object()
-    get_settings_mock = MagicMock(return_value=refreshed)
-    get_settings_mock.cache_clear = MagicMock()
+    current = types.SimpleNamespace(APP_NAME="old-name")
+    refreshed = MagicMock()
+    refreshed.APP_NAME = "new-name"
+    refreshed.model_dump.return_value = {"APP_NAME": refreshed.APP_NAME}
     logger = MagicMock()
 
     fake_security_module = types.ModuleType("app.shared.core.security")
@@ -117,13 +125,15 @@ def test_reload_settings_from_environment_logs_warning_when_cache_refresh_fails(
     fake_security_module.EncryptionKeyManager = _KeyManager
 
     with (
-        patch("app.shared.core.config.get_settings", get_settings_mock),
+        patch("app.shared.core.config.get_settings", return_value=current),
+        patch("app.shared.core.config.Settings", return_value=refreshed),
         patch("app.shared.core.config.structlog.get_logger", return_value=logger),
         patch.dict("sys.modules", {"app.shared.core.security": fake_security_module}),
     ):
         result = reload_settings_from_environment()
 
-    assert result is refreshed
+    assert result is current
+    assert current.APP_NAME == "new-name"
     logger.warning.assert_called_once()
 
 

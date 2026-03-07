@@ -115,7 +115,8 @@ async def test_process_jobs_internal_unauthorized(async_client: AsyncClient):
         mock_get_settings.return_value = mock_settings
 
         response = await async_client.post(
-            "/api/v1/jobs/internal/process", params={"secret": "wrong"}
+            "/api/v1/jobs/internal/process",
+            headers={"X-Internal-Job-Secret": "wrong"},
         )
         assert response.status_code == 403
 
@@ -130,7 +131,8 @@ async def test_process_jobs_internal_success(async_client: AsyncClient):
         mock_get_settings.return_value = mock_settings
 
         response = await async_client.post(
-            "/api/v1/jobs/internal/process", params={"secret": "s" * 32}
+            "/api/v1/jobs/internal/process",
+            headers={"X-Internal-Job-Secret": "s" * 32},
         )
         assert response.status_code == 200
         assert response.json()["status"] == "accepted"
@@ -146,7 +148,8 @@ async def test_process_jobs_internal_insecure_secret_rejected(
         mock_get_settings.return_value = mock_settings
 
         response = await async_client.post(
-            "/api/v1/jobs/internal/process", params={"secret": "short-secret"}
+            "/api/v1/jobs/internal/process",
+            headers={"X-Internal-Job-Secret": "short-secret"},
         )
         assert response.status_code == 503
 
@@ -161,9 +164,23 @@ async def test_process_jobs_internal_insecure_secret_rejected(
         mock_get_settings.return_value = mock_settings
 
         response = await async_client.post(
-            "/api/v1/jobs/internal/process", params={"secret": "short-secret"}
+            "/api/v1/jobs/internal/process",
+            headers={"X-Internal-Job-Secret": "short-secret"},
         )
         assert response.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_process_jobs_internal_rejects_query_param_secret(async_client: AsyncClient):
+    with patch("app.shared.core.config.get_settings") as mock_get_settings:
+        mock_settings = MagicMock()
+        mock_settings.INTERNAL_JOB_SECRET = "s" * 32
+        mock_get_settings.return_value = mock_settings
+
+        response = await async_client.post(
+            "/api/v1/jobs/internal/process", params={"secret": "s" * 32}
+        )
+        assert response.status_code == 422
 
 
 @pytest.mark.asyncio

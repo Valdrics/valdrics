@@ -188,6 +188,12 @@ class TestSessionExhaustive:
 
     def test_slow_query_event_registration(self, clean_session_module):
         """Verify event listeners are registered."""
+        class _SyncEngine:
+            pass
+
+        class _Engine:
+            sync_engine = _SyncEngine()
+
         mock_settings = MagicMock()
         mock_settings.DATABASE_URL = "sqlite+aiosqlite:///test.db"
         mock_settings.DB_SSL_MODE = "disable"
@@ -195,10 +201,14 @@ class TestSessionExhaustive:
 
         with (
             patch("app.shared.core.config.get_settings", return_value=mock_settings),
-            patch("sqlalchemy.event.listens_for") as mock_listen,
-            patch("sqlalchemy.ext.asyncio.create_async_engine"),
+            patch("sqlalchemy.event.listen") as mock_listen,
+            patch(
+                "sqlalchemy.ext.asyncio.create_async_engine",
+                return_value=_Engine(),
+            ),
         ):
             importlib.reload(session_mod)
+            session_mod._get_db_runtime()
             assert mock_listen.called
 
     @pytest.mark.asyncio

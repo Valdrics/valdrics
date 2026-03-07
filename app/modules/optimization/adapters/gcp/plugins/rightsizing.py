@@ -6,6 +6,7 @@ import structlog
 from google.cloud import compute_v1
 from google.cloud import monitoring_v3
 
+from app.modules.optimization.adapters.common import build_google_recoverable_exceptions
 from app.modules.optimization.adapters.common.credentials import resolve_gcp_credentials
 from app.modules.optimization.adapters.common.rightsizing_common import (
     build_rightsizing_finding,
@@ -23,21 +24,9 @@ from app.modules.reporting.domain.pricing.service import PricingService
 
 logger = structlog.get_logger()
 
-def _resolve_google_api_error_base() -> type[Exception]:
-    try:
-        from google.api_core.exceptions import GoogleAPIError
-    except ImportError:  # pragma: no cover - fallback for SDK-mocked test envs
-        return Exception
-    return GoogleAPIError
-
 CPU_MAX_THRESHOLD_RATIO = 0.1
 SKIPPED_MACHINE_TYPE_TOKENS: tuple[str, ...] = ("micro", "small")
-GCP_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS = (
-    _resolve_google_api_error_base(),
-    OSError,
-    TimeoutError,
-    ValueError,
-)
+GCP_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS = build_google_recoverable_exceptions()
 
 
 @registry.register("gcp")

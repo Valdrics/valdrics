@@ -16,6 +16,9 @@ AWS_CONNECTION_VERIFY_RECOVERABLE_EXCEPTIONS = (
     RuntimeError,
     TypeError,
     ValueError,
+    AttributeError,
+    KeyError,
+    LookupError,
 )
 
 
@@ -87,6 +90,8 @@ class AWSConnectionService:
             await self.db.commit()
             return {"status": "error", "message": str(e), "code": e.code}
         except AWS_CONNECTION_VERIFY_RECOVERABLE_EXCEPTIONS as e:
+            connection.status = "error"
+            await self.db.commit()
             logger.error(
                 "aws_verification_unexpected_error",
                 error=str(e),

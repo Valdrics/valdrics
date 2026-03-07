@@ -45,6 +45,7 @@ async def test_github_dispatch_success_and_failure() -> None:
             {"tenant_id": "t1", "request_id": "r1", "resource_id": "i-1"},
         )
     assert ok is True
+    assert client.post.await_args.kwargs["timeout"] == 5.0
 
     bad_response = MagicMock(status_code=401, text="unauthorized")
     client.post = AsyncMock(return_value=bad_response)
@@ -79,6 +80,7 @@ async def test_gitlab_dispatch_success() -> None:
     assert ok is True
     call_data = client.post.await_args.kwargs["data"]
     assert call_data["variables[VALDRICS_EVENT_TYPE]"] == "remediation.completed"
+    assert client.post.await_args.kwargs["timeout"] == 5.0
 
 
 @pytest.mark.asyncio
@@ -135,6 +137,7 @@ async def test_generic_dispatch_validates_allowlist_and_posts() -> None:
     assert ok is True
     headers = client.post.await_args.kwargs["headers"]
     assert headers["Authorization"] == "Bearer secret-token"
+    assert client.post.await_args.kwargs["timeout"] == 5.0
 
 
 @pytest.mark.asyncio

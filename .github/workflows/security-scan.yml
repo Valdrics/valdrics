@@ -29,6 +29,7 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.12"
+  UV_VERSION: "0.9.21"
 
 jobs:
   security-scan:
@@ -48,7 +49,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          version: "latest"
+          version: ${{ env.UV_VERSION }}
           
       - name: Install dependencies
         run: uv sync --locked --group dev
@@ -94,7 +95,7 @@ jobs:
           context: .
           push: false
           load: true
-          tags: valdrics-backend:latest
+          tags: valdrics-backend:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -105,14 +106,14 @@ jobs:
           file: ./Dockerfile.dashboard
           push: false
           load: true
-          tags: valdrics-dashboard:latest
+          tags: valdrics-dashboard:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner (Backend)
         uses: aquasecurity/trivy-action@0.33.1
         with:
-          image-ref: 'valdrics-backend:latest'
+          image-ref: 'valdrics-backend:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
           ignore-unfixed: true
@@ -122,7 +123,7 @@ jobs:
       - name: Run Trivy vulnerability scanner (Dashboard)
         uses: aquasecurity/trivy-action@0.33.1
         with:
-          image-ref: 'valdrics-dashboard:latest'
+          image-ref: 'valdrics-dashboard:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-dashboard-results.sarif'
           ignore-unfixed: true
@@ -142,3 +143,96 @@ jobs:
         with:
           sarif_file: 'trivy-dashboard-results.sarif'
           category: 'trivy-dashboard'
+
+  dast-zap-baseline:
+    name: DAST (OWASP ZAP Baseline)
+    runs-on: ubuntu-latest
+    needs: [container-scan]
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Prepare ephemeral QA environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp .env.example .env
+          python3 - <<'PY'
+          from pathlib import Path
+          import base64
+
+          path = Path(".env")
+          lines = path.read_text(encoding="utf-8").splitlines()
+          overrides = {
+              "ENVIRONMENT": "development",
+              "DEBUG": "False",
+              "CSRF_SECRET_KEY": "dast_csrf_secret_key_2026_0123456789abcdef",
+              "ENCRYPTION_KEY": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "KDF_SALT": base64.b64encode(b"12345678901234567890123456789012").decode(),
+              "SUPABASE_JWT_SECRET": "dast_supabase_jwt_secret_2026_0123456789abcdef",
+              "ADMIN_API_KEY": "dast_admin_api_key_2026_0123456789abcdef",
+              "DATABASE_URL": "postgresql+asyncpg://postgres:local-dev-change-me@postgres:5432/valdrics",
+              "REDIS_URL": "redis://redis:6379",
+              "APP_RUNTIME_DATA_DIR": "/tmp/valdrics",
+              "CIRCUIT_BREAKER_DISTRIBUTED_STATE": "true",
+              "CIRCUIT_BREAKER_DISTRIBUTED_KEY_PREFIX": "valdrics:circuit",
+              "PAYSTACK_WEBHOOK_ALLOWED_IPS": "[\"52.31.139.75\",\"52.49.173.169\",\"52.214.14.220\"]",
+          }
+
+          rendered = []
+          seen = set()
+          for line in lines:
+              if "=" in line and not line.lstrip().startswith("#"):
+                  key = line.split("=", 1)[0].strip()
+                  if key in overrides:
+                      rendered.append(f"{key}={overrides[key]}")
+                      seen.add(key)
+                      continue
+              rendered.append(line)
+          for key, value in overrides.items():
+              if key not in seen:
+                  rendered.append(f"{key}={value}")
+          path.write_text("\n".join(rendered) + "\n", encoding="utf-8")
+          PY
+
+      - name: Start ephemeral QA stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose up -d --build postgres redis api dashboard
+
+      - name: Wait for QA readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          for _ in $(seq 1 60); do
+            api_ready=0
+            ui_ready=0
+            if curl -fsS http://localhost:8000/health/live >/dev/null 2>&1; then
+              api_ready=1
+            fi
+            if curl -fsS http://localhost:3000 >/dev/null 2>&1; then
+              ui_ready=1
+            fi
+            if [ "$api_ready" -eq 1 ] && [ "$ui_ready" -eq 1 ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          docker compose ps
+          echo "Ephemeral QA stack did not become healthy in time."
+          exit 1
+
+      - name: Run OWASP ZAP Baseline against ephemeral QA
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "http://localhost:3000"
+          cmd_options: "-a -j -m 5 -T 60"
+
+      - name: Tear down ephemeral QA stack
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker compose down -v

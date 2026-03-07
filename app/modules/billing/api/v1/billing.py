@@ -386,13 +386,13 @@ async def cancel_subscription(
         raise HTTPException(500, "Failed to cancel subscription") from e
 
 
-@router.post("/webhook")
+@router.post("/webhook", status_code=202)
 async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -> Any:
     """
-    Handle Paystack webhook events with durable processing.
+    Handle Paystack webhook events with durable asynchronous processing.
 
-    Webhooks are stored in background_jobs before processing,
-    enabling automatic retry on failure.
+    Webhooks are validated, persisted to background_jobs, and acknowledged
+    immediately with 202 to keep provider latency out of the request path.
     """
     try:
         return await process_paystack_webhook(
