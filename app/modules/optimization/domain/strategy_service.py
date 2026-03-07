@@ -17,7 +17,6 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
-
 def build_default_strategies(
     *,
     optimization_strategy_cls: Any,
@@ -137,7 +136,6 @@ def build_default_strategies(
         ),
     ]
 
-
 def percentile(values: list[float], percentile_value: float) -> float:
     if not values:
         return 0.0
@@ -152,12 +150,10 @@ def percentile(values: list[float], percentile_value: float) -> float:
     frac = rank - lower_idx
     return ordered[lower_idx] + ((ordered[upper_idx] - ordered[lower_idx]) * frac)
 
-
 def _normalize_scope_key(value: str | None) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip().lower()
     return None
-
 
 async def aggregate_usage_baseline(
     *,
@@ -316,7 +312,6 @@ async def aggregate_usage_baseline(
         "region_totals": region_totals,
         "hourly_cost_series": hourly_cost_series,
     }
-
 
 class OptimizationService(BaseService):
     def __init__(self, db: AsyncSession):

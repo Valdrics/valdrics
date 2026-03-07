@@ -49,6 +49,7 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.12"
+  UV_VERSION: "0.9.21"
 
 jobs:
   gate:
@@ -68,7 +69,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          version: "latest"
+          version: ${{ env.UV_VERSION }}
 
       - name: Install Dependencies
         run: uv sync --locked --dev

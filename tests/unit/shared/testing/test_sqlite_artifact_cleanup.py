@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.shared.testing.sqlite_artifact_cleanup import cleanup_sqlite_test_artifacts
+import pytest
+
+from app.shared.testing.sqlite_artifact_cleanup import (
+    build_sqlite_test_database_path,
+    cleanup_sqlite_test_artifacts,
+)
 
 
 def _touch(path: Path) -> None:
@@ -46,3 +51,29 @@ def test_cleanup_sqlite_test_artifacts_preserves_non_matching_files(
     assert deleted == ()
     assert all(path.exists() for path in keep_files)
 
+
+def test_build_sqlite_test_database_path_uses_caller_temp_directory(
+    tmp_path: Path,
+) -> None:
+    db_path = build_sqlite_test_database_path(tmp_path)
+
+    assert db_path.parent == tmp_path
+    assert db_path.name.startswith("test_")
+    assert db_path.suffix == ".sqlite"
+
+
+def test_build_sqlite_test_database_path_returns_unique_paths(tmp_path: Path) -> None:
+    first = build_sqlite_test_database_path(tmp_path)
+    second = build_sqlite_test_database_path(tmp_path)
+
+    assert first != second
+
+
+@pytest.mark.asyncio
+async def test_async_engine_fixture_uses_temp_directory(async_engine) -> None:
+    database_path = Path(async_engine.url.database)
+
+    assert database_path.is_absolute()
+    assert database_path.parent != Path.cwd()
+    assert database_path.name.startswith("test_")
+    assert database_path.suffix == ".sqlite"

@@ -55,14 +55,12 @@ CIRCUIT_BREAKER_DECODE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     ValueError,
 )
 
-
 class CircuitState(Enum):
     """Circuit breaker states."""
 
     CLOSED = "closed"  # Normal operation
     OPEN = "open"  # Failing, requests rejected
     HALF_OPEN = "half_open"  # Testing recovery
-
 
 @dataclass
 class CircuitBreakerConfig:
@@ -76,7 +74,6 @@ class CircuitBreakerConfig:
     )  # Exceptions that count as failures
     name: str = "default"  # Circuit breaker name for logging
 
-
 @dataclass
 class CircuitBreakerMetrics:
     """Metrics for circuit breaker monitoring."""
@@ -89,7 +86,6 @@ class CircuitBreakerMetrics:
     last_failure_time: Optional[float] = None
     last_success_time: Optional[float] = None
     state_changes: int = 0
-
 
 class CircuitBreaker:
     """
@@ -431,10 +427,8 @@ class CircuitBreaker:
             },
         }
 
-
 # Global circuit breaker registry
 _circuit_breakers: dict[str, CircuitBreaker] = {}
-
 
 def get_circuit_breaker(
     name: str, config: Optional[CircuitBreakerConfig] = None
@@ -447,11 +441,9 @@ def get_circuit_breaker(
 
     return _circuit_breakers[name]
 
-
 def get_all_circuit_breakers() -> dict[str, dict[str, Any]]:
     """Get status of all circuit breakers for monitoring."""
     return {name: breaker.get_status() for name, breaker in _circuit_breakers.items()}
-
 
 # Pre-configured circuit breakers for common services
 EXTERNAL_API_BREAKER = get_circuit_breaker(

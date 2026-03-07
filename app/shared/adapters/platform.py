@@ -53,7 +53,6 @@ async def _platform_get_request(
     ) as client:
         return await client.get(url, headers=headers, params=params)
 
-
 async def _platform_post_request(
     *,
     url: str,
@@ -67,7 +66,6 @@ async def _platform_post_request(
         verify=verify_ssl,
     ) as client:
         return await client.post(url, headers=headers, params=params, json=json)
-
 
 class PlatformAdapter(PlatformNativeConnectorMixin, BaseAdapter):
     """Cloud+ adapter for internal platform/shared-services spend."""

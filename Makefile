@@ -1,13 +1,14 @@
 # Valdrics Makefile
 # Developer convenience commands using uv
 
-.PHONY: help install dev test lint format security clean docker-build docker-up helm-install
+.PHONY: help install dev test lint format security clean docker-build docker-up helm-install env-dev
 
 # Default target
 help:
 	@echo "Valdrics Development Commands"
 	@echo ""
 	@echo "  make install     - Install dependencies with uv"
+	@echo "  make env-dev     - Generate deterministic .env.dev for local isolated testing"
 	@echo "  make dev         - Start development servers"
 	@echo "  make test        - Run test suite"
 	@echo "  make lint        - Run linters"
@@ -28,6 +29,9 @@ help:
 install:
 	uv sync --dev
 	cd dashboard && pnpm install
+
+env-dev:
+	uv run python3 scripts/generate_local_dev_env.py
 
 dev:
 	@echo "Starting API server..."
@@ -127,8 +131,9 @@ generate-client:
 # ============================================================================
 
 deploy:
+	@test -n "$(VERSION)" || (echo "VERSION must be set to an immutable release tag" && exit 1)
 	@echo "🚀 Deploying to Koyeb..."
-	koyeb app init valdrics --docker ghcr.io/valdrics-ai/valdrics:latest || true
+	koyeb app init valdrics --docker ghcr.io/valdrics-ai/valdrics:$(VERSION) || true
 	koyeb deploy -f koyeb.yaml
 	@echo "✅ Koyeb deployment started"
 	@echo "Dashboard: https://app.koyeb.com"
@@ -136,4 +141,3 @@ deploy:
 deploy-status:
 	@echo "Koyeb status:"
 	koyeb service list --app valdrics
-

@@ -35,15 +35,18 @@ _settings_reload_lock = Lock()
 SETTINGS_RELOAD_CACHE_REFRESH_RECOVERABLE_EXCEPTIONS = (ImportError, AttributeError, RuntimeError, TypeError, ValueError)
 def reload_settings_from_environment() -> "Settings":
     """
-    Atomically rebuild and replace cached settings from environment values.
+    Atomically refresh the cached settings from current environment values.
 
-    This avoids mutating the cached singleton instance in-place.
+    The singleton is updated in place so modules that captured the settings
+    object during import still observe refreshed values after reload.
     """
     logger = structlog.get_logger()
     with _settings_reload_lock:
         logger.info("settings_reload_started")
-        get_settings.cache_clear()
-        refreshed = get_settings()
+        current = get_settings()
+        refreshed = Settings()
+        for field_name in refreshed.model_dump().keys():
+            setattr(current, field_name, getattr(refreshed, field_name))
         try:
             from app.shared.core.security import EncryptionKeyManager
 
@@ -51,7 +54,7 @@ def reload_settings_from_environment() -> "Settings":
         except SETTINGS_RELOAD_CACHE_REFRESH_RECOVERABLE_EXCEPTIONS as cache_exc:  # pragma: no cover - defensive path
             logger.warning("settings_reload_cache_refresh_failed", error=str(cache_exc))
         logger.info("settings_reload_completed")
-        return refreshed
+        return current
 
 
 class Settings(BaseSettings):
@@ -75,7 +78,8 @@ class Settings(BaseSettings):
     TESTING: bool = False
     PYTEST_CURRENT_TEST: Optional[str] = None
     SENTRY_DSN: Optional[str] = None
-    WEB_CONCURRENCY: int = 1
+    WEB_CONCURRENCY: int = 2
+    APP_RUNTIME_DATA_DIR: str = "/tmp/valdrics"
     RATELIMIT_ENABLED: bool = True
     # In staging/production, distributed rate limiting is required by default.
     # This override exists only for controlled break-glass situations.
@@ -214,6 +218,7 @@ class Settings(BaseSettings):
     # Break-glass audit metadata when fallback is enabled in strict env.
     FORECASTER_BREAK_GLASS_REASON: Optional[str] = None
     FORECASTER_BREAK_GLASS_EXPIRES_AT: Optional[str] = None
+    FORECASTER_BREAK_GLASS_MAX_DURATION_HOURS: int = 168
     # Disabled-by-default fairness guardrails for future "near-unlimited" tiers.
     # Keep OFF until production evidence gates are met.
     LLM_FAIR_USE_GUARDS_ENABLED: bool = False
@@ -234,6 +239,11 @@ class Settings(BaseSettings):
     # Bound system-scope sweeps to reduce blast radius during incident conditions.
     SCHEDULER_SYSTEM_SWEEP_MAX_TENANTS: int = 5000
     SCHEDULER_SYSTEM_SWEEP_MAX_CONNECTIONS: int = 5000
+    # Background job retention (terminal states) enforced by maintenance sweep.
+    BACKGROUND_JOB_COMPLETED_RETENTION_DAYS: int = 7
+    BACKGROUND_JOB_DEAD_LETTER_RETENTION_DAYS: int = 30
+    BACKGROUND_JOB_RETENTION_PURGE_BATCH_SIZE: int = 1000
+    BACKGROUND_JOB_RETENTION_PURGE_MAX_BATCHES: int = 20
     # Scheduler distributed lock should fail-closed by default.
     # Enable only as temporary emergency bypass.
     SCHEDULER_LOCK_FAIL_OPEN: bool = False
@@ -248,7 +258,8 @@ class Settings(BaseSettings):
     DB_SSL_CA_CERT_PATH: Optional[str] = (
         None  # Path to CA cert for verify-ca/verify-full modes
     )
-    DB_POOL_SIZE: int = 20  # Standard for Supabase/Neon free tiers
+    # Conservative default for broad compatibility; tune based on worker count and DB capacity.
+    DB_POOL_SIZE: int = 20
     DB_MAX_OVERFLOW: int = 10
     DB_POOL_TIMEOUT: int = 30
     DB_POOL_RECYCLE: int = 3600
@@ -279,6 +290,9 @@ class Settings(BaseSettings):
     JIRA_PROJECT_KEY: Optional[str] = None
     JIRA_ISSUE_TYPE: str = "Task"
     JIRA_TIMEOUT_SECONDS: float = 10.0
+    JIRA_ALLOWED_DOMAINS: list[str] = ["atlassian.net"]
+    JIRA_REQUIRE_HTTPS: bool = True
+    JIRA_BLOCK_PRIVATE_IPS: bool = True
     WORKFLOW_DISPATCH_TIMEOUT_SECONDS: float = 10.0
     WORKFLOW_EVIDENCE_BASE_URL: Optional[str] = None
     TEAMS_TIMEOUT_SECONDS: float = 10.0
@@ -386,6 +400,7 @@ class Settings(BaseSettings):
     CIRCUIT_BREAKER_RECOVERY_SECONDS: int = 300
     CIRCUIT_BREAKER_MAX_DAILY_SAVINGS: float = 1000.0
     CIRCUIT_BREAKER_CACHE_SIZE: int = 1000
+    # Redis-backed state is the default deployment posture for multi-worker safety.
     CIRCUIT_BREAKER_DISTRIBUTED_STATE: bool = True
     CIRCUIT_BREAKER_DISTRIBUTED_KEY_PREFIX: str = "valdrics:circuit"
     # REMEDIATION KILL SWITCH: Stop all deletions if daily cost impact hits $500

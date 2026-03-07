@@ -160,6 +160,19 @@ class TestGetSlackService:
             result = get_slack_service()
             assert isinstance(result, SlackService)
 
+    def test_factory_reuses_service_instance_per_channel(self):
+        with patch("app.shared.core.config.get_settings") as mock_settings:
+            mock_settings.return_value = MagicMock(
+                SLACK_BOT_TOKEN="xoxb-test-token",
+                SLACK_CHANNEL_ID="#test-channel",
+                SAAS_STRICT_INTEGRATIONS=False,
+            )
+
+            first = get_slack_service()
+            second = get_slack_service()
+
+        assert first is second
+
     def test_returns_none_when_strict_mode_enabled(self):
         """Test factory returns None when env integrations are disabled by strict SaaS mode."""
         with patch("app.shared.core.config.get_settings") as mock_settings:

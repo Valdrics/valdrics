@@ -26,6 +26,9 @@ ORG_DISCOVERY_RECOVERABLE_EXCEPTIONS = (
     RuntimeError,
     TypeError,
     ValueError,
+    AttributeError,
+    KeyError,
+    LookupError,
 )
 
 

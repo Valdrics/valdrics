@@ -4,14 +4,18 @@ Jira notification service for Valdrics policy violations and escalations.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from typing import Iterable
+from urllib.parse import urlparse
 from uuid import UUID
 
 import httpx
 import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.shared.core import config as config_module
 
 logger = structlog.get_logger()
 JIRA_CLIENT_RECOVERABLE_EXCEPTIONS = (
@@ -21,6 +25,64 @@ JIRA_CLIENT_RECOVERABLE_EXCEPTIONS = (
     ValueError,
     AttributeError,
 )
+
+
+def _is_private_or_link_local(host: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_multicast
+        or ip.is_reserved
+    )
+
+
+def _host_allowed(host: str, allowlist: set[str]) -> bool:
+    if not allowlist:
+        return False
+    if host in allowlist:
+        return True
+    return any(host.endswith(f".{allowed}") for allowed in allowlist)
+
+
+def validate_jira_base_url(url: str, settings_obj: object | None = None) -> str:
+    runtime_settings = settings_obj or config_module.get_settings()
+    raw_allowlist = getattr(runtime_settings, "JIRA_ALLOWED_DOMAINS", None)
+    if raw_allowlist is None:
+        raw_allowlist = ["atlassian.net"]
+    allowlist = {
+        str(domain).strip().lower()
+        for domain in raw_allowlist
+        if str(domain).strip()
+    }
+    require_https = bool(getattr(runtime_settings, "JIRA_REQUIRE_HTTPS", True))
+    block_private_ips = bool(getattr(runtime_settings, "JIRA_BLOCK_PRIVATE_IPS", True))
+
+    parsed = urlparse(str(url or "").strip())
+    if require_https and parsed.scheme.lower() != "https":
+        raise ValueError("Jira base URL must use HTTPS")
+    if not parsed.hostname:
+        raise ValueError("Jira base URL must include a host")
+    if parsed.username or parsed.password:
+        raise ValueError("Jira base URL must not include credentials")
+    if parsed.query or parsed.fragment:
+        raise ValueError("Jira base URL must not include query or fragment components")
+
+    host = parsed.hostname.lower()
+    if block_private_ips and (host in {"localhost"} or host.endswith(".local")):
+        raise ValueError("Jira base URL must not target local hostnames")
+    if block_private_ips and _is_private_or_link_local(host):
+        raise ValueError("Jira base URL must not target private or link-local addresses")
+    if not _host_allowed(host, allowlist):
+        raise ValueError("Jira base URL host is not in allowlist")
+
+    path = parsed.path.rstrip("/")
+    normalized = parsed._replace(path=path)
+    return normalized.geturl().rstrip("/")
 
 
 class JiraService:
@@ -53,6 +115,12 @@ class JiraService:
         description: str,
         labels: Iterable[str] | None = None,
     ) -> bool:
+        try:
+            base_url = validate_jira_base_url(self.base_url)
+        except ValueError as exc:
+            logger.warning("jira_base_url_invalid", error=str(exc))
+            return False
+
         jira_labels = [self._sanitize_label(value) for value in (labels or ())]
         payload = {
             "fields": {
@@ -64,7 +132,7 @@ class JiraService:
             }
         }
 
-        endpoint = f"{self.base_url}/rest/api/3/issue"
+        endpoint = f"{base_url}/rest/api/3/issue"
 
         try:
             from app.shared.core.http import get_http_client
@@ -74,6 +142,7 @@ class JiraService:
                 endpoint,
                 json=payload,
                 auth=httpx.BasicAuth(self.email, self.api_token),
+                timeout=self.timeout_seconds,
                 headers={
                     "Accept": "application/json",
                     "Content-Type": "application/json",
@@ -97,7 +166,13 @@ class JiraService:
 
         This validates credentials and base URL without creating issues.
         """
-        endpoint = f"{self.base_url}/rest/api/3/myself"
+        try:
+            base_url = validate_jira_base_url(self.base_url)
+        except ValueError as exc:
+            logger.warning("jira_base_url_invalid", error=str(exc))
+            return False, 400, str(exc)
+
+        endpoint = f"{base_url}/rest/api/3/myself"
         try:
             from app.shared.core.http import get_http_client
 
@@ -105,6 +180,7 @@ class JiraService:
             response = await client.get(
                 endpoint,
                 auth=httpx.BasicAuth(self.email, self.api_token),
+                timeout=self.timeout_seconds,
                 headers={"Accept": "application/json"},
             )
             if response.status_code == 200:
@@ -162,9 +238,7 @@ class JiraService:
         confidence: float,
         probable_cause: str,
     ) -> bool:
-        from app.shared.core.config import get_settings
-
-        settings = get_settings()
+        settings = config_module.get_settings()
         api_base = (settings.WORKFLOW_EVIDENCE_BASE_URL or settings.API_URL).rstrip("/")
         frontend_base = (settings.FRONTEND_URL or api_base).rstrip("/")
         evidence_link = (
@@ -200,21 +274,19 @@ class JiraService:
 
 def get_jira_service() -> JiraService | None:
     """Factory for Jira service. Returns None when not fully configured."""
-    from app.shared.core.config import get_settings
-
-    settings = get_settings()
+    settings = config_module.get_settings()
     if getattr(settings, "SAAS_STRICT_INTEGRATIONS", False):
         logger.info("env_jira_service_disabled_by_saas_strict_mode")
         return None
 
-    if (
-        settings.JIRA_BASE_URL
-        and settings.JIRA_EMAIL
-        and settings.JIRA_API_TOKEN
-        and settings.JIRA_PROJECT_KEY
-    ):
+    if settings.JIRA_BASE_URL and settings.JIRA_EMAIL and settings.JIRA_API_TOKEN and settings.JIRA_PROJECT_KEY:
+        try:
+            base_url = validate_jira_base_url(settings.JIRA_BASE_URL, settings)
+        except ValueError as exc:
+            logger.warning("env_jira_service_invalid_base_url", error=str(exc))
+            return None
         return JiraService(
-            base_url=settings.JIRA_BASE_URL,
+            base_url=base_url,
             email=settings.JIRA_EMAIL,
             api_token=settings.JIRA_API_TOKEN,
             project_key=settings.JIRA_PROJECT_KEY,
@@ -232,7 +304,6 @@ async def get_tenant_jira_service(
     Returns None if Jira integration is disabled or incomplete for the tenant.
     """
     from app.models.notification_settings import NotificationSettings
-    from app.shared.core.config import get_settings
 
     try:
         tenant_uuid = UUID(str(tenant_id))
@@ -278,9 +349,18 @@ async def get_tenant_jira_service(
         )
         return None
 
-    settings = get_settings()
+    settings = config_module.get_settings()
+    try:
+        base_url = validate_jira_base_url(str(jira_base_url), settings)
+    except ValueError as exc:
+        logger.warning(
+            "tenant_jira_settings_invalid_base_url",
+            tenant_id=str(tenant_uuid),
+            error=str(exc),
+        )
+        return None
     return JiraService(
-        base_url=jira_base_url,
+        base_url=base_url,
         email=jira_email,
         api_token=jira_api_token,
         project_key=jira_project_key,

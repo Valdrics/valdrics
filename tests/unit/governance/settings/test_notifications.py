@@ -370,6 +370,43 @@ async def test_update_notification_settings_jira_requires_incident_tier(
 
 
 @pytest.mark.asyncio
+async def test_update_notification_settings_rejects_unsafe_jira_base_url(
+    async_client: AsyncClient, app
+):
+    admin = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        email="admin@notify.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+    app.dependency_overrides[get_current_user] = lambda: admin
+    try:
+        response = await async_client.put(
+            "/api/v1/settings/notifications",
+            json={
+                "slack_enabled": True,
+                "jira_enabled": True,
+                "jira_base_url": "https://127.0.0.1",
+                "jira_email": "jira@example.com",
+                "jira_project_key": "FINOPS",
+                "jira_issue_type": "Task",
+                "jira_api_token": "jira_token_value_123",
+                "digest_schedule": "daily",
+                "digest_hour": 9,
+                "digest_minute": 0,
+                "alert_on_budget_warning": True,
+                "alert_on_budget_exceeded": True,
+                "alert_on_zombie_detected": True,
+            },
+        )
+        assert response.status_code == 422
+        assert "jira_base_url is invalid" in response.json()["error"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
 async def test_update_notification_settings_teams_requires_incident_tier(
     async_client: AsyncClient, app
 ):

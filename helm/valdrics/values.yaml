@@ -10,9 +10,8 @@ global:
   subdomain: api
 
 # -- Number of API replicas
-# Keep single-replica by default while core circuit-breaker state is process-local.
-# For `enforcementWebhook.failurePolicy=Fail`, increase to >=2 (or use HPA minReplicas >=2).
-replicaCount: 1
+# Default to HA-safe API capacity for rolling upgrades and fail-closed controls.
+replicaCount: 2
 
 image:
   # -- Container image repository
@@ -37,7 +36,7 @@ serviceAccount:
 podAnnotations:
   prometheus.io/scrape: "true"
   prometheus.io/port: "8000"
-  prometheus.io/path: "/metrics"
+  prometheus.io/path: "/_internal/metrics"
 
 podSecurityContext:
   runAsNonRoot: true
@@ -71,6 +70,13 @@ ingress:
     nginx.ingress.kubernetes.io/rate-limit: "100"
     nginx.ingress.kubernetes.io/configuration-snippet: |
       more_set_headers "Content-Security-Policy: frame-ancestors 'none';";
+    nginx.ingress.kubernetes.io/server-snippet: |
+      location = /_internal/metrics {
+        return 404;
+      }
+      location = /metrics {
+        return 404;
+      }
   # -- Ingress hosts
   hosts:
     - host: "" # Leave empty to use global.subdomain.global.baseDomain
@@ -104,9 +110,9 @@ autoscaling:
   # -- Enable HPA
   enabled: false
   # -- Minimum replicas
-  minReplicas: 1
+  minReplicas: 2
   # -- Maximum replicas
-  maxReplicas: 1
+  maxReplicas: 6
   # -- Target CPU utilization
   targetCPUUtilizationPercentage: 70
   # -- Target memory utilization
@@ -138,12 +144,31 @@ affinity:
 env:
   ENVIRONMENT: production
   LOG_LEVEL: INFO
-  WEB_CONCURRENCY: "1"
+  WEB_CONCURRENCY: "2"
 
 # -- Secrets to inject (must exist in cluster)
 existingSecrets:
   # -- Name of secret containing DATABASE_URL, ENCRYPTION_KEY, etc.
   name: valdrics-secrets
+
+# -- ExternalSecrets integration (syncs runtime secrets from cloud secret stores)
+externalSecrets:
+  enabled: false
+  # -- Kubernetes namespace where ExternalSecret resources are created.
+  namespace: ""
+  # -- SecretStore/ClusterSecretStore reference used by ExternalSecrets controller.
+  secretStoreRef:
+    kind: ClusterSecretStore
+    name: aws-secretsmanager
+  # -- Refresh interval for secret synchronization.
+  refreshInterval: 1h
+  # -- Cloud secret key/path (should match Terraform output runtime_secret_name).
+  remoteSecretKey: /valdrics/prod/app-runtime
+  target:
+    # -- Generated Kubernetes Secret name consumed by workloads.
+    name: valdrics-secrets
+    creationPolicy: Owner
+    deletionPolicy: Retain
 
 # -- Worker configuration
 worker:
@@ -151,6 +176,8 @@ worker:
   enabled: true
   # -- Worker replicas
   replicaCount: 2
+  # -- Worker pods do not expose HTTP metrics by default.
+  podAnnotations: {}
   resources:
     limits:
       cpu: 2000m

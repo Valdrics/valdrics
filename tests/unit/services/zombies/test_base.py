@@ -2,6 +2,7 @@ import pytest
 from typing import Dict
 import asyncio
 from typing import List, Any
+from unittest.mock import patch
 from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.domain.plugin import ZombiePlugin
 
@@ -78,6 +79,23 @@ async def test_base_detector_plugin_failure():
     # It might set a top level error if the aggregation fails, but per logic it sets result["error"] only on catastrophe?
     # Checking logic: "except Exception: logger.error... results['error'] = str(e)" is at top level
     # Individual plugin failure is caught in _run_plugin_with_timeout and returns empty list.
+
+
+@pytest.mark.asyncio
+async def test_base_detector_unexpected_plugin_exception_is_contained():
+    detector = MockDetector()
+    detector.plugins = [MockPlugin("unexpected_plugin")]
+
+    with patch.object(
+        detector,
+        "_execute_plugin_scan",
+        side_effect=Exception("unexpected failure"),
+    ):
+        results = await detector.scan_all()
+
+    assert results["provider"] == "mock"
+    assert results["unexpected_plugin"] == []
+    assert results["total_monthly_waste"] == 0.0
 
 
 @pytest.mark.asyncio

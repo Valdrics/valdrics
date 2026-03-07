@@ -64,6 +64,8 @@ BUDGET_CACHE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     TypeError,
     ValueError,
     AttributeError,
+    KeyError,
+    LookupError,
 )
 BUDGET_ALERT_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     RuntimeError,

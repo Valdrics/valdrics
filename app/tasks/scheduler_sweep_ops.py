@@ -366,6 +366,35 @@ async def maintenance_sweep_logic(
                 await db.rollback()
                 logger.error("maintenance_partitioning_failed", error=str(e))
 
+            try:
+                from app.models.background_job import BackgroundJob, JobStatus
+                from app.shared.core.config import get_settings
+                from app.tasks.scheduler_background_job_retention_ops import (
+                    purge_terminal_background_jobs,
+                )
+
+                purge_summary = await purge_terminal_background_jobs(
+                    db=db,
+                    sa=sa,
+                    logger=logger,
+                    background_job_model=BackgroundJob,
+                    job_status=JobStatus,
+                    datetime_cls=datetime_cls,
+                    timezone_obj=timezone_obj,
+                    timedelta_cls=timedelta_cls,
+                    get_settings_fn=get_settings,
+                )
+                if purge_summary["total_deleted"] > 0:
+                    retention_commit_result = db.commit()
+                    if inspect_module.isawaitable(retention_commit_result):
+                        await retention_commit_result
+                logger.info("maintenance_background_jobs_retention_success", **purge_summary)
+            except SCHEDULER_SWEEP_RECOVERABLE_ERRORS as e:
+                retention_rollback_result = db.rollback()
+                if inspect_module.isawaitable(retention_rollback_result):
+                    await retention_rollback_result
+                logger.warning("maintenance_background_jobs_retention_failed", error=str(e))
+
 
 async def enforcement_reconciliation_sweep_logic(
     *,

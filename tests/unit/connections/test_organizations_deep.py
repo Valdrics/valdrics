@@ -133,9 +133,9 @@ class TestOrganizationsDiscoveryDeep:
             assert existing_acc.name == "NewName"
 
     @pytest.mark.asyncio
-    async def test_sync_accounts_exception_handling(self, mock_db):
+    async def test_sync_accounts_exception_handling_propagates(self, mock_db):
         conn = AWSConnection(id=uuid4(), is_management_account=True)
         with patch("aioboto3.Session") as mock_session_class:
             mock_session_class.side_effect = Exception("AWS Down")
-            count = await OrganizationsDiscoveryService.sync_accounts(mock_db, conn)
-            assert count == 0
+            with pytest.raises(Exception, match="AWS Down"):
+                await OrganizationsDiscoveryService.sync_accounts(mock_db, conn)

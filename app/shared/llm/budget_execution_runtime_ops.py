@@ -346,7 +346,6 @@ async def check_budget_state(
                 "Fail-Closed: LLM Budget check failed due to system error.",
                 details={"error": "service_unavailable", "reason": str(exc)},
             )
-
     result = await db.execute(
         select(manager_module.LLMBudget).where(
             manager_module.LLMBudget.tenant_id == tenant_id

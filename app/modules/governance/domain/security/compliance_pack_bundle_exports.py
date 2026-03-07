@@ -11,11 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.core.auth import CurrentUser
 
-
 def _append_unique(paths: list[str], path: str) -> None:
     if path not in paths:
         paths.append(path)
-
 
 def write_core_artifacts(
     *,
@@ -30,7 +28,6 @@ def write_core_artifacts(
     for path, content in doc_payloads.items():
         if content is not None:
             zf.writestr(path, content)
-
 
 def build_manifest(
     *,
@@ -137,7 +134,6 @@ def build_manifest(
         ],
     }
 
-
 async def run_focus_export(
     *,
     zf: zipfile.ZipFile,
@@ -223,7 +219,6 @@ async def run_focus_export(
         )
         _append_unique(included_files, "exports/focus-v1.3-core.error.json")
 
-
 async def run_savings_proof_export(
     *,
     zf: zipfile.ZipFile,
@@ -304,7 +299,6 @@ async def run_savings_proof_export(
             ),
         )
         _append_unique(included_files, error_path)
-
 
 async def run_realized_savings_export(
     *,
@@ -433,7 +427,6 @@ async def run_realized_savings_export(
             ),
         )
         _append_unique(included_files, error_path)
-
 
 async def run_close_package_export(
     *,

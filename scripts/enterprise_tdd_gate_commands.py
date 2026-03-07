@@ -52,6 +52,12 @@ def build_gate_commands() -> list[list[str]]:
             "uv",
             "run",
             "python3",
+            "scripts/verify_container_image_pinning.py",
+        ],
+        [
+            "uv",
+            "run",
+            "python3",
             "scripts/verify_adapter_test_coverage.py",
         ],
         [
@@ -79,7 +85,7 @@ def build_gate_commands() -> list[list[str]]:
             "python3",
             "scripts/verify_python_module_size_budget.py",
             "--enforcement-mode",
-            "advisory",
+            "strict",
         ],
         [
             "uv",

@@ -1,3 +1,4 @@
+{{- if .Values.worker.enabled }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -13,8 +14,10 @@ spec:
       app.kubernetes.io/component: worker
   template:
     metadata:
+      {{- with .Values.worker.podAnnotations }}
       annotations:
-        {{- toYaml .Values.podAnnotations | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       labels:
         {{- include "valdrics.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: worker
@@ -32,7 +35,7 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          command: ["celery", "-A", "app.tasks", "worker", "-l", "info", "-B"]
+          command: ["celery", "-A", "app.shared.core.celery_app:celery_app", "worker", "-l", "info"]
           env:
             {{- range $key, $value := .Values.env }}
             - name: {{ $key }}
@@ -45,6 +48,33 @@ spec:
           envFrom:
             - secretRef:
                 name: {{ .Values.existingSecrets.name }}
+          startupProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pgrep -f "celery.*worker" >/dev/null
+            failureThreshold: 24
+            periodSeconds: 5
+            timeoutSeconds: 3
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pgrep -f "celery.*worker" >/dev/null
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - celery -A app.shared.core.celery_app:celery_app inspect ping -d celery@$HOSTNAME -t 3 >/dev/null 2>&1
+            initialDelaySeconds: 20
+            periodSeconds: 30
+            timeoutSeconds: 5
           resources:
             {{- toYaml .Values.worker.resources | nindent 12 }}
           volumeMounts:
@@ -65,3 +95,4 @@ spec:
       tolerations:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+{{- end }}

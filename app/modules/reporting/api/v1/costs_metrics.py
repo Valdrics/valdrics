@@ -18,6 +18,7 @@ from app.models.remediation import (
     RemediationStatus,
 )
 from app.models.unit_economics_settings import UnitEconomicsSettings
+from app.shared.core.async_utils import maybe_await
 from app.shared.core.connection_state import is_connection_active
 
 from .costs_models import (
@@ -217,6 +218,7 @@ async def compute_ingestion_sla_metrics(
             BackgroundJob.created_at >= window_start,
         )
     )
+    jobs = list(await maybe_await(result.scalars().all()))
     total_jobs = 0
     successful_jobs = 0
     failed_jobs = 0
@@ -224,7 +226,7 @@ async def compute_ingestion_sla_metrics(
     duration_samples: list[float] = []
     records_ingested = 0
 
-    for job in result.scalars():
+    for job in jobs:
         total_jobs += 1
         if job.status == JobStatus.COMPLETED.value:
             successful_jobs += 1

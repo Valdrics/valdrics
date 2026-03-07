@@ -45,6 +45,24 @@ def validate_report_scope(
     return tuple(errors)
 
 
+def validate_generic_report_findings(
+    *,
+    report_findings: tuple[str, ...],
+) -> tuple[str, ...]:
+    errors: list[str] = []
+    if not report_findings:
+        errors.append("report contains no recognizable finding headings.")
+        return tuple(errors)
+    duplicates = sorted(
+        finding_id
+        for finding_id in set(report_findings)
+        if report_findings.count(finding_id) > 1
+    )
+    if duplicates:
+        errors.append("report has duplicate finding headings: " + ", ".join(duplicates))
+    return tuple(errors)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Validate resolved audit findings against repository controls."
@@ -91,7 +109,6 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     report_errors: list[str] = []
-    report_warnings: list[str] = []
     if not args.skip_report_check:
         report_path = args.report_path
         if not report_path.exists():
@@ -116,9 +133,10 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 generic_report_findings = parse_generic_report_findings(report_path)
                 if generic_report_findings:
-                    report_warnings.append(
-                        "report uses non-canonical finding headings; "
-                        "skipped strict heading parity check."
+                    report_errors.extend(
+                        validate_generic_report_findings(
+                            report_findings=generic_report_findings
+                        )
                     )
                 else:
                     report_errors.append(
@@ -139,8 +157,6 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
 
-    for warning in report_warnings:
-        print(f"[audit-report] warning: {warning}")
     print(
         "[audit-report] ok "
         f"passed={len(passes)} checked={len(selected)} repo_root={repo_root.as_posix()}"

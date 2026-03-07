@@ -121,10 +121,35 @@ class BaseZombieDetector(ABC):
                 return cat_key, items
 
             checkpoint_tasks = [run_and_checkpoint(t) for t in tasks]
-            plugin_results = await asyncio.gather(*checkpoint_tasks)
+            plugin_results = await asyncio.gather(
+                *checkpoint_tasks,
+                return_exceptions=True,
+            )
 
             # Aggregate individual plugin results
-            for category_key, items in plugin_results:
+            for plugin, plugin_result in zip(self.plugins, plugin_results, strict=True):
+                if isinstance(plugin_result, asyncio.CancelledError):
+                    raise plugin_result
+                if isinstance(plugin_result, BaseException) and not isinstance(
+                    plugin_result, Exception
+                ):
+                    raise plugin_result
+                category_key: str = plugin.category_key
+                items: list[dict[str, Any]] = []
+                if isinstance(plugin_result, Exception):
+                    logger.error(
+                        "plugin_scan_unhandled_exception",
+                        plugin=plugin.category_key,
+                        error=str(plugin_result),
+                    )
+                elif isinstance(plugin_result, tuple):
+                    category_key, items = plugin_result
+                else:
+                    logger.error(
+                        "plugin_scan_invalid_result_type",
+                        plugin=plugin.category_key,
+                        result_type=type(plugin_result).__name__,
+                    )
                 # BE-ZD-5: Robust Regional Validation
                 # Prevent cross-region data leakage by ensuring all items match detector region
                 validated_items = []

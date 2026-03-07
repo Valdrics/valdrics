@@ -10,54 +10,12 @@ from pathlib import Path
 DEFAULT_MAX_LINES = 700
 PREFERRED_MAX_LINES = 500
 ENFORCEMENT_MODES: tuple[str, ...] = ("advisory", "strict")
+CLUSTER_MIN_LINES = 495
+CLUSTER_MAX_LINES = 500
+EMIT_PREFERRED_SIGNALS_DEFAULT = False
+EMIT_CLUSTER_SIGNALS_DEFAULT = False
 
-# Transitional exceptions while decomposition work is in progress.
-# Overrides can only raise the hard budget to avoid forcing artificial splits.
-MODULE_LINE_BUDGET_OVERRIDES: dict[str, int] = {
-    "app/main.py": 551,
-    "app/models/enforcement.py": 778,
-    "app/modules/billing/domain/billing/paystack_service_impl.py": 599,
-    "app/modules/enforcement/api/v1/enforcement.py": 668,
-    "app/modules/enforcement/domain/actions.py": 565,
-    "app/modules/enforcement/domain/gate_evaluation_ops.py": 620,
-    "app/modules/enforcement/domain/service.py": 527,
-    "app/modules/enforcement/domain/service_runtime_ops.py": 610,
-    "app/modules/governance/api/v1/health_dashboard.py": 694,
-    "app/modules/governance/api/v1/scim.py": 742,
-    "app/modules/governance/api/v1/scim_membership_ops.py": 597,
-    "app/modules/governance/api/v1/settings/notifications.py": 870,
-    "app/modules/governance/domain/jobs/handlers/acceptance.py": 741,
-    "app/modules/governance/api/v1/audit_evidence.py": 500,
-    "app/modules/governance/domain/security/compliance_pack_bundle.py": 500,
-    "app/modules/reporting/api/v1/carbon.py": 586,
-    "app/modules/reporting/api/v1/costs.py": 797,
-    "app/modules/reporting/domain/aggregator.py": 630,
-    "app/modules/reporting/domain/attribution_engine_allocation_ops.py": 512,
-    "app/modules/reporting/domain/attribution_engine.py": 748,
-    "app/modules/reporting/domain/persistence.py": 602,
-    "app/modules/reporting/domain/reconciliation.py": 500,
-    "app/modules/reporting/domain/savings_proof.py": 720,
-    "app/modules/optimization/api/v1/zombies.py": 500,
-    "app/modules/optimization/domain/service.py": 500,
-    "app/modules/optimization/domain/strategy_service.py": 500,
-    "app/modules/optimization/domain/remediation_execute.py": 500,
-    "app/schemas/connections.py": 730,
-    "app/shared/analysis/azure_usage_analyzer.py": 505,
-    "app/shared/analysis/cur_usage_analyzer.py": 531,
-    "app/shared/adapters/aws_cur.py": 791,
-    "app/shared/adapters/hybrid.py": 872,
-    "app/shared/adapters/platform.py": 961,
-    "app/shared/connections/discovery.py": 883,
-    "app/shared/core/auth.py": 524,
-    "app/shared/core/config.py": 771,
-    "app/shared/core/performance_testing.py": 595,
-    "app/shared/core/pricing.py": 804,
-    "app/shared/db/session.py": 724,
-    "app/shared/llm/analyzer.py": 500,
-    "app/shared/llm/budget_execution.py": 595,
-    "app/shared/llm/budget_fair_use.py": 844,
-    "app/tasks/scheduler_tasks.py": 598,
-}
+MODULE_LINE_BUDGET_OVERRIDES: dict[str, int] = {}
 
 
 @dataclass(frozen=True)
@@ -72,6 +30,14 @@ class ModuleSizePreferredBreach:
     path: str
     lines: int
     preferred_max_lines: int
+
+
+@dataclass(frozen=True)
+class ModuleSizeClusterSignal:
+    path: str
+    lines: int
+    cluster_min_lines: int
+    cluster_max_lines: int
 
 
 def _line_count(path: Path) -> int:
@@ -121,11 +87,35 @@ def collect_module_size_preferred_breaches(
     return tuple(breaches)
 
 
+def collect_module_size_cluster_signals(
+    root: Path,
+    *,
+    cluster_min_lines: int = CLUSTER_MIN_LINES,
+    cluster_max_lines: int = CLUSTER_MAX_LINES,
+) -> tuple[ModuleSizeClusterSignal, ...]:
+    app_root = root / "app"
+    signals: list[ModuleSizeClusterSignal] = []
+    for module_path in sorted(app_root.rglob("*.py")):
+        relative = module_path.relative_to(root).as_posix()
+        lines = _line_count(module_path)
+        if cluster_min_lines <= lines <= cluster_max_lines:
+            signals.append(
+                ModuleSizeClusterSignal(
+                    path=relative,
+                    lines=lines,
+                    cluster_min_lines=cluster_min_lines,
+                    cluster_max_lines=cluster_max_lines,
+                )
+            )
+    return tuple(signals)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
-            "Report module-size maintainability signals. "
-            "Use --enforcement-mode strict only when a hard fail is intentionally required."
+            "Enforce module-size maintainability signals with a strict default hard guardrail. "
+            "Use advisory mode only for explicit non-blocking analysis. "
+            "Complexity gates (for example C901) remain complementary cohesion controls."
         )
     )
     parser.add_argument(
@@ -152,12 +142,45 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--emit-preferred-signals",
+        action="store_true",
+        default=EMIT_PREFERRED_SIGNALS_DEFAULT,
+        help=(
+            "Emit preferred-threshold warnings for long modules. Disabled by default "
+            "to avoid line-count-driven fragmentation pressure."
+        ),
+    )
+    parser.add_argument(
         "--enforcement-mode",
         choices=ENFORCEMENT_MODES,
-        default="advisory",
+        default="strict",
         help=(
-            "advisory: never fail on line-count budget drift. "
-            "strict: fail when a module exceeds the hard budget."
+            "strict: fail when a module exceeds the hard budget. "
+            "advisory: report drift without failing."
+        ),
+    )
+    parser.add_argument(
+        "--cluster-min-lines",
+        type=int,
+        default=CLUSTER_MIN_LINES,
+        help=(
+            "Lower bound for near-limit clustering signal (advisory). "
+            "Use with --cluster-max-lines to detect suspicious budget-edge files."
+        ),
+    )
+    parser.add_argument(
+        "--cluster-max-lines",
+        type=int,
+        default=CLUSTER_MAX_LINES,
+        help="Upper bound for near-limit clustering signal (advisory).",
+    )
+    parser.add_argument(
+        "--emit-cluster-signals",
+        action="store_true",
+        default=EMIT_CLUSTER_SIGNALS_DEFAULT,
+        help=(
+            "Emit near-limit clustering warnings for modules inside the cluster range. "
+            "Disabled by default to avoid artificial file-splitting pressure."
         ),
     )
     return parser
@@ -166,19 +189,29 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     root = Path(args.root).resolve()
-    preferred_breaches = collect_module_size_preferred_breaches(
-        root,
-        preferred_max_lines=int(args.preferred_max_lines),
-    )
+    preferred_breaches: tuple[ModuleSizePreferredBreach, ...] = ()
+    if bool(args.emit_preferred_signals):
+        preferred_breaches = collect_module_size_preferred_breaches(
+            root,
+            preferred_max_lines=int(args.preferred_max_lines),
+        )
     violations = collect_module_size_violations(
         root,
         default_max_lines=int(args.default_max_lines),
     )
+    cluster_signals: tuple[ModuleSizeClusterSignal, ...] = ()
+    if bool(args.emit_cluster_signals):
+        cluster_signals = collect_module_size_cluster_signals(
+            root,
+            cluster_min_lines=int(args.cluster_min_lines),
+            cluster_max_lines=int(args.cluster_max_lines),
+        )
     print(
         "[python-module-size-budget] "
         f"root={root} mode={args.enforcement_mode} "
         f"default_max_lines={args.default_max_lines} "
-        f"preferred_max_lines={args.preferred_max_lines}"
+        f"preferred_max_lines={args.preferred_max_lines} "
+        f"emit_preferred_signals={bool(args.emit_preferred_signals)}"
     )
 
     if preferred_breaches:
@@ -190,6 +223,18 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f" - {breach.path}: {breach.lines} lines "
                 f"(preferred={breach.preferred_max_lines})"
+            )
+
+    if cluster_signals:
+        print(
+            "[python-module-size-budget] warning "
+            f"found {len(cluster_signals)} module(s) clustered near line budget "
+            f"({args.cluster_min_lines}-{args.cluster_max_lines}):"
+        )
+        for signal in cluster_signals:
+            print(
+                f" - {signal.path}: {signal.lines} lines "
+                f"(cluster={signal.cluster_min_lines}-{signal.cluster_max_lines})"
             )
 
     if not violations:
@@ -209,8 +254,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.enforcement_mode == "strict":
         return 1
     print(
-        "[python-module-size-budget] advisory mode keeps line counts non-blocking; "
-        "use complexity checks (e.g., C901) as the hard governance gate."
+        "[python-module-size-budget] advisory mode is explicitly non-blocking; "
+        "strict mode remains the default governance gate."
     )
     return 0
 

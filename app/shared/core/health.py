@@ -21,6 +21,10 @@ from app.shared.core.system_resources import (
     safe_virtual_memory,
     safe_disk_usage,
 )
+from app.shared.core.health_check_ops import (
+    evaluate_background_jobs,
+    evaluate_system_resources,
+)
 from app.shared.core.circuit_breaker import get_all_circuit_breakers
 from app.shared.db.session import health_check as db_health_check
 from app.shared.core.cache import get_cache_service
@@ -40,6 +44,14 @@ HEALTH_RECOVERABLE_ERRORS = (
     ValueError,
     asyncio.TimeoutError,
 )
+HEALTH_FALLBACK_STATUSES: dict[str, str] = {
+    "database": "down",
+    "cache": "unhealthy",
+    "external_services": "degraded",
+    "circuit_breakers": "unknown",
+    "system_resources": "unknown",
+    "background_jobs": "unknown",
+}
 
 
 class HealthService:
@@ -117,14 +129,58 @@ class HealthService:
 
         Returns detailed health status for monitoring and alerting.
         """
-        checks = await asyncio.gather(
-            self._check_database(),
-            self._check_cache(),
-            self._check_external_services(),
-            self._check_circuit_breakers(),
-            self._check_system_resources(),
-            self._check_background_jobs(),
+        component_checks = (
+            (
+                "database",
+                self._run_health_check(
+                    self._check_database(),
+                    component="database",
+                ),
+            ),
+            (
+                "cache",
+                self._run_health_check(
+                    self._check_cache(),
+                    component="cache",
+                ),
+            ),
+            (
+                "external_services",
+                self._run_health_check(
+                    self._check_external_services(),
+                    component="external_services",
+                ),
+            ),
+            (
+                "circuit_breakers",
+                self._run_health_check(
+                    self._check_circuit_breakers(),
+                    component="circuit_breakers",
+                ),
+            ),
+            (
+                "system_resources",
+                self._run_health_check(
+                    self._check_system_resources(),
+                    component="system_resources",
+                ),
+            ),
+            (
+                "background_jobs",
+                self._run_health_check(
+                    self._check_background_jobs(),
+                    component="background_jobs",
+                ),
+            ),
         )
+        gathered_checks = await asyncio.gather(
+            *(coro for _, coro in component_checks),
+            return_exceptions=True,
+        )
+        checks = [
+            self._normalize_health_check_result(component=component, result=result)
+            for (component, _), result in zip(component_checks, gathered_checks)
+        ]
 
         # Unpack results
         (
@@ -172,6 +228,69 @@ class HealthService:
             logger.debug("health_check_passed", status=overall_status)
 
         return health_data
+
+    async def _run_health_check(
+        self,
+        coro: Awaitable[Dict[str, Any]],
+        *,
+        component: str,
+    ) -> Dict[str, Any]:
+        """Contain unexpected subcheck failures so /health remains deterministic."""
+        try:
+            result = await coro
+        except HEALTH_RECOVERABLE_ERRORS as exc:
+            fallback_status = HEALTH_FALLBACK_STATUSES.get(component, "unknown")
+            logger.error(
+                "health_check_unhandled_exception",
+                component=component,
+                fallback_status=fallback_status,
+                error_type=type(exc).__name__,
+                error=str(exc),
+            )
+            return {
+                "status": fallback_status,
+                "error": str(exc),
+                "component": component,
+            }
+
+        return self._normalize_health_check_result(component=component, result=result)
+
+    def _normalize_health_check_result(
+        self,
+        *,
+        component: str,
+        result: Dict[str, Any] | Exception | BaseException,
+    ) -> Dict[str, Any]:
+        if isinstance(result, BaseException) and not isinstance(result, Exception):
+            raise result
+
+        if isinstance(result, Exception):
+            fallback_status = HEALTH_FALLBACK_STATUSES.get(component, "unknown")
+            logger.error(
+                "health_check_unhandled_exception",
+                component=component,
+                fallback_status=fallback_status,
+                error_type=type(result).__name__,
+                error=str(result),
+            )
+            return {
+                "status": fallback_status,
+                "error": str(result),
+                "component": component,
+            }
+
+        if not isinstance(result, dict):
+            logger.error(
+                "health_check_invalid_payload",
+                component=component,
+                payload_type=type(result).__name__,
+            )
+            return {
+                "status": HEALTH_FALLBACK_STATUSES.get(component, "unknown"),
+                "error": "Health check returned non-dict payload",
+                "component": component,
+            }
+        return result
 
     async def _check_database(self) -> Dict[str, Any]:
         """Check database connectivity and performance."""
@@ -280,115 +399,28 @@ class HealthService:
 
     async def _check_system_resources(self) -> Dict[str, Any]:
         """Check system resource usage."""
-        try:
-            # Memory usage
-            memory = safe_virtual_memory()
-            memory_percent = memory.percent
-
-            # CPU usage (non-blocking to avoid stalling health checks)
-            cpu_percent = safe_cpu_percent()
-
-            # Disk usage
-            disk = safe_disk_usage("/")
-            disk_percent = disk.percent
-
-            status = "healthy"
-            warnings = []
-
-            if memory_percent > 85:
-                status = "degraded"
-                warnings.append("memory_high")
-            if cpu_percent > 90:
-                status = "degraded"
-                warnings.append("cpu_high")
-            if disk_percent > 90:
-                status = "degraded"
-                warnings.append("disk_high")
-
-            return {
-                "status": status,
-                "memory": {
-                    "percent": memory_percent,
-                    "used_gb": round(memory.used / (1024**3), 2),
-                    "available_gb": round(memory.available / (1024**3), 2),
-                },
-                "cpu": {"percent": cpu_percent},
-                "disk": {
-                    "percent": disk_percent,
-                    "free_gb": round(safe_disk_usage("/").free / (1024**3), 2),
-                },
-                "warnings": warnings,
-            }
-
-        except HEALTH_RECOVERABLE_ERRORS as e:
-            logger.error("system_resources_health_check_failed", error=str(e))
-            return {"status": "unknown", "error": str(e)}
+        result = evaluate_system_resources(
+            virtual_memory_sampler=safe_virtual_memory,
+            cpu_percent_sampler=safe_cpu_percent,
+            disk_usage_sampler=safe_disk_usage,
+            recoverable_errors=HEALTH_RECOVERABLE_ERRORS,
+        )
+        if result.get("status") == "unknown" and result.get("error"):
+            logger.error(
+                "system_resources_health_check_failed",
+                error=str(result.get("error")),
+            )
+        return result
 
     async def _check_background_jobs(self) -> Dict[str, Any]:
         """Check background job queue health."""
-        try:
-            if not self.db:
-                return {
-                    "status": "unknown",
-                    "message": "Database session not available",
-                }
-
-            # Check for stuck jobs (pending for more than 1 hour)
-            from sqlalchemy import select, func
-            from app.models.background_job import BackgroundJob, JobStatus
-            from datetime import timedelta
-
-            import sqlalchemy as sa
-
-            cutoff_time = datetime.now(timezone.utc) - timedelta(hours=1)
-
-            result = await self.db.execute(
-                select(func.count()).where(
-                    BackgroundJob.status == JobStatus.PENDING,
-                    BackgroundJob.created_at < cutoff_time,
-                )
-            )
-
-            stuck_jobs = await maybe_await(result.scalar())
-
-            if stuck_jobs and stuck_jobs > 0:
-                return {
-                    "status": "degraded",
-                    "message": f"{stuck_jobs} jobs stuck in pending state",
-                    "stuck_jobs": stuck_jobs,
-                }
-
-            # Get queue statistics
-            result = await self.db.execute(
-                select(
-                    func.count().label("total"),
-                    func.sum(
-                        sa.cast(BackgroundJob.status == JobStatus.PENDING, sa.Integer)
-                    ).label("pending"),
-                    func.sum(
-                        sa.cast(BackgroundJob.status == JobStatus.RUNNING, sa.Integer)
-                    ).label("running"),
-                    func.sum(
-                        sa.cast(BackgroundJob.status == JobStatus.FAILED, sa.Integer)
-                    ).label("failed"),
-                )
-            )
-
-            stats = await maybe_await(result.first())
-
-            return {
-                "status": "healthy",
-                "queue_stats": {
-                    "total_jobs": stats.total or 0,
-                    "pending_jobs": stats.pending or 0,
-                    "running_jobs": stats.running or 0,
-                    "failed_jobs": stats.failed or 0,
-                },
-            }
-
-        except HEALTH_RECOVERABLE_ERRORS as e:
-            logger.error("background_jobs_health_check_failed", error=str(e))
-            return {"status": "unknown", "error": str(e)}
+        result = await evaluate_background_jobs(
+            db=self.db,
+            recoverable_errors=HEALTH_RECOVERABLE_ERRORS,
+        )
+        if result.get("status") == "unknown" and result.get("error"):
+            logger.error("background_jobs_health_check_failed", error=str(result["error"]))
+        return result
 
     def _calculate_overall_health(self, check_results: List[Dict[str, Any]]) -> str:
         """Calculate overall health status from individual checks."""

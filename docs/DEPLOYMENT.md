@@ -58,6 +58,8 @@ Also create:
 | Variable | Example | Notes |
 |---|---|---|
 | `DATABASE_URL` | `postgresql://...` | Supabase pooled URL |
+| `DB_POOL_SIZE` | `20` | Baseline per worker process; tune with capacity formula below |
+| `DB_MAX_OVERFLOW` | `10` | Burst allowance per worker process |
 | `SUPABASE_JWT_SECRET` | `...` | Supabase JWT secret |
 | `CSRF_SECRET_KEY` | `...` | >=32 chars, non-default |
 | `ENCRYPTION_KEY` | `...` | 64-char hex |
@@ -91,7 +93,19 @@ uv run python scripts/validate_runtime_env.py --environment production
 If `prophet` is intentionally not bundled in production/staging, set all of:
 - `FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=true`
 - `FORECASTER_BREAK_GLASS_REASON=<ticket/incident reference>`
-- `FORECASTER_BREAK_GLASS_EXPIRES_AT=<ISO-8601 UTC, future timestamp>`
+- `FORECASTER_BREAK_GLASS_EXPIRES_AT=<ISO-8601 UTC, future timestamp within the configured max break-glass window>`
+
+### DB Pool Planning for Enterprise Capacity
+
+Before increasing `DB_POOL_SIZE`, compute:
+
+```text
+max_db_connections_required =
+  api_replicas * WEB_CONCURRENCY * (DB_POOL_SIZE + DB_MAX_OVERFLOW)
+```
+
+Keep this value below ~80% of your database hard connection limit.  
+Recommended sequence: scale replicas/workers first, then raise pool values only when query queueing persists and DB headroom is still healthy.
 
 ## Step 4: Run Database Migrations
 
@@ -146,7 +160,7 @@ For production hardening and operator run-through (DNS, SSL/TLS, DNSSEC, WAF, bo
 1. API health check:
 
 ```bash
-curl -fsS https://api.valdrics.ai/health
+curl -fsS https://api.valdrics.ai/health/live
 ```
 
 2. Dashboard auth flow:
@@ -163,6 +177,7 @@ curl -fsS https://api.valdrics.ai/health
   - `valdrics_ops_llm_fair_use_denials_total`
   - `valdrics_ops_llm_fair_use_evaluations_total`
   - `valdrics_ops_llm_fair_use_observed`
+- Confirm infrastructure-only metrics scraping uses `/_internal/metrics`; this endpoint should not be internet-exposed.
 - Confirm tenant-scoped runtime visibility endpoint responds:
   - `GET /api/v1/admin/health-dashboard/fair-use` (admin-authenticated)
 - Confirm no CORS errors in browser console

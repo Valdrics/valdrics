@@ -10,6 +10,7 @@ from app.modules.notifications.domain.jira import (
     JiraService,
     get_jira_service,
     get_tenant_jira_service,
+    validate_jira_base_url,
 )
 
 
@@ -24,6 +25,30 @@ def test_sanitize_label_handles_empty_and_truncation() -> None:
     assert JiraService._sanitize_label(" Prod Team / Alerts ") == "prod-team-alerts"
     assert JiraService._sanitize_label("$$$") == "valdrics"
     assert len(JiraService._sanitize_label("a" * 100)) == 64
+
+
+def test_validate_jira_base_url_rejects_unsafe_hosts_and_normalizes() -> None:
+    settings = SimpleNamespace(
+        JIRA_ALLOWED_DOMAINS=["atlassian.net", "jira.example.com"],
+        JIRA_REQUIRE_HTTPS=True,
+        JIRA_BLOCK_PRIVATE_IPS=True,
+    )
+
+    with pytest.raises(ValueError):
+        validate_jira_base_url("http://example.atlassian.net", settings)
+    with pytest.raises(ValueError):
+        validate_jira_base_url("https://user:pass@example.atlassian.net", settings)
+    with pytest.raises(ValueError):
+        validate_jira_base_url("https://127.0.0.1", settings)
+    with pytest.raises(ValueError):
+        validate_jira_base_url("https://evil.example.org", settings)
+    with pytest.raises(ValueError):
+        validate_jira_base_url("https://example.atlassian.net?x=1", settings)
+
+    assert (
+        validate_jira_base_url("https://example.atlassian.net/", settings)
+        == "https://example.atlassian.net"
+    )
 
 
 @pytest.mark.asyncio
@@ -49,6 +74,7 @@ async def test_create_issue_success_and_payload_shape() -> None:
     payload = client.post.await_args.kwargs["json"]
     assert payload["fields"]["summary"] == "x" * 240
     assert payload["fields"]["labels"] == ["team-ops", "prod-blue"]
+    assert client.post.await_args.kwargs["timeout"] == 10.0
 
 
 @pytest.mark.asyncio
@@ -102,6 +128,18 @@ async def test_health_check_does_not_swallow_fatal_exceptions() -> None:
     with patch("app.shared.core.http.get_http_client", return_value=client):
         with pytest.raises(KeyboardInterrupt):
             await service.health_check()
+
+
+@pytest.mark.asyncio
+async def test_create_issue_rejects_invalid_base_url() -> None:
+    service = JiraService(
+        base_url="https://127.0.0.1",
+        email="jira@example.com",
+        api_token="token",
+        project_key="FINOPS",
+    )
+
+    assert await service.create_issue("s", "d") is False
 
 
 @pytest.mark.asyncio
@@ -193,6 +231,9 @@ def test_get_jira_service_complete_and_incomplete() -> None:
         JIRA_PROJECT_KEY="FINOPS",
         JIRA_ISSUE_TYPE="Incident",
         JIRA_TIMEOUT_SECONDS=7.0,
+        JIRA_ALLOWED_DOMAINS=["atlassian.net"],
+        JIRA_REQUIRE_HTTPS=True,
+        JIRA_BLOCK_PRIVATE_IPS=True,
     )
     with patch("app.shared.core.config.get_settings", return_value=complete):
         service = get_jira_service()
@@ -257,9 +298,41 @@ async def test_get_tenant_jira_service_success() -> None:
     result.scalar_one_or_none.return_value = notif
     db.execute = AsyncMock(return_value=result)
 
-    settings = SimpleNamespace(JIRA_TIMEOUT_SECONDS=12.5)
+    settings = SimpleNamespace(
+        JIRA_TIMEOUT_SECONDS=12.5,
+        JIRA_ALLOWED_DOMAINS=["atlassian.net"],
+        JIRA_REQUIRE_HTTPS=True,
+        JIRA_BLOCK_PRIVATE_IPS=True,
+    )
     with patch("app.shared.core.config.get_settings", return_value=settings):
         service = await get_tenant_jira_service(db, uuid4())
 
     assert isinstance(service, JiraService)
     assert service is not None and service.timeout_seconds == 12.5
+
+
+@pytest.mark.asyncio
+async def test_get_tenant_jira_service_rejects_invalid_base_url() -> None:
+    db = MagicMock()
+    notif = SimpleNamespace(
+        jira_enabled=True,
+        jira_base_url="https://10.0.0.5",
+        jira_email="jira@example.com",
+        jira_project_key="FINOPS",
+        jira_issue_type="Task",
+        jira_api_token="token-123",
+    )
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = notif
+    db.execute = AsyncMock(return_value=result)
+
+    settings = SimpleNamespace(
+        JIRA_TIMEOUT_SECONDS=12.5,
+        JIRA_ALLOWED_DOMAINS=["atlassian.net"],
+        JIRA_REQUIRE_HTTPS=True,
+        JIRA_BLOCK_PRIVATE_IPS=True,
+    )
+    with patch("app.shared.core.config.get_settings", return_value=settings):
+        service = await get_tenant_jira_service(db, uuid4())
+
+    assert service is None

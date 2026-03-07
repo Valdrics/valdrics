@@ -143,6 +143,8 @@ def validate_notification_settings_requirements(
     raise_http_exception_fn: Callable[[int, str], None],
 ) -> None:
     if settings.jira_enabled:
+        from app.modules.notifications.domain.jira import validate_jira_base_url
+
         jira_requirements = [
             ("jira_base_url", settings.jira_base_url),
             ("jira_email", settings.jira_email),
@@ -155,6 +157,10 @@ def validate_notification_settings_requirements(
                 422,
                 "Jira is enabled but missing required fields: " + ", ".join(missing),
             )
+        try:
+            validate_jira_base_url(str(settings.jira_base_url))
+        except ValueError as exc:
+            raise_http_exception_fn(422, f"jira_base_url is invalid: {exc}")
     if settings.teams_enabled and not settings.teams_webhook_url:
         raise_http_exception_fn(
             422,

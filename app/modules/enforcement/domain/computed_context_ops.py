@@ -17,9 +17,7 @@ from app.modules.enforcement.domain.service_models import DecisionComputedContex
 from app.modules.enforcement.domain.service_utils import _as_utc, _quantize, _to_decimal
 from app.shared.core.pricing import PricingTier, get_tenant_tier, get_tier_limit
 
-
 logger = structlog.get_logger()
-
 
 async def resolve_tenant_tier(
     *,
@@ -29,7 +27,6 @@ async def resolve_tenant_tier(
 ) -> PricingTier:
     tier = await get_tenant_tier_fn(tenant_id, db)
     return tier if isinstance(tier, PricingTier) else PricingTier.FREE
-
 
 async def resolve_plan_monthly_ceiling_usd(
     *,
@@ -52,7 +49,6 @@ async def resolve_plan_monthly_ceiling_usd(
         return None
     return ceiling
 
-
 async def resolve_enterprise_monthly_ceiling_usd(
     *,
     policy: EnforcementPolicy,
@@ -74,10 +70,8 @@ async def resolve_enterprise_monthly_ceiling_usd(
         return None
     return ceiling
 
-
 def month_total_days(value: date) -> int:
     return int(calendar.monthrange(value.year, value.month)[1])
-
 
 async def load_daily_cost_totals(
     *,
@@ -110,7 +104,6 @@ async def load_daily_cost_totals(
         )
         for item in rows.all()
     }
-
 
 def derive_risk_assessment(
     *,
@@ -206,7 +199,6 @@ def derive_risk_assessment(
         risk_class = "low"
 
     return risk_class, score, tuple(factors)
-
 
 async def build_decision_computed_context_payload(
     *,
@@ -370,7 +362,6 @@ async def build_decision_computed_context_payload(
         "risk_factors": risk_factors,
     }
 
-
 async def resolve_tenant_tier_for_service(service: Any, tenant_id: UUID) -> PricingTier:
     from app.modules.enforcement.domain import service as enforcement_service_module
 
@@ -383,7 +374,6 @@ async def resolve_tenant_tier_for_service(service: Any, tenant_id: UUID) -> Pric
             get_tenant_tier,
         ),
     )
-
 
 async def resolve_plan_monthly_ceiling_usd_for_service(
     service: Any,
@@ -405,7 +395,6 @@ async def resolve_plan_monthly_ceiling_usd_for_service(
         ),
     )
 
-
 async def resolve_enterprise_monthly_ceiling_usd_for_service(
     service: Any,
     *,
@@ -426,10 +415,8 @@ async def resolve_enterprise_monthly_ceiling_usd_for_service(
         ),
     )
 
-
 def month_total_days_for_service(_service: Any, value: date) -> int:
     return month_total_days(value)
-
 
 async def load_daily_cost_totals_for_service(
     service: Any,
@@ -449,7 +436,6 @@ async def load_daily_cost_totals_for_service(
         to_decimal_fn=_to_decimal,
     )
 
-
 def derive_risk_assessment_for_service(
     _service: Any,
     *,
@@ -464,7 +450,6 @@ def derive_risk_assessment_for_service(
         quantize_fn=_quantize,
         to_decimal_fn=_to_decimal,
     )
-
 
 async def build_decision_computed_context_for_service(
     service: Any,

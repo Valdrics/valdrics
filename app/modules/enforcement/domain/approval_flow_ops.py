@@ -21,7 +21,6 @@ from app.models.enforcement import (
 )
 from app.shared.core.auth import CurrentUser
 
-
 async def create_or_get_approval_request(
     *,
     db: AsyncSession,
@@ -84,7 +83,6 @@ async def create_or_get_approval_request(
     await db.refresh(approval)
     return approval
 
-
 async def list_pending_approvals(
     *,
     db: AsyncSession,
@@ -128,7 +126,6 @@ async def list_pending_approvals(
             continue
         allowed.append((approval, decision))
     return allowed
-
 
 async def approve_request(
     *,
@@ -225,7 +222,6 @@ async def approve_request(
 
     return approval, decision, approval_token, token_expires_at
 
-
 async def deny_request(
     *,
     db: AsyncSession,
@@ -291,7 +287,6 @@ async def deny_request(
     await db.refresh(decision)
 
     return approval, decision
-
 
 async def consume_approval_token(
     *,

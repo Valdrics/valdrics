@@ -65,6 +65,13 @@ SCHEDULER_RECOVERABLE_ERRORS = (
 )
 _coerce_positive_limit = _coerce_positive_limit_impl
 
+
+async def _load_active_remediation_connections(
+    db: AsyncSession, *args: Any, **kwargs: Any
+) -> list[Any]:
+    """Compatibility wrapper used by remediation sweep tests and runtime wiring."""
+    return await list_active_connections_all_tenants(db, *args, **kwargs)
+
 def _system_sweep_tenant_limit() -> int:
     return _system_sweep_tenant_limit_impl(
         get_settings_fn=get_settings,
@@ -112,7 +119,6 @@ def run_async(task_or_coro: Any, *args: Any, **kwargs: Any) -> Any:
 
     raise TypeError("run_async expects an awaitable or a callable async function")
 
-
 @shared_task(
     name="scheduler.cohort_analysis",
     autoretry_for=(Exception,),
@@ -129,7 +135,6 @@ def run_cohort_analysis(cohort_value: str) -> None:
             cohort = TenantCohort(cohort_value)
 
     run_async(_cohort_analysis_logic, cohort)
-
 
 async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
     job_id = str(uuid.uuid4())
@@ -297,7 +302,6 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
         duration = time.time() - start_time
         SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
-
 @shared_task(
     name="scheduler.remediation_sweep",
     autoretry_for=(Exception,),
@@ -307,7 +311,6 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
 def run_remediation_sweep() -> None:
     run_async(_remediation_sweep_logic)
 
-
 async def _remediation_sweep_logic() -> None:
     await _remediation_sweep_logic_impl(
         open_db_session_fn=_open_db_session,
@@ -315,7 +318,7 @@ async def _remediation_sweep_logic() -> None:
         system_sweep_connection_limit_fn=_system_sweep_connection_limit,
         cap_scope_items_fn=_cap_scope_items,
         logger=logger,
-        list_active_connections_all_tenants_fn=list_active_connections_all_tenants,
+        list_active_connections_all_tenants_fn=_load_active_remediation_connections,
         is_connection_active_fn=is_connection_active,
         scheduler_orchestrator_cls=SchedulerOrchestrator,
         async_session_maker_fn=async_session_maker,
@@ -338,7 +341,6 @@ async def _remediation_sweep_logic() -> None:
         recoverable_errors=SCHEDULER_RECOVERABLE_ERRORS,
     )
 
-
 @shared_task(
     name="scheduler.billing_sweep",
     autoretry_for=(Exception,),
@@ -347,7 +349,6 @@ async def _remediation_sweep_logic() -> None:
 )  # type: ignore[untyped-decorator]
 def run_billing_sweep() -> None:
     run_async(_billing_sweep_logic)
-
 
 async def _billing_sweep_logic() -> None:
     await _billing_sweep_logic_impl(
@@ -366,7 +367,6 @@ async def _billing_sweep_logic() -> None:
         asyncio_module=asyncio,
     )
 
-
 @shared_task(
     name="scheduler.acceptance_sweep",
     autoretry_for=(Exception,),
@@ -375,7 +375,6 @@ async def _billing_sweep_logic() -> None:
 )  # type: ignore[untyped-decorator]
 def run_acceptance_sweep() -> None:
     run_async(_acceptance_sweep_logic)
-
 
 async def _acceptance_sweep_logic() -> None:
     await _acceptance_sweep_logic_impl(
@@ -398,7 +397,6 @@ async def _acceptance_sweep_logic() -> None:
         asyncio_module=asyncio,
     )
 
-
 @shared_task(
     name="scheduler.maintenance_sweep",
     autoretry_for=(Exception,),
@@ -407,7 +405,6 @@ async def _acceptance_sweep_logic() -> None:
 )  # type: ignore[untyped-decorator]
 def run_maintenance_sweep() -> None:
     run_async(_maintenance_sweep_logic)
-
 
 async def _maintenance_sweep_logic() -> None:
     await _maintenance_sweep_logic_impl(
@@ -423,7 +420,6 @@ async def _maintenance_sweep_logic() -> None:
         timedelta_cls=timedelta,
     )
 
-
 @shared_task(
     name="scheduler.currency_sync",
     autoretry_for=(Exception,),
@@ -435,7 +431,6 @@ def run_currency_sync() -> None:
         run_async(get_exchange_rate, curr)
     logger.info("currency_sync_completed")
 
-
 @shared_task(
     name="scheduler.enforcement_reconciliation_sweep",
     autoretry_for=(Exception,),
@@ -444,7 +439,6 @@ def run_currency_sync() -> None:
 )  # type: ignore[untyped-decorator]
 def run_enforcement_reconciliation_sweep() -> None:
     run_async(_enforcement_reconciliation_sweep_logic)
-
 
 async def _enforcement_reconciliation_sweep_logic() -> None:
     await _enforcement_reconciliation_sweep_logic_impl(
@@ -468,7 +462,6 @@ async def _enforcement_reconciliation_sweep_logic() -> None:
         time_module=time,
         asyncio_module=asyncio,
     )
-
 
 @shared_task(name="scheduler.daily_scan")  # type: ignore[untyped-decorator]
 def daily_finops_scan() -> None:

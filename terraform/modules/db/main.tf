@@ -37,21 +37,23 @@ resource "aws_security_group" "rds" {
 }
 
 resource "aws_db_instance" "main" {
-  allocated_storage      = 20
-  storage_type           = "gp3"
-  engine                 = "postgres"
-  engine_version         = "16.3"
-  instance_class         = var.db_instance_class
-  db_name                = var.db_name
-  username               = var.db_username
-  password               = var.db_password
-  parameter_group_name   = "default.postgres16"
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [aws_security_group.rds.id]
-  skip_final_snapshot    = var.skip_final_snapshot
-  storage_encrypted      = true
+  allocated_storage            = 20
+  storage_type                 = "gp3"
+  engine                       = "postgres"
+  engine_version               = "16.3"
+  instance_class               = var.db_instance_class
+  db_name                      = var.db_name
+  username                     = var.db_username
+  password                     = var.db_password
+  parameter_group_name         = "default.postgres16"
+  db_subnet_group_name         = aws_db_subnet_group.main.name
+  vpc_security_group_ids       = [aws_security_group.rds.id]
+  skip_final_snapshot          = var.skip_final_snapshot
+  storage_encrypted            = true
   performance_insights_enabled = true
-  
+  multi_az                     = true
+  deletion_protection          = var.environment == "production"
+
   backup_retention_period = 30
   backup_window           = "03:00-04:00"
   copy_tags_to_snapshot   = true

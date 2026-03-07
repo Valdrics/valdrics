@@ -52,16 +52,13 @@ class BillingService:
 
     class _ExchangeRateRuntime(Protocol):
         async def get_ngn_rate(self) -> float: ...
-
         def convert_usd_to_ngn(self, amount_usd: float, ngn_rate: float) -> int: ...
 
     def __init__(
         self,
         db: AsyncSession,
         *,
-        exchange_rate_service_factory: (
-            Callable[[AsyncSession], _ExchangeRateRuntime] | None
-        ) = None,
+        exchange_rate_service_factory: Callable[[AsyncSession], _ExchangeRateRuntime] | None = None,
     ):
         self.db = db
         self.client = PaystackClient()

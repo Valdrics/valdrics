@@ -17,20 +17,6 @@ BILLING_PLAN_RECOVERABLE_ERRORS = (
     TypeError,
     ValueError,
 )
-BILLING_WEBHOOK_COMPLETION_RECOVERABLE_ERRORS = (
-    SQLAlchemyError,
-    RuntimeError,
-    TypeError,
-    ValueError,
-    OSError,
-)
-BILLING_WEBHOOK_PROCESS_RECOVERABLE_ERRORS = (
-    SQLAlchemyError,
-    RuntimeError,
-    TypeError,
-    ValueError,
-    OSError,
-)
 
 
 async def load_public_plans(
@@ -289,24 +275,12 @@ async def process_paystack_webhook(
     if job is None:
         return {"status": "duplicate", "message": "Already queued or processed"}
 
-    try:
-        result = await handler.handle(request, payload, signature)
-        try:
-            await retry_service.mark_inline_processed(job, result)
-        except BILLING_WEBHOOK_COMPLETION_RECOVERABLE_ERRORS as completion_exc:
-            logger.error(
-                "webhook_inline_completion_mark_failed",
-                job_id=str(job.id),
-                error=str(completion_exc),
-            )
-        return result
-    except BILLING_WEBHOOK_PROCESS_RECOVERABLE_ERRORS as process_error:
-        logger.warning(
-            "webhook_processing_failed_will_retry",
-            job_id=str(job.id),
-            error=str(process_error),
-        )
-        return {"status": "queued", "job_id": str(job.id)}
+    return {
+        "status": "accepted",
+        "job_id": str(job.id),
+        "event_type": event_type,
+        "delivery_mode": "async_durable",
+    }
 
 
 async def apply_exchange_rate_update(

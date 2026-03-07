@@ -97,10 +97,11 @@ def check_m01(repo_root: Path) -> tuple[str, ...]:
         errors.append(
             "module-size overrides must be floor-aware (cannot enforce lower-than-default budgets)."
         )
-    if 'default="advisory"' not in text:
+    if "MODULE_LINE_BUDGET_OVERRIDES: dict[str, int] = {}" not in text:
+        errors.append("module-size override table must be empty unless a current hard-budget exception is required.")
+    if 'default="strict"' not in text:
         errors.append(
-            "module-size governance must default to advisory mode; "
-            "line-count budgets are maintainability signals, not default hard-fail gates."
+            "module-size governance must default to strict mode so hard-budget drift blocks merges."
         )
 
     ci_path = repo_root / ".github/workflows/ci.yml"

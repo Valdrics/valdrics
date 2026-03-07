@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from app.modules.optimization.adapters.common import build_google_recoverable_exceptions
 from app.modules.optimization.adapters.common.credentials import (
     resolve_azure_credentials,
     resolve_gcp_credentials,
@@ -66,3 +67,12 @@ def test_resolve_gcp_credentials_accepts_credential_like_objects() -> None:
     credential_like = MagicMock()
     credential_like.before_request = MagicMock()
     assert resolve_gcp_credentials(credential_like) is credential_like
+
+
+def test_build_google_recoverable_exceptions_contains_expected_types() -> None:
+    exception_types = build_google_recoverable_exceptions()
+    assert OSError in exception_types
+    assert TimeoutError in exception_types
+    assert ValueError in exception_types
+    assert exception_types
+    assert issubclass(exception_types[0], Exception)

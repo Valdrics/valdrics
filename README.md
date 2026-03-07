@@ -202,7 +202,7 @@ We're paranoid, so you don't have to be:
 - Temporary break-glass fallback is allowed only with:
   - `FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=true`
   - `FORECASTER_BREAK_GLASS_REASON` (auditable justification)
-  - `FORECASTER_BREAK_GLASS_EXPIRES_AT` (ISO-8601 UTC expiry)
+  - `FORECASTER_BREAK_GLASS_EXPIRES_AT` (ISO-8601 UTC expiry inside the configured max break-glass window)
 
 ### 1. Clone & Configure
 
@@ -211,6 +211,13 @@ git clone https://github.com/Valdrics/valdrics.git
 cd valdrics
 cp .env.example .env
 ```
+
+For deterministic local isolated testing, generate a safe mock env file:
+```bash
+make env-dev
+cp .env.dev .env
+```
+This mock profile is local-only (`TESTING=true`) and must not be used in staging/production.
 
 Edit `.env` and add:
 ```env
@@ -269,7 +276,6 @@ helm install valdrics helm/valdrics/ -f my-values.yaml
 | Component | Location | Description |
 |-----------|----------|-------------|
 | **Helm Chart** | `helm/valdrics/` | Full K8s deployment (HPA, Ingress, Service) |
-| **K8s Manifests** | `k8s/` | Raw YAML manifests for non-Helm deploys |
 | **Grafana Dashboards** | `grafana/dashboards/` | API Overview + FinOps metrics |
 | **Load Tests** | `loadtest/` | k6 + Locust performance tests |
 | **SBOM Generation** | `.github/workflows/sbom.yml` | CycloneDX + vulnerability scanning |

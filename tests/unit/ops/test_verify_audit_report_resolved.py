@@ -5,6 +5,7 @@ from pathlib import Path
 from scripts.verify_audit_report_resolved import (
     main,
     parse_report_findings,
+    validate_generic_report_findings,
     validate_report_scope,
 )
 
@@ -42,6 +43,13 @@ def test_validate_report_scope_flags_missing_findings() -> None:
         expected_findings=("C-01", "H-01", "L-02"),
     )
     assert errors == ("report missing expected finding headings: L-02",)
+
+
+def test_validate_generic_report_findings_flags_duplicates() -> None:
+    errors = validate_generic_report_findings(
+        report_findings=("PERF-01", "TECH-01", "PERF-01"),
+    )
+    assert errors == ("report has duplicate finding headings: PERF-01",)
 
 
 def test_main_allows_noncanonical_report_headings(tmp_path: Path) -> None:
@@ -152,9 +160,10 @@ def test_main_passes_m01_with_compact_optimization_structure(tmp_path: Path) -> 
         (
             "DEFAULT_MAX_LINES = 700\n"
             "PREFERRED_MAX_LINES = 500\n"
+            "MODULE_LINE_BUDGET_OVERRIDES: dict[str, int] = {}\n"
             "override_budget = 700\n"
             "max(default_max_lines, override_budget)\n"
-            "default=\"advisory\"\n"
+            "default=\"strict\"\n"
         ),
     )
     _write(tmp_path / "app/modules/optimization/domain/service.py", "pass\n")
@@ -177,9 +186,10 @@ def test_main_flags_m01_when_file_budget_exceeded(tmp_path: Path) -> None:
         (
             "DEFAULT_MAX_LINES = 700\n"
             "PREFERRED_MAX_LINES = 500\n"
+            "MODULE_LINE_BUDGET_OVERRIDES: dict[str, int] = {}\n"
             "override_budget = 700\n"
             "max(default_max_lines, override_budget)\n"
-            "default=\"advisory\"\n"
+            "default=\"strict\"\n"
         ),
     )
     for idx in range(106):

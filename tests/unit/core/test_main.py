@@ -6,6 +6,7 @@ from unittest.mock import patch, MagicMock
 
 from app.main import app as valdrics_app
 from app.main import (
+    INTERNAL_METRICS_PATH,
     valdrics_exception_handler,
     http_exception_handler,
     csrf_protect_exception_handler,
@@ -73,6 +74,16 @@ async def test_health_detailed(lite_client: AsyncClient):
         response = await lite_client.get("/health")
         assert response.status_code == 200
         assert response.json()["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_metrics_are_internal_only(lite_client: AsyncClient):
+    response = await lite_client.get("/metrics")
+    assert response.status_code == 404
+
+    internal_response = await lite_client.get(INTERNAL_METRICS_PATH)
+    assert internal_response.status_code == 200
+    assert "# HELP" in internal_response.text
 
 
 @pytest.mark.asyncio

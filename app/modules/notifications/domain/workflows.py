@@ -123,7 +123,12 @@ class GitHubActionsDispatcher:
             from app.shared.core.http import get_http_client
 
             client = get_http_client()
-            response = await client.post(endpoint, json=body, headers=headers)
+            response = await client.post(
+                endpoint,
+                json=body,
+                headers=headers,
+                timeout=self.timeout_seconds,
+            )
             if response.status_code in {200, 201, 204}:
                 return True
             logger.warning(
@@ -164,7 +169,11 @@ class GitLabCIDispatcher:
             from app.shared.core.http import get_http_client
 
             client = get_http_client()
-            response = await client.post(endpoint, data=form)
+            response = await client.post(
+                endpoint,
+                data=form,
+                timeout=self.timeout_seconds,
+            )
             if response.status_code in {200, 201}:
                 return True
             logger.warning(
@@ -215,7 +224,12 @@ class GenericCIWebhookDispatcher:
             from app.shared.core.http import get_http_client
 
             client = get_http_client()
-            response = await client.post(self.url, json=body, headers=headers)
+            response = await client.post(
+                self.url,
+                json=body,
+                headers=headers,
+                timeout=self.timeout_seconds,
+            )
             if 200 <= response.status_code < 300:
                 return True
             logger.warning(

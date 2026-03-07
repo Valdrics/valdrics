@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio  # noqa: F401
-from datetime import datetime
 from decimal import Decimal
 import hashlib  # noqa: F401
 import time  # noqa: F401
@@ -14,8 +13,6 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError  # noqa: F401
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enforcement import (
-    EnforcementApprovalRequest,
-    EnforcementDecision,
     EnforcementMode,
     EnforcementPolicy,
     EnforcementSource,
@@ -33,13 +30,6 @@ from app.modules.enforcement.domain.runtime_query_ops import (
     get_effective_budget as _get_effective_budget_impl,
     get_reserved_totals as _get_reserved_totals_impl,
 )
-from app.modules.enforcement.domain.approval_flow_ops import (
-    approve_request as _approve_request_impl,
-    consume_approval_token as _consume_approval_token_impl,
-    create_or_get_approval_request as _create_or_get_approval_request_impl,
-    deny_request as _deny_request_impl,
-    list_pending_approvals as _list_pending_approvals_impl,
-)
 from app.modules.enforcement.domain.gate_evaluation_ops import (
     evaluate_gate as _evaluate_gate_impl,
     resolve_fail_safe_gate as _resolve_fail_safe_gate_impl,
@@ -52,8 +42,9 @@ from app.modules.enforcement.domain.policy_contract_ops import (
     get_or_create_policy as _get_or_create_policy_impl,
     update_policy as _update_policy_impl,
 )
-import app.modules.enforcement.domain.service_private_ops as _service_private_ops_module
-import app.modules.enforcement.domain.service_gate_lock_ops as _service_gate_lock_ops_module
+from app.modules.enforcement.domain.service_approval_ops import (
+    EnforcementServiceApprovalOps,
+)
 from app.modules.enforcement.domain.service_private_ops import (
     EnforcementServicePrivateOps,
 )
@@ -78,13 +69,12 @@ from app.modules.enforcement.domain.service_models import (
     ReservationReconciliationResult,
 )
 from app.modules.enforcement.domain.service_gate_lock_ops import (
-    gate_lock_timeout_seconds as _gate_lock_timeout_seconds,
+    gate_lock_timeout_seconds as _gate_lock_timeout_seconds_impl,
 )
 from app.modules.enforcement.domain.service_response_ops import (
     gate_result_to_response,  # noqa: F401
 )
 from app.modules.enforcement.domain.service_utils import (
-    _as_utc,
     _computed_context_snapshot,  # noqa: F401
     _default_required_permission_for_environment,  # noqa: F401
     _is_production_environment,
@@ -106,11 +96,9 @@ from app.modules.enforcement.domain.service_utils import (
     _utcnow,
 )
 from app.shared.core.approval_permissions import user_has_approval_permission
-from app.shared.core.auth import CurrentUser
 from app.shared.core.config import get_settings
 from app.shared.core.pricing import PricingTier, get_tenant_tier, get_tier_limit  # noqa: F401
 from app.shared.core.ops_metrics import (
-    ENFORCEMENT_APPROVAL_TOKEN_EVENTS_TOTAL,
     ENFORCEMENT_EXPORT_EVENTS_TOTAL,  # noqa: F401
     ENFORCEMENT_RESERVATION_DRIFT_USD_TOTAL,
     ENFORCEMENT_RESERVATION_RECONCILIATIONS_TOTAL,
@@ -123,25 +111,37 @@ from app.shared.core.ops_metrics import (  # noqa: F401
 
 logger = structlog.get_logger()
 
-# Keep private-op dependencies bound to service-module symbols so helper tests
-# that monkeypatch this module continue to validate behavior across the split.
-setattr(_service_private_ops_module, "get_settings", lambda: get_settings())
-setattr(
-    _service_private_ops_module,
-    "user_has_approval_permission",
-    lambda *args, **kwargs: user_has_approval_permission(*args, **kwargs),
-)
-setattr(
-    _service_private_ops_module,
-    "_quantize",
-    lambda value, quantum: _quantize(value, quantum),
-)
-setattr(_service_private_ops_module, "_to_decimal", lambda value: _to_decimal(value))
-setattr(_service_private_ops_module, "jwt", jwt)
-setattr(_service_gate_lock_ops_module, "get_settings", lambda: get_settings())
-class EnforcementService(EnforcementServicePrivateOps):
+
+def _gate_lock_timeout_seconds() -> float:
+    return _gate_lock_timeout_seconds_impl(get_settings_fn=get_settings)
+
+
+class EnforcementService(EnforcementServiceApprovalOps, EnforcementServicePrivateOps):
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    def _get_runtime_settings(self) -> Any:
+        return get_settings()
+
+    async def _check_user_has_approval_permission(
+        self,
+        *args: Any,
+        **kwargs: Any,
+    ) -> bool:
+        return await user_has_approval_permission(*args, **kwargs)
+
+    def _jwt_module(self) -> Any:
+        return jwt
+
+    def _quantize_value(self, value: Decimal, quantum: str) -> Decimal:
+        return _quantize(value, quantum)
+
+    def _to_decimal_value(
+        self,
+        value: Any,
+        default: Decimal = Decimal("0"),
+    ) -> Decimal:
+        return _to_decimal(value, default=default)
 
     def compute_request_fingerprint(
         self,
@@ -283,125 +283,6 @@ class EnforcementService(EnforcementServicePrivateOps):
                 normalize_policy_document_sha256_fn=_normalize_policy_document_sha256,
                 utcnow_fn=_utcnow,
             ),
-        )
-
-    async def create_or_get_approval_request(
-        self,
-        *,
-        tenant_id: UUID,
-        actor_id: UUID,
-        decision_id: UUID,
-        notes: str | None,
-    ) -> EnforcementApprovalRequest:
-        return await _create_or_get_approval_request_impl(
-            db=self.db,
-            tenant_id=tenant_id,
-            actor_id=actor_id,
-            decision_id=decision_id,
-            notes=notes,
-            get_or_create_policy_fn=self.get_or_create_policy,
-            get_approval_by_decision_fn=self._get_approval_by_decision,
-            resolve_approval_routing_trace_fn=self._resolve_approval_routing_trace,
-            append_decision_ledger_entry_fn=self._append_decision_ledger_entry,
-            utcnow_fn=_utcnow,
-        )
-
-    async def list_pending_approvals(
-        self,
-        *,
-        tenant_id: UUID,
-        reviewer: CurrentUser | None,
-        limit: int,
-    ) -> list[tuple[EnforcementApprovalRequest, EnforcementDecision]]:
-        return await _list_pending_approvals_impl(
-            db=self.db,
-            tenant_id=tenant_id,
-            reviewer=reviewer,
-            limit=limit,
-            get_or_create_policy_fn=self.get_or_create_policy,
-            enforce_reviewer_authority_fn=self._enforce_reviewer_authority,
-            utcnow_fn=_utcnow,
-        )
-
-    async def approve_request(
-        self,
-        *,
-        tenant_id: UUID,
-        approval_id: UUID,
-        reviewer: CurrentUser,
-        notes: str | None,
-    ) -> tuple[EnforcementApprovalRequest, EnforcementDecision, str, datetime]:
-        return await _approve_request_impl(
-            db=self.db,
-            tenant_id=tenant_id,
-            approval_id=approval_id,
-            reviewer=reviewer,
-            notes=notes,
-            load_approval_with_decision_fn=self._load_approval_with_decision,
-            assert_pending_fn=self._assert_pending,
-            settle_credit_reservations_for_decision_fn=self._settle_credit_reservations_for_decision,
-            get_or_create_policy_fn=self.get_or_create_policy,
-            enforce_reviewer_authority_fn=self._enforce_reviewer_authority,
-            build_approval_token_fn=self._build_approval_token,
-            append_decision_ledger_entry_fn=self._append_decision_ledger_entry,
-            utcnow_fn=_utcnow,
-            as_utc_fn=_as_utc,
-        )
-
-    async def deny_request(
-        self,
-        *,
-        tenant_id: UUID,
-        approval_id: UUID,
-        reviewer: CurrentUser,
-        notes: str | None,
-    ) -> tuple[EnforcementApprovalRequest, EnforcementDecision]:
-        return await _deny_request_impl(
-            db=self.db,
-            tenant_id=tenant_id,
-            approval_id=approval_id,
-            reviewer=reviewer,
-            notes=notes,
-            load_approval_with_decision_fn=self._load_approval_with_decision,
-            assert_pending_fn=self._assert_pending,
-            get_or_create_policy_fn=self.get_or_create_policy,
-            enforce_reviewer_authority_fn=self._enforce_reviewer_authority,
-            settle_credit_reservations_for_decision_fn=self._settle_credit_reservations_for_decision,
-            append_decision_ledger_entry_fn=self._append_decision_ledger_entry,
-            utcnow_fn=_utcnow,
-        )
-
-    async def consume_approval_token(
-        self,
-        *,
-        tenant_id: UUID,
-        approval_token: str,
-        actor_id: UUID | None = None,
-        expected_source: EnforcementSource | None = None,
-        expected_project_id: str | None = None,
-        expected_environment: str | None = None,
-        expected_request_fingerprint: str | None = None,
-        expected_resource_reference: str | None = None,
-    ) -> tuple[EnforcementApprovalRequest, EnforcementDecision]:
-        return await _consume_approval_token_impl(
-            db=self.db,
-            tenant_id=tenant_id,
-            approval_token=approval_token,
-            actor_id=actor_id,
-            expected_source=expected_source,
-            expected_project_id=expected_project_id,
-            expected_environment=expected_environment,
-            expected_request_fingerprint=expected_request_fingerprint,
-            expected_resource_reference=expected_resource_reference,
-            decode_approval_token_fn=self._decode_approval_token,
-            extract_token_context_fn=self._extract_token_context,
-            load_approval_with_decision_fn=self._load_approval_with_decision,
-            utcnow_fn=_utcnow,
-            as_utc_fn=_as_utc,
-            normalize_environment_fn=_normalize_environment,
-            quantize_fn=_quantize,
-            to_decimal_fn=_to_decimal,
-            approval_token_events_counter=ENFORCEMENT_APPROVAL_TOKEN_EVENTS_TOTAL,
         )
 
     list_active_reservations = _list_active_reservations_impl

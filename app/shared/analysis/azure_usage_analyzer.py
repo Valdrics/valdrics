@@ -5,14 +5,22 @@ This module analyzes Azure cost export data to detect idle and underutilized
 resources without making expensive Monitor API calls.
 """
 
-from typing import List, Dict, Any
 from collections import defaultdict
+from typing import Any
+
 import structlog
 
-from app.shared.analysis.usage_analyzer_numeric import safe_float
+from app.shared.analysis.azure_usage_analyzer_helpers import (
+    projected_monthly_cost,
+    record_contains_terms,
+    resource_id_from_records,
+    resource_name_from_id,
+    sum_cost,
+    sum_cost_for_terms,
+    sum_usage_for_terms,
+)
 
 logger = structlog.get_logger()
-
 
 class AzureUsageAnalyzer:
     """
@@ -24,7 +32,7 @@ class AzureUsageAnalyzer:
     - Detection based on usage patterns in cost data
     """
 
-    def __init__(self, cost_records: List[Dict[str, Any]]):
+    def __init__(self, cost_records: list[dict[str, Any]]):
         """
         Initialize with cost records from Cost Management export.
 
@@ -36,7 +44,7 @@ class AzureUsageAnalyzer:
         self.records = cost_records
         self._resource_costs = self._group_by_resource()
 
-    def _group_by_resource(self) -> Dict[str, List[Dict[str, Any]]]:
+    def _group_by_resource(self) -> dict[str, list[dict[str, Any]]]:
         """Group cost records by ResourceId for analysis."""
         grouped = defaultdict(list)
         for record in self.records:
@@ -47,7 +55,7 @@ class AzureUsageAnalyzer:
 
     def find_idle_vms(
         self, days: int = 7, cost_threshold: float = 50.0
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """
         Detect idle Azure VMs based on cost export data patterns.
 
@@ -69,15 +77,13 @@ class AzureUsageAnalyzer:
             if not vm_records:
                 continue
 
-            total_cost = sum(safe_float(r.get("PreTaxCost", 0)) for r in vm_records)
+            total_cost = sum_cost(vm_records)
 
             # Get original resource ID from records (not the lowercase key)
-            resource_id = vm_records[0].get("ResourceId") or vm_records[0].get(
-                "resource_id", resource_key
-            )
+            resource_id = resource_id_from_records(vm_records, resource_key)
 
             # Check for GPU VMs (NC, ND, NV series)
-            vm_name = resource_id.split("/")[-1] if "/" in resource_id else resource_id
+            vm_name = resource_name_from_id(resource_id)
             is_gpu = any(
                 series in resource_id.lower()
                 for series in [
@@ -93,24 +99,16 @@ class AzureUsageAnalyzer:
 
             # Look for disk I/O and network usage in related records
             # Broaden search to MeterName and MeterCategory
-            disk_usage = sum(
-                safe_float(r.get("UsageQuantity", 0))
-                for r in self._resource_costs.get(resource_key, [])
-                if any(
-                    term in str(r.get("MeterCategory", "")).lower()
-                    or term in str(r.get("MeterName", "")).lower()
-                    for term in ["disk", "storage"]
-                )
+            disk_usage = sum_usage_for_terms(
+                self._resource_costs.get(resource_key, []),
+                terms=("disk", "storage"),
+                fields=("MeterCategory", "MeterName"),
             )
 
-            network_usage = sum(
-                safe_float(r.get("UsageQuantity", 0))
-                for r in self._resource_costs.get(resource_key, [])
-                if any(
-                    term in str(r.get("MeterCategory", "")).lower()
-                    or term in str(r.get("MeterName", "")).lower()
-                    for term in ["bandwidth", "network", "throughput"]
-                )
+            network_usage = sum_usage_for_terms(
+                self._resource_costs.get(resource_key, []),
+                terms=("bandwidth", "network", "throughput"),
+                fields=("MeterCategory", "MeterName"),
             )
 
             # Low disk/network activity with significant compute cost indicates idle
@@ -121,7 +119,7 @@ class AzureUsageAnalyzer:
                         "resource_name": vm_name,
                         "resource_type": "Virtual Machine"
                         + (" (GPU)" if is_gpu else ""),
-                        "monthly_cost": round(total_cost * (30 / days), 2),
+                        "monthly_cost": projected_monthly_cost(total_cost, days),
                         "recommendation": "Stop or deallocate if not needed",
                         "action": "deallocate_vm",
                         "confidence_score": 0.85 if is_gpu else 0.75,
@@ -131,7 +129,7 @@ class AzureUsageAnalyzer:
 
         return zombies
 
-    def find_unattached_disks(self) -> List[Dict[str, Any]]:
+    def find_unattached_disks(self) -> list[dict[str, Any]]:
         """
         Detect unattached Managed Disks from cost data.
 
@@ -146,22 +144,20 @@ class AzureUsageAnalyzer:
             disk_records = [
                 r
                 for r in records
-                if any(
-                    term in str(r.get("MeterCategory", "")).lower()
-                    or term in str(r.get("ServiceName", "")).lower()
-                    for term in ["disk", "storage"]
+                if record_contains_terms(
+                    r,
+                    terms=("disk", "storage"),
+                    fields=("MeterCategory", "ServiceName"),
                 )
             ]
 
             if not disk_records:
                 continue
 
-            storage_cost = sum(safe_float(r.get("PreTaxCost", 0)) for r in disk_records)
+            storage_cost = sum_cost(disk_records)
 
             # Use original ResourceId for results
-            resource_id = disk_records[0].get("ResourceId") or disk_records[0].get(
-                "resource_id", resource_key
-            )
+            resource_id = resource_id_from_records(disk_records, resource_key)
 
             # Check for disk ID in VM's related resource records
             has_vm = False
@@ -177,9 +173,7 @@ class AzureUsageAnalyzer:
                         break
 
             if storage_cost > 0 and not has_vm:
-                disk_name = (
-                    resource_id.split("/")[-1] if "/" in resource_id else resource_id
-                )
+                disk_name = resource_name_from_id(resource_id)
                 zombies.append(
                     {
                         "resource_id": resource_id,
@@ -196,7 +190,7 @@ class AzureUsageAnalyzer:
 
         return zombies
 
-    def find_idle_sql_databases(self, days: int = 7) -> List[Dict[str, Any]]:
+    def find_idle_sql_databases(self, days: int = 7) -> list[dict[str, Any]]:
         """
         Detect idle Azure SQL databases from cost data.
         """
@@ -212,42 +206,36 @@ class AzureUsageAnalyzer:
             sql_records = [
                 r
                 for r in records
-                if any(
-                    term in str(r.get("ServiceName", "")).lower()
-                    for term in ["sql", "database"]
+                if record_contains_terms(
+                    r,
+                    terms=("sql", "database"),
+                    fields=("ServiceName",),
                 )
             ]
 
             if not sql_records:
                 continue
 
-            total_cost = sum(safe_float(r.get("PreTaxCost", 0)) for r in sql_records)
+            total_cost = sum_cost(sql_records)
 
             # Use original ResourceId for results
-            resource_id = sql_records[0].get("ResourceId") or sql_records[0].get(
-                "resource_id", resource_key
-            )
+            resource_id = resource_id_from_records(sql_records, resource_key)
 
             # Check for DTU/vCore usage (indicates actual queries)
-            dtu_usage = sum(
-                safe_float(r.get("UsageQuantity", 0))
-                for r in sql_records
-                if any(
-                    term in str(r.get("MeterName", "")).lower()
-                    for term in ["dtu", "vcore"]
-                )
+            dtu_usage = sum_usage_for_terms(
+                sql_records,
+                terms=("dtu", "vcore"),
+                fields=("MeterName",),
             )
 
             if total_cost > 0 and dtu_usage < 1:
-                db_name = (
-                    resource_id.split("/")[-1] if "/" in resource_id else resource_id
-                )
+                db_name = resource_name_from_id(resource_id)
                 zombies.append(
                     {
                         "resource_id": resource_id,
                         "resource_name": db_name,
                         "resource_type": "Azure SQL Database",
-                        "monthly_cost": round(total_cost * (30 / days), 2),
+                        "monthly_cost": projected_monthly_cost(total_cost, days),
                         "recommendation": "Pause or delete if not needed",
                         "action": "pause_sql",
                         "confidence_score": 0.85,
@@ -257,7 +245,7 @@ class AzureUsageAnalyzer:
 
         return zombies
 
-    def find_idle_aks_clusters(self, days: int = 7) -> List[Dict[str, Any]]:
+    def find_idle_aks_clusters(self, days: int = 7) -> list[dict[str, Any]]:
         """
         Detect AKS clusters with minimal workload usage.
         """
@@ -270,42 +258,36 @@ class AzureUsageAnalyzer:
             aks_records = [
                 r
                 for r in records
-                if any(
-                    term in str(r.get("ServiceName", "")).lower()
-                    for term in ["kubernetes", "aks"]
+                if record_contains_terms(
+                    r,
+                    terms=("kubernetes", "aks"),
+                    fields=("ServiceName",),
                 )
             ]
 
             if not aks_records:
                 continue
 
-            total_cost = sum(safe_float(r.get("PreTaxCost", 0)) for r in aks_records)
+            total_cost = sum_cost(aks_records)
 
             # Use original ResourceId for results
-            resource_id = aks_records[0].get("ResourceId") or aks_records[0].get(
-                "resource_id", resource_key
-            )
+            resource_id = resource_id_from_records(aks_records, resource_key)
 
             # Check for node pool compute costs (indicates workloads)
-            node_cost = sum(
-                safe_float(r.get("PreTaxCost", 0))
-                for r in aks_records
-                if any(
-                    term in str(r.get("MeterName", "")).lower()
-                    for term in ["node", "agent pool"]
-                )
+            node_cost = sum_cost_for_terms(
+                aks_records,
+                terms=("node", "agent pool"),
+                fields=("MeterName",),
             )
 
             if total_cost > 0 and node_cost == 0:
-                cluster_name = (
-                    resource_id.split("/")[-1] if "/" in resource_id else resource_id
-                )
+                cluster_name = resource_name_from_id(resource_id)
                 zombies.append(
                     {
                         "resource_id": resource_id,
                         "resource_name": cluster_name,
                         "resource_type": "AKS Cluster",
-                        "monthly_cost": round(total_cost * (30 / days), 2),
+                        "monthly_cost": projected_monthly_cost(total_cost, days),
                         "recommendation": "Delete if no workloads",
                         "action": "delete_aks",
                         "confidence_score": 0.88,
@@ -315,7 +297,7 @@ class AzureUsageAnalyzer:
 
         return zombies
 
-    def find_orphan_public_ips(self) -> List[Dict[str, Any]]:
+    def find_orphan_public_ips(self) -> list[dict[str, Any]]:
         """
         Detect unused Public IP addresses.
         """
@@ -328,28 +310,24 @@ class AzureUsageAnalyzer:
             ip_records = [
                 r
                 for r in records
-                if any(
-                    term in str(r.get("MeterName", "")).lower()
-                    or term in str(r.get("ServiceName", "")).lower()
-                    for term in ["ip address", "public ip"]
+                if record_contains_terms(
+                    r,
+                    terms=("ip address", "public ip"),
+                    fields=("MeterName", "ServiceName"),
                 )
             ]
 
             if not ip_records:
                 continue
 
-            ip_cost = sum(safe_float(r.get("PreTaxCost", 0)) for r in ip_records)
+            ip_cost = sum_cost(ip_records)
 
             # Use original ResourceId for results
-            resource_id = ip_records[0].get("ResourceId") or ip_records[0].get(
-                "resource_id", resource_key
-            )
+            resource_id = resource_id_from_records(ip_records, resource_key)
 
             # Public IPs cost when static and not associated
             if ip_cost > 0:
-                ip_name = (
-                    resource_id.split("/")[-1] if "/" in resource_id else resource_id
-                )
+                ip_name = resource_name_from_id(resource_id)
                 zombies.append(
                     {
                         "resource_id": resource_id,
@@ -365,7 +343,7 @@ class AzureUsageAnalyzer:
 
         return zombies
 
-    def find_unused_app_service_plans(self) -> List[Dict[str, Any]]:
+    def find_unused_app_service_plans(self) -> list[dict[str, Any]]:
         """
         Detect App Service Plans with no apps.
         """
@@ -378,33 +356,30 @@ class AzureUsageAnalyzer:
             plan_records = [
                 r
                 for r in records
-                if any(
-                    term in str(r.get("ServiceName", "")).lower()
-                    for term in ["app service", "server farm"]
+                if record_contains_terms(
+                    r,
+                    terms=("app service", "server farm"),
+                    fields=("ServiceName",),
                 )
             ]
 
             if not plan_records:
                 continue
 
-            total_cost = sum(safe_float(r.get("PreTaxCost", 0)) for r in plan_records)
+            total_cost = sum_cost(plan_records)
 
             # Use original ResourceId for results
-            resource_id = plan_records[0].get("ResourceId") or plan_records[0].get(
-                "resource_id", resource_key
-            )
+            resource_id = resource_id_from_records(plan_records, resource_key)
 
             # Check for any web app activity
-            app_usage = sum(
-                safe_float(r.get("UsageQuantity", 0))
-                for r in plan_records
-                if "hour" in str(r.get("MeterName", "")).lower()
+            app_usage = sum_usage_for_terms(
+                plan_records,
+                terms=("hour",),
+                fields=("MeterName",),
             )
 
             if total_cost > 0 and app_usage == 0:
-                plan_name = (
-                    resource_id.split("/")[-1] if "/" in resource_id else resource_id
-                )
+                plan_name = resource_name_from_id(resource_id)
                 zombies.append(
                     {
                         "resource_id": resource_id,
@@ -420,7 +395,7 @@ class AzureUsageAnalyzer:
 
         return zombies
 
-    def find_orphan_nics(self) -> List[Dict[str, Any]]:
+    def find_orphan_nics(self) -> list[dict[str, Any]]:
         """
         Detect Network Interfaces not attached to any VM.
 
@@ -429,19 +404,17 @@ class AzureUsageAnalyzer:
         line items in costExports. Orphan NICs should be identified via Azure
         Resource Graph or Network APIs.
         """
-        zombies: List[Dict[str, Any]] = []
+        zombies: list[dict[str, Any]] = []
 
-        for resource_id, records in self._resource_costs.items():
+        for resource_id in self._resource_costs:
             if "microsoft.network/networkinterfaces" not in resource_id.lower():
                 continue
 
             # NICs are free, but if they exist in cost data, they're associated with something
             # We flag orphan NICs from Resource Graph, not cost data
-            pass
-
         return zombies
 
-    def find_old_snapshots(self, age_days: int = 90) -> List[Dict[str, Any]]:
+    def find_old_snapshots(self, age_days: int = 90) -> list[dict[str, Any]]:
         """
         Detect old disk snapshots with ongoing storage costs.
 
@@ -458,29 +431,23 @@ class AzureUsageAnalyzer:
             snapshot_records = [
                 r
                 for r in records
-                if any(
-                    term in str(r.get("MeterCategory", "")).lower()
-                    or term in str(r.get("ServiceName", "")).lower()
-                    for term in ["snapshot", "storage"]
+                if record_contains_terms(
+                    r,
+                    terms=("snapshot", "storage"),
+                    fields=("MeterCategory", "ServiceName"),
                 )
             ]
 
             if not snapshot_records:
                 continue
 
-            storage_cost = sum(
-                safe_float(r.get("PreTaxCost", 0)) for r in snapshot_records
-            )
+            storage_cost = sum_cost(snapshot_records)
 
             # Use original ResourceId for results
-            resource_id = snapshot_records[0].get("ResourceId") or snapshot_records[
-                0
-            ].get("resource_id", resource_key)
+            resource_id = resource_id_from_records(snapshot_records, resource_key)
 
             if storage_cost > 0:
-                snapshot_name = (
-                    resource_id.split("/")[-1] if "/" in resource_id else resource_id
-                )
+                snapshot_name = resource_name_from_id(resource_id)
                 zombies.append(
                     {
                         "resource_id": resource_id,
