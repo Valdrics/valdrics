@@ -2,23 +2,10 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-
-def _coerce_positive_int(
-    value: Any,
-    *,
-    default: int,
-    minimum: int,
-) -> int:
-    try:
-        parsed = int(value)
-    except (TypeError, ValueError):
-        return default
-    return parsed if parsed >= minimum else default
-
-
-def _extract_deleted_count(result: Any) -> int:
-    rowcount = getattr(result, "rowcount", 0)
-    return rowcount if isinstance(rowcount, int) and rowcount > 0 else 0
+from app.tasks.scheduler_retention_utils import (
+    coerce_positive_int,
+    extract_deleted_count,
+)
 
 
 async def purge_terminal_background_jobs(
@@ -34,22 +21,22 @@ async def purge_terminal_background_jobs(
     get_settings_fn: Callable[[], Any],
 ) -> dict[str, int]:
     settings = get_settings_fn()
-    completed_days = _coerce_positive_int(
+    completed_days = coerce_positive_int(
         getattr(settings, "BACKGROUND_JOB_COMPLETED_RETENTION_DAYS", 7),
         default=7,
         minimum=1,
     )
-    dead_letter_days = _coerce_positive_int(
+    dead_letter_days = coerce_positive_int(
         getattr(settings, "BACKGROUND_JOB_DEAD_LETTER_RETENTION_DAYS", 30),
         default=30,
         minimum=1,
     )
-    batch_size = _coerce_positive_int(
+    batch_size = coerce_positive_int(
         getattr(settings, "BACKGROUND_JOB_RETENTION_PURGE_BATCH_SIZE", 1000),
         default=1000,
         minimum=50,
     )
-    max_batches = _coerce_positive_int(
+    max_batches = coerce_positive_int(
         getattr(settings, "BACKGROUND_JOB_RETENTION_PURGE_MAX_BATCHES", 20),
         default=20,
         minimum=1,
@@ -91,7 +78,7 @@ async def purge_terminal_background_jobs(
                 background_job_model.id.in_(sa.select(id_subquery.c.id))
             )
             delete_result = await db.execute(delete_stmt)
-            deleted_count = _extract_deleted_count(delete_result)
+            deleted_count = extract_deleted_count(delete_result)
             if deleted_count == 0:
                 break
             status_deleted += deleted_count

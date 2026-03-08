@@ -137,6 +137,8 @@ class EnforcementServiceApprovalOps:
         expected_resource_reference: str | None = None,
     ) -> tuple[EnforcementApprovalRequest, EnforcementDecision]:
         service = cast(Any, self)
+        from app.modules.enforcement.domain import service as enforcement_service_module
+
         return await _consume_approval_token_impl(
             db=service.db,
             tenant_id=tenant_id,
@@ -150,10 +152,18 @@ class EnforcementServiceApprovalOps:
             decode_approval_token_fn=service._decode_approval_token,
             extract_token_context_fn=service._extract_token_context,
             load_approval_with_decision_fn=service._load_approval_with_decision,
-            utcnow_fn=_utcnow,
+            utcnow_fn=getattr(
+                enforcement_service_module,
+                "_utcnow",
+                _utcnow,
+            ),
             as_utc_fn=_as_utc,
             normalize_environment_fn=_normalize_environment,
             quantize_fn=_quantize,
             to_decimal_fn=_to_decimal,
-            approval_token_events_counter=ENFORCEMENT_APPROVAL_TOKEN_EVENTS_TOTAL,
+            approval_token_events_counter=getattr(
+                enforcement_service_module,
+                "ENFORCEMENT_APPROVAL_TOKEN_EVENTS_TOTAL",
+                ENFORCEMENT_APPROVAL_TOKEN_EVENTS_TOTAL,
+            ),
         )

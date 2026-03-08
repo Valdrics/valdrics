@@ -432,7 +432,7 @@ async def test_consume_approval_token_accepts_rotated_fallback_secret(
         fallback: list[str] | None = None,
     ) -> SimpleNamespace:
         return SimpleNamespace(
-            SUPABASE_JWT_SECRET=secret,
+            ENFORCEMENT_APPROVAL_TOKEN_SECRET=secret,
             API_URL="https://api.valdrics.local",
             JWT_SIGNING_KID="",
             ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=list(fallback or []),

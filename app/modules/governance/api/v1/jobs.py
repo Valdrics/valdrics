@@ -2,7 +2,7 @@
 Background Jobs API - Job Queue Management
 
 Provides endpoints for:
-- Processing pending jobs (called by pg_cron or manually)
+- Processing pending jobs (called by the authenticated internal scheduler or manually)
 - Viewing job status
 - Enqueueing new jobs
 """
@@ -207,7 +207,7 @@ async def process_pending_jobs(
     """
     Process pending jobs manually.
 
-    This endpoint is typically called by pg_cron every minute,
+    This endpoint is typically called by the authenticated internal scheduler,
     but can be triggered manually by admins.
     """
     processor = JobProcessor(db)
@@ -415,7 +415,7 @@ async def stream_job_updates(
     return EventSourceResponse(event_generator())
 
 
-# Internal endpoint for pg_cron (no auth, called by database)
+# Internal endpoint for the authenticated scheduler runner.
 @router.post("/internal/process")
 async def internal_process_jobs(
     background_tasks: BackgroundTasks,
@@ -423,7 +423,7 @@ async def internal_process_jobs(
     _auth: None = Depends(require_internal_job_secret),
 ) -> Dict[str, str]:
     """
-    Internal endpoint called by pg_cron (Asynchronous).
+    Internal endpoint called by the authenticated scheduler runner.
     """
     async def run_processor() -> None:
         async with async_session_maker() as session:

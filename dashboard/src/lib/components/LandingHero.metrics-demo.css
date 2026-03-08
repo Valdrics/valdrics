@@ -222,34 +222,6 @@
 	text-align: center;
 }
 
-.landing-hook-highlight {
-	margin-top: 1rem;
-	border: 1px solid rgb(255 255 255 / 0.1);
-	background: linear-gradient(120deg, rgb(8 14 21 / 0.92), rgb(14 22 32 / 0.82));
-	border-radius: var(--radius-lg);
-	padding: 0.75rem 0.9rem;
-	text-align: center;
-	max-width: 52rem;
-	margin-left: auto;
-	margin-right: auto;
-}
-
-.landing-hook-highlight-k {
-	margin: 0;
-	font-size: var(--text-xs);
-	letter-spacing: 0.11em;
-	text-transform: uppercase;
-	font-weight: 800;
-	color: var(--color-ink-400);
-}
-
-.landing-hook-highlight-v {
-	margin: 0.25rem 0 0 0;
-	font-size: 0.97rem;
-	font-weight: 600;
-	color: var(--color-ink-200);
-}
-
 .landing-hook-switch {
 	margin-top: 1rem;
 	display: flex;

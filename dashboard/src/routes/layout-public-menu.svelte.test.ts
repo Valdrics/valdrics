@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Snippet } from 'svelte';
 import Layout from './+layout.svelte';
@@ -83,11 +83,16 @@ vi.mock('$lib/stores/jobs.svelte', () => ({
 describe('public layout mobile menu', () => {
 	const emptySnippet = (() => '') as unknown as Snippet;
 
+	beforeEach(() => {
+		mocks.pageStore.set({ url: new URL('https://example.com/') });
+	});
+
 	function getMenuToggle(): HTMLButtonElement {
 		return screen.getAllByRole('button', { name: /toggle menu/i })[0] as HTMLButtonElement;
 	}
 
 	function renderPublicLayout() {
+		mocks.pageStore.set({ url: new URL('https://example.com/') });
 		return render(Layout, {
 			data: {
 				user: null,
@@ -117,7 +122,7 @@ describe('public layout mobile menu', () => {
 		await fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
 		await waitFor(() => {
 			const active = document.activeElement as HTMLElement | null;
-			expect(active?.textContent?.trim()).toMatch(/resources/i);
+			expect(active?.textContent?.trim()).toMatch(/enterprise|resources/i);
 		});
 
 		await fireEvent.keyDown(window, { key: 'Tab' });
@@ -191,9 +196,9 @@ describe('public layout mobile menu', () => {
 		await fireEvent.click(resourcesTrigger);
 		expect(await screen.findByRole('menu', { name: /^resources$/i })).toBeTruthy();
 		expect(screen.getByRole('menuitem', { name: /resource hub/i })).toBeTruthy();
-		expect(screen.getByRole('menuitem', { name: /proof/i })).toBeTruthy();
 		expect(screen.getByRole('menuitem', { name: /docs/i })).toBeTruthy();
-		expect(screen.getByRole('menuitem', { name: /blog/i })).toBeTruthy();
+		expect(screen.getByRole('menuitem', { name: /proof pack/i })).toBeTruthy();
+		expect(screen.getByRole('menuitem', { name: /insights/i })).toBeTruthy();
 
 		await fireEvent.keyDown(window, { key: 'Escape' });
 		await waitFor(() => {

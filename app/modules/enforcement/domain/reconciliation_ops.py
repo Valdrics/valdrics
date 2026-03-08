@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 
 
 def build_reconciliation_exception_payloads(
@@ -100,7 +100,7 @@ def build_reservation_reconciliation_replay_payload(
         "0.0001",
     )
     if expected_actual != actual_monthly_delta_usd:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail=(
                 "Reservation reconciliation idempotency key replay payload mismatch "
@@ -114,7 +114,7 @@ def build_reservation_reconciliation_replay_payload(
         else None
     )
     if notes is not None and notes != stored_notes:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail=(
                 "Reservation reconciliation idempotency key replay payload mismatch "
@@ -124,7 +124,7 @@ def build_reservation_reconciliation_replay_payload(
 
     status = str(reconciliation.get("status") or "").strip().lower()
     if status not in {"matched", "overage", "savings"}:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail=(
                 "Stored reservation reconciliation payload is invalid for "
@@ -145,4 +145,3 @@ def build_reservation_reconciliation_replay_payload(
         "status": status,
         "reconciled_at": reconciled_at,
     }
-

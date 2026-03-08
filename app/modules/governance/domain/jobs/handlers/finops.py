@@ -7,15 +7,17 @@ from decimal import Decimal
 from typing import Any, Dict, List
 from uuid import UUID
 
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.background_job import BackgroundJob
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
 from app.schemas.costs import CloudUsageSummary, CostRecord
-from app.shared.adapters.factory import AdapterFactory
+from app.shared.core.adapter_resolver import get_adapter_for_connection
 from app.shared.core.adapter_usage import fetch_daily_costs_if_supported
 from app.shared.core.connection_queries import list_tenant_connections
 from app.shared.core.config import get_settings
+from app.shared.core.ops_metrics import FINOPS_PROVIDER_FAILURES_TOTAL
 from app.shared.core.provider import resolve_provider_from_connection
 from app.shared.llm.analyzer import FinOpsAnalyzer
 from app.shared.llm.factory import LLMFactory
@@ -29,6 +31,7 @@ FINOPS_PROVIDER_ANALYSIS_RECOVERABLE_EXCEPTIONS = (
     OSError,
 )
 
+logger = structlog.get_logger()
 
 def _as_datetime(value: Any) -> datetime:
     if isinstance(value, datetime):
@@ -108,13 +111,14 @@ class FinOpsAnalysisHandler(BaseJobHandler):
         analyzer = FinOpsAnalyzer(llm=llm)
         analyses: List[Dict[str, Any]] = []
         analyzed_providers: set[str] = set()
+        provider_failures: list[dict[str, str]] = []
 
         for connection in connections:
             provider = resolve_provider_from_connection(connection)
             if not provider:
                 continue
             try:
-                adapter = AdapterFactory.get_adapter(connection)
+                adapter = get_adapter_for_connection(connection)
 
                 usage_summary = await fetch_daily_costs_if_supported(
                     adapter,
@@ -153,17 +157,44 @@ class FinOpsAnalysisHandler(BaseJobHandler):
                 if isinstance(llm_result, dict):
                     analyses.append(llm_result)
                 analyzed_providers.add(provider)
-            except FINOPS_PROVIDER_ANALYSIS_RECOVERABLE_EXCEPTIONS:
-                # Keep processing remaining providers even if one fails.
+            except FINOPS_PROVIDER_ANALYSIS_RECOVERABLE_EXCEPTIONS as exc:
+                FINOPS_PROVIDER_FAILURES_TOTAL.labels(
+                    provider=provider,
+                    error_type=type(exc).__name__,
+                ).inc()
+                provider_failures.append(
+                    {
+                        "provider": provider,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    }
+                )
+                logger.warning(
+                    "finops_provider_analysis_failed",
+                    tenant_id=str(tenant_uuid),
+                    provider=provider,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
                 continue
 
         if not analyses:
+            if provider_failures:
+                return {
+                    "status": "failed",
+                    "reason": "provider_failures",
+                    "provider_failures": provider_failures,
+                }
             return {"status": "skipped", "reason": "no_cost_data"}
 
         analysis_length = sum(len(str(result)) for result in analyses)
-        return {
+        result: dict[str, Any] = {
             "status": "completed",
             "analysis_runs": len(analyses),
             "providers_analyzed": sorted(analyzed_providers),
             "analysis_length": analysis_length,
         }
+        if provider_failures:
+            result["partial_failure"] = True
+            result["provider_failures"] = provider_failures
+        return result

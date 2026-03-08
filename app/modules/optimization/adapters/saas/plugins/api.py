@@ -7,6 +7,7 @@ import structlog
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 from app.shared.adapters.feed_utils import parse_timestamp
+from app.shared.core.http import get_http_client
 
 logger = structlog.get_logger()
 GITHUB_SCAN_RECOVERABLE_EXCEPTIONS = (
@@ -79,63 +80,63 @@ class GitHubUnusedSeatPlugin(ZombiePlugin):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                url = f"https://api.github.com/orgs/{org}/members"
-                response = await client.get(url, headers=headers)
+            client = get_http_client()
+            url = f"https://api.github.com/orgs/{org}/members"
+            response = await client.get(url, headers=headers, timeout=20.0)
 
-                if response.status_code != 200:
-                    logger.warning(
-                        "github_api_failed",
-                        status=response.status_code,
-                        org=org,
-                    )
-                    return []
+            if response.status_code != 200:
+                logger.warning(
+                    "github_api_failed",
+                    status=response.status_code,
+                    org=org,
+                )
+                return []
 
-                payload = response.json()
-                members = payload if isinstance(payload, list) else payload.get("value", [])
-                if not isinstance(members, list):
-                    return []
+            payload = response.json()
+            members = payload if isinstance(payload, list) else payload.get("value", [])
+            if not isinstance(members, list):
+                return []
 
-                zombies: list[dict[str, Any]] = []
-                now = datetime.now(timezone.utc)
-                for member in members:
-                    if not isinstance(member, dict):
-                        continue
-                    username = str(member.get("login") or "").strip()
-                    if not username:
-                        continue
+            zombies: list[dict[str, Any]] = []
+            now = datetime.now(timezone.utc)
+            for member in members:
+                if not isinstance(member, dict):
+                    continue
+                username = str(member.get("login") or "").strip()
+                if not username:
+                    continue
 
-                    last_active_str = member.get("last_activity")
-                    if last_active_str in (None, ""):
-                        continue
+                last_active_str = member.get("last_activity")
+                if last_active_str in (None, ""):
+                    continue
 
-                    try:
-                        last_active = parse_timestamp(last_active_str)
-                    except (TypeError, ValueError):
-                        continue
-                    if last_active.tzinfo is None:
-                        last_active = last_active.replace(tzinfo=timezone.utc)
+                try:
+                    last_active = parse_timestamp(last_active_str)
+                except (TypeError, ValueError):
+                    continue
+                if last_active.tzinfo is None:
+                    last_active = last_active.replace(tzinfo=timezone.utc)
 
-                    days_inactive = (now - last_active).days
-                    if days_inactive < threshold_days:
-                        continue
+                days_inactive = (now - last_active).days
+                if days_inactive < threshold_days:
+                    continue
 
-                    zombies.append(
-                        {
-                            "resource_id": username,
-                            "resource_type": "GitHub Seat",
-                            "resource_name": f"User: {username}",
-                            "monthly_cost": seat_cost,
-                            "recommendation": "Remove inactive user from organization",
-                            "action": "revoke_github_seat",
-                            "confidence_score": 0.9,
-                            "explainability_notes": (
-                                f"User '{username}' inactive for {days_inactive} days "
-                                f"(threshold: {threshold_days})."
-                            ),
-                        }
-                    )
-                return zombies
+                zombies.append(
+                    {
+                        "resource_id": username,
+                        "resource_type": "GitHub Seat",
+                        "resource_name": f"User: {username}",
+                        "monthly_cost": seat_cost,
+                        "recommendation": "Remove inactive user from organization",
+                        "action": "revoke_github_seat",
+                        "confidence_score": 0.9,
+                        "explainability_notes": (
+                            f"User '{username}' inactive for {days_inactive} days "
+                            f"(threshold: {threshold_days})."
+                        ),
+                    }
+                )
+            return zombies
         except GITHUB_SCAN_RECOVERABLE_EXCEPTIONS as exc:
             logger.error("github_scan_failed", error=str(exc))
             return []

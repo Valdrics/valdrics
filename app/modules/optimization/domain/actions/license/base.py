@@ -1,12 +1,13 @@
 from typing import Optional
+
+import structlog
+
 from app.models.remediation import RemediationAction
 from app.modules.optimization.domain.actions.base import BaseRemediationAction, ExecutionResult, ExecutionStatus, RemediationContext
 from app.modules.optimization.domain.actions.factory import RemediationActionFactory
 from app.shared.core.pricing import FeatureFlag
-from app.shared.adapters.license import LicenseAdapter
 from app.shared.core.credentials import LicenseCredentials
 from app.shared.core.exceptions import UnsupportedVendorError
-import structlog
 
 logger = structlog.get_logger()
 LICENSE_RECLAMATION_RECOVERABLE_EXCEPTIONS = (
@@ -15,6 +16,18 @@ LICENSE_RECLAMATION_RECOVERABLE_EXCEPTIONS = (
     TypeError,
     ValueError,
 )
+
+
+class _LicenseAdapterProxy:
+    def __call__(self, *args: object, **kwargs: object) -> object:
+        from app.shared.adapters.license import LicenseAdapter as _LicenseAdapter
+
+        return _LicenseAdapter(*args, **kwargs)
+
+
+LicenseAdapter = _LicenseAdapterProxy()
+
+
 class BaseLicenseAction(BaseRemediationAction):
     @property
     def required_feature(self) -> FeatureFlag:

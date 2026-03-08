@@ -2,23 +2,22 @@
 
 Last verified: **2026-03-07**
 
-## Supported Deployment Profiles
+## Supported Production Deployment Profile
 
-Supported deployment profiles are documented below.
+The repository-backed production deployment profile is:
 
-This repository currently contains two supported deployment profiles:
+Supported production deployment profile: `Helm + Terraform (AWS/EKS)`.
 
 1. `Helm + Terraform (AWS/EKS)`
-2. `Cloudflare Pages + Koyeb`
 
-Choose one profile and operate it consistently. Do not mix assumptions from one
-profile into the other during incident response or compliance review.
+Do not mix preview/reference manifests into the production operational contract.
 
 ## Shared Runtime Contract
 
 All production profiles should satisfy these checks:
 
 - `ENVIRONMENT=production`
+- explicit public URLs: `API_URL=https://...` and `FRONTEND_URL=https://...`
 - `ENABLE_SCHEDULER=true` unless intentionally disabled for incident control
 - liveness probe: `/health/live`
 - dependency health/readiness: `/health`
@@ -47,7 +46,7 @@ Core operator steps:
 3. Deploy with Helm values that preserve the production defaults.
 4. Validate `/health/live`, `/health`, and cluster-internal `/_internal/metrics`.
 
-## Profile B: Cloudflare Pages + Koyeb
+## Reference Managed-Platform Manifests
 
 Repository evidence:
 
@@ -55,19 +54,27 @@ Repository evidence:
 - Backend API manifest: `koyeb.yaml`
 - Backend worker manifest: `koyeb-worker.yaml`
 
-Core operator steps:
+These manifests remain checked in as a managed-platform reference and preview
+surface. They are not a supported production profile because the checked-in
+Koyeb definitions are branch-driven and do not, by themselves, satisfy the
+repository requirement for immutable release artifacts.
+
+Reference operator steps:
 
 1. Deploy the dashboard to Cloudflare Pages.
 2. Deploy the API to Koyeb using the checked-in `Dockerfile`.
 3. Deploy the Celery worker to Koyeb using `koyeb-worker.yaml`.
-4. Configure runtime secrets through the platform secret store, including `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`, and `TRUSTED_PROXY_CIDRS`.
+4. Configure runtime secrets through the platform secret store, including `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRUSTED_PROXY_CIDRS`, and `INTERNAL_METRICS_AUTH_TOKEN`.
 5. Validate dashboard-to-API connectivity, worker connectivity to Redis, and API health endpoints.
+
+Promote this path to production only if external release automation enforces
+immutable artifacts and a separate DR/rollback contract.
 
 ## Verification Checklist
 
 - `/health/live` returns `200`
 - `/health` reflects dependency state accurately
-- `/_internal/metrics` is reachable only by internal scrapers
+- `/_internal/metrics` is reachable only by internal scrapers or callers presenting `INTERNAL_METRICS_AUTH_TOKEN`
 - workers and scheduler start only when expected
 - rollback path is documented for the chosen profile
 

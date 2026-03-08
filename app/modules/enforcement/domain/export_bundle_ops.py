@@ -8,7 +8,7 @@ import json
 from typing import Any
 from uuid import UUID
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,17 +31,12 @@ __all__ = (
 def resolve_manifest_signing_secret(
     *,
     configured_secret: str,
-    fallback_secret: str,
 ) -> str:
     configured = str(configured_secret or "").strip()
     if len(configured) >= 32:
         return configured
 
-    fallback = str(fallback_secret or "").strip()
-    if len(fallback) >= 32:
-        return fallback
-
-    raise HTTPException(
+    raise EnforcementDomainError(
         status_code=503,
         detail="Export manifest signing key is not configured",
     )
@@ -140,14 +135,14 @@ async def build_export_bundle_payload(
 ) -> dict[str, Any]:
     bounded_max_rows = int(max_rows)
     if bounded_max_rows < 1:
-        raise HTTPException(status_code=422, detail="max_rows must be >= 1")
+        raise EnforcementDomainError(status_code=422, detail="max_rows must be >= 1")
     if bounded_max_rows > 50000:
-        raise HTTPException(status_code=422, detail="max_rows must be <= 50000")
+        raise EnforcementDomainError(status_code=422, detail="max_rows must be <= 50000")
 
     normalized_start = as_utc_fn(window_start)
     normalized_end = as_utc_fn(window_end)
     if normalized_start >= normalized_end:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="window_start must be before window_end",
         )
@@ -168,7 +163,7 @@ async def build_export_bundle_payload(
             artifact="bundle",
             outcome="rejected_limit",
         ).inc()
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail=(
                 f"Export window exceeds max_rows ({bounded_max_rows}). "

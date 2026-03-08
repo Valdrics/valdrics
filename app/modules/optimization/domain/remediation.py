@@ -46,7 +46,7 @@ from app.modules.governance.domain.security.remediation_policy import (
     PolicyConfig,
     RemediationPolicyEngine,  # noqa: F401
 )
-from app.shared.adapters.aws_utils import map_aws_credentials
+from app.shared.core.aws_credentials import map_aws_credentials
 from app.shared.core.config import get_settings
 from app.shared.core.connection_queries import get_connection_model  # noqa: F401
 from app.shared.core.connection_state import (  # noqa: F401

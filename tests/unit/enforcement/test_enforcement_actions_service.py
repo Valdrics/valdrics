@@ -19,6 +19,7 @@ from app.models.enforcement import (
     EnforcementSource,
 )
 from app.models.tenant import Tenant, UserRole
+from app.modules.enforcement.domain.action_errors import EnforcementActionError
 from app.modules.enforcement.domain.actions import (
     EnforcementActionOrchestrator,
     _as_utc,
@@ -316,7 +317,7 @@ async def test_create_action_request_rejects_denied_decision(db) -> None:
     )
     orchestrator = EnforcementActionOrchestrator(db)
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(EnforcementActionError) as exc:
         await orchestrator.create_action_request(
             tenant_id=tenant.id,
             actor_id=actor_id,
@@ -345,7 +346,7 @@ async def test_create_action_request_rejects_unapproved_decision(db) -> None:
     assert gate.approval is not None
     orchestrator = EnforcementActionOrchestrator(db)
 
-    with pytest.raises(HTTPException) as exc:
+    with pytest.raises(EnforcementActionError) as exc:
         await orchestrator.create_action_request(
             tenant_id=tenant.id,
             actor_id=actor_id,
@@ -372,7 +373,7 @@ async def test_create_action_request_validation_and_lookup_errors(db) -> None:
     )
     orchestrator = EnforcementActionOrchestrator(db)
 
-    with pytest.raises(HTTPException) as missing_decision:
+    with pytest.raises(EnforcementActionError) as missing_decision:
         await orchestrator.create_action_request(
             tenant_id=tenant.id,
             actor_id=actor_id,
@@ -383,7 +384,7 @@ async def test_create_action_request_validation_and_lookup_errors(db) -> None:
         )
     assert missing_decision.value.status_code == 404
 
-    with pytest.raises(HTTPException) as exc_action_required:
+    with pytest.raises(EnforcementActionError) as exc_action_required:
         await orchestrator.create_action_request(
             tenant_id=tenant.id,
             actor_id=actor_id,
@@ -394,7 +395,7 @@ async def test_create_action_request_validation_and_lookup_errors(db) -> None:
         )
     assert exc_action_required.value.status_code == 422
 
-    with pytest.raises(HTTPException) as exc_action_too_long:
+    with pytest.raises(EnforcementActionError) as exc_action_too_long:
         await orchestrator.create_action_request(
             tenant_id=tenant.id,
             actor_id=actor_id,
@@ -405,7 +406,7 @@ async def test_create_action_request_validation_and_lookup_errors(db) -> None:
         )
     assert exc_action_too_long.value.status_code == 422
 
-    with pytest.raises(HTTPException) as exc_target_required:
+    with pytest.raises(EnforcementActionError) as exc_target_required:
         await orchestrator.create_action_request(
             tenant_id=tenant.id,
             actor_id=actor_id,
@@ -416,7 +417,7 @@ async def test_create_action_request_validation_and_lookup_errors(db) -> None:
         )
     assert exc_target_required.value.status_code == 422
 
-    with pytest.raises(HTTPException) as exc_target_too_long:
+    with pytest.raises(EnforcementActionError) as exc_target_too_long:
         await orchestrator.create_action_request(
             tenant_id=tenant.id,
             actor_id=actor_id,
@@ -427,7 +428,7 @@ async def test_create_action_request_validation_and_lookup_errors(db) -> None:
         )
     assert exc_target_too_long.value.status_code == 422
 
-    with pytest.raises(HTTPException) as exc_max_attempts:
+    with pytest.raises(EnforcementActionError) as exc_max_attempts:
         await orchestrator.create_action_request(
             tenant_id=tenant.id,
             actor_id=actor_id,
@@ -439,7 +440,7 @@ async def test_create_action_request_validation_and_lookup_errors(db) -> None:
         )
     assert exc_max_attempts.value.status_code == 422
 
-    with pytest.raises(HTTPException) as exc_retry:
+    with pytest.raises(EnforcementActionError) as exc_retry:
         await orchestrator.create_action_request(
             tenant_id=tenant.id,
             actor_id=actor_id,
@@ -451,7 +452,7 @@ async def test_create_action_request_validation_and_lookup_errors(db) -> None:
         )
     assert exc_retry.value.status_code == 422
 
-    with pytest.raises(HTTPException) as exc_lease_ttl:
+    with pytest.raises(EnforcementActionError) as exc_lease_ttl:
         await orchestrator.create_action_request(
             tenant_id=tenant.id,
             actor_id=actor_id,
@@ -977,7 +978,7 @@ async def test_action_orchestrator_get_list_lease_and_cancel_missing_branches() 
     # get_action not found branch.
     not_found_db = _QueueDB([_ScalarResult(None)])
     not_found_orchestrator = EnforcementActionOrchestrator(not_found_db)  # type: ignore[arg-type]
-    with pytest.raises(HTTPException, match="not found"):
+    with pytest.raises(EnforcementActionError, match="not found"):
         await not_found_orchestrator.get_action(tenant_id=tenant_id, action_id=action_id)
 
     # list_actions status/decision filters + return conversion path.

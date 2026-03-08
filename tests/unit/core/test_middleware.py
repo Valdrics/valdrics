@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 from starlette.responses import Response
 from app.shared.core.middleware import (
+    InternalMetricsAccessMiddleware,
     RequestIDMiddleware,
     SecurityHeadersMiddleware,
     TrustedProxyHeadersMiddleware,
@@ -123,6 +124,66 @@ async def test_trusted_proxy_headers_middleware_normalizes_client_and_scheme():
                     (b"x-forwarded-proto", b"http, https"),
                 ],
                 "client": ("203.0.113.10", 44321),
+            }
+        )
+
+        response = await middleware.dispatch(request, call_next)
+
+    assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_internal_metrics_access_middleware_blocks_public_unauthenticated_requests():
+    async def call_next(request):
+        return Response("ok")
+
+    middleware = InternalMetricsAccessMiddleware(MagicMock())
+
+    with patch("app.shared.core.middleware.get_settings") as mock_settings:
+        mock_settings.return_value.TESTING = False
+        mock_settings.return_value.ENVIRONMENT = "production"
+        mock_settings.return_value.INTERNAL_METRICS_AUTH_TOKEN = "x" * 40
+
+        from fastapi import Request
+
+        request = Request(
+            {
+                "type": "http",
+                "scheme": "https",
+                "method": "GET",
+                "path": "/_internal/metrics",
+                "headers": [],
+                "client": ("8.8.8.8", 44321),
+            }
+        )
+
+        response = await middleware.dispatch(request, call_next)
+
+    assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_internal_metrics_access_middleware_allows_authenticated_public_requests():
+    async def call_next(request):
+        return Response("ok")
+
+    middleware = InternalMetricsAccessMiddleware(MagicMock())
+
+    with patch("app.shared.core.middleware.get_settings") as mock_settings:
+        mock_settings.return_value.TESTING = False
+        mock_settings.return_value.ENVIRONMENT = "production"
+        mock_settings.return_value.INTERNAL_METRICS_AUTH_TOKEN = "x" * 40
+
+        from fastapi import Request
+
+        request = Request(
+            {
+                "type": "http",
+                "scheme": "https",
+                "method": "GET",
+                "path": "/_internal/metrics",
+                "headers": [(b"x-internal-metrics-token", b"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx")],
+                "client": ("8.8.8.8", 44321),
             }
         )
 

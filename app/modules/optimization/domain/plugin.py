@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 import inspect
-from app.shared.adapters.aws_utils import map_aws_credentials
+from app.shared.core.aws_credentials import map_aws_credentials
 
 
 # Estimated monthly costs (USD) used for zombie resource impact analysis

@@ -61,26 +61,19 @@ describe('LandingHero', () => {
 		if (secondaryCta) {
 			await fireEvent.click(secondaryCta);
 		}
-		const demoLink = heroView.getByRole('link', { name: /live signal map/i });
-		expect(demoLink.getAttribute('href')).toBe('#signal-map');
-		expect(heroView.getByText(/what you can verify now/i)).toBeTruthy();
-		expect(heroView.getByText(/safe access model/i)).toBeTruthy();
-		expect(heroView.getByText(/first production workflow typically goes live in 3-10 business days/i)).toBeTruthy();
-		expect(heroView.getByText(/decision history and export-ready records support finance, security, and buyer review/i)).toBeTruthy();
-		expect(
-			heroView.getByRole('link', { name: /technical validation/i }).getAttribute('href')
-		).toBe('/docs/technical-validation');
-		expect(
-			heroView.getByRole('link', { name: /access checklist/i }).getAttribute('href')
-		).toBe('/resources/global-finops-compliance-workbook.md');
-		expect(heroView.getByRole('link', { name: /review methodology/i }).getAttribute('href')).toBe(
-			'/docs/technical-validation'
-		);
+		expect(heroView.getByText(/read-only access/i)).toBeTruthy();
+		expect(heroView.getByText(/3-10 day rollout/i)).toBeTruthy();
+		expect(heroView.getByText(/export-ready records/i)).toBeTruthy();
+		expect(heroView.queryByText(/verify before you commit/i)).toBeNull();
+		expect(heroView.queryByText(/modeled first-quarter range:/i)).toBeNull();
+		expect(heroView.queryByRole('link', { name: /technical validation/i })).toBeNull();
+		expect(heroView.queryByRole('link', { name: /access checklist/i })).toBeNull();
+		expect(heroView.queryByRole('link', { name: /review methodology/i })).toBeNull();
+		expect(heroView.queryByRole('link', { name: /live signal map/i })).toBeNull();
 		expect(heroView.queryByText(/evidence snapshot · february 28, 2026/i)).toBeNull();
 		expect(heroView.queryByRole('link', { name: /view technical validation brief/i })).toBeNull();
 
-		expect(screen.getByRole('heading', { name: /what happens between alert and action/i })).toBeTruthy();
-		expect(screen.getByRole('heading', { name: /most tools stop at the alert/i })).toBeTruthy();
+		expect(screen.getByRole('heading', { name: /what valdrics coordinates/i })).toBeTruthy();
 		expect(screen.getByText(/connected inputs/i)).toBeTruthy();
 		expect(screen.getAllByText(/^AWS$/i).length).toBeGreaterThanOrEqual(1);
 		expect(screen.getAllByText(/^Microsoft 365$/i).length).toBeGreaterThanOrEqual(1);
@@ -107,14 +100,6 @@ describe('LandingHero', () => {
 		expect(screen.queryByRole('button', { name: /switch to plain english/i })).toBeNull();
 		expect(screen.queryByRole('link', { name: /run the spend scenario simulator/i })).toBeNull();
 
-		const withoutToggle = screen.getByRole('button', { name: /^without valdrics$/i });
-		const withToggle = screen.getByRole('button', { name: /^with valdrics$/i });
-		expect(withoutToggle.getAttribute('aria-pressed')).toBe('true');
-		expect(withToggle.getAttribute('aria-pressed')).toBe('false');
-		await fireEvent.click(withToggle);
-		expect(withToggle.getAttribute('aria-pressed')).toBe('true');
-		expect(screen.getByText(/guardrailed/i)).toBeTruthy();
-
 		const summary = screen.getByText(/approval chain summary for snapshot a/i);
 		const signalMap = summary.closest('.signal-map');
 		expect(signalMap).toBeTruthy();
@@ -140,6 +125,8 @@ describe('LandingHero', () => {
 		expect(screen.getByLabelText(/managed waste rate/i)).toBeTruthy();
 		expect(screen.getByLabelText(/decision window \(months\)/i)).toBeTruthy();
 		expect(screen.getByText(/Scenario Delta/i)).toBeTruthy();
+		expect(screen.getByText(/Potential monthly recovery/i)).toBeTruthy();
+		expect(screen.getByText(/12-month recovery/i)).toBeTruthy();
 		expect(screen.getByRole('link', { name: /open assumptions csv/i }).getAttribute('href')).toBe(
 			'/resources/valdrics-roi-assumptions.csv'
 		);
@@ -148,11 +135,12 @@ describe('LandingHero', () => {
 		const freePlanCta = screen.getByRole('link', { name: /start on free tier/i });
 		expect(freePlanCta.getAttribute('href') || '').toContain('plan=free');
 		await fireEvent.click(freePlanCta);
-		expect(screen.getByText(/pricing clarity/i)).toBeTruthy();
 		expect(
-			screen.getByText(/starting prices shown here are monthly entry points/i)
+			screen.getByText(/monthly starting prices shown here are entry points/i)
 		).toBeTruthy();
+		expect(screen.getByText(/start here first/i)).toBeTruthy();
 		expect(screen.getByText(/one owner-routed savings workflow on the free tier/i)).toBeTruthy();
+		expect(screen.getByText(/free is best for proving one workflow/i)).toBeTruthy();
 		expect(
 			screen.getByText(/monthly starting price\. best fit for a single-provider operating scope/i)
 		).toBeTruthy();

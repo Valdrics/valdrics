@@ -83,7 +83,7 @@ def test_decode_approval_token_deduplicates_candidate_secrets(monkeypatch) -> No
         enforcement_service_module,
         "get_settings",
         lambda: SimpleNamespace(
-            SUPABASE_JWT_SECRET="a" * 32,
+            ENFORCEMENT_APPROVAL_TOKEN_SECRET="a" * 32,
             ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=["a" * 32, "b" * 32, "b" * 32],
             API_URL="https://api.example.com",
         ),

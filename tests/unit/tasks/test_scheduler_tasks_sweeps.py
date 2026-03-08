@@ -382,6 +382,10 @@ class TestMaintenanceSweep:
                 new_callable=AsyncMock,
             ) as mock_auto_activate,
             patch(
+                "app.shared.core.cloud_pricing_data.sync_supported_aws_pricing",
+                new=AsyncMock(return_value=0),
+            ) as mock_sync_supported_aws_pricing,
+            patch(
                 "app.shared.core.maintenance.PartitionMaintenanceService.create_future_partitions",
                 new=AsyncMock(return_value=0),
             ) as mock_create_partitions,
@@ -422,6 +426,7 @@ class TestMaintenanceSweep:
             mock_persistence.finalize_batch.assert_called_once_with(days_ago=2)
             mock_aggregator.refresh_materialized_view.assert_called_once()
             mock_auto_activate.assert_awaited_once()
+            mock_sync_supported_aws_pricing.assert_awaited_once()
             mock_create_partitions.assert_awaited_once_with(months_ahead=3)
             mock_archive_partitions.assert_awaited_once_with(months_old=13)
 
@@ -439,6 +444,10 @@ class TestMaintenanceSweep:
                 "app.modules.reporting.domain.carbon_factors.CarbonFactorService.auto_activate_latest",
                 new_callable=AsyncMock,
             ) as mock_auto_activate,
+            patch(
+                "app.shared.core.cloud_pricing_data.sync_supported_aws_pricing",
+                new=AsyncMock(return_value=0),
+            ),
             patch(
                 "app.shared.core.maintenance.PartitionMaintenanceService.create_future_partitions",
                 new=AsyncMock(return_value=0),
@@ -509,6 +518,90 @@ class TestMaintenanceSweep:
             mock_archive_partitions.assert_awaited_once_with(months_old=13)
 
     @pytest.mark.asyncio
+    async def test_maintenance_sweep_records_audit_log_retention_evidence(self):
+        tenant_id = uuid4()
+        with (
+            patch(
+                "app.tasks.scheduler_tasks.async_session_maker"
+            ) as mock_session_maker,
+            patch(
+                "app.tasks.scheduler_tasks.CostPersistenceService"
+            ) as mock_persistence_cls,
+            patch("app.tasks.scheduler_tasks.CostAggregator") as mock_aggregator_cls,
+            patch(
+                "app.modules.reporting.domain.carbon_factors.CarbonFactorService.auto_activate_latest",
+                new_callable=AsyncMock,
+            ) as mock_auto_activate,
+            patch(
+                "app.shared.core.cloud_pricing_data.sync_supported_aws_pricing",
+                new=AsyncMock(return_value=0),
+            ),
+            patch(
+                "app.shared.core.maintenance.PartitionMaintenanceService.create_future_partitions",
+                new=AsyncMock(return_value=0),
+            ) as mock_create_partitions,
+            patch(
+                "app.shared.core.maintenance.PartitionMaintenanceService.archive_old_partitions",
+                new=AsyncMock(return_value=1),
+            ) as mock_archive_partitions,
+            patch(
+                "app.tasks.scheduler_audit_log_retention_ops.purge_expired_audit_logs",
+                new=AsyncMock(
+                    return_value={
+                        "total_deleted": 3,
+                        "retention_days": 90,
+                        "batch_size": 5000,
+                        "max_batches": 20,
+                        "cutoff": "2025-12-01T00:00:00+00:00",
+                        "tenant_reports": [
+                            {"tenant_id": tenant_id, "deleted_count": 3}
+                        ],
+                    }
+                ),
+            ) as mock_purge_audit_logs,
+            patch(
+                "app.modules.governance.domain.security.audit_log.AuditLogger"
+            ) as mock_audit_logger_cls,
+            patch(
+                "app.shared.core.ops_metrics.record_audit_log_retention_purge"
+            ) as mock_record_audit_log_retention_purge,
+        ):
+            mock_session = AsyncMock()
+            mock_session_maker.return_value = mock_session
+            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_session.__aexit__ = AsyncMock(return_value=None)
+            mock_auto_activate.return_value = {
+                "status": "no_update",
+                "active_factor_set_id": "seeded",
+            }
+
+            mock_persistence = MagicMock()
+            mock_persistence.finalize_batch = AsyncMock(
+                return_value={"records_finalized": 100}
+            )
+            mock_persistence_cls.return_value = mock_persistence
+
+            mock_aggregator = MagicMock()
+            mock_aggregator.refresh_materialized_view = AsyncMock()
+            mock_aggregator_cls.return_value = mock_aggregator
+
+            empty_result = MagicMock()
+            empty_result.scalars.return_value.all.return_value = []
+            mock_session.execute = AsyncMock(return_value=empty_result)
+
+            mock_audit_logger = MagicMock()
+            mock_audit_logger.log = AsyncMock()
+            mock_audit_logger_cls.return_value = mock_audit_logger
+
+            await _maintenance_sweep_logic()
+
+            mock_purge_audit_logs.assert_awaited_once()
+            mock_audit_logger.log.assert_awaited_once()
+            mock_record_audit_log_retention_purge.assert_called_once_with(3)
+            mock_create_partitions.assert_awaited_once_with(months_ahead=3)
+            mock_archive_partitions.assert_awaited_once_with(months_old=13)
+
+    @pytest.mark.asyncio
     async def test_maintenance_sweep_persistence_failure(self):
         """Test maintenance sweep handles persistence failure."""
         with (
@@ -523,6 +616,10 @@ class TestMaintenanceSweep:
                 "app.modules.reporting.domain.carbon_factors.CarbonFactorService.auto_activate_latest",
                 new_callable=AsyncMock,
             ) as mock_auto_activate,
+            patch(
+                "app.shared.core.cloud_pricing_data.sync_supported_aws_pricing",
+                new=AsyncMock(return_value=0),
+            ),
             patch(
                 "app.shared.core.maintenance.PartitionMaintenanceService.create_future_partitions",
                 new=AsyncMock(return_value=0),

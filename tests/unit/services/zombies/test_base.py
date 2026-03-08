@@ -75,10 +75,10 @@ async def test_base_detector_plugin_failure():
     assert results["provider"] == "mock"
     assert "fail_plugin" in results
     assert len(results["fail_plugin"]) == 0
-    # Base detector logs error but continues, returning empty list for failed plugin
-    # It might set a top level error if the aggregation fails, but per logic it sets result["error"] only on catastrophe?
-    # Checking logic: "except Exception: logger.error... results['error'] = str(e)" is at top level
-    # Individual plugin failure is caught in _run_plugin_with_timeout and returns empty list.
+    assert results["partial_results"] is True
+    assert results["scan_completeness"]["degraded"] is True
+    assert results["scan_completeness"]["plugins"]["fail_plugin"]["status"] == "failed"
+    assert results["scan_completeness"]["plugins"]["fail_plugin"]["error_type"] == "RuntimeError"
 
 
 @pytest.mark.asyncio
@@ -96,6 +96,11 @@ async def test_base_detector_unexpected_plugin_exception_is_contained():
     assert results["provider"] == "mock"
     assert results["unexpected_plugin"] == []
     assert results["total_monthly_waste"] == 0.0
+    assert results["partial_results"] is True
+    assert (
+        results["scan_completeness"]["plugins"]["unexpected_plugin"]["status"]
+        == "failed"
+    )
 
 
 @pytest.mark.asyncio

@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Callable
 from uuid import UUID
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -42,7 +42,7 @@ async def upsert_budget(
 ) -> EnforcementBudgetAllocation:
     normalized_scope = str(scope_key or "default").strip().lower() or "default"
     if monthly_limit_usd < Decimal("0"):
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="monthly_limit_usd must be >= 0",
         )
@@ -104,14 +104,14 @@ async def create_credit_grant(
     normalized_scope = str(scope_key or "default").strip().lower() or "default"
     amount = quantize_fn(total_amount_usd, "0.0001")
     if amount <= Decimal("0"):
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="total_amount_usd must be > 0",
         )
 
     normalized_expires_at = as_utc_fn(expires_at) if expires_at is not None else None
     if normalized_expires_at is not None and normalized_expires_at <= utcnow_fn():
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="expires_at must be in the future",
         )

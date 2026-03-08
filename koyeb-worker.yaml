@@ -1,4 +1,6 @@
 # Valdrics Koyeb Worker Configuration
+# Reference managed-platform manifest only. The checked-in definition is branch-driven
+# and is not, by itself, a supported immutable-production release profile.
 # https://www.koyeb.com/docs/deploy/koyeb-files
 
 name: valdrics-worker
@@ -34,6 +36,10 @@ definition:
       value: production
     - name: ENABLE_SCHEDULER
       value: "false"
+    - name: API_URL
+      value: https://api.valdrics.ai
+    - name: FRONTEND_URL
+      value: https://dashboard.valdrics.ai
     - name: LOG_LEVEL
       value: INFO
     - name: LLM_PROVIDER

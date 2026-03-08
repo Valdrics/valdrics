@@ -447,7 +447,6 @@ async def test_build_signed_export_manifest_requires_signing_secret(db, monkeypa
         "get_settings",
         lambda: SimpleNamespace(
             ENFORCEMENT_EXPORT_SIGNING_SECRET="",
-            SUPABASE_JWT_SECRET="",
             ENFORCEMENT_EXPORT_SIGNING_KID="export-key-v1",
             JWT_SIGNING_KID="",
         ),

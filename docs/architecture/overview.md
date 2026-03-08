@@ -45,10 +45,13 @@ in `helm/valdrics/`. It defines:
 - ingress and internal metrics protections
 - production defaults for security context and anti-affinity
 
-### PaaS Profile
+### Reference Managed-Platform Manifests
 
-The repository also includes a Cloudflare Pages + Koyeb deployment profile for
-teams operating the dashboard/API on managed platforms.
+The repository also includes Cloudflare Pages + Koyeb manifests as a reference
+managed-platform surface. This reference managed-platform surface is not part
+of the supported production
+contract because the checked-in manifests are Git-branch driven rather than
+immutable-release driven.
 
 ## Security and Tenancy
 

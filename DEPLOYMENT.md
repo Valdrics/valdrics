@@ -107,7 +107,7 @@ k6 run loadtest/k6-test.js
 
 ### Prometheus Metrics
 - Endpoint: `/_internal/metrics`
-- Exposure: cluster-internal only; ingress blocks public access
+- Exposure: cluster-internal only, or token-gated with `INTERNAL_METRICS_AUTH_TOKEN` when the edge cannot fully isolate the path
 - Includes: request latency, error rates, active connections
 
 ### Health Check
@@ -145,6 +145,7 @@ Scaling rule:
 ## Production Checklist
 
 - [ ] Secrets configured in Kubernetes
+- [ ] `API_URL` and `FRONTEND_URL` set to explicit `https://` public domains
 - [ ] TLS certificates deployed
 - [ ] Database migrations run
 - [ ] HPA tested under load

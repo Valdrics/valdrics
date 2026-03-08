@@ -2,7 +2,8 @@
 Job Processor Service - Phase 7: Scheduler SPOF Resolution
 
 Processes background jobs from the database queue.
-Works with pg_cron to provide durable, distributed job processing.
+Works with the authenticated internal scheduler to provide durable,
+distributed job processing.
 
 Key Features:
 - Survives app restarts (jobs in database)
@@ -62,7 +63,7 @@ class JobProcessor:
     Processes background jobs from the database queue.
 
     Designed to be called by:
-    1. pg_cron (every minute in Supabase)
+    1. the authenticated internal scheduler
     2. API endpoint for on-demand processing
     3. Startup hook for catching up
     """

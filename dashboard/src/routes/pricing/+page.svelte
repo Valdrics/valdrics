@@ -1,42 +1,159 @@
-<!--
-  Pricing Page - Public Landing Page for Plans
-  
-  Features:
-  - USD pricing with NGN payment note
-  - BYOK available in current plans with no additional platform surcharge
-  - Highlight Growth as "Most Popular"
-  - Permanent free tier CTA
-  - Feature comparison table
--->
-
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { assets, base } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import { api } from '$lib/api';
 	import { edgeApiPath } from '$lib/edgeProxy';
+	import {
+		FREE_TIER_HIGHLIGHTS,
+		FREE_TIER_LIMIT_NOTE
+	} from '$lib/landing/heroContent.extended';
 	import { normalizeCheckoutUrl } from '$lib/utils';
-	import { page } from '$app/stores';
 	import type { PageData } from './$types';
 	import type { PricingPlan } from './plans';
 	import { DEFAULT_PRICING_PLANS } from './plans';
 	import './pricing-page.css';
 
+	type BillingCycle = 'monthly' | 'annual';
+
+	type PlanPresentation = {
+		badge: string;
+		headline: string;
+		summary: string;
+		note: string;
+	};
+
+	const PLAN_ORDER = ['free', 'starter', 'growth', 'pro'] as const;
+
+	const PLAN_PRESENTATION: Record<string, PlanPresentation> = {
+		free: {
+			badge: 'Start here first',
+			headline: 'Free tier for your first savings workflow',
+			summary:
+				'Start at $0, prove one workflow, and upgrade only when you need more coverage, automation, or governance depth.',
+			note:
+				'Free is best for proving one workflow before you expand into multi-cloud coverage, deeper automation, or expanded governance support.'
+		},
+		starter: {
+			badge: 'Focused operator lane',
+			headline: 'Structured control for one provider scope',
+			summary:
+				'Best for a smaller operating scope when one team needs clearer owner routing, stronger alerts, and more repeatable weekly review.',
+			note: 'Best fit for a single-provider operating scope with one core review team.'
+		},
+		growth: {
+			badge: 'Most popular',
+			headline: 'Multi-cloud execution with approvals attached',
+			summary:
+				'Best for teams that need broader provider coverage, owner routing, approval checkpoints, and guided execution across functions.',
+			note: 'Built for broader provider coverage and stronger cross-functional governance.'
+		},
+		pro: {
+			badge: 'Automation lane',
+			headline: 'Deeper automation, API access, and proof',
+			summary:
+				'Best for teams that want higher automation depth, finance-grade exports, and stronger evidence for leadership, security, and audit review.',
+			note: 'Adds deeper automation, API access, and stronger governance evidence.'
+		}
+	};
+
+	const HERO_META = [
+		{
+			label: 'Entry path',
+			value: '$0 free tier for the first owner-routed workflow'
+		},
+		{
+			label: 'Rollout speed',
+			value: 'First workflow typically live in 3-10 business days'
+		},
+		{
+			label: 'Upgrade model',
+			value: 'Move up only when you need more coverage, automation, or governance depth'
+		}
+	] as const;
+
+	const BUYING_NOTES = [
+		'Prices are shown in USD for easy plan comparison.',
+		'The free tier does not require a checkout session.'
+	] as const;
+
 	let { data }: { data: PageData } = $props();
 
-	let billingCycle = $state('monthly'); // 'monthly' or 'annual'
-	let upgrading = $state(''); // plan ID being upgraded to
-	let error = $state(''); // error message for display
+	let billingCycle = $state<BillingCycle>('monthly');
+	let upgrading = $state('');
+	let error = $state('');
+
+	function mergePlans(incomingPlans: PricingPlan[]): PricingPlan[] {
+		const byId = new Map(DEFAULT_PRICING_PLANS.map((plan) => [plan.id, plan] as const));
+		for (const plan of incomingPlans) {
+			const existing = byId.get(plan.id);
+			byId.set(plan.id, existing ? { ...existing, ...plan } : plan);
+		}
+
+		const knownPlans = PLAN_ORDER.map((planId) => byId.get(planId)).filter(
+			(plan): plan is PricingPlan => Boolean(plan)
+		);
+		const extras = incomingPlans.filter((plan) => !PLAN_ORDER.includes(plan.id as (typeof PLAN_ORDER)[number]));
+		return [...knownPlans, ...extras];
+	}
+
 	let plans = $derived<PricingPlan[]>(
-		Array.isArray(data.plans) && data.plans.length > 0 ? data.plans : DEFAULT_PRICING_PLANS
+		mergePlans(Array.isArray(data.plans) && data.plans.length > 0 ? data.plans : DEFAULT_PRICING_PLANS)
 	);
+	let freePlan = $derived(plans.find((plan) => plan.id === 'free') ?? null);
+	let paidPlans = $derived(plans.filter((plan) => plan.id !== 'free'));
+	let currentTier = $derived(String(data.subscription?.tier ?? 'free').trim().toLowerCase());
+
+	function getPlanPresentation(plan: PricingPlan): PlanPresentation {
+		return (
+			PLAN_PRESENTATION[plan.id] ?? {
+				badge: plan.popular ? 'Most popular' : 'Plan',
+				headline: plan.name,
+				summary: plan.description,
+				note: plan.description
+			}
+		);
+	}
+
+	function formatUsd(value: number): string {
+		return new Intl.NumberFormat('en-US', {
+			style: 'currency',
+			currency: 'USD',
+			maximumFractionDigits: 0
+		}).format(value);
+	}
+
+	function getDisplayedMonthlyPrice(plan: PricingPlan): number {
+		return billingCycle === 'monthly' ? plan.price_monthly : Math.round(plan.price_annual / 12);
+	}
+
+	function getAnnualSavings(plan: PricingPlan): number {
+		return Math.max(plan.price_monthly * 12 - plan.price_annual, 0);
+	}
+
+	function getSignupHref(planId: string): string {
+		return `${base}/auth/login?mode=signup&plan=${planId}&cycle=${billingCycle}`;
+	}
+
+	function getFreeTierHref(): string {
+		return data.user ? `${base}/onboarding?intent=pricing_free` : getSignupHref('free');
+	}
+
+	function isCurrentPlan(planId: string): boolean {
+		return Boolean(data.user && currentTier === planId);
+	}
 
 	async function selectPlan(planId: string) {
-		if (upgrading) return;
+		if (upgrading || isCurrentPlan(planId)) return;
+		if (planId === 'free') {
+			await goto(getFreeTierHref());
+			return;
+		}
 
-		// If not logged in, redirect to signup
 		if (!data.user) {
-			goto(`${base}/auth/login?mode=signup&plan=${planId}&cycle=${billingCycle}`);
+			await goto(getSignupHref(planId));
 			return;
 		}
 
@@ -78,24 +195,21 @@
 	<title>Pricing | Valdrics</title>
 	<meta
 		name="description"
-		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier, with BYOK available in current plans."
+		content="Simple, transparent Valdrics pricing. Start on the permanent free tier, prove one workflow, and upgrade only when you need more coverage, automation, or governance depth."
 	/>
 	<meta property="og:title" content="Pricing | Valdrics" />
 	<meta
 		property="og:description"
-		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier, with BYOK available in current plans."
+		content="Compare the Valdrics free, Starter, Growth, and Pro plans for cloud and software spend control."
 	/>
 	<meta property="og:type" content="website" />
 	<meta property="og:url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
-	<meta
-		property="og:image"
-		content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()}
-	/>
+	<meta property="og:image" content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()} />
 	<meta name="twitter:card" content="summary_large_image" />
 	<meta name="twitter:title" content="Pricing | Valdrics" />
 	<meta
 		name="twitter:description"
-		content="Simple, transparent pricing for cloud cost optimization. Start on a permanent free tier, with BYOK available in current plans."
+		content="Start with the permanent free tier, then move to Starter, Growth, or Pro as coverage and governance needs expand."
 	/>
 	<meta
 		name="twitter:image"
@@ -103,169 +217,203 @@
 	/>
 </svelte:head>
 
-<div class="pricing-page">
-	<!-- Hero Section -->
-	<div class="hero-section">
-		<h1 class="hero-title">Simple, Transparent Pricing</h1>
-		<p class="hero-subtitle">
-			Start with a <strong>permanent free tier</strong>. BYOK is available across current plans with
-			no additional platform surcharge.
-		</p>
+<PublicMarketingPage
+	kicker="Pricing"
+	title="Simple, transparent pricing"
+	subtitle="Start on the permanent free tier, prove one workflow, and upgrade only when you need more provider coverage, automation, or governance depth."
+>
+	{#snippet heroActions()}
+		<a href={getFreeTierHref()} class="btn btn-primary">Start Free</a>
+		<a href={`${base}/talk-to-sales`} class="btn btn-secondary">Talk to Sales</a>
+	{/snippet}
 
-		<!-- Cycle Toggle -->
-		<div class="cycle-toggle-container">
-			<span class={billingCycle === 'monthly' ? 'active' : ''}>Monthly</span>
-			<button
-				type="button"
-				class="cycle-toggle-switch {billingCycle === 'annual' ? 'annual' : ''}"
-				onclick={() => (billingCycle = billingCycle === 'monthly' ? 'annual' : 'monthly')}
-				aria-label="Toggle billing cycle"
-				role="switch"
-				aria-checked={billingCycle === 'annual'}
-			>
-				<span class="toggle-knob"></span>
-			</button>
-			<span class={billingCycle === 'annual' ? 'active' : ''}>
-				Yearly
-				<span class="savings-badge">Save 17%</span>
-			</span>
-		</div>
-	</div>
-
-	{#if error}
-		<div class="error-banner">
-			<p>{error}</p>
-			<button type="button" onclick={() => (error = '')}>Dismiss</button>
-		</div>
-	{/if}
-
-	<!-- Pricing Grid -->
-	<div class="pricing-grid">
-		{#each plans as plan, i (plan.id)}
-			<div
-				class="pricing-card {plan.popular ? 'popular' : ''}"
-				style="animation-delay: {i * 100}ms;"
-			>
-				{#if plan.popular}
-					<div class="popular-badge">Most Popular</div>
-				{/if}
-
-				<div class="card-header">
-					<h2 class="plan-name">{plan.name}</h2>
-					<p class="plan-description">{plan.description}</p>
-				</div>
-
-				<div class="plan-price">
-					<span class="currency">$</span>
-					<span class="amount">
-						{billingCycle === 'monthly' ? plan.price_monthly : Math.round(plan.price_annual / 12)}
-					</span>
-					<span class="period">
-						{billingCycle === 'monthly' ? '/mo' : '/mo, billed yearly'}
-					</span>
-				</div>
-
-				<ul class="feature-list">
-					{#each plan.features as feature (feature)}
-						<li>
-							<span class="check-icon">✓</span>
-							{feature}
-						</li>
-					{/each}
-				</ul>
-
-				<button
-					type="button"
-					class="cta-button {plan.popular ? 'primary' : 'secondary'}"
-					onclick={() => selectPlan(plan.id)}
-					disabled={!!upgrading}
-					aria-label="{plan.cta} for {plan.name} plan"
-				>
-					{#if upgrading === plan.id}
-						<span class="spinner" aria-hidden="true"></span>
-						Processing...
-					{:else}
-						{plan.cta}
-					{/if}
-				</button>
-			</div>
+	{#snippet heroMeta()}
+		{#each HERO_META as item (item.label)}
+			<article class="public-page__meta-item">
+				<strong>{item.label}</strong>
+				<span>{item.value}</span>
+			</article>
 		{/each}
-	</div>
+	{/snippet}
 
-	<!-- Enterprise Section -->
-	<div class="enterprise-section">
-		<div class="enterprise-content">
-			<h2>Enterprise Governance</h2>
-			<p>
-				Optional advanced path for organizations that require formal controls, procurement workflows,
-				and expanded governance support.
-			</p>
-			<ul>
-				<li>Advanced security and identity controls (SSO/SCIM)</li>
-				<li>Procurement and due-diligence support lane</li>
-				<li>Priority support and commercial governance alignment</li>
-				<li>Custom integrations for complex operating environments</li>
-			</ul>
-		</div>
-		<div class="enterprise-cta-group">
-			<a href="mailto:enterprise@valdrics.com?cc=sales@valdrics.com" class="enterprise-cta"
-				>Contact Sales</a
-			>
-			<a href={`${base}/enterprise`} class="enterprise-cta enterprise-cta-secondary">
-				View Enterprise Overview
-			</a>
-		</div>
-	</div>
+	{#snippet children()}
+		{#if error}
+			<div class="pricing-alert" role="alert">
+				<p>{error}</p>
+				<button type="button" onclick={() => (error = '')}>Dismiss</button>
+			</div>
+		{/if}
 
-	<!-- Payment Note -->
-	<div class="payment-note">
-		<p>
-			<strong>Secure payments via Paystack.</strong>
-			Prices are listed in USD. Checkout is currently processed in NGN at the live exchange rate. BYOK
-			does not add a separate platform surcharge.
-		</p>
-	</div>
-
-	<!-- FAQ Section -->
-	<div class="faq-section">
-		<h2>Frequently Asked Questions</h2>
-
-		<div class="faq-grid">
-			<div class="faq-item">
-				<h3>How does the free tier work?</h3>
-				<p>
-					The free tier is permanent with usage limits. Upgrade anytime when you need more scale.
+		<section class="public-page__section" aria-labelledby="pricing-self-serve-title">
+			<div class="public-page__section-head">
+				<p class="public-page__eyebrow">Self-serve plans</p>
+				<h2 id="pricing-self-serve-title" class="public-page__section-title">
+					Choose the plan that matches your control depth
+				</h2>
+				<p class="public-page__section-subtitle">
+					Monthly starting prices are shown as entry points. Switch to annual billing to compare the
+					lower effective monthly rate.
 				</p>
 			</div>
 
-			<div class="faq-item">
-				<h3>Is BYOK available on every tier?</h3>
-				<p>
-					In the current lineup, Free, Starter, Growth, and Pro can use BYOK. Daily AI usage limits
-					still apply by tier.
-				</p>
+			<div class="pricing-cycle">
+				<div class="pricing-cycle__copy">
+					<p class="pricing-cycle__kicker">Billing cycle</p>
+					<p class="pricing-cycle__note">Annual billing lowers the effective monthly price on paid plans.</p>
+				</div>
+				<div class="pricing-cycle__toggle" role="group" aria-label="Billing cycle">
+					<span class:active={billingCycle === 'monthly'}>Monthly</span>
+					<button
+						type="button"
+						class={`pricing-cycle__switch ${billingCycle === 'annual' ? 'annual' : ''}`}
+						onclick={() => (billingCycle = billingCycle === 'monthly' ? 'annual' : 'monthly')}
+						aria-label="Toggle billing cycle"
+						role="switch"
+						aria-checked={billingCycle === 'annual'}
+					>
+						<span class="pricing-cycle__knob"></span>
+					</button>
+					<span class:active={billingCycle === 'annual'}>
+						Annual
+						<span class="pricing-cycle__badge">Save 17%</span>
+					</span>
+				</div>
 			</div>
 
-			<div class="faq-item">
-				<h3>Can I upgrade or downgrade anytime?</h3>
-				<p>
-					You can request plan changes at any time. Most changes take effect on your next billing
-					cycle.
-				</p>
-			</div>
+			{#if freePlan}
+				<article class="public-page__card public-page__card--accent pricing-entry-card">
+					<div class="pricing-entry-card__head">
+						<div class="pricing-entry-card__copy">
+							<p class="public-page__card-kicker">{getPlanPresentation(freePlan).badge}</p>
+							<h3 class="public-page__card-title">{getPlanPresentation(freePlan).headline}</h3>
+							<p class="public-page__card-copy">{getPlanPresentation(freePlan).summary}</p>
+						</div>
+						<div class="pricing-entry-card__price">
+							<p class="pricing-entry-card__price-label">Entry price</p>
+							<p class="pricing-entry-card__price-value">$0</p>
+						</div>
+					</div>
 
-			<div class="faq-item">
-				<h3>What cloud providers do you support?</h3>
-				<p>Starter supports AWS. Growth and Pro support AWS, Azure, and GCP.</p>
-			</div>
+					<ul class="public-page__list">
+						{#each FREE_TIER_HIGHLIGHTS as feature (feature)}
+							<li>{feature}</li>
+						{/each}
+					</ul>
 
-			<div class="faq-item">
-				<h3>Is my data secure?</h3>
-				<p>
-					We use read-only cloud roles where supported, and connector secrets are stored encrypted
-					at rest.
-				</p>
+					<div class="pricing-entry-card__footer">
+						<p class="public-page__inline-note">{FREE_TIER_LIMIT_NOTE}</p>
+						<div class="public-page__actions-row">
+							<a href={getFreeTierHref()} class="btn btn-primary">Start on Free Tier</a>
+							{#if isCurrentPlan('free')}
+								<span class="pricing-current-plan">Current plan active</span>
+							{:else}
+								<span class="pricing-support-note">Upgrade later if you need more automation.</span>
+							{/if}
+						</div>
+					</div>
+				</article>
+			{/if}
+
+			<div class="pricing-plan-grid">
+				{#each paidPlans as plan (plan.id)}
+					{@const presentation = getPlanPresentation(plan)}
+					<article
+						class={`public-page__card pricing-plan-card ${plan.popular ? 'public-page__card--featured pricing-plan-card--popular' : ''}`}
+					>
+						<div class="pricing-plan-card__head">
+							<div>
+								<p class="public-page__card-kicker">{presentation.badge}</p>
+								<h3 class="public-page__card-title">{plan.name}</h3>
+							</div>
+							{#if isCurrentPlan(plan.id)}
+								<span class="pricing-current-plan">Current plan</span>
+							{/if}
+						</div>
+
+						<p class="public-page__card-copy">{presentation.summary}</p>
+
+						<div class="pricing-plan-price">
+							<span class="pricing-plan-price__currency">$</span>
+							<span class="pricing-plan-price__amount">{getDisplayedMonthlyPrice(plan)}</span>
+							<span class="pricing-plan-price__period">
+								{billingCycle === 'monthly' ? '/mo' : '/mo billed annually'}
+							</span>
+						</div>
+
+						<p class="pricing-plan-price__note">
+							{billingCycle === 'annual'
+								? `${formatUsd(plan.price_annual)} billed yearly`
+								: `Starting monthly price. ${presentation.note}`}
+						</p>
+
+						<ul class="public-page__list">
+							{#each plan.features as feature (feature)}
+								<li>{feature}</li>
+							{/each}
+						</ul>
+
+						<div class="pricing-plan-card__footer">
+							{#if isCurrentPlan(plan.id)}
+								<button type="button" class="btn btn-secondary pricing-plan-button" disabled>
+									Current Plan
+								</button>
+							{:else if data.user}
+								<button
+									type="button"
+									class={`btn ${plan.popular ? 'btn-primary' : 'btn-secondary'} pricing-plan-button`}
+									onclick={() => void selectPlan(plan.id)}
+									disabled={!!upgrading}
+									aria-label={`${plan.cta} for ${plan.name} plan`}
+								>
+									{#if upgrading === plan.id}
+										<span class="pricing-spinner" aria-hidden="true"></span>
+										Processing...
+									{:else}
+										{plan.cta}
+									{/if}
+								</button>
+							{:else}
+								<a
+									href={getSignupHref(plan.id)}
+									class={`btn ${plan.popular ? 'btn-primary' : 'btn-secondary'} pricing-plan-button`}
+								>
+									{plan.cta}
+								</a>
+							{/if}
+
+							<p class="pricing-support-note">
+								{billingCycle === 'annual' && getAnnualSavings(plan) > 0
+									? `Save ${formatUsd(getAnnualSavings(plan))} per year versus monthly billing.`
+									: presentation.note}
+							</p>
+						</div>
+					</article>
+				{/each}
 			</div>
-		</div>
-	</div>
-</div>
+		</section>
+
+		<section class="public-page__section" aria-labelledby="pricing-enterprise-title">
+			<div class="public-page__band public-page__band--dark">
+				<div class="public-page__band-copy">
+					<p class="public-page__eyebrow">Need enterprise review?</p>
+					<h2 id="pricing-enterprise-title" class="public-page__section-title">
+						Use the enterprise lane only when security or procurement needs a separate track
+					</h2>
+					<p class="public-page__section-subtitle">
+						Otherwise, start on Free, Starter, Growth, or Pro. Bring in sales when SSO/SCIM,
+						security review, procurement, or rollout governance needs its own buying path.
+					</p>
+				</div>
+				<div class="public-page__actions-row">
+					<a href={`${base}/talk-to-sales`} class="btn btn-primary">Talk to Sales</a>
+					<a href={`${base}/enterprise`} class="btn btn-secondary">View Enterprise Overview</a>
+				</div>
+				<div class="public-page__badge-cloud pricing-buying-notes">
+					{#each BUYING_NOTES as item (item)}
+						<span class="public-page__badge">{item}</span>
+					{/each}
+				</div>
+			</div>
+		</section>
+	{/snippet}
+</PublicMarketingPage>

@@ -137,6 +137,25 @@ def test_record_cost_retention_purge_rejects_negative_values() -> None:
         ops_metrics.record_cost_retention_purge("free", -1)
 
 
+def test_record_audit_log_retention_purge_updates_counter_and_last_run_gauge() -> None:
+    ops_metrics.record_audit_log_retention_purge(4)
+
+    total = REGISTRY.get_sample_value(
+        "valdrics_ops_audit_log_retention_purged_total",
+    )
+    last_run = REGISTRY.get_sample_value(
+        "valdrics_ops_audit_log_retention_last_run_deleted",
+    )
+
+    assert total is not None and total >= 4.0
+    assert last_run == 4.0
+
+
+def test_record_audit_log_retention_purge_rejects_negative_values() -> None:
+    with pytest.raises(ValueError, match="deleted_count must be >= 0"):
+        ops_metrics.record_audit_log_retention_purge(-1)
+
+
 def test_time_operation_records_db_duration():
     """Decorator should record DB duration for db operations."""
     with patch("app.shared.core.ops_metrics.DB_QUERY_DURATION") as mock_hist:

@@ -1,6 +1,8 @@
 from collections.abc import Awaitable, Callable
+import ipaddress
+import secrets
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import Response, PlainTextResponse
 from fastapi import Request
 import uuid
 import structlog
@@ -13,6 +15,8 @@ REQUEST_ID_ALLOWED_CHARS = frozenset(
 )
 REQUEST_ID_MIN_LENGTH = 8
 REQUEST_ID_MAX_LENGTH = 128
+INTERNAL_METRICS_PATH = "/_internal/metrics"
+INTERNAL_METRICS_TOKEN_HEADER = "x-internal-metrics-token"
 
 
 def _normalize_request_id(value: str | None) -> str:
@@ -84,6 +88,50 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             )
 
         return response
+
+
+def _request_from_private_network(request: Request) -> bool:
+    client_host = getattr(getattr(request, "client", None), "host", "") or ""
+    candidate = str(client_host).strip().lower()
+    if candidate == "localhost":
+        return True
+    try:
+        ip_value = ipaddress.ip_address(candidate)
+    except ValueError:
+        return False
+    return (
+        ip_value.is_private
+        or ip_value.is_loopback
+        or ip_value.is_link_local
+        or ip_value.is_reserved
+    )
+
+
+class InternalMetricsAccessMiddleware(BaseHTTPMiddleware):
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        settings = get_settings()
+        if request.url.path != INTERNAL_METRICS_PATH or settings.TESTING:
+            return await call_next(request)
+
+        if not getattr(settings, "is_strict_environment", False):
+            return await call_next(request)
+
+        configured_token = str(
+            getattr(settings, "INTERNAL_METRICS_AUTH_TOKEN", "") or ""
+        ).strip()
+        supplied_token = str(request.headers.get(INTERNAL_METRICS_TOKEN_HEADER, "") or "").strip()
+        if configured_token and supplied_token and secrets.compare_digest(
+            supplied_token,
+            configured_token,
+        ):
+            return await call_next(request)
+
+        if _request_from_private_network(request):
+            return await call_next(request)
+
+        return PlainTextResponse("Not Found", status_code=404)
 
 
 class TrustedProxyHeadersMiddleware(BaseHTTPMiddleware):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Any, Callable
+from urllib.parse import urlparse
 
 
 def build_identity_diagnostics_payload(
@@ -155,10 +156,29 @@ def build_sso_federation_validation_payload(
     provider_id = str(getattr(identity, "sso_federation_provider_id", "") or "").strip()
     provider_id_configured = bool(provider_id)
 
-    frontend_url = str(getattr(settings, "FRONTEND_URL", "") or "").strip() or "http://localhost:5173"
-    api_url = str(getattr(settings, "API_URL", "") or "").strip() or "http://localhost:8000"
-    expected_redirect_url = frontend_url.rstrip("/") + "/auth/callback"
-    discovery_endpoint = api_url.rstrip("/") + "/api/v1/public/sso/discovery"
+    frontend_url = str(getattr(settings, "FRONTEND_URL", "") or "").strip()
+    api_url = str(getattr(settings, "API_URL", "") or "").strip()
+    strict_env = bool(getattr(settings, "is_strict_environment", False))
+
+    def is_localhost_url(value: str) -> bool:
+        if not value:
+            return False
+        try:
+            parsed = urlparse(value)
+        except (TypeError, ValueError):
+            return False
+        return str(parsed.hostname or "").strip().lower() in {"localhost", "127.0.0.1", "::1"}
+
+    expected_redirect_url = (
+        frontend_url.rstrip("/") + "/auth/callback"
+        if is_http_url_fn(frontend_url)
+        else ""
+    )
+    discovery_endpoint = (
+        api_url.rstrip("/") + "/api/v1/public/sso/discovery"
+        if is_http_url_fn(api_url)
+        else ""
+    )
 
     checks: list[dict[str, Any]] = []
 
@@ -173,6 +193,16 @@ def build_sso_federation_validation_payload(
             {"name": name, "passed": passed, "severity": severity, "detail": detail}
         )
 
+    add(
+        "config.frontend_url_configured",
+        bool(frontend_url),
+        detail="FRONTEND_URL must be configured explicitly.",
+    )
+    add(
+        "config.api_url_configured",
+        bool(api_url),
+        detail="API_URL must be configured explicitly.",
+    )
     add(
         "config.frontend_url_is_http",
         is_http_url_fn(frontend_url),
@@ -193,6 +223,17 @@ def build_sso_federation_validation_payload(
             "config.api_url_is_https_in_production",
             is_https_url_fn(api_url),
             detail="API_URL should be https in production.",
+        )
+    if strict_env:
+        add(
+            "config.frontend_url_not_localhost_in_strict_env",
+            not is_localhost_url(frontend_url),
+            detail="FRONTEND_URL must not point to localhost in staging/production.",
+        )
+        add(
+            "config.api_url_not_localhost_in_strict_env",
+            not is_localhost_url(api_url),
+            detail="API_URL must not point to localhost in staging/production.",
         )
 
     if bool(getattr(identity, "sso_enabled", False)) and not allowed_domains:
@@ -244,15 +285,23 @@ def build_sso_federation_validation_payload(
 
     add(
         "supabase.expected_redirect_url_computed",
-        True,
-        severity="info",
-        detail=f"Allow this redirect URL in Supabase SSO provider: {expected_redirect_url}",
+        bool(expected_redirect_url),
+        severity="info" if expected_redirect_url else "warning",
+        detail=(
+            f"Allow this redirect URL in Supabase SSO provider: {expected_redirect_url}"
+            if expected_redirect_url
+            else "Redirect URL unavailable until FRONTEND_URL is configured."
+        ),
     )
     add(
         "valdrics.discovery_endpoint_computed",
-        True,
-        severity="info",
-        detail=f"Login uses tenant-scoped discovery endpoint: {discovery_endpoint}",
+        bool(discovery_endpoint),
+        severity="info" if discovery_endpoint else "warning",
+        detail=(
+            f"Login uses tenant-scoped discovery endpoint: {discovery_endpoint}"
+            if discovery_endpoint
+            else "Discovery endpoint unavailable until API_URL is configured."
+        ),
     )
 
     passed = not any((c["severity"] == "error" and not c["passed"]) for c in checks)

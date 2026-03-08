@@ -1,5 +1,5 @@
 """
-Add Materialized View for Cost Aggregation Caching (Phase 4.3)
+Historical bootstrap migration: add materialized view for cost aggregation caching
 
 This migration creates a materialized view for daily cost aggregates
 to provide instant API responses for common dashboard queries.
@@ -10,7 +10,10 @@ Create Date: 2026-01-19
 
 Phase 4.3: Query Caching Layer
 - Daily aggregate view by tenant, service, region
-- Refreshed nightly via pg_cron or background job
+- Refreshed nightly via pg_cron or background job during the original rollout.
+  The current production scheduler model is the authenticated internal
+  scheduler; these pg_cron references are retained only as historical context
+  for this migration.
 - API hits cache first for 100ms responses
 """
 

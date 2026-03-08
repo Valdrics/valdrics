@@ -23,7 +23,7 @@ def test_build_approval_token_requires_secret_and_includes_kid(monkeypatch) -> N
         enforcement_service_module,
         "get_settings",
         lambda: SimpleNamespace(
-            SUPABASE_JWT_SECRET="short",
+            ENFORCEMENT_APPROVAL_TOKEN_SECRET="short",
             API_URL="https://api.example.com",
             JWT_SIGNING_KID="kid-1",
         ),
@@ -50,7 +50,7 @@ def test_build_approval_token_requires_secret_and_includes_kid(monkeypatch) -> N
         enforcement_service_module,
         "get_settings",
         lambda: SimpleNamespace(
-            SUPABASE_JWT_SECRET="s" * 32,
+            ENFORCEMENT_APPROVAL_TOKEN_SECRET="s" * 32,
             API_URL="https://api.example.com",
             JWT_SIGNING_KID="kid-1",
         ),

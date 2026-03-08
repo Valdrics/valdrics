@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import { PUBLIC_EXTENDED_CONTACT_CHANNELS } from '$lib/landing/publicNav';
 
 	type ResourceEntry = {
@@ -60,6 +61,21 @@
 			ctaLabel: 'Download Worksheet'
 		}
 	];
+
+	const heroHighlights = [
+		{
+			label: 'Playbooks',
+			value: 'Weekly review, GreenOps, SaaS, and procurement-ready guidance'
+		},
+		{
+			label: 'Downloads',
+			value: 'Executive one-pager, ROI worksheet, and compliance checklist'
+		},
+		{
+			label: 'Contact paths',
+			value: 'Commercial, technical, security, privacy, and billing channels'
+		}
+	] as const;
 </script>
 
 <svelte:head>
@@ -70,64 +86,87 @@
 	/>
 </svelte:head>
 
-<section class="container mx-auto px-6 py-12 space-y-8">
-	<header class="space-y-3 max-w-3xl">
-		<h1 class="text-3xl font-bold text-ink-100">Resources</h1>
-		<p class="text-ink-300">
-			Practical guidance for teams that want to reduce cloud and software waste without slowing
-			delivery.
-		</p>
-	</header>
+<PublicMarketingPage
+	kicker="Resource Hub"
+	title="Resources"
+	subtitle="Practical guidance for teams that want to reduce cloud and software waste without slowing delivery."
+	heroVariant="narrow"
+>
+	{#snippet heroActions()}
+		<a href={`${base}/auth/login?intent=resource_signup&entry=resources`} class="btn btn-primary">
+			Start Free
+		</a>
+		<a href={`${base}/talk-to-sales?entry=resources&source=resource_hub`} class="btn btn-secondary">
+			Talk to Sales
+		</a>
+		<a href={`${base}/insights`} class="btn btn-secondary">Open Insights</a>
+	{/snippet}
 
-	<div class="grid gap-6 md:grid-cols-3">
-		{#each resources as resource (resource.title)}
-			<article class="glass-panel space-y-3">
-				<p class="text-xs uppercase tracking-[0.12em] text-ink-500">{resource.category}</p>
-				<h2 class="text-xl font-semibold">{resource.title}</h2>
-				<p class="text-ink-300">{resource.summary}</p>
-				<a href={resource.href} class="btn btn-secondary w-fit">{resource.ctaLabel}</a>
+	{#snippet heroMeta()}
+		{#each heroHighlights as item (item.label)}
+			<article class="public-page__meta-item">
+				<strong>{item.label}</strong>
+				<span>{item.value}</span>
 			</article>
 		{/each}
-	</div>
+	{/snippet}
 
-	<div class="glass-panel space-y-3">
-		<h2 class="text-xl font-semibold">Need a guided walkthrough?</h2>
-		<p class="text-ink-300">
-			Start free and run your own ROI plan and remediation loop in a live workspace, or talk to
-			sales for enterprise procurement support.
-		</p>
-		<div class="flex flex-wrap gap-3">
-			<a
-				href={`${base}/auth/login?intent=resource_signup&entry=resources`}
-				class="btn btn-primary w-fit"
-			>
-				Start Free
-			</a>
-			<a
-				href={`${base}/talk-to-sales?entry=resources&source=resource_hub`}
-				class="btn btn-secondary w-fit"
-			>
-				Talk to Sales
-			</a>
-			<a href={`${base}/insights`} class="btn btn-secondary w-fit">Open Insights</a>
-		</div>
-	</div>
+	{#snippet children()}
+		<section class="public-page__section" aria-labelledby="resources-library-title">
+			<div class="public-page__section-head">
+				<p class="public-page__eyebrow">Library</p>
+				<h2 id="resources-library-title" class="public-page__section-title">Use the right asset for the buying moment</h2>
+				<p class="public-page__section-subtitle">
+					Each asset is tuned for a specific stage: self-serve evaluation, internal alignment, or
+					formal diligence.
+				</p>
+			</div>
 
-	<div class="glass-panel space-y-3" aria-label="Contact directory">
-		<h2 class="text-xl font-semibold">Contact Directory</h2>
-		<p class="text-ink-300">
-			Use the right channel for commercial, technical, security, or compliance requests.
-		</p>
-		<div class="grid gap-2 md:grid-cols-2">
-			{#each PUBLIC_EXTENDED_CONTACT_CHANNELS as channel (channel.email)}
-				<a
-					href={channel.href}
-					class="badge badge-default w-fit text-ink-200 hover:text-ink-100 transition-colors"
-					aria-label={`${channel.label} contact ${channel.email}`}
-				>
-					{channel.label}: {channel.email}
-				</a>
-			{/each}
-		</div>
-	</div>
-</section>
+			<div class="public-page__grid public-page__grid--3">
+				{#each resources as resource (resource.title)}
+						<article
+							class={`public-page__card ${
+								resource.title === 'Enterprise Governance Overview'
+									? 'public-page__card--accent public-page__card--featured'
+									: resource.title === 'GreenOps Decision Framework'
+										? 'public-page__card--dark'
+										: resource.title === 'Executive One-Pager (Download)'
+											? 'public-page__card--featured'
+											: ''
+							}`}
+						>
+						<p class="public-page__card-kicker">{resource.category}</p>
+						<h2 class="public-page__card-title">{resource.title}</h2>
+						<p class="public-page__card-copy">{resource.summary}</p>
+						<div class="public-page__actions-row">
+							<a href={resource.href} class="btn btn-secondary">{resource.ctaLabel}</a>
+						</div>
+					</article>
+				{/each}
+			</div>
+		</section>
+
+		<section class="public-page__section" aria-labelledby="resources-contact-title">
+				<div class="public-page__band public-page__band--dark">
+				<div class="public-page__band-copy">
+					<p class="public-page__eyebrow">Contact Directory</p>
+					<h2 id="resources-contact-title" class="public-page__section-title">Contact Directory</h2>
+					<p class="public-page__section-subtitle">
+						Use the right channel for commercial, technical, security, or compliance requests.
+					</p>
+				</div>
+				<div class="public-page__badge-cloud">
+					{#each PUBLIC_EXTENDED_CONTACT_CHANNELS as channel (channel.email)}
+						<a
+							href={channel.href}
+							class="public-page__badge"
+							aria-label={`${channel.label} contact ${channel.email}`}
+						>
+							{channel.label}: {channel.email}
+						</a>
+					{/each}
+				</div>
+			</div>
+		</section>
+	{/snippet}
+</PublicMarketingPage>

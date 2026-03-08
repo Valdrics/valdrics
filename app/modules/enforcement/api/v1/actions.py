@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable
+from typing import TypeVar
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -15,6 +17,7 @@ from app.modules.enforcement.api.v1.schemas import (
     ActionFailRequest,
     ActionLeaseRequest,
 )
+from app.modules.enforcement.domain.action_errors import EnforcementActionError
 from app.modules.enforcement.domain.actions import EnforcementActionOrchestrator
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
 from app.shared.core.pricing import FeatureFlag
@@ -22,6 +25,7 @@ from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
 
 router = APIRouter(tags=["Enforcement"])
+T = TypeVar("T")
 
 
 def _to_action_response(action: EnforcementActionExecution) -> ActionExecutionResponse:
@@ -57,6 +61,13 @@ def _to_action_response(action: EnforcementActionExecution) -> ActionExecutionRe
     )
 
 
+async def _translate_action_errors(awaitable: Awaitable[T]) -> T:
+    try:
+        return await awaitable
+    except EnforcementActionError as exc:
+        raise exc.to_http_exception() from exc
+
+
 @router.post("/actions/requests", response_model=ActionExecutionResponse)
 @rate_limit("120/minute")
 async def create_action_request(
@@ -71,17 +82,19 @@ async def create_action_request(
         feature=FeatureFlag.POLICY_CONFIGURATION,
     )
     service = EnforcementActionOrchestrator(db)
-    action = await service.create_action_request(
-        tenant_id=tenant_or_403(current_user),
-        actor_id=current_user.id,
-        decision_id=payload.decision_id,
-        action_type=payload.action_type,
-        target_reference=payload.target_reference,
-        request_payload=payload.request_payload,
-        idempotency_key=payload.idempotency_key,
-        max_attempts=payload.max_attempts,
-        retry_backoff_seconds=payload.retry_backoff_seconds,
-        lease_ttl_seconds=payload.lease_ttl_seconds,
+    action = await _translate_action_errors(
+        service.create_action_request(
+            tenant_id=tenant_or_403(current_user),
+            actor_id=current_user.id,
+            decision_id=payload.decision_id,
+            action_type=payload.action_type,
+            target_reference=payload.target_reference,
+            request_payload=payload.request_payload,
+            idempotency_key=payload.idempotency_key,
+            max_attempts=payload.max_attempts,
+            retry_backoff_seconds=payload.retry_backoff_seconds,
+            lease_ttl_seconds=payload.lease_ttl_seconds,
+        )
     )
     return _to_action_response(action)
 
@@ -125,9 +138,11 @@ async def get_action_request(
         feature=FeatureFlag.POLICY_CONFIGURATION,
     )
     service = EnforcementActionOrchestrator(db)
-    action = await service.get_action(
-        tenant_id=tenant_or_403(current_user),
-        action_id=action_id,
+    action = await _translate_action_errors(
+        service.get_action(
+            tenant_id=tenant_or_403(current_user),
+            action_id=action_id,
+        )
     )
     return _to_action_response(action)
 

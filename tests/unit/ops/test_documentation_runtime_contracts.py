@@ -31,8 +31,11 @@ def test_retention_policy_matches_supported_erasure_controls() -> None:
 
     assert "/api/v1/audit/data-erasure-request" in text
     assert "background job retention" in text.lower()
+    assert "Audit logs | Automated retention purge" in text
+    assert "AUDIT_LOG_RETENTION_DAYS" in text
     assert "plan-aware retention purge" in text
     assert "resource_type=cost_records_retention" in text
+    assert "resource_type=audit_logs_retention" in text
 
 
 def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
@@ -55,17 +58,43 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     assert "AWS RDS" in recovery
     assert "Cloudflare" in recovery
     assert "disaster-recovery-drill.yml" in recovery
+    assert "regional-failover.yml" in recovery
+    assert "scripts/run_regional_failover.py" in recovery
+    assert "enable_multi_region_failover=true" in recovery
+    assert "secondary_db_endpoint" in recovery
+    assert "regional_recovery_mode=automated_secondary_region_failover" in recovery
+    assert "1200 seconds" in recovery
+    assert "duration_seconds" in recovery
+    assert "regional_recovery_mode=manual_restore_redeploy_reroute" in recovery
+    assert "regional_recovery_rto_seconds=1200" in recovery
+    assert (
+        "regional_recovery_rpo_contract=provider_backup_restore_external_to_repository"
+        in recovery
+    )
     assert "Supabase" not in recovery
     assert "Cloudflare" in failover
     assert "RDS" in failover
     assert "disaster-recovery-drill.yml" in failover
+    assert "regional-failover.yml" in failover
+    assert "scripts/run_regional_failover.py" in failover
+    assert "enable_multi_region_failover=true" in failover
+    assert "secondary_db_endpoint" in failover
+    assert "regional_recovery_mode=automated_secondary_region_failover" in failover
+    assert "1200 seconds" in failover
+    assert "duration_seconds" in failover
+    assert "regional_recovery_mode=manual_restore_redeploy_reroute" in failover
+    assert "regional_recovery_rto_seconds=1200" in failover
+    assert (
+        "regional_recovery_rpo_contract=provider_backup_restore_external_to_repository"
+        in failover
+    )
     assert "Route 53" not in failover
-    assert "Supported deployment profiles" in deployment
+    assert "Supported production deployment profile" in deployment
     assert "Helm + Terraform (AWS/EKS)" in deployment
-    assert "Cloudflare Pages + Koyeb" in deployment
+    assert "Reference Managed-Platform Manifests" in deployment
     assert "koyeb-worker.yaml" in deployment
-    assert "Helm + Terraform (AWS/EKS)" in capacity
-    assert "Cloudflare Pages + Koyeb" in capacity
+    assert "sole supported production scale path" in capacity
+    assert "managed-platform preview/reference surface" in capacity
     assert "koyeb-worker.yaml" in capacity
     assert "One-step forward/rollback smoke" in db_overview
     assert "backup/restore is the primary rollback path" in db_overview
@@ -73,13 +102,21 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     dr_workflow = (
         REPO_ROOT / ".github/workflows/disaster-recovery-drill.yml"
     ).read_text(encoding="utf-8")
+    regional_failover_workflow = (
+        REPO_ROOT / ".github/workflows/regional-failover.yml"
+    ).read_text(encoding="utf-8")
     assert "workflow_dispatch:" in dr_workflow
     assert "schedule:" in dr_workflow
     assert "scripts/run_disaster_recovery_drill.py" in dr_workflow
+    assert "--max-duration-seconds 1200" in dr_workflow
     assert 'ENVIRONMENT: "staging"' in dr_workflow
     assert "postgres:16.8-alpine" in dr_workflow
     assert "uv run alembic upgrade head" in dr_workflow
     assert "uv run celery -A app.shared.core.celery_app:celery_app worker -l info" in dr_workflow
+    assert "scripts/run_regional_failover.py" in regional_failover_workflow
+    assert "CLOUDFLARE_API_TOKEN" in regional_failover_workflow
+    assert "secondary_db_instance_id" in regional_failover_workflow
+    assert "secondary_api_origin" in regional_failover_workflow
 
 
 def test_architecture_overview_does_not_overclaim_domain_purity_or_raw_k8s() -> None:
@@ -91,6 +128,7 @@ def test_architecture_overview_does_not_overclaim_domain_purity_or_raw_k8s() -> 
     assert "`k8s/`" not in text
     assert "Helm chart" in text
     assert "boundary target" in text
+    assert "reference managed-platform surface" in text
 
 
 def test_incident_and_production_runbooks_match_strict_saas_observability_contract() -> None:
@@ -110,12 +148,18 @@ def test_incident_and_production_runbooks_match_strict_saas_observability_contra
     assert "specified in `SLACK_CHANNEL_ID`" not in incident
     assert "SENTRY_DSN=https://" in production
     assert "OTEL_EXPORTER_OTLP_ENDPOINT=https://" in production
+    assert "API_URL=https://" in production
+    assert "FRONTEND_URL=https://" in production
+    assert "INTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>" in production
     assert "EXPOSE_API_DOCUMENTATION_PUBLICLY=false" in production
     assert "Optional but recommended: `SENTRY_DSN" not in production
     assert "env channel routing (`SLACK_CHANNEL_ID`) is blocked" in workflow
     assert "self-host or break-glass-only paths" in workflow
     assert "`app/modules/governance/api/v1/settings/account.py`" in soc2
     assert "| CC6.4 |" in soc2 and "Implemented" in soc2
+    assert "`app/core/logging.py`" not in soc2
+    assert "`docs/DR_RUNBOOK.md`" not in soc2
+    assert "`technical_due_diligence.md`" not in soc2
 
 
 def test_partition_archival_helpers_match_runtime_maintenance_path() -> None:
@@ -131,3 +175,16 @@ def test_partition_archival_helpers_match_runtime_maintenance_path() -> None:
     assert "cost_records_archive" in sql_text
     assert "ux_cost_records_archive_id_recorded_at" in sql_text
     assert "RAISE NOTICE" not in sql_text
+
+
+def test_runbooks_with_high_operational_risk_are_covered_by_contract_guard() -> None:
+    script_text = (
+        REPO_ROOT / "scripts/verify_documentation_runtime_contracts.py"
+    ).read_text(encoding="utf-8")
+
+    assert "docs/SOC2_CONTROLS.md" in script_text
+    assert "docs/policies/data_retention.md" in script_text
+    assert "docs/runbooks/enforcement_preprovision_integrations.md" in script_text
+    assert "docs/runbooks/partition_maintenance.md" in script_text
+    assert "docs/ops/cloudflare_go_live_checklist_2026-03-02.md" in script_text
+    assert 'path="DEPLOYMENT.md"' in script_text

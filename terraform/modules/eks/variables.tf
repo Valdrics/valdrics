@@ -16,6 +16,11 @@ variable "cluster_name" {
   default = "valdrics"
 }
 
+variable "name_suffix" {
+  type    = string
+  default = ""
+}
+
 variable "node_instance_types" {
   type    = list(string)
   default = ["t3.medium"]

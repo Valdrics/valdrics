@@ -21,6 +21,8 @@ from app.shared.adapters.resource_usage_projection import (
 from app.shared.core.credentials import PlatformCredentials
 from app.shared.core.currency import convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
+from app.shared.core.http import get_http_client
+from app.shared.core.outbound_tls import resolve_outbound_tls_verification
 
 logger = structlog.get_logger()
 
@@ -47,11 +49,8 @@ async def _platform_get_request(
     params: dict[str, Any] | None,
     verify_ssl: bool,
 ) -> httpx.Response:
-    async with httpx.AsyncClient(
-        timeout=_NATIVE_TIMEOUT_SECONDS,
-        verify=verify_ssl,
-    ) as client:
-        return await client.get(url, headers=headers, params=params)
+    client = get_http_client(verify=verify_ssl)
+    return await client.get(url, headers=headers, params=params, timeout=_NATIVE_TIMEOUT_SECONDS)
 
 async def _platform_post_request(
     *,
@@ -61,11 +60,10 @@ async def _platform_post_request(
     json: dict[str, Any],
     verify_ssl: bool,
 ) -> httpx.Response:
-    async with httpx.AsyncClient(
-        timeout=_NATIVE_TIMEOUT_SECONDS,
-        verify=verify_ssl,
-    ) as client:
-        return await client.post(url, headers=headers, params=params, json=json)
+    client = get_http_client(verify=verify_ssl)
+    return await client.post(
+        url, headers=headers, params=params, json=json, timeout=_NATIVE_TIMEOUT_SECONDS
+    )
 
 class PlatformAdapter(PlatformNativeConnectorMixin, BaseAdapter):
     """Cloud+ adapter for internal platform/shared-services spend."""
@@ -187,11 +185,14 @@ class PlatformAdapter(PlatformNativeConnectorMixin, BaseAdapter):
     def _resolve_verify_ssl(self) -> bool:
         raw = self._connector_config.get("verify_ssl")
         if isinstance(raw, bool):
-            return raw
-        raw = self._connector_config.get("ssl_verify")
-        if isinstance(raw, bool):
-            return raw
-        return True
+            verify_requested = raw
+        else:
+            raw = self._connector_config.get("ssl_verify")
+            verify_requested = raw if isinstance(raw, bool) else True
+        try:
+            return resolve_outbound_tls_verification(verify_requested)
+        except ValueError as exc:
+            raise ExternalAPIError(str(exc)) from exc
 
     async def _convert_to_usd(self, amount_local: float, currency_code: str) -> float:
         return float(await convert_to_usd(amount_local, currency_code))

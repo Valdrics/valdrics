@@ -22,6 +22,8 @@ def test_helm_values_default_to_ha_api_and_internal_metrics() -> None:
     assert values["podAnnotations"]["prometheus.io/path"] == "/_internal/metrics"
     assert values["externalSecrets"]["enabled"] is True
     assert values["worker"]["podAnnotations"] == {}
+    assert values["enforcementWebhook"]["failurePolicy"] == "Fail"
+    assert values["enforcementWebhook"]["podDisruptionBudget"]["enabled"] is True
     server_snippet = values["ingress"]["annotations"][
         "nginx.ingress.kubernetes.io/server-snippet"
     ]
@@ -52,6 +54,10 @@ def test_api_template_uses_runtime_secret_helper() -> None:
     )
 
     assert 'include "valdrics.runtimeSecretName" .' in text
+    assert 'name: API_URL' in text
+    assert 'name: FRONTEND_URL' in text
+    assert 'include "valdrics.apiUrl" .' in text
+    assert 'include "valdrics.frontendUrl" .' in text
 
 
 def test_runtime_healthchecks_use_liveness_only() -> None:
@@ -140,11 +146,16 @@ def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults()
     assert int(koyeb["definition"]["scaling"]["min"]) >= 2
     assert env_values["WEB_CONCURRENCY"] == "2"
     assert env_values["ENABLE_SCHEDULER"] == "true"
+    assert env_values["API_URL"] == "https://api.valdrics.ai"
+    assert env_values["FRONTEND_URL"] == "https://dashboard.valdrics.ai"
     assert env_values["TRUST_PROXY_HEADERS"] == "true"
     assert env_values["APP_RUNTIME_DATA_DIR"] == "/tmp/valdrics"
     assert "metrics_path: /_internal/metrics" in prometheus_text
     assert env_values["FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK"] is None
     assert "OTEL_EXPORTER_OTLP_ENDPOINT" in {
+        item["name"] for item in koyeb["definition"]["env"] if "name" in item
+    }
+    assert "INTERNAL_METRICS_AUTH_TOKEN" in {
         item["name"] for item in koyeb["definition"]["env"] if "name" in item
     }
     assert "TRUSTED_PROXY_CIDRS" in {
@@ -168,6 +179,8 @@ def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults()
     worker_env_names = {
         item["name"] for item in koyeb_worker["definition"]["env"] if "name" in item
     }
+    assert "API_URL" in worker_env_names
+    assert "FRONTEND_URL" in worker_env_names
     assert "OTEL_EXPORTER_OTLP_ENDPOINT" in worker_env_names
     assert "SENTRY_DSN" in worker_env_names
     assert "REDIS_URL" in worker_env_names
@@ -191,6 +204,8 @@ def test_deployment_docs_match_runtime_contracts() -> None:
     assert "--from-literal=OPENAI_API_KEY=" in root_doc
     assert "/health/live" in ops_doc
     assert "configured max break-glass window" in ops_doc
+    assert "Supported production deployment profile" in ops_doc
+    assert "Reference Managed-Platform Manifests" in ops_doc
     assert "koyeb-worker.yaml" in ops_doc
 
 

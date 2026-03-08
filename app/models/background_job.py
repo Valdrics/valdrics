@@ -69,7 +69,7 @@ class BackgroundJob(Base):
     """
     Durable background job stored in PostgreSQL.
 
-    Processed by pg_cron scheduler for reliability:
+    Processed by the authenticated internal scheduler for reliability:
     - Survives app restarts
     - Automatic retries with backoff
     - Full audit trail

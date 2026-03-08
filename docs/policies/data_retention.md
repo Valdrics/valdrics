@@ -9,6 +9,7 @@ states that explicitly instead of implying automation.
 | Data Class | Retention Posture | Enforcement Source |
 |---|---|---|
 | Background job terminal-state records | Automated retention purge | Scheduler maintenance sweep and background-job retention settings |
+| Audit logs | Automated retention purge | Scheduler maintenance sweep and audit-log retention settings |
 | Tenant cost records | Automated plan-aware retention purge | Scheduler maintenance sweep and `CostPersistenceService.cleanup_expired_records_by_plan` |
 | Tenant-scoped operational data | Removed on approved tenant erasure request | `DELETE /api/v1/audit/data-erasure-request` and `docs/runbooks/tenant_data_lifecycle.md` |
 | AWS RDS backups (Terraform profile) | 30-day backup retention | `terraform/modules/db/main.tf` |
@@ -19,11 +20,16 @@ states that explicitly instead of implying automation.
 The application currently enforces automated retention for:
 
 - background-job terminal states through background job retention controls
+- audit logs through the maintenance sweep using `AUDIT_LOG_RETENTION_DAYS`
 - tenant cost records, using the tenant plan's configured `retention_days`
 
 Cost-record purge evidence is written as structured `system.maintenance` audit
 events with `resource_type=cost_records_retention`, so operators can export a
 deterministic purge report through the audit log surface.
+
+Audit-log purge evidence is written as structured `system.maintenance` audit
+events with `resource_type=audit_logs_retention`, and operational telemetry is
+exported through the audit-log retention Prometheus counters/gauges.
 
 ## Tenant Erasure Requests
 

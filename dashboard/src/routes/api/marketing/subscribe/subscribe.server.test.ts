@@ -15,6 +15,15 @@ function buildRequest(body: unknown): Request {
 	});
 }
 
+function buildEvent(overrides: Record<string, unknown>): Parameters<typeof POST>[0] {
+	return {
+		request: buildRequest({}),
+		getClientAddress: () => '127.0.0.1',
+		fetch: vi.fn(),
+		...overrides
+	} as unknown as Parameters<typeof POST>[0];
+}
+
 afterEach(() => {
 	_resetMarketingSubscribeRateLimitForTests();
 	vi.restoreAllMocks();
@@ -34,13 +43,15 @@ describe('marketing subscribe route', () => {
 			})
 		);
 		const response = await POST({
-			request: buildRequest({
-				email: 'buyer@example.com',
-				company: 'Example Inc',
-				role: 'FinOps'
-			}),
-			fetch: fetchMock
-		} as Parameters<typeof POST>[0]);
+			...buildEvent({
+				request: buildRequest({
+					email: 'buyer@example.com',
+					company: 'Example Inc',
+					role: 'FinOps'
+				}),
+				fetch: fetchMock
+			})
+		});
 
 		expect(response.status).toBe(202);
 		const payload = await response.json();
@@ -51,10 +62,12 @@ describe('marketing subscribe route', () => {
 	});
 
 	it('rejects invalid payloads', async () => {
-		const response = await POST({
-			request: buildRequest({ email: 'not-an-email' }),
-			getClientAddress: () => '127.0.0.2'
-		} as Parameters<typeof POST>[0]);
+		const response = await POST(
+			buildEvent({
+				request: buildRequest({ email: 'not-an-email' }),
+				getClientAddress: () => '127.0.0.2'
+			})
+		);
 
 		expect(response.status).toBe(400);
 		const payload = await response.json();
@@ -64,10 +77,12 @@ describe('marketing subscribe route', () => {
 
 	it('silently accepts honeypot submissions', async () => {
 		const fetchMock = vi.fn();
-		const response = await POST({
-			request: buildRequest({ email: 'bot@example.com', honey: 'filled' }),
-			fetch: fetchMock
-		} as Parameters<typeof POST>[0]);
+		const response = await POST(
+			buildEvent({
+				request: buildRequest({ email: 'bot@example.com', honey: 'filled' }),
+				fetch: fetchMock
+			})
+		);
 
 		expect(response.status).toBe(202);
 		const payload = await response.json();
@@ -83,20 +98,24 @@ describe('marketing subscribe route', () => {
 				headers: { 'content-type': 'application/json' }
 			})
 		);
-		const blocked = await POST({
-			request: buildRequest({ email: 'ops+blocked@example.com' }),
-			fetch: fetchMock
-		} as Parameters<typeof POST>[0]);
+		const blocked = await POST(
+			buildEvent({
+				request: buildRequest({ email: 'ops+blocked@example.com' }),
+				fetch: fetchMock
+			})
+		);
 		expect(blocked.status).toBe(429);
 		const payload = await blocked.json();
 		expect(payload.error).toBe('rate_limited');
 	});
 
 	it('returns delivery failure when backend subscribe proxy fails', async () => {
-		const response = await POST({
-			request: buildRequest({ email: 'cfo@example.com' }),
-			fetch: vi.fn().mockRejectedValue(new Error('upstream unavailable'))
-		} as Parameters<typeof POST>[0]);
+		const response = await POST(
+			buildEvent({
+				request: buildRequest({ email: 'cfo@example.com' }),
+				fetch: vi.fn().mockRejectedValue(new Error('upstream unavailable'))
+			})
+		);
 
 		expect(response.status).toBe(503);
 		const payload = await response.json();

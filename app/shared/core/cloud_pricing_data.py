@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from collections.abc import Iterable
 from decimal import Decimal
 from typing import Any
@@ -11,7 +10,12 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.shared.core.pricing_defaults import DEFAULT_RATES, REGION_MULTIPLIERS
+from app.shared.core.cloud_pricing_aws_sync import collect_supported_aws_pricing_records
+from app.shared.core.pricing_defaults import (
+    AVERAGE_BILLING_MONTH_HOURS,
+    DEFAULT_RATES,
+    REGION_MULTIPLIERS,
+)
 
 logger = structlog.get_logger()
 
@@ -26,8 +30,7 @@ CLOUD_PRICING_REFRESH_RECOVERABLE_EXCEPTIONS = (
 )
 
 _CLOUD_PRICING_CACHE: dict[tuple[str, str, str, str], float] = {}
-
-
+_CLOUD_PRICING_DETAILS_CACHE: dict[tuple[str, str, str, str], dict[str, Any]] = {}
 def _normalize_key(value: Any, *, default: str = "") -> str:
     normalized = str(value or default).strip().lower()
     return normalized or default
@@ -101,6 +104,104 @@ def get_cloud_hourly_rate(
     return float(base_rate) * float(multiplier)
 
 
+def get_cloud_pricing_quote(
+    provider: str,
+    resource_type: str,
+    resource_size: str | None = None,
+    region: str = "global",
+) -> dict[str, Any]:
+    normalized_provider = _normalize_key(provider)
+    normalized_type = _normalize_key(resource_type)
+    normalized_size = _normalize_size(resource_size)
+    normalized_region = _normalize_key(region, default="global")
+
+    key_candidates: tuple[tuple[str, tuple[str, str, str, str]], ...] = (
+        (
+            "exact_region_size",
+            _cache_key(normalized_provider, normalized_type, normalized_size, normalized_region),
+        ),
+        (
+            "exact_region_default_size",
+            _cache_key(normalized_provider, normalized_type, "default", normalized_region),
+        ),
+        (
+            "global_exact_size_regionalized",
+            _cache_key(normalized_provider, normalized_type, normalized_size, "global"),
+        ),
+        (
+            "global_default_regionalized",
+            _cache_key(normalized_provider, normalized_type, "default", "global"),
+        ),
+    )
+    selected = next(
+        (
+            (match_strategy, key)
+            for match_strategy, key in key_candidates
+            if key in _CLOUD_PRICING_DETAILS_CACHE
+        ),
+        None,
+    )
+    selected_match_strategy = selected[0] if selected is not None else None
+    selected_key = selected[1] if selected is not None else None
+    if selected_key is None:
+        return {
+            "provider": normalized_provider,
+            "resource_type": normalized_type,
+            "resource_size": normalized_size,
+            "requested_region": normalized_region,
+            "effective_region": "missing",
+            "hourly_rate_usd": 0.0,
+            "source": "missing",
+            "pricing_metadata": {},
+        }
+
+    details = dict(_CLOUD_PRICING_DETAILS_CACHE[selected_key])
+    pricing_metadata = dict(details.get("pricing_metadata") or {})
+    hourly_rate = get_cloud_hourly_rate(
+        provider=normalized_provider,
+        resource_type=normalized_type,
+        resource_size=normalized_size,
+        region=normalized_region,
+    )
+    effective_region = str(details.get("effective_region") or "global")
+    pricing_metadata.update(
+        {
+            "match_strategy": selected_match_strategy or "missing",
+            "requested_region": normalized_region,
+            "effective_region": effective_region,
+            "region_multiplier_applied": (
+                float(REGION_MULTIPLIERS.get(normalized_region, 1.0))
+                if effective_region == "global" and normalized_region != "global"
+                else 1.0
+            ),
+            "pricing_confidence": (
+                "catalog_exact"
+                if selected_match_strategy == "exact_region_size"
+                else (
+                    "catalog_size_fallback"
+                    if selected_match_strategy == "exact_region_default_size"
+                    else (
+                        "regionalized_catalog_baseline"
+                        if selected_match_strategy == "global_exact_size_regionalized"
+                        else "regionalized_default_baseline"
+                    )
+                )
+            ),
+        }
+    )
+    details.update(
+        {
+            "provider": normalized_provider,
+            "resource_type": normalized_type,
+            "resource_size": normalized_size,
+            "requested_region": normalized_region,
+            "hourly_rate_usd": hourly_rate,
+            "pricing_metadata": pricing_metadata,
+        }
+    )
+    return details
+
+
 def _flatten_default_rates() -> list[dict[str, Any]]:
     seed_records: list[dict[str, Any]] = []
     for provider, resource_map in DEFAULT_RATES.items():
@@ -115,6 +216,14 @@ def _flatten_default_rates() -> list[dict[str, Any]]:
                             "region": "global",
                             "hourly_rate_usd": _safe_rate(hourly_rate),
                             "source": "default_catalog",
+                            "pricing_metadata": {
+                                "billing_period_hours": AVERAGE_BILLING_MONTH_HOURS,
+                                "coverage_scope": "repo_default_catalog",
+                                "pricing_basis": "hourly_normalized_default",
+                                "coverage_limitations": (
+                                    "Checked-in default pricing catalog; live provider catalog coverage may differ by region, size, and HA profile."
+                                ),
+                            },
                         }
                     )
             else:
@@ -126,6 +235,14 @@ def _flatten_default_rates() -> list[dict[str, Any]]:
                         "region": "global",
                         "hourly_rate_usd": _safe_rate(resource_value),
                         "source": "default_catalog",
+                        "pricing_metadata": {
+                            "billing_period_hours": AVERAGE_BILLING_MONTH_HOURS,
+                            "coverage_scope": "repo_default_catalog",
+                            "pricing_basis": "hourly_default",
+                            "coverage_limitations": (
+                                "Checked-in default pricing catalog; live provider catalog coverage may differ by region, size, and HA profile."
+                            ),
+                        },
                     }
                 )
     return seed_records
@@ -149,6 +266,7 @@ async def _upsert_catalog_records(*, db_session: Any, records: Iterable[dict[str
             continue
         existing.hourly_rate_usd = record["hourly_rate_usd"]
         existing.source = record["source"]
+        existing.pricing_metadata = dict(record.get("pricing_metadata") or {})
         existing.is_active = True
         updated += 1
     return updated
@@ -178,16 +296,21 @@ async def seed_default_cloud_pricing_catalog(db_session: Any = None) -> int:
 
 def _refresh_cache_from_rows(rows: Iterable[Any]) -> int:
     _CLOUD_PRICING_CACHE.clear()
+    _CLOUD_PRICING_DETAILS_CACHE.clear()
     count = 0
     for row in rows:
-        _CLOUD_PRICING_CACHE[
-            _cache_key(
-                getattr(row, "provider", None),
-                getattr(row, "resource_type", None),
-                getattr(row, "resource_size", None),
-                getattr(row, "region", None),
-            )
-        ] = _safe_rate(getattr(row, "hourly_rate_usd", 0.0))
+        key = _cache_key(
+            getattr(row, "provider", None),
+            getattr(row, "resource_type", None),
+            getattr(row, "resource_size", None),
+            getattr(row, "region", None),
+        )
+        _CLOUD_PRICING_CACHE[key] = _safe_rate(getattr(row, "hourly_rate_usd", 0.0))
+        _CLOUD_PRICING_DETAILS_CACHE[key] = {
+            "effective_region": _normalize_key(getattr(row, "region", None), default="global"),
+            "source": _normalize_key(getattr(row, "source", None), default="default_catalog"),
+            "pricing_metadata": dict(getattr(row, "pricing_metadata", {}) or {}),
+        }
         count += 1
     return count
 
@@ -218,65 +341,34 @@ async def refresh_cloud_resource_pricing(db_session: Any = None) -> int:
         return 0
 
 
-def _extract_aws_hourly_rate(price_list: list[str]) -> float | None:
-    for raw_entry in price_list:
-        try:
-            payload = json.loads(raw_entry)
-        except json.JSONDecodeError:
-            continue
-        on_demand_terms = payload.get("terms", {}).get("OnDemand", {})
-        for term in on_demand_terms.values():
-            dimensions = term.get("priceDimensions", {})
-            for dimension in dimensions.values():
-                usd_value = dimension.get("pricePerUnit", {}).get("USD")
-                try:
-                    rate = float(usd_value)
-                except (TypeError, ValueError):
-                    continue
-                if rate >= 0:
-                    return rate
-    return None
-
-
 async def sync_supported_aws_pricing(db_session: Any = None, *, client: Any = None) -> int:
     """
     Persist supported AWS Pricing API observations into the catalog.
 
-    The repository currently supports a verified NAT Gateway catalog probe because
-    that query shape already existed in the codebase before this remediation.
+    The repository synchronizes a curated set of verified AWS catalog probes for the
+    resource classes that are priced directly by the optimization engine.
     """
     from app.shared.db.session import async_session_maker, mark_session_system_context
 
     try:
         import boto3
+        from botocore.exceptions import BotoCoreError
     except ImportError as exc:
         logger.error("aws_pricing_sync_failed", error=str(exc))
         return 0
 
     pricing_client = client or boto3.client("pricing", region_name="us-east-1")
-    response: dict[str, Any] = pricing_client.get_products(
-        ServiceCode="AmazonEC2",
-        Filters=[
-            {"Type": "TERM_MATCH", "Field": "usageType", "Value": "NatGateway-Hours"},
-            {"Type": "TERM_MATCH", "Field": "location", "Value": "US East (N. Virginia)"},
-        ],
-    )
-    rate = _extract_aws_hourly_rate(list(response.get("PriceList", []) or []))
-    if rate is None:
+    try:
+        records = collect_supported_aws_pricing_records(pricing_client)
+    except (BotoCoreError, OSError, RuntimeError, ValueError, TypeError) as exc:
+        logger.warning("aws_pricing_sync_unavailable", error=str(exc))
+        return 0
+    if not records:
         logger.warning("aws_pricing_sync_no_supported_rates_found")
         return 0
 
-    record = {
-        "provider": "aws",
-        "resource_type": "nat_gateway",
-        "resource_size": "default",
-        "region": "us-east-1",
-        "hourly_rate_usd": rate,
-        "source": "aws_pricing_api",
-    }
-
     async def _sync(session: Any, *, commit: bool) -> int:
-        updated = await _upsert_catalog_records(db_session=session, records=[record])
+        updated = await _upsert_catalog_records(db_session=session, records=records)
         if commit:
             await session.commit()
         else:
@@ -285,7 +377,6 @@ async def sync_supported_aws_pricing(db_session: Any = None, *, client: Any = No
         logger.info(
             "aws_pricing_sync_completed",
             supported_records=updated,
-            hourly_rate_usd=rate,
         )
         return updated
 
@@ -303,6 +394,7 @@ async def sync_supported_aws_pricing(db_session: Any = None, *, client: Any = No
 __all__ = [
     "CLOUD_PRICING_REFRESH_RECOVERABLE_EXCEPTIONS",
     "get_cloud_hourly_rate",
+    "get_cloud_pricing_quote",
     "refresh_cloud_resource_pricing",
     "seed_default_cloud_pricing_catalog",
     "sync_supported_aws_pricing",

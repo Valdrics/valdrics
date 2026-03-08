@@ -527,6 +527,12 @@ async def test_finops_analysis_handler_continues_on_recoverable_provider_failure
             "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",
             return_value=MagicMock(),
         ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.FINOPS_PROVIDER_FAILURES_TOTAL"
+        ) as mock_metric,
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.logger"
+        ) as mock_logger,
     ):
         mock_adapter_ok = MagicMock()
         mock_factory.get_adapter.side_effect = [
@@ -542,6 +548,10 @@ async def test_finops_analysis_handler_continues_on_recoverable_provider_failure
     assert result["status"] == "completed"
     assert result["analysis_runs"] == 1
     assert result["providers_analyzed"] == ["gcp"]
+    assert result["partial_failure"] is True
+    assert result["provider_failures"][0]["provider"] == "aws"
+    mock_metric.labels.return_value.inc.assert_called_once()
+    mock_logger.warning.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -567,6 +577,37 @@ async def test_finops_analysis_handler_does_not_swallow_fatal_provider_failures(
         mock_factory.get_adapter.side_effect = _FatalTestSignal()
         with pytest.raises(_FatalTestSignal):
             await handler.execute(sample_job, mock_db)
+
+
+@pytest.mark.asyncio
+async def test_finops_analysis_handler_marks_failed_when_all_providers_fail(
+    mock_db, sample_job
+):
+    handler = FinOpsAnalysisHandler()
+    conn = MagicMock(provider="aws")
+
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.list_tenant_connections",
+            new=AsyncMock(return_value=[conn]),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory"
+        ) as mock_factory,
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.FINOPS_PROVIDER_FAILURES_TOTAL"
+        ),
+    ):
+        mock_factory.get_adapter.side_effect = RuntimeError("adapter unavailable")
+        result = await handler.execute(sample_job, mock_db)
+
+    assert result["status"] == "failed"
+    assert result["reason"] == "provider_failures"
+    assert result["provider_failures"][0]["provider"] == "aws"
 
 
 @pytest.mark.asyncio

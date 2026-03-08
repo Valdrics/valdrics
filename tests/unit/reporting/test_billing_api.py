@@ -71,7 +71,9 @@ async def test_get_public_plans_from_db(mock_db):
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
         response = await ac.get("/api/v1/billing/plans")
     assert response.status_code == 200
-    assert response.json()[0]["price_monthly"] == 10.0
+    payload = response.json()
+    assert payload[0]["id"] == "free"
+    assert any(plan["price_monthly"] == 10.0 for plan in payload)
 
 
 @pytest.mark.asyncio
@@ -82,7 +84,9 @@ async def test_get_public_plans_fallback(mock_db):
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
         response = await ac.get("/api/v1/billing/plans")
     assert response.status_code == 200
-    assert len(response.json()) >= 3
+    payload = response.json()
+    assert len(payload) >= 4
+    assert payload[0]["id"] == "free"
 
 
 @pytest.mark.asyncio

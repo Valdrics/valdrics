@@ -49,7 +49,7 @@ finops_analysis:
         }}
       ],
       "summary": {{
-        "total_estimated_savings": "$XXX/month",
+        "total_estimated_savings": "$123/month",
         "top_priority_action": "most impactful recommendation",
         "risk_level": "low|medium|high"
       }}

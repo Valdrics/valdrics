@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -251,7 +251,7 @@ async def reserve_credit_from_grants(
         remaining = quantize_fn(remaining - reserve_amount, "0.0001")
 
     if remaining > Decimal("0.0000"):
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail=(
                 "Insufficient credit grant headroom during reservation allocation "
@@ -294,7 +294,7 @@ async def settle_credit_reservations_for_decision(
     )
     allocations = list(allocation_rows.scalars().all())
     if not allocations:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail="Missing credit reservation allocation rows for decision settlement",
         )
@@ -312,7 +312,7 @@ async def settle_credit_reservations_for_decision(
     for allocation in allocations:
         grant = grants_by_id.get(allocation.credit_grant_id)
         if grant is None:
-            raise HTTPException(
+            raise EnforcementDomainError(
                 status_code=409,
                 detail=(
                     "Missing credit grant row for reservation allocation "
@@ -375,7 +375,7 @@ async def settle_credit_reservations_for_decision(
         )
 
     if remaining_consume > Decimal("0.0000") or remaining_release > Decimal("0.0000"):
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail=(
                 "Credit reservation settlement drift detected "

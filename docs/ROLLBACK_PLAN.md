@@ -29,13 +29,14 @@ For the Helm deployment profile:
 2. Confirm API and worker pods become ready.
 3. Re-check internal metrics scraping via `/_internal/metrics`.
 
-## 3. PaaS Rollback
+## 3. Reference Managed-Platform Rollback
 
-For the Cloudflare Pages + Koyeb profile:
+For the Cloudflare Pages + Koyeb reference manifests:
 
 1. Restore the prior Cloudflare Pages deployment for the dashboard if the frontend regressed.
-2. Redeploy the previous immutable backend release or prior successful commit on Koyeb.
-3. Verify `/health/live` and key dashboard/API flows after rollback.
+2. Redeploy the prior known-good Koyeb revision for both `koyeb.yaml` and `koyeb-worker.yaml`.
+3. Treat this as preview/reference rollback guidance only; it is not part of the supported production rollback contract unless external release automation adds immutable artifact promotion.
+4. Verify `/health/live` and key dashboard/API flows after rollback.
 
 ## 4. Infrastructure Rollback
 

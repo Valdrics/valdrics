@@ -6,7 +6,6 @@ import json
 from typing import Any, Mapping, cast
 from uuid import UUID
 
-from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy import or_, select, update
 from sqlalchemy.engine import CursorResult
@@ -22,6 +21,7 @@ from app.models.enforcement import (
     EnforcementDecisionType,
     EnforcementPolicy,
 )
+from app.modules.enforcement.domain.action_errors import EnforcementActionError
 from app.modules.enforcement.domain.policy_document import PolicyDocument
 from app.modules.enforcement.domain.actions_terminal_ops import (
     cancel_action_impl,
@@ -124,7 +124,7 @@ class EnforcementActionOrchestrator:
             )
         ).scalar_one_or_none()
         if decision is None:
-            raise HTTPException(status_code=404, detail="Decision not found")
+            raise EnforcementActionError(status_code=404, detail="Decision not found")
 
         approval = (
             await self.db.execute(
@@ -143,14 +143,14 @@ class EnforcementActionOrchestrator:
         approval: EnforcementApprovalRequest | None,
     ) -> UUID | None:
         if decision.decision == EnforcementDecisionType.DENY:
-            raise HTTPException(
+            raise EnforcementActionError(
                 status_code=409,
                 detail="Cannot enqueue action for denied decision",
             )
 
         if decision.approval_required:
             if approval is None or approval.status != EnforcementApprovalStatus.APPROVED:
-                raise HTTPException(
+                raise EnforcementActionError(
                     status_code=409,
                     detail=(
                         "Cannot enqueue action before approval is approved for "
@@ -179,18 +179,20 @@ class EnforcementActionOrchestrator:
     ) -> EnforcementActionExecution:
         normalized_action_type = _normalize_action_type(action_type)
         if not normalized_action_type:
-            raise HTTPException(status_code=422, detail="action_type is required")
+            raise EnforcementActionError(status_code=422, detail="action_type is required")
         if len(normalized_action_type) > 64:
-            raise HTTPException(
+            raise EnforcementActionError(
                 status_code=422,
                 detail="action_type must be <= 64 characters",
             )
 
         normalized_target_reference = _normalize_target_reference(target_reference)
         if not normalized_target_reference:
-            raise HTTPException(status_code=422, detail="target_reference is required")
+            raise EnforcementActionError(
+                status_code=422, detail="target_reference is required"
+            )
         if len(normalized_target_reference) > 512:
-            raise HTTPException(
+            raise EnforcementActionError(
                 status_code=422,
                 detail="target_reference must be <= 512 characters",
             )
@@ -221,7 +223,7 @@ class EnforcementActionOrchestrator:
             else policy_lease_ttl_seconds
         )
         if effective_max_attempts < 1 or effective_max_attempts > 10:
-            raise HTTPException(
+            raise EnforcementActionError(
                 status_code=422,
                 detail="max_attempts must be between 1 and 10",
             )
@@ -229,12 +231,12 @@ class EnforcementActionOrchestrator:
             effective_retry_backoff_seconds < 1
             or effective_retry_backoff_seconds > 86400
         ):
-            raise HTTPException(
+            raise EnforcementActionError(
                 status_code=422,
                 detail="retry_backoff_seconds must be between 1 and 86400",
             )
         if effective_lease_ttl_seconds < 30 or effective_lease_ttl_seconds > 3600:
-            raise HTTPException(
+            raise EnforcementActionError(
                 status_code=422,
                 detail="lease_ttl_seconds must be between 30 and 3600",
             )
@@ -320,7 +322,9 @@ class EnforcementActionOrchestrator:
             )
         ).scalar_one_or_none()
         if action is None:
-            raise HTTPException(status_code=404, detail="Action execution not found")
+            raise EnforcementActionError(
+                status_code=404, detail="Action execution not found"
+            )
         return action
 
     async def list_actions(

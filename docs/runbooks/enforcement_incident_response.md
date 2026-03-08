@@ -101,7 +101,7 @@ Release-gate rule:
 ### Detection Signals
 
 - unexpected token validation mismatches or replay attempts.
-- suspected exposure of signing secret (`SUPABASE_JWT_SECRET`).
+- suspected exposure of signing secret (`ENFORCEMENT_APPROVAL_TOKEN_SECRET` or `ENFORCEMENT_EXPORT_SIGNING_SECRET`).
 - untrusted token generation observed in logs.
 
 ### Immediate Response

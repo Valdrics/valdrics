@@ -172,9 +172,12 @@ async def run_async_migrations() -> None:
     if ssl_mode == "disable":
         connect_args["ssl"] = False
     elif ssl_mode == "require":
-        # Supabase/Supavisor pooler often works best with "require" semantics:
-        # encrypted transport without enforcing certificate-chain validation.
-        connect_args["ssl"] = "require"
+        ssl_context = ssl.create_default_context()
+        if settings.DB_SSL_CA_CERT_PATH:
+            ssl_context.load_verify_locations(cafile=settings.DB_SSL_CA_CERT_PATH)
+        ssl_context.verify_mode = ssl.CERT_REQUIRED
+        ssl_context.check_hostname = True
+        connect_args["ssl"] = ssl_context
     elif ssl_mode in {"verify-ca", "verify-full"}:
         if not settings.DB_SSL_CA_CERT_PATH:
             raise ValueError(f"DB_SSL_CA_CERT_PATH is required when DB_SSL_MODE={ssl_mode}")

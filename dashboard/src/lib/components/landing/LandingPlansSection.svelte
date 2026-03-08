@@ -4,8 +4,7 @@
 		FREE_TIER_HIGHLIGHTS,
 		FREE_TIER_LIMIT_NOTE,
 		IMPLEMENTATION_COST_FACTS,
-		PLAN_COMPARE_CARDS,
-		PLANS_PRICING_EXPLANATION
+		PLAN_COMPARE_CARDS
 	} from '$lib/landing/heroContent';
 
 	let {
@@ -29,18 +28,15 @@
 	<div class="landing-section-head">
 		<h2 class="landing-h2">Choose a plan and launch fast</h2>
 		<p class="landing-section-sub">
-			Pick the tier that fits your provider coverage, workflow automation depth, and support needs.
+			Monthly starting prices shown here are entry points. Upgrade as provider coverage,
+			automation depth, and governance needs expand.
 		</p>
-	</div>
-
-	<div class="landing-plans-pricing-note glass-panel">
-		<p class="landing-proof-k">Pricing clarity</p>
-		<p class="landing-p">{PLANS_PRICING_EXPLANATION}</p>
 	</div>
 
 	<div class="landing-free-tier-card glass-panel">
 		<div class="landing-free-tier-head">
 			<div>
+				<p class="landing-free-tier-badge">Start here first</p>
 				<p class="landing-proof-k">Start Free</p>
 				<h3 class="landing-h3">Free tier for your first savings workflow</h3>
 				<p class="landing-p">
@@ -62,7 +58,7 @@
 		<div class="landing-free-tier-cta">
 			<a
 				href={buildFreeTierCtaHref()}
-				class="btn btn-primary"
+				class="btn btn-primary landing-free-tier-primary-cta"
 				onclick={() => onTrackCta('cta_click', 'plans', 'start_plan_free')}
 			>
 				Start on Free Tier
@@ -86,7 +82,7 @@
 				</ul>
 				<a
 					href={buildPlanCtaHref(plan.id)}
-					class="btn btn-primary"
+					class="btn btn-secondary landing-plan-secondary-cta"
 					onclick={() => onTrackCta('cta_click', 'plans', `start_plan_${plan.id}`)}
 				>
 					Start with {plan.name}
@@ -100,7 +96,7 @@
 			Know setup effort before you buy
 		</h3>
 		<p class="landing-p">
-			Estimate software cost and setup effort up front so approval is based on the full picture.
+			See the setup path and team footprint up front so approval is based on the full picture.
 		</p>
 
 		<div class="landing-rollout-grid">

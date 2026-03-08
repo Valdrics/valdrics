@@ -26,3 +26,9 @@ variable "environment" {
   description = "Environment name (e.g., prod, staging)"
   type        = string
 }
+
+variable "cluster_name" {
+  description = "Cluster name prefix used for Kubernetes subnet tags."
+  type        = string
+  default     = "valdrics"
+}

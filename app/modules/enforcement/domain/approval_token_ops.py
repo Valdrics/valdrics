@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Callable, Mapping, cast
 from uuid import UUID
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 
 
 def decode_approval_token(
@@ -15,9 +15,11 @@ def decode_approval_token(
     jwt_module: Any,
 ) -> Mapping[str, Any]:
     settings = get_settings_fn()
-    primary_secret = str(getattr(settings, "SUPABASE_JWT_SECRET", "") or "").strip()
+    primary_secret = str(
+        getattr(settings, "ENFORCEMENT_APPROVAL_TOKEN_SECRET", "") or ""
+    ).strip()
     if len(primary_secret) < 32:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=503,
             detail="Approval token signing key is not configured",
         )
@@ -75,11 +77,11 @@ def decode_approval_token(
             continue
 
     if expired_error is not None:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail="Approval token has expired",
         ) from expired_error
-    raise HTTPException(
+    raise EnforcementDomainError(
         status_code=401,
         detail="Invalid approval token",
     )
@@ -97,7 +99,7 @@ def extract_token_context_payload(
         try:
             return UUID(str(raw))
         except (TypeError, ValueError) as exc:
-            raise HTTPException(
+            raise EnforcementDomainError(
                 status_code=401,
                 detail="Invalid approval token",
             ) from exc
@@ -106,7 +108,7 @@ def extract_token_context_payload(
     try:
         source = source_enum(source_raw)
     except ValueError as exc:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=401,
             detail="Invalid approval token",
         ) from exc
@@ -121,32 +123,32 @@ def extract_token_context_payload(
             "0.000001",
         )
     except InvalidOperation as exc:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=401,
             detail="Invalid approval token",
         ) from exc
 
     exp_raw = payload.get("exp")
     if not isinstance(exp_raw, (int, float, str)):
-        raise HTTPException(status_code=401, detail="Invalid approval token")
+        raise EnforcementDomainError(status_code=401, detail="Invalid approval token")
     try:
         expires_at = datetime.fromtimestamp(int(exp_raw), tz=timezone.utc)
     except (TypeError, ValueError, OSError) as exc:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=401,
             detail="Invalid approval token",
         ) from exc
 
     request_fingerprint = str(payload.get("request_fingerprint", "")).strip()
     if len(request_fingerprint) != 64:
-        raise HTTPException(status_code=401, detail="Invalid approval token")
+        raise EnforcementDomainError(status_code=401, detail="Invalid approval token")
 
     resource_reference = str(payload.get("resource_reference", "")).strip()
     if not resource_reference:
-        raise HTTPException(status_code=401, detail="Invalid approval token")
+        raise EnforcementDomainError(status_code=401, detail="Invalid approval token")
     project_id = str(payload.get("project_id", "")).strip()
     if not project_id:
-        raise HTTPException(status_code=401, detail="Invalid approval token")
+        raise EnforcementDomainError(status_code=401, detail="Invalid approval token")
 
     return {
         "approval_id": _uuid_claim("approval_id"),
@@ -174,9 +176,9 @@ def build_approval_token(
     jwt_module: Any,
 ) -> str:
     settings = get_settings_fn()
-    secret = str(getattr(settings, "SUPABASE_JWT_SECRET", "") or "").strip()
+    secret = str(getattr(settings, "ENFORCEMENT_APPROVAL_TOKEN_SECRET", "") or "").strip()
     if len(secret) < 32:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=503,
             detail="Approval token signing key is not configured",
         )

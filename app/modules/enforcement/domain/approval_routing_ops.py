@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.enforcement import (
@@ -237,7 +237,7 @@ async def enforce_reviewer_authority(
         else None
     )
     if reviewer_role not in allowed_reviewer_roles:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=403,
             detail=(
                 f"Reviewer role '{reviewer_role}' is not allowed for "
@@ -249,7 +249,7 @@ async def enforce_reviewer_authority(
         routing_trace.get("required_permission")
     )
     if required_permission is None:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail="Approval routing trace is missing required_permission",
         )
@@ -260,7 +260,7 @@ async def enforce_reviewer_authority(
         required_permission,
     )
     if not has_permission:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=403,
             detail=f"Insufficient approval permission: {required_permission}",
         )
@@ -276,7 +276,7 @@ async def enforce_reviewer_authority(
         and requested_by_user_id
         and requested_by_user_id == reviewer_user_id
     ):
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=403,
             detail=(
                 "Requester/reviewer separation is enforced for this approval route"

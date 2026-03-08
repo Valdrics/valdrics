@@ -27,7 +27,7 @@ test.describe('Landing visual snapshots', () => {
 				animations: 'disabled',
 				caret: 'hide'
 			});
-			await expect(page.locator('#cloud-hook')).toHaveScreenshot('landing-hook-desktop.png', {
+			await expect(page.locator('#capabilities')).toHaveScreenshot('landing-hook-desktop.png', {
 				animations: 'disabled',
 				caret: 'hide'
 			});
@@ -47,7 +47,7 @@ test.describe('Landing visual snapshots', () => {
 				animations: 'disabled',
 				caret: 'hide'
 			});
-			await expect(page.locator('#cloud-hook')).toHaveScreenshot('landing-hook-mobile.png', {
+			await expect(page.locator('#capabilities')).toHaveScreenshot('landing-hook-mobile.png', {
 				animations: 'disabled',
 				caret: 'hide'
 			});

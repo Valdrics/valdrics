@@ -135,6 +135,9 @@ async def test_execute_non_aws_path_and_exception_continue() -> None:
             "app.modules.governance.domain.jobs.handlers.finops.FinOpsAnalyzer",
             return_value=analyzer,
         ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.FINOPS_PROVIDER_FAILURES_TOTAL"
+        ) as mock_metric,
     ):
         result = await handler.execute(job, db)
 
@@ -142,6 +145,9 @@ async def test_execute_non_aws_path_and_exception_continue() -> None:
     assert result["analysis_runs"] == 1
     assert result["providers_analyzed"] == ["azure"]
     assert result["analysis_length"] > 0
+    assert result["partial_failure"] is True
+    assert result["provider_failures"][0]["provider"] == "gcp"
+    mock_metric.labels.return_value.inc.assert_called_once()
     analyzer.analyze.assert_awaited_once()
 
 

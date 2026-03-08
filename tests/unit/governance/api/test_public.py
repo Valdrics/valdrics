@@ -1,12 +1,13 @@
 import pytest
-from httpx import AsyncClient
-from unittest.mock import MagicMock, patch
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from unittest.mock import AsyncMock
-from types import SimpleNamespace
 from datetime import datetime, timezone, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 
+from httpx import AsyncClient
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models.background_job import BackgroundJob, JobType
 from app.models.landing_telemetry_rollup import LandingTelemetryDailyRollup
 from app.models.tenant import Tenant
 from app.models.sso_domain_mapping import SsoDomainMapping
@@ -282,17 +283,21 @@ async def test_sso_discovery_provider_id_missing(async_client: AsyncClient, db: 
 
 
 @pytest.mark.asyncio
-async def test_marketing_subscribe_accepts_valid_payload(async_client: AsyncClient) -> None:
-    with patch(
-        "app.modules.governance.api.v1.public_marketing.get_settings",
-        return_value=SimpleNamespace(
-            MARKETING_SUBSCRIBE_WEBHOOK_URL="",
-            WEBHOOK_ALLOWED_DOMAINS=[],
-            WEBHOOK_REQUIRE_HTTPS=True,
-            WEBHOOK_BLOCK_PRIVATE_IPS=True,
-            TRUST_PROXY_HEADERS=False,
-            TRUSTED_PROXY_HOPS=1,
-            TRUSTED_PROXY_CIDRS=[],
+async def test_marketing_subscribe_accepts_valid_payload(
+    async_client: AsyncClient, db: AsyncSession
+) -> None:
+    with (
+        patch(
+            "app.modules.governance.api.v1.public_marketing.get_settings",
+            return_value=SimpleNamespace(
+                MARKETING_SUBSCRIBE_WEBHOOK_URL="https://hooks.example.com/subscribe",
+                WEBHOOK_ALLOWED_DOMAINS=["example.com"],
+                WEBHOOK_REQUIRE_HTTPS=True,
+                WEBHOOK_BLOCK_PRIVATE_IPS=True,
+                TRUST_PROXY_HEADERS=False,
+                TRUSTED_PROXY_HOPS=1,
+                TRUSTED_PROXY_CIDRS=[],
+            ),
         ),
     ):
         response = await async_client.post(
@@ -310,15 +315,21 @@ async def test_marketing_subscribe_accepts_valid_payload(async_client: AsyncClie
     assert payload["ok"] is True
     assert payload["accepted"] is True
     assert len(payload["emailHash"]) == 64
+    jobs = (
+        await db.execute(
+            select(BackgroundJob).where(
+                BackgroundJob.job_type == JobType.WEBHOOK_RETRY.value
+            )
+        )
+    ).scalars().all()
+    assert len(jobs) == 1
+    assert jobs[0].payload["provider"] == "marketing_subscribe"
+    assert jobs[0].payload["url"] == "https://hooks.example.com/subscribe"
+    assert jobs[0].payload["data"]["email"] == "buyer@example.com"
 
 
 @pytest.mark.asyncio
-async def test_marketing_subscribe_delivery_failure_returns_503(async_client: AsyncClient) -> None:
-    mock_response = MagicMock()
-    mock_response.raise_for_status.side_effect = RuntimeError("webhook failed")
-    mock_client = AsyncMock()
-    mock_client.post.return_value = mock_response
-
+async def test_marketing_subscribe_enqueue_failure_returns_503(async_client: AsyncClient) -> None:
     with (
         patch(
             "app.modules.governance.api.v1.public_marketing.get_settings",
@@ -333,8 +344,8 @@ async def test_marketing_subscribe_delivery_failure_returns_503(async_client: As
             ),
         ),
         patch(
-            "app.modules.governance.api.v1.public_marketing.get_http_client",
-            return_value=mock_client,
+            "app.modules.governance.api.v1.public_marketing.enqueue_job",
+            new=AsyncMock(side_effect=RuntimeError("queue unavailable")),
         ),
     ):
         response = await async_client.post(

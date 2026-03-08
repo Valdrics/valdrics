@@ -24,7 +24,6 @@ describe('Landing component decomposition', () => {
 			props: {
 				heroTitle: 'Control every dollar in your cloud and software stack.',
 				heroSubtitle: 'From signal to owner and approved action in one loop.',
-				quantPromise: 'Target 10-18% controllable spend recovery opportunity in the first 90 days.',
 				primaryCtaLabel: 'Start Free',
 				secondaryCtaLabel: 'See it in action',
 				secondaryCtaHref: '#signal-map',
@@ -39,21 +38,13 @@ describe('Landing component decomposition', () => {
 		await fireEvent.click(screen.getByRole('link', { name: /see it in action/i }));
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
-		expect(screen.getByText(/what you can verify now/i)).toBeTruthy();
-		expect(screen.getByText(/safe access model/i)).toBeTruthy();
-		expect(screen.getByText(/first production workflow typically goes live in 3-10 business days/i)).toBeTruthy();
-		expect(
-			screen.getByRole('link', { name: /technical validation/i }).getAttribute('href')
-		).toBe('/docs/technical-validation');
-		expect(
-			screen.getByRole('link', { name: /access checklist/i }).getAttribute('href')
-		).toBe('/resources/global-finops-compliance-workbook.md');
-		expect(screen.getByRole('link', { name: /review methodology/i }).getAttribute('href')).toBe(
-			'/docs/technical-validation'
-		);
-		expect(screen.getByRole('link', { name: /live signal map/i }).getAttribute('href')).toBe(
-			'#signal-map'
-		);
+		expect(screen.getByText(/read-only access/i)).toBeTruthy();
+		expect(screen.getByText(/3-10 day rollout/i)).toBeTruthy();
+		expect(screen.queryByText(/verify before you commit/i)).toBeNull();
+		expect(screen.queryByRole('link', { name: /technical validation/i })).toBeNull();
+		expect(screen.queryByRole('link', { name: /access checklist/i })).toBeNull();
+		expect(screen.queryByRole('link', { name: /review methodology/i })).toBeNull();
+		expect(screen.queryByRole('link', { name: /live signal map/i })).toBeNull();
 		expect(screen.queryByText(/evidence snapshot · february 28, 2026/i)).toBeNull();
 
 		// Check for GreenOps Global Flip additions
@@ -239,61 +230,8 @@ describe('Landing component decomposition', () => {
 		}
 	});
 
-	it('rotates customer comments with navigation controls', async () => {
-		const trust = render(LandingTrustSection, {
-			props: {
-				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
-				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
-				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
-				onTrackCta: vi.fn()
-			}
-		});
-		const trustView = within(trust.container);
-
-		expect(
-			trustView.getByText(/we stopped debating whose queue a cost issue belongs to/i)
-		).toBeTruthy();
-		await fireEvent.click(trustView.getByRole('button', { name: /next comment/i }));
-		expect(
-			trustView.getByText(
-				/the value is not another dashboard\. it is moving from signal to controlled action/i
-			)
-		).toBeTruthy();
-		expect(trustView.queryByText(/current proof reflects design-partner feedback/i)).toBeNull();
-		await fireEvent.click(trustView.getByRole('button', { name: /show comment 3/i }));
-		expect(trustView.getByText(/leadership reviews got shorter/i)).toBeTruthy();
-	});
-
-	it('refreshes customer comments periodically from the feed', async () => {
-		vi.useFakeTimers();
-		const fetchMock = vi
-			.spyOn(globalThis, 'fetch')
-			.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({
-						items: [
-							{
-								quote: 'Initial streamed quote for trust section.',
-								attribution: 'First source'
-							}
-						]
-					}),
-					{ status: 200, headers: { 'content-type': 'application/json' } }
-				)
-			)
-			.mockResolvedValueOnce(
-				new Response(
-					JSON.stringify({
-						items: [
-							{
-								quote: 'Updated streamed quote after polling refresh.',
-								attribution: 'Second source'
-							}
-						]
-					}),
-					{ status: 200, headers: { 'content-type': 'application/json' } }
-				)
-			);
+	it('keeps trust content static and free of testimonial rotators or polling', () => {
+		const fetchMock = vi.spyOn(globalThis, 'fetch');
 
 		try {
 			const trust = render(LandingTrustSection, {
@@ -306,42 +244,12 @@ describe('Landing component decomposition', () => {
 			});
 			const trustView = within(trust.container);
 
-			expect(await trustView.findByText(/initial streamed quote for trust section/i)).toBeTruthy();
-			await vi.advanceTimersByTimeAsync(20_500);
-			expect(
-				await trustView.findByText(/updated streamed quote after polling refresh/i)
-			).toBeTruthy();
-			expect(fetchMock).toHaveBeenCalledTimes(2);
-		} finally {
-			fetchMock.mockRestore();
-			vi.useRealTimers();
-		}
-	});
-
-	it('keeps fallback trust quotes when the customer comments feed is unavailable', async () => {
-		const fetchMock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('network down'));
-
-		try {
-			const trust = render(LandingTrustSection, {
-				props: {
-					requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
-					onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
-					globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
-					onTrackCta: vi.fn()
-				}
-			});
-			const trustView = within(trust.container);
-
-			expect(
-				trustView.getByText(/we stopped debating whose queue a cost issue belongs to/i)
-			).toBeTruthy();
-			await fireEvent.click(trustView.getByRole('button', { name: /next comment/i }));
-			expect(
-				trustView.getByText(
-					/the value is not another dashboard\. it is moving from signal to controlled action/i
-				)
-			).toBeTruthy();
-			expect(fetchMock).toHaveBeenCalled();
+			expect(trustView.getByText(/teams decide faster with less friction/i)).toBeTruthy();
+			expect(trustView.getByText(/actions stay safe and accountable/i)).toBeTruthy();
+			expect(trustView.getByText(/reviews stay focused on outcomes/i)).toBeTruthy();
+			expect(trustView.queryByRole('button', { name: /next comment/i })).toBeNull();
+			expect(trustView.queryByRole('button', { name: /show comment/i })).toBeNull();
+			expect(fetchMock).not.toHaveBeenCalled();
 		} finally {
 			fetchMock.mockRestore();
 		}

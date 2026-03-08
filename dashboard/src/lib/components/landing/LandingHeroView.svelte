@@ -1,23 +1,19 @@
 <script lang="ts">
 	import type { LandingExperimentAssignments } from '$lib/landing/landingExperiment';
-	import { CLOUD_HOOK_STATES } from '$lib/landing/heroContent';
 	import type {
 		SignalLaneId,
 		SignalLaneSnapshot,
 		SignalSnapshot
 	} from '$lib/landing/realtimeSignalMap';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
+	import LandingCloudHookSection from '$lib/components/landing/LandingCloudHookSection.svelte';
 	import LandingHeroCopy from '$lib/components/landing/LandingHeroCopy.svelte';
 	import LandingSignalMapCard from '$lib/components/landing/LandingSignalMapCard.svelte';
 	import LandingRoiSimulator from '$lib/components/landing/LandingRoiSimulator.svelte';
-	import LandingCloudHookSection from '$lib/components/landing/LandingCloudHookSection.svelte';
-	import LandingWorkflowSection from '$lib/components/landing/LandingWorkflowSection.svelte';
 	import LandingCapabilitiesSection from '$lib/components/landing/LandingCapabilitiesSection.svelte';
 	import LandingPlansSection from '$lib/components/landing/LandingPlansSection.svelte';
 	import LandingTrustSection from '$lib/components/landing/LandingTrustSection.svelte';
 	import LandingCookieConsent from '$lib/components/landing/LandingCookieConsent.svelte';
-
-	type CloudHookState = (typeof CLOUD_HOOK_STATES)[number];
 
 	let {
 		motionProfile,
@@ -26,13 +22,13 @@
 		imageUrl,
 		heroTitle,
 		heroSubtitle,
-		quantPromise,
 		primaryCtaLabel,
 		secondaryCtaLabel,
 		secondaryCtaHref,
 		primaryCtaHref,
 		ctaVariant,
 		sectionOrderVariant,
+		cloudHookStates,
 		activeHookState,
 		hookStateIndex,
 		onSelectHookState,
@@ -83,14 +79,28 @@
 		imageUrl: string;
 		heroTitle: string;
 		heroSubtitle: string;
-		quantPromise: string;
 		primaryCtaLabel: string;
 		secondaryCtaLabel: string;
 		secondaryCtaHref: string;
 		primaryCtaHref: string;
 		ctaVariant: LandingExperimentAssignments['ctaVariant'];
 		sectionOrderVariant: LandingExperimentAssignments['sectionOrderVariant'];
-		activeHookState: CloudHookState;
+		cloudHookStates: readonly {
+			id: string;
+			title: string;
+			subtitle: string;
+			ahaMoment: string;
+			points: readonly string[];
+			metrics: readonly { label: string; value: string }[];
+		}[];
+		activeHookState: {
+			id: string;
+			title: string;
+			subtitle: string;
+			ahaMoment: string;
+			points: readonly string[];
+			metrics: readonly { label: string; value: string }[];
+		};
 		hookStateIndex: number;
 		onSelectHookState: (index: number) => void;
 		activeSnapshot: SignalSnapshot;
@@ -167,62 +177,85 @@
 			<span class="landing-hero-signal-node landing-hero-signal-node-c"></span>
 			<span class="landing-hero-signal-node landing-hero-signal-node-d"></span>
 		</div>
-		<div class="container mx-auto px-6 pt-8 pb-14 sm:pt-10 sm:pb-16 lg:pt-12 lg:pb-20">
+		<div class="container mx-auto px-6 pt-7 pb-8 sm:pt-9 sm:pb-10 lg:pt-10 lg:pb-11">
 			<LandingHeroCopy
 				{heroTitle}
 				{heroSubtitle}
-				{quantPromise}
 				{primaryCtaLabel}
 				{secondaryCtaLabel}
 				{secondaryCtaHref}
-				demoCtaHref="#signal-map"
 				{primaryCtaHref}
 				onPrimaryCta={() => onTrackCta('cta_click', 'hero', ctaVariant)}
 				onSecondaryCta={() => onTrackCta('cta_click', 'hero', 'enterprise_review')}
-				onDemoCta={() => onTrackCta('cta_click', 'hero', 'see_signal_map')}
 			/>
 		</div>
 	</section>
 
+	<LandingCloudHookSection
+		{cloudHookStates}
+		{activeHookState}
+		{hookStateIndex}
+		onSelectHookState={onSelectHookState}
+	/>
+
 	<div class="landing-story-band">
-		<div id="product">
-			{#if sectionOrderVariant === 'workflow_first'}
-				<LandingWorkflowSection />
-			{:else}
-				<LandingCloudHookSection
-					{activeHookState}
-					{hookStateIndex}
-					cloudHookStates={CLOUD_HOOK_STATES}
-					onSelectHookState={onSelectHookState}
+		{#if sectionOrderVariant === 'workflow_first'}
+			<section
+				id="signal-map"
+				class="container mx-auto px-6 pb-12 md:pb-16 landing-section-lazy"
+				data-landing-section="signal_map"
+			>
+				<div class="landing-section-head">
+					<h2 class="landing-h2">See the decision loop in action</h2>
+					<p class="landing-section-sub">
+						One live path from signal, to owner, to approval, to recorded outcome.
+					</p>
+				</div>
+				<LandingSignalMapCard
+					{activeSnapshot}
+					{activeSignalLane}
+					{signalMapInView}
+					{snapshotIndex}
+					{demoStepIndex}
+					onSelectSignalLane={onSelectSignalLane}
+					onSelectDemoStep={onSelectDemoStep}
+					onSelectSnapshot={onSelectSnapshot}
+					onSignalMapElementChange={onSignalMapElementChange}
 				/>
-			{/if}
-		</div>
+			</section>
 
-		<LandingCapabilitiesSection />
-
-		<section
-			id="signal-map"
-			class="container mx-auto px-6 pb-12 md:pb-16 landing-section-lazy"
-			data-landing-section="signal_map"
-		>
-			<div class="landing-section-head">
-				<h2 class="landing-h2">See the decision loop in action</h2>
-				<p class="landing-section-sub">
-					One live path from signal, to owner, to approval, to recorded outcome.
-				</p>
+			<div id="product">
+				<LandingCapabilitiesSection />
 			</div>
-			<LandingSignalMapCard
-				{activeSnapshot}
-				{activeSignalLane}
-				{signalMapInView}
-				{snapshotIndex}
-				{demoStepIndex}
-				onSelectSignalLane={onSelectSignalLane}
-				onSelectDemoStep={onSelectDemoStep}
-				onSelectSnapshot={onSelectSnapshot}
-				onSignalMapElementChange={onSignalMapElementChange}
-			/>
-		</section>
+		{:else}
+			<div id="product">
+				<LandingCapabilitiesSection />
+			</div>
+
+			<section
+				id="signal-map"
+				class="container mx-auto px-6 pb-12 md:pb-16 landing-section-lazy"
+				data-landing-section="signal_map"
+			>
+				<div class="landing-section-head">
+					<h2 class="landing-h2">See the decision loop in action</h2>
+					<p class="landing-section-sub">
+						One live path from signal, to owner, to approval, to recorded outcome.
+					</p>
+				</div>
+				<LandingSignalMapCard
+					{activeSnapshot}
+					{activeSignalLane}
+					{signalMapInView}
+					{snapshotIndex}
+					{demoStepIndex}
+					onSelectSignalLane={onSelectSignalLane}
+					onSelectDemoStep={onSelectDemoStep}
+					onSelectSnapshot={onSelectSnapshot}
+					onSignalMapElementChange={onSignalMapElementChange}
+				/>
+			</section>
+		{/if}
 
 		<LandingRoiSimulator
 			{normalizedScenarioWasteWithoutPct}

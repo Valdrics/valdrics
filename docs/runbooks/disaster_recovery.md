@@ -5,14 +5,25 @@ present in the repository.
 
 ## Supported Profiles
 
-- Helm + Terraform on AWS/EKS with AWS RDS and ElastiCache
-- Cloudflare Pages + Koyeb for the dashboard/API/worker PaaS profile
+- Supported production: Helm + Terraform on AWS/EKS with AWS RDS and ElastiCache
+- Reference managed-platform manifests: Cloudflare Pages + Koyeb for preview evaluation only
 
 ## Recovery Posture
 
 - Current checked-in IaC supports in-region high availability for AWS RDS and ElastiCache.
-- Cross-region recovery is a manual restore and redeploy exercise unless additional regional infrastructure is provisioned outside this repository.
+- Cross-region recovery defaults to manual restore/redeploy unless
+  `enable_multi_region_failover=true` is enabled in Terraform.
 - `.github/workflows/disaster-recovery-drill.yml` runs a repository-managed rebuild-and-verify exercise so the documented recovery path is rehearsed on versioned artifacts.
+- Repository-backed rebuild-and-verify objective: the automated drill must finish within 1200 seconds and persist `duration_seconds` in the evidence artifact. This objective covers application bootstrap, migrations, worker start, and API verification; it does not claim a provider-level regional backup-restore RTO.
+- The drill evidence also records `regional_recovery_mode=manual_restore_redeploy_reroute` so the checked-in regional recovery contract is explicit instead of implicit.
+- The drill evidence records `regional_recovery_rto_seconds=1200`, which is the repository-owned manual rebuild-and-verify RTO once restored data endpoints are available.
+- The drill evidence records `regional_recovery_rpo_contract=provider_backup_restore_external_to_repository`, which makes the current provider-managed backup/restore dependency explicit instead of implied.
+- Optional warm-standby failover is available through the Terraform
+  `enable_multi_region_failover=true` profile plus
+  `.github/workflows/regional-failover.yml` / `scripts/run_regional_failover.py`.
+- The automated cutover path records
+  `regional_recovery_mode=automated_secondary_region_failover`.
+- Managed-platform preview manifests are excluded from the production DR contract unless an operator adds immutable release and regional recovery controls outside this repository.
 
 ## 1. AWS RDS Database Failure
 
@@ -50,7 +61,19 @@ Repository evidence:
 3. Validate `/health/live`, `/health`, and `/_internal/metrics` from inside the cluster.
 4. Confirm Redis and database connectivity before reopening traffic.
 
-## 3. Cloudflare Pages or Koyeb Failure
+## 2A. Warm-Standby Regional Failover
+
+Use this path only when the secondary-region Terraform profile is already
+provisioned.
+
+1. Confirm Terraform outputs expose `secondary_eks_cluster_name` and `secondary_db_endpoint`.
+2. Execute `.github/workflows/regional-failover.yml` or run `scripts/run_regional_failover.py`.
+3. Promote the secondary-region DB replica.
+4. Verify `https://<secondary-origin>/health/live` before cutover.
+5. Update Cloudflare API DNS to the secondary origin through the scripted cutover.
+6. Re-run `/health`, worker-consumption checks, and tenant-scoped API validation after cutover.
+
+## 3. Reference Managed-Platform Failure
 
 ### Detection
 
@@ -62,9 +85,10 @@ Repository evidence:
 
 1. Identify whether the issue is isolated to Cloudflare Pages, Koyeb, or both.
 2. Roll back the affected Cloudflare deployment if the dashboard release regressed.
-3. Redeploy the previous immutable backend release or prior successful Koyeb deployment for both `koyeb.yaml` and `koyeb-worker.yaml` if the API or worker regressed.
+3. Redeploy the prior known-good Koyeb revision for both `koyeb.yaml` and `koyeb-worker.yaml` if the API or worker regressed.
 4. Confirm the Koyeb runtime secrets include `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`, and the audited `TRUSTED_PROXY_CIDRS` allowlist before reopening traffic.
-5. Re-validate health checks, authentication flows, queue consumption, and dashboard-to-API connectivity.
+5. Treat this as preview/reference recovery only; it is not part of the supported production DR contract without external immutable release and regional failover controls.
+6. Re-validate health checks, authentication flows, queue consumption, and dashboard-to-API connectivity.
 
 ## 4. Secret Exposure or Rotation Event
 

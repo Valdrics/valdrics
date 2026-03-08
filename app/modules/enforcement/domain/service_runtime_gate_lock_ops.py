@@ -4,7 +4,7 @@ import asyncio
 import time
 from typing import Any, cast
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 from sqlalchemy import update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import SQLAlchemyError
@@ -69,7 +69,7 @@ async def acquire_gate_evaluation_lock(
             event="contended",
         ).inc()
         await service.db.rollback()
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=503,
             detail={
                 "code": "gate_lock_timeout",
@@ -109,7 +109,7 @@ async def acquire_gate_evaluation_lock(
             source=source.value,
             event="not_acquired",
         ).inc()
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail={
                 "code": "gate_lock_contended",

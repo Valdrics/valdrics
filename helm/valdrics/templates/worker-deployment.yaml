@@ -41,6 +41,10 @@ spec:
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}
+            - name: API_URL
+              value: {{ include "valdrics.apiUrl" . | quote }}
+            - name: FRONTEND_URL
+              value: {{ include "valdrics.frontendUrl" . | quote }}
             - name: REDIS_HOST
               value: {{ .Values.redis.host | quote }}
             - name: REDIS_PORT

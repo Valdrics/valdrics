@@ -37,15 +37,16 @@ describe('Landing Component Data Hardening', () => {
 
 	it('keeps public navigation focused on buyer-facing routes and signal copy', () => {
 		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.label === 'Product')).toBe(true);
-		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.label === 'Live Demo')).toBe(true);
-		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.label === 'ROI')).toBe(true);
+		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.label === 'Pricing')).toBe(true);
 		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.label === 'Enterprise')).toBe(true);
 		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.label === 'Resources')).toBe(true);
 		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#product')).toBe(true);
+		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#signal-map')).toBe(false);
+		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#simulator')).toBe(false);
 		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#workflow')).toBe(false);
 		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/#benefits')).toBe(false);
 		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/pricing')).toBe(true);
-		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/#simulator')).toBe(true);
+		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/#simulator')).toBe(false);
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/enterprise')).toBe(true);
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/resources')).toBe(true);
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(false);

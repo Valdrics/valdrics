@@ -1,7 +1,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, cast
 import structlog
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -102,6 +102,14 @@ class BaseZombieDetector(ABC):
             "region": self.region,
             "scanned_at": datetime.now(timezone.utc).isoformat(),
             "total_monthly_waste": Decimal("0"),
+            "scan_completeness": {
+                "provider": self.provider_name,
+                "region": self.region,
+                "degraded": False,
+                "error_count": 0,
+                "plugins": {},
+                "overall_error": None,
+            },
         }
 
         # Initialize results keys for all plugins
@@ -113,12 +121,12 @@ class BaseZombieDetector(ABC):
             tasks = [self._run_plugin_with_timeout(plugin) for plugin in self.plugins]
 
             async def run_and_checkpoint(
-                task: Awaitable[tuple[str, list[dict[str, Any]]]],
-            ) -> tuple[str, list[dict[str, Any]]]:
-                cat_key, items = await task
+                task: Awaitable[tuple[str, list[dict[str, Any]], dict[str, Any]]],
+            ) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
+                cat_key, items, metadata = await task
                 if on_category_complete:
                     await on_category_complete(cat_key, items)
-                return cat_key, items
+                return cat_key, items, metadata
 
             checkpoint_tasks = [run_and_checkpoint(t) for t in tasks]
             plugin_results = await asyncio.gather(
@@ -136,20 +144,47 @@ class BaseZombieDetector(ABC):
                     raise plugin_result
                 category_key: str = plugin.category_key
                 items: list[dict[str, Any]] = []
+                plugin_metadata: dict[str, Any] = {
+                    "status": "failed",
+                    "item_count": 0,
+                    "validated_item_count": 0,
+                    "error": "Unhandled plugin result failure",
+                    "error_type": "UnhandledPluginResult",
+                }
                 if isinstance(plugin_result, Exception):
                     logger.error(
                         "plugin_scan_unhandled_exception",
                         plugin=plugin.category_key,
                         error=str(plugin_result),
                     )
-                elif isinstance(plugin_result, tuple):
-                    category_key, items = plugin_result
+                    plugin_metadata = {
+                        "status": "failed",
+                        "item_count": 0,
+                        "validated_item_count": 0,
+                        "error": str(plugin_result),
+                        "error_type": type(plugin_result).__name__,
+                    }
+                elif (
+                    isinstance(plugin_result, tuple)
+                    and len(plugin_result) == 3
+                ):
+                    category_key, items, plugin_metadata = plugin_result
                 else:
                     logger.error(
                         "plugin_scan_invalid_result_type",
                         plugin=plugin.category_key,
                         result_type=type(plugin_result).__name__,
                     )
+                    plugin_metadata = {
+                        "status": "failed",
+                        "item_count": 0,
+                        "validated_item_count": 0,
+                        "error": (
+                            "Invalid plugin result type "
+                            f"{type(plugin_result).__name__}"
+                        ),
+                        "error_type": "InvalidResultType",
+                    }
                 # BE-ZD-5: Robust Regional Validation
                 # Prevent cross-region data leakage by ensuring all items match detector region
                 validated_items = []
@@ -170,6 +205,17 @@ class BaseZombieDetector(ABC):
                     validated_items.append(item)
 
                 results[category_key] = validated_items
+                plugin_metadata = dict(plugin_metadata or {})
+                plugin_metadata["item_count"] = int(len(items))
+                plugin_metadata["validated_item_count"] = int(len(validated_items))
+                completeness = results["scan_completeness"]
+                assert isinstance(completeness, dict)
+                cast(dict[str, Any], completeness)["plugins"][category_key] = plugin_metadata
+                if plugin_metadata.get("status") != "ok":
+                    cast(dict[str, Any], completeness)["degraded"] = True
+                    cast(dict[str, Any], completeness)["error_count"] = int(
+                        completeness.get("error_count", 0)
+                    ) + 1
 
             # Calculate the total monthly waste across all items
             total = Decimal("0")
@@ -196,12 +242,23 @@ class BaseZombieDetector(ABC):
                 "zombie_scan_failed", provider=self.provider_name, error=str(e)
             )
             results["error"] = str(e)
+            completeness = results["scan_completeness"]
+            assert isinstance(completeness, dict)
+            cast(dict[str, Any], completeness)["degraded"] = True
+            cast(dict[str, Any], completeness)["overall_error"] = str(e)
+            cast(dict[str, Any], completeness)["error_count"] = int(
+                completeness.get("error_count", 0)
+            ) + 1
+
+        results["partial_results"] = bool(
+            cast(dict[str, Any], results["scan_completeness"]).get("degraded")
+        )
 
         return results
 
     async def _run_plugin_with_timeout(
         self, plugin: ZombiePlugin
-    ) -> tuple[str, list[dict[str, Any]]]:
+    ) -> tuple[str, list[dict[str, Any]], dict[str, Any]]:
         """Wraps plugin execution with a generic timeout."""
         from app.modules.optimization.domain.cloud_api_budget import (
             cloud_api_scan_context,
@@ -223,17 +280,29 @@ class BaseZombieDetector(ABC):
                 plugin=plugin.category_key,
             ):
                 items = await asyncio.wait_for(scan_coro, timeout=timeout)
-            return plugin.category_key, items
+            return plugin.category_key, items, {
+                "status": "ok",
+                "error": None,
+                "error_type": None,
+            }
 
         except asyncio.TimeoutError:
             logger.error("plugin_timeout", plugin=plugin.category_key)
-            return plugin.category_key, []
+            return plugin.category_key, [], {
+                "status": "timeout",
+                "error": "Plugin scan timed out",
+                "error_type": "TimeoutError",
+            }
         except asyncio.CancelledError:
             # O4: Propagate cancellation
             raise
         except ZOMBIE_PLUGIN_SCAN_RECOVERABLE_EXCEPTIONS as e:
             logger.error("plugin_scan_failed", plugin=plugin.category_key, error=str(e))
-            return plugin.category_key, []
+            return plugin.category_key, [], {
+                "status": "failed",
+                "error": str(e),
+                "error_type": type(e).__name__,
+            }
 
     @abstractmethod
     async def _execute_plugin_scan(self, plugin: ZombiePlugin) -> List[Dict[str, Any]]:

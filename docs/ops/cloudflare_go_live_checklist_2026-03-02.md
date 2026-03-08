@@ -1,4 +1,12 @@
-# Cloudflare Go-Live Checklist (valdrics.com) - 2026-03-02
+# Historical Preview Checklist: Cloudflare Go-Live (valdrics.com) - 2026-03-02
+
+Status: historical preview/reference artifact only.
+
+This checklist captured an earlier Cloudflare Pages + Koyeb preview path. It is
+not part of the supported production deployment contract today. Use
+`docs/DEPLOYMENT.md`, `docs/architecture/failover.md`, and
+`docs/runbooks/disaster_recovery.md` as the current source of truth for
+production deployment and recovery posture.
 
 Purpose: one pass, operator-ready checklist for production readiness of `valdrics.com` on Cloudflare Pages + Koyeb API.
 

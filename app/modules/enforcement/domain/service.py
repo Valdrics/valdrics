@@ -99,6 +99,7 @@ from app.shared.core.approval_permissions import user_has_approval_permission
 from app.shared.core.config import get_settings
 from app.shared.core.pricing import PricingTier, get_tenant_tier, get_tier_limit  # noqa: F401
 from app.shared.core.ops_metrics import (
+    ENFORCEMENT_APPROVAL_TOKEN_EVENTS_TOTAL,  # noqa: F401
     ENFORCEMENT_EXPORT_EVENTS_TOTAL,  # noqa: F401
     ENFORCEMENT_RESERVATION_DRIFT_USD_TOTAL,
     ENFORCEMENT_RESERVATION_RECONCILIATIONS_TOTAL,

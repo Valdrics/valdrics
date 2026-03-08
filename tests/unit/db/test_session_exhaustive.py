@@ -75,18 +75,37 @@ class TestSessionExhaustive:
                 else:
                     importlib.reload(session_mod)
 
-    def test_production_ssl_requirement(self, clean_session_module):
-        """Test that production mode requires CA cert for SSL."""
+    def test_production_ssl_require_uses_system_trust_when_ca_not_pinned(
+        self, clean_session_module
+    ):
+        """Production require mode should use verified system trust without a pinned CA."""
         mock_settings = MagicMock()
         mock_settings.DATABASE_URL = "postgresql+asyncpg://user@host/db"
         mock_settings.DB_SSL_MODE = "require"
         mock_settings.DB_SSL_CA_CERT_PATH = ""
         mock_settings.is_production = True
+        mock_settings.TESTING = False
+        mock_settings.DEBUG = False
+        mock_settings.DB_POOL_SIZE = 10
+        mock_settings.DB_MAX_OVERFLOW = 20
+        mock_settings.DB_POOL_TIMEOUT = 30
+        mock_settings.DB_POOL_RECYCLE = 3600
+        mock_settings.DB_ECHO = False
 
-        with patch("app.shared.core.config.get_settings", return_value=mock_settings):
+        ssl_ctx = MagicMock()
+        with (
+            patch("app.shared.core.config.get_settings", return_value=mock_settings),
+            patch("ssl.create_default_context", return_value=ssl_ctx),
+            patch("sqlalchemy.ext.asyncio.create_async_engine") as mock_create_engine,
+            patch("sqlalchemy.event.listen"),
+        ):
             importlib.reload(session_mod)
-            with pytest.raises(ValueError, match="DB_SSL_CA_CERT_PATH is mandatory"):
-                session_mod._get_db_runtime()
+            session_mod._get_db_runtime()
+
+        _, kwargs = mock_create_engine.call_args
+        assert kwargs["connect_args"]["ssl"] is ssl_ctx
+        assert ssl_ctx.verify_mode == session_mod.ssl.CERT_REQUIRED
+        assert ssl_ctx.check_hostname is True
 
     def test_invalid_ssl_mode(self, clean_session_module):
         """Test error on invalid SSL mode."""

@@ -45,22 +45,20 @@ class OIDCService:
     @staticmethod
     async def get_discovery_doc() -> dict[str, Any]:
         """
-        Standard OIDC Discovery document.
-        Enhanced with recommended fields for AWS/GCP federated identity compatibility.
+        Workload-identity discovery document.
+
+        Only advertise OIDC surfaces that are implemented in the checked-in API:
+        issuer metadata plus JWKS publication for signed tenant tokens.
         """
         settings = get_settings()
         base_url = settings.API_URL.rstrip("/")
         return {
             "issuer": base_url,
             "jwks_uri": f"{base_url}/.well-known/jwks.json",
-            "authorization_endpoint": f"{base_url}/oidc/auth",  # Placeholder for standard compliance
-            "token_endpoint": f"{base_url}/api/v1/public/oidc/token",  # Placeholder for federated exchange
-            "scopes_supported": ["openid", "profile", "email"],
-            "response_types_supported": ["id_token", "token"],
             "subject_types_supported": ["public"],
             "id_token_signing_alg_values_supported": ["RS256"],
-            "token_endpoint_auth_methods_supported": ["none"],
             "claims_supported": ["sub", "iss", "aud", "iat", "exp", "nbf", "tenant_id"],
+            "workload_identity_profile": "signed_jwks_identity_tokens",
         }
 
     @staticmethod

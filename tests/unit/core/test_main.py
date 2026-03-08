@@ -17,8 +17,10 @@ from app.main import (
     _resolve_csrf_settings,
 )
 from app.main import settings
+from app.shared.core.enforcement_http_boundary import enforcement_domain_exception_handler
 from app.shared.core import app_runtime
 from app.shared.core.exceptions import ValdricsException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 from app.shared.db.session import get_db
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -193,6 +195,29 @@ async def test_http_exception_handler_sanitizes_5xx_in_production():
     assert body["code"] == "HTTP_ERROR"
     assert body["message"] == "An unexpected internal error occurred"
     assert "password" not in body["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_enforcement_domain_exception_handler_translates_to_http_boundary():
+    request = _make_request(path="/api/v1/enforcement/actions/requests", method="POST")
+    exc = EnforcementDomainError(status_code=409, detail="lease already held")
+
+    with patch("app.main.API_ERRORS_TOTAL") as mock_metric:
+        response = await enforcement_domain_exception_handler(
+            request, exc, http_exception_handler
+        )
+        mock_metric.labels.assert_called_once_with(
+            path="/api/v1/enforcement/actions/requests",
+            method="POST",
+            status_code=409,
+        )
+
+    assert response.status_code == 409
+    from typing import cast
+
+    body = json.loads(cast(bytes, response.body))
+    assert body["code"] == "HTTP_ERROR"
+    assert body["message"] == "lease already held"
 
 
 @pytest.mark.asyncio

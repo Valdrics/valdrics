@@ -1,5 +1,21 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
+
+	const heroHighlights = [
+		{
+			label: 'Setup',
+			value: 'Quick start, onboarding flow, and operating guidance'
+		},
+		{
+			label: 'Validation',
+			value: 'Technical validation and public proof links for buyer diligence'
+		},
+		{
+			label: 'Reference',
+			value: 'API docs, plan access, and legal commitments in one place'
+		}
+	] as const;
 </script>
 
 <svelte:head>
@@ -10,86 +26,120 @@
 	/>
 </svelte:head>
 
-<section class="container mx-auto px-6 py-12 space-y-8">
-	<header class="space-y-3">
-		<h1 class="text-3xl font-bold text-ink-100">Documentation</h1>
-		<p class="text-ink-300 max-w-3xl">
-			Use these guides to set up Valdrics quickly, align teams on spend ownership, and execute
-			reliable cost decisions with confidence.
-		</p>
-	</header>
-
-	<div class="grid gap-6 md:grid-cols-2">
-		<article class="glass-panel space-y-3">
-			<h2 class="text-xl font-semibold">Quick Start</h2>
-			<p class="text-ink-300">
-				Connect providers, select your operating window, and prioritize the biggest cost and risk
-				signals first.
-			</p>
-			<a href={`${base}/`} class="btn btn-secondary w-fit">Open Dashboard</a>
-		</article>
-
-		<article class="glass-panel space-y-3">
-			<h2 class="text-xl font-semibold">API Reference</h2>
-			<p class="text-ink-300">
-				Review endpoint groups and request examples for product and platform integrations.
-			</p>
-			<a href={`${base}/docs/api`} class="btn btn-secondary w-fit">Open API Docs</a>
-		</article>
-
-		<article class="glass-panel space-y-3">
-			<h2 class="text-xl font-semibold">Technical Validation</h2>
-			<p class="text-ink-300">
-				Review the buyer-safe capability-to-API validation summary used for technical diligence.
-			</p>
-			<a href={`${base}/docs/technical-validation`} class="btn btn-secondary w-fit">
-				Open Technical Validation
-			</a>
-		</article>
-
-		<article class="glass-panel space-y-3">
-			<h2 class="text-xl font-semibold">Resources Hub</h2>
-			<p class="text-ink-300">
-				Read practical playbooks for cloud, GreenOps, SaaS, and license optimization programs.
-			</p>
-			<div class="flex flex-wrap gap-3">
-				<a href={`${base}/resources`} class="btn btn-secondary w-fit">Open Resources</a>
-				<a href={`${base}/insights`} class="btn btn-secondary w-fit">Open Insights</a>
-			</div>
-		</article>
-
-		<article class="glass-panel space-y-3">
-			<h2 class="text-xl font-semibold">Plan & Access</h2>
-			<p class="text-ink-300">
-				See current plan capabilities, billing model, and upgrade paths for advanced workflows.
-			</p>
-			<a href={`${base}/pricing`} class="btn btn-secondary w-fit">View Pricing</a>
-		</article>
-
-		<article class="glass-panel space-y-3">
-			<h2 class="text-xl font-semibold">Policies & Legal</h2>
-			<p class="text-ink-300">
-				Review service terms, privacy commitments, and data handling posture.
-			</p>
-			<div class="flex flex-wrap gap-3">
-				<a href={`${base}/terms`} class="btn btn-secondary w-fit">Terms</a>
-				<a href={`${base}/privacy`} class="btn btn-secondary w-fit">Privacy</a>
-			</div>
-		</article>
-	</div>
-
-	<div class="glass-panel space-y-3">
-		<h2 class="text-xl font-semibold">Repository Docs</h2>
-		<p class="text-ink-300">
-			Deployment and runbook documentation is maintained in the project repository.
-		</p>
-		<a
-			href="https://github.com/Valdrics-AI/valdrics/tree/main/docs"
-			target="_blank"
-			rel="noopener noreferrer"
-			class="btn btn-secondary w-fit"
-		>
-			Browse GitHub Docs
+<PublicMarketingPage
+	kicker="Documentation"
+	title="Documentation"
+	subtitle="Use these guides to set up Valdrics quickly, align teams on spend ownership, and execute reliable cost decisions with confidence."
+	heroVariant="narrow"
+>
+	{#snippet heroActions()}
+		<a href={`${base}/docs/api`} class="btn btn-primary">Open API Docs</a>
+		<a href={`${base}/docs/technical-validation`} class="btn btn-secondary">
+			Open Technical Validation
 		</a>
-	</div>
-</section>
+		<a href={`${base}/pricing`} class="btn btn-secondary">View Pricing</a>
+	{/snippet}
+
+	{#snippet heroMeta()}
+		{#each heroHighlights as item (item.label)}
+			<article class="public-page__meta-item">
+				<strong>{item.label}</strong>
+				<span>{item.value}</span>
+			</article>
+		{/each}
+	{/snippet}
+
+	{#snippet children()}
+		<section class="public-page__section" aria-labelledby="docs-sections-title">
+			<div class="public-page__section-head">
+				<p class="public-page__eyebrow">Core guides</p>
+				<h2 id="docs-sections-title" class="public-page__section-title">Pick the documentation surface that matches the question</h2>
+				<p class="public-page__section-subtitle">
+					Move from quick start to APIs, validation, resources, and policies without leaving the public
+					documentation flow.
+				</p>
+			</div>
+
+			<div class="public-page__grid public-page__grid--2">
+					<article class="public-page__card public-page__card--accent public-page__card--featured">
+						<h2 class="public-page__card-title">Quick Start</h2>
+					<p class="public-page__card-copy">
+						Start a workspace, connect your first providers, and prioritize the biggest cost and risk
+						signals first.
+					</p>
+					<a href={`${base}/auth/login?mode=signup`} class="btn btn-secondary">Start Free Workspace</a>
+				</article>
+
+					<article class="public-page__card public-page__card--dark">
+						<h2 class="public-page__card-title">API Reference</h2>
+					<p class="public-page__card-copy">
+						Review endpoint groups and request examples for product and platform integrations.
+					</p>
+					<a href={`${base}/docs/api`} class="btn btn-secondary">Open API Docs</a>
+				</article>
+
+					<article class="public-page__card public-page__card--featured">
+						<h2 class="public-page__card-title">Technical Validation</h2>
+					<p class="public-page__card-copy">
+						Review the buyer-safe capability-to-API validation summary used for technical diligence.
+					</p>
+					<a href={`${base}/docs/technical-validation`} class="btn btn-secondary">
+						Open Technical Validation
+					</a>
+				</article>
+
+				<article class="public-page__card">
+					<h2 class="public-page__card-title">Resources Hub</h2>
+					<p class="public-page__card-copy">
+						Read practical playbooks for cloud, GreenOps, SaaS, and license optimization programs.
+					</p>
+					<div class="public-page__actions-row">
+						<a href={`${base}/resources`} class="btn btn-secondary">Open Resources</a>
+						<a href={`${base}/insights`} class="btn btn-secondary">Open Insights</a>
+					</div>
+				</article>
+
+				<article class="public-page__card">
+					<h2 class="public-page__card-title">Plan & Access</h2>
+					<p class="public-page__card-copy">
+						See current plan capabilities, billing model, and upgrade paths for advanced workflows.
+					</p>
+					<a href={`${base}/pricing`} class="btn btn-secondary">View Pricing</a>
+				</article>
+
+				<article class="public-page__card">
+					<h2 class="public-page__card-title">Policies & Legal</h2>
+					<p class="public-page__card-copy">
+						Review service terms, privacy commitments, and data handling posture.
+					</p>
+					<div class="public-page__actions-row">
+						<a href={`${base}/terms`} class="btn btn-secondary">Terms</a>
+						<a href={`${base}/privacy`} class="btn btn-secondary">Privacy</a>
+					</div>
+				</article>
+			</div>
+		</section>
+
+		<section class="public-page__section">
+				<div class="public-page__band public-page__band--accent">
+				<div class="public-page__band-copy">
+					<p class="public-page__eyebrow">Repository docs</p>
+					<h2 class="public-page__section-title">Repository Docs</h2>
+					<p class="public-page__section-subtitle">
+						Deployment and runbook documentation is maintained in the project repository.
+					</p>
+				</div>
+				<div class="public-page__actions-row">
+					<a
+						href="https://github.com/Valdrics-AI/valdrics/tree/main/docs"
+						target="_blank"
+						rel="noopener noreferrer"
+						class="btn btn-secondary"
+					>
+						Browse GitHub Docs
+					</a>
+				</div>
+			</div>
+		</section>
+	{/snippet}
+</PublicMarketingPage>

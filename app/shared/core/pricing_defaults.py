@@ -3,12 +3,14 @@ Centralized Pricing Defaults
 Consolidates resource costs across providers and regions.
 """
 
+AVERAGE_BILLING_MONTH_HOURS = 730
+
 # Standardized hourly rates (USD)
 DEFAULT_RATES = {
     "aws": {
         "volume": {
-            "gp2": 0.10 / 720,  # $0.10/GB-month
-            "gp3": 0.08 / 720,  # $0.08/GB-month
+            "gp2": 0.10 / AVERAGE_BILLING_MONTH_HOURS,  # $0.10/GB-month
+            "gp3": 0.08 / AVERAGE_BILLING_MONTH_HOURS,  # $0.08/GB-month
         },
         "ip": 0.005,  # $0.005/hour for unused EIP
         "instance": {
@@ -28,7 +30,7 @@ DEFAULT_RATES = {
         },
         "redshift": 0.25,  # $0.25/hour per node
         "sagemaker": 0.15,  # $0.15/hour per endpoint instance
-        "ecr": 0.10 / 720,  # $0.10/GB-month
+        "ecr": 0.10 / AVERAGE_BILLING_MONTH_HOURS,  # $0.10/GB-month
         # OpenSearch on-demand baseline rates (hourly)
         "opensearch": {
             "t3.small.search": 0.036,
@@ -47,24 +49,24 @@ DEFAULT_RATES = {
     "gcp": {
         "ip": 0.01,  # ~$7.20/month
         "instance": {
-            "gpu": 1500.0 / 730,  # ~$1500/month
-            "n1-standard": 100.0 / 730,
-            "micro": 5.0 / 730,
-            "default": 50.0 / 730,
+            "gpu": 1500.0 / AVERAGE_BILLING_MONTH_HOURS,  # ~$1500/month
+            "n1-standard": 100.0 / AVERAGE_BILLING_MONTH_HOURS,
+            "micro": 5.0 / AVERAGE_BILLING_MONTH_HOURS,
+            "default": 50.0 / AVERAGE_BILLING_MONTH_HOURS,
         },
-        "disk": 0.04 / 730,  # $0.04/GB-month (standard)
-        "image": 0.05 / 730,
+        "disk": 0.04 / AVERAGE_BILLING_MONTH_HOURS,  # $0.04/GB-month (standard)
+        "image": 0.05 / AVERAGE_BILLING_MONTH_HOURS,
     },
     "azure": {
         "ip": 0.004,  # ~$2.90/month
         "instance": {
-            "gpu": 1200.0 / 730,
-            "standard_d": 150.0 / 730,
-            "standard_b": 20.0 / 730,
-            "default": 100.0 / 730,
+            "gpu": 1200.0 / AVERAGE_BILLING_MONTH_HOURS,
+            "standard_d": 150.0 / AVERAGE_BILLING_MONTH_HOURS,
+            "standard_b": 20.0 / AVERAGE_BILLING_MONTH_HOURS,
+            "default": 100.0 / AVERAGE_BILLING_MONTH_HOURS,
         },
-        "disk": 0.05 / 730,
-        "image": 0.03 / 730,
+        "disk": 0.05 / AVERAGE_BILLING_MONTH_HOURS,
+        "image": 0.03 / AVERAGE_BILLING_MONTH_HOURS,
         # Provisioned throughput unit approximation for Azure OpenAI.
         # Note: exact billing varies by model/region and should be overridden by live catalogs.
         "azure_openai_ptu": {

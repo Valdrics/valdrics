@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Callable, Mapping, cast
 from uuid import UUID
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 from sqlalchemy import select
 
 from app.models.enforcement import (
@@ -94,7 +94,7 @@ def normalize_policy_approval_routing_rules(
         return []
 
     if len(rules) > 64:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="approval_routing_rules cannot exceed 64 rules",
         )
@@ -103,25 +103,25 @@ def normalize_policy_approval_routing_rules(
     seen_rule_ids: set[str] = set()
     for index, raw_rule in enumerate(rules, start=1):
         if not isinstance(raw_rule, Mapping):
-            raise HTTPException(
+            raise EnforcementDomainError(
                 status_code=422,
                 detail=f"approval_routing_rules[{index}] must be an object",
             )
 
         rule_id = str(raw_rule.get("rule_id") or "").strip()
         if not rule_id:
-            raise HTTPException(
+            raise EnforcementDomainError(
                 status_code=422,
                 detail=f"approval_routing_rules[{index}].rule_id is required",
             )
         if len(rule_id) > 64:
-            raise HTTPException(
+            raise EnforcementDomainError(
                 status_code=422,
                 detail=f"approval_routing_rules[{index}].rule_id exceeds 64 chars",
             )
         rule_key = rule_id.lower()
         if rule_key in seen_rule_ids:
-            raise HTTPException(
+            raise EnforcementDomainError(
                 status_code=422,
                 detail=f"Duplicate approval routing rule_id: {rule_id}",
             )
@@ -140,17 +140,17 @@ def normalize_policy_approval_routing_rules(
             else None
         )
         if min_delta is not None and min_delta < Decimal("0"):
-            raise HTTPException(
+            raise EnforcementDomainError(
                 status_code=422,
                 detail=f"approval_routing_rules[{index}].min_monthly_delta_usd must be >= 0",
             )
         if max_delta is not None and max_delta < Decimal("0"):
-            raise HTTPException(
+            raise EnforcementDomainError(
                 status_code=422,
                 detail=f"approval_routing_rules[{index}].max_monthly_delta_usd must be >= 0",
             )
         if min_delta is not None and max_delta is not None and min_delta > max_delta:
-            raise HTTPException(
+            raise EnforcementDomainError(
                 status_code=422,
                 detail=(
                     f"approval_routing_rules[{index}] min_monthly_delta_usd "
@@ -163,7 +163,7 @@ def normalize_policy_approval_routing_rules(
         if raw_required_permission is not None:
             required_permission = normalize_approval_permission(raw_required_permission)
             if required_permission is None:
-                raise HTTPException(
+                raise EnforcementDomainError(
                     status_code=422,
                     detail=(
                         f"approval_routing_rules[{index}].required_permission must be one of "
@@ -174,7 +174,7 @@ def normalize_policy_approval_routing_rules(
 
         raw_separation = raw_rule.get("require_requester_reviewer_separation")
         if raw_separation is not None and not isinstance(raw_separation, bool):
-            raise HTTPException(
+            raise EnforcementDomainError(
                 status_code=422,
                 detail=(
                     f"approval_routing_rules[{index}].require_requester_reviewer_separation "
@@ -377,7 +377,6 @@ def resolve_export_manifest_signing_secret(
         configured_secret=str(
             getattr(settings, "ENFORCEMENT_EXPORT_SIGNING_SECRET", "") or ""
         ),
-        fallback_secret=str(getattr(settings, "SUPABASE_JWT_SECRET", "") or ""),
     )
 
 

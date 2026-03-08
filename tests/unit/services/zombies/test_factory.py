@@ -45,10 +45,8 @@ def test_get_detector_aws_global_region_hint_uses_connection_region():
 
 def test_get_detector_aws_global_region_hint_falls_back_to_config_default():
     conn = SimpleNamespace(provider="aws", region="")
-    with patch(
-        "app.shared.core.connection_state.get_settings",
-        return_value=SimpleNamespace(AWS_DEFAULT_REGION="eu-central-1"),
-    ):
+    with patch("app.shared.core.connection_state.get_settings") as mock_get_settings:
+        mock_get_settings.return_value = SimpleNamespace(AWS_DEFAULT_REGION="eu-central-1")
         detector = ZombieDetectorFactory.get_detector(conn, region="global")
     assert type(detector).__name__ == "AWSZombieDetector"
     assert detector.region == "eu-central-1"
