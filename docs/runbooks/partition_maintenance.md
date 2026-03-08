@@ -41,8 +41,10 @@ Recommended cadence:
 - `create`: daily (or at least weekly)
 - `validate`: daily (or at least weekly) and alert if missing partitions are detected
 
-If you run this via `pg_cron`, ensure only one instance runs at a time.
-The script uses a Postgres advisory lock to prevent concurrent runs.
+If you run this from the internal scheduler or external automation, ensure only
+one instance runs at a time. The script uses a Postgres advisory lock to
+prevent concurrent runs, and any internal API trigger should remain protected
+by `X-Internal-Job-Secret`.
 
 ## Evidence Capture (Procurement / Scale Sign-off)
 
@@ -60,4 +62,3 @@ The evidence payload includes:
 
 - This runbook assumes Postgres. SQLite/testing does not support range partitioning.
 - Retention (archive/drop) is currently only implemented for `cost_records` partitions.
-

@@ -8,6 +8,7 @@ const PUBLIC_EXACT_PATHS = new Set<string>([
 	'/privacy',
 	'/blog',
 	'/insights',
+	'/proof',
 	'/enterprise',
 	'/talk-to-sales',
 	'/status'

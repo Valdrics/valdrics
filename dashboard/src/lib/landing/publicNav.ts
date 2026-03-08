@@ -12,8 +12,6 @@ export interface PublicContactChannel {
 
 export const PUBLIC_PRIMARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/#product', label: 'Product' },
-	{ href: '/#signal-map', label: 'Live Demo' },
-	{ href: '/#simulator', label: 'ROI' },
 	{ href: '/pricing', label: 'Pricing' },
 	{ href: '/enterprise', label: 'Enterprise' },
 	{ href: '/resources', label: 'Resources' }
@@ -21,9 +19,8 @@ export const PUBLIC_PRIMARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 
 export const PUBLIC_RESOURCES_DROPDOWN_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/resources', label: 'Resource Hub' },
-	{ href: '/#trust', label: 'Proof' },
 	{ href: '/docs', label: 'Docs' },
-	{ href: '/blog', label: 'Blog' },
+	{ href: '/proof', label: 'Proof Pack' },
 	{ href: '/insights', label: 'Insights' }
 ]);
 
@@ -35,8 +32,6 @@ export const PUBLIC_SECONDARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 
 export const PUBLIC_MOBILE_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/#product', label: 'Product' },
-	{ href: '/#signal-map', label: 'Live Demo' },
-	{ href: '/#simulator', label: 'ROI' },
 	{ href: '/pricing', label: 'Pricing' },
 	{ href: '/enterprise', label: 'Enterprise' },
 	{ href: '/resources', label: 'Resources' }
@@ -47,11 +42,10 @@ export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/docs/api', label: 'API Reference' },
 	{ href: '/resources', label: 'Resources' },
 	{ href: '/enterprise', label: 'Enterprise' },
-	{ href: '/blog', label: 'Blog' },
 	{ href: '/insights', label: 'Insights' },
+	{ href: '/proof', label: 'Proof Pack' },
 	{ href: '/talk-to-sales', label: 'Talk to Sales' },
 	{ href: '/pricing', label: 'Pricing' },
-	{ href: '/#trust', label: 'Trust' },
 	{ href: '/privacy', label: 'Privacy' },
 	{ href: '/terms', label: 'Terms' },
 	{ href: '/status', label: 'Status' }
@@ -67,9 +61,7 @@ export const PUBLIC_FOOTER_BADGES: readonly string[] = Object.freeze([
 	'Start Free at $0',
 	'Owner-assigned actions',
 	'Safe approvals',
-	'Cloud + SaaS + ITAM',
-	'Enterprise-ready security',
-	'Usage-based scaling'
+	'Enterprise-ready security'
 ]);
 
 export const PUBLIC_FOOTER_SUBTITLE =

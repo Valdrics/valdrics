@@ -8,6 +8,8 @@ global:
   baseDomain: valdrics.ai
   # -- Subdomain for the API service
   subdomain: api
+  # -- Subdomain for the frontend/dashboard service
+  frontendSubdomain: dashboard
 
 # -- Number of API replicas
 # Default to HA-safe API capacity for rolling upgrades and fail-closed controls.
@@ -213,8 +215,8 @@ enforcementWebhook:
   # -- Create ValidatingWebhookConfiguration for pre-provision gate
   enabled: false
   # -- Webhook failure policy: Ignore (fail-open) or Fail (fail-closed).
-  # When set to Fail, chart guardrails require API HA (replicaCount>=2 or autoscaling.minReplicas>=2).
-  failurePolicy: Ignore
+  # Enterprise default is fail-closed; explicit soft-rollout overrides must opt back into Ignore.
+  failurePolicy: Fail
   # -- Admission webhook timeout in seconds (recommended <= 2)
   timeoutSeconds: 2
   # -- Match policy for equivalent resources
@@ -245,9 +247,9 @@ enforcementWebhook:
   # -- Optional webhook match conditions (CEL expressions) for fine-grained request filtering.
   matchConditions: []
   # -- Disruption budget for API pods serving admission gate traffic.
-  # For failurePolicy=Fail this must remain enabled with maxUnavailable=1.
+  # Enterprise default keeps this enabled with maxUnavailable=1 for fail-closed safety.
   podDisruptionBudget:
-    enabled: false
+    enabled: true
     maxUnavailable: 1
   service:
     namespace: ""

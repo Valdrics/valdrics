@@ -25,7 +25,7 @@ jobs:
   # JOB 1: QUALITY ASSURANCE
   test:
     name: Run Unit Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # Default test-runtime contract (step-level env can override as needed).
       ENVIRONMENT: "development"
@@ -49,15 +49,15 @@ jobs:
       CODECARBON_LOG_LEVEL: "info"
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -70,6 +70,8 @@ jobs:
           ENVIRONMENT: "production"
           TESTING: "false"
           DATABASE_URL: "postgresql+asyncpg://test:test@localhost/test"
+          API_URL: "https://api.validation.example.com"
+          FRONTEND_URL: "https://app.validation.example.com"
           CSRF_SECRET_KEY: "ci-csrf-secret-key-32-chars-min-000000"
           ENCRYPTION_KEY: "ci-encryption-key-32-chars-min-00000000"
           KDF_SALT: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
@@ -87,6 +89,7 @@ jobs:
           GITHUB_ACTIONS_TOKEN: ""
           CORS_ORIGINS: "[\"https://dashboard.example.com\"]"
           SENTRY_DSN: "https://example@sentry.io/1"
+          OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
           FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK: "true"
           FORECASTER_BREAK_GLASS_REASON: "CI preflight while prophet is not bundled."
         run: |
@@ -168,7 +171,7 @@ PY
             --fail-under=95
 
       - name: Upload Coverage Report
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238 # v4
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
@@ -177,7 +180,7 @@ PY
   # JOB 1A: ALEMBIC FORWARD/ROLLBACK SMOKE
   migration-smoke:
     name: Alembic Upgrade/Downgrade Smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:16
@@ -209,15 +212,15 @@ PY
       REDIS_URL: "redis://localhost:6379/0"
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -234,18 +237,18 @@ PY
   # JOB 1C: TYPE SAFETY (2026 Strict Standards)
   type-check:
     name: Backend Type Check (Mypy)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -259,7 +262,7 @@ PY
   # JOB 1B: DASHBOARD QUALITY (2026 Frontend Standards)
   dashboard-quality:
     name: Dashboard Lint / Typecheck / Unit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # Required so `$env/static/public` exports are available during
       # `svelte-kit sync` and type generation in CI.
@@ -268,20 +271,20 @@ PY
       PUBLIC_SUPABASE_ANON_KEY: "ci-public-anon-key"
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
       - name: Cache pnpm dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.pnpm-store
           key: pnpm-${{ runner.os }}-${{ hashFiles('dashboard/pnpm-lock.yaml') }}
@@ -360,20 +363,20 @@ PY
   # JOB 2: CARBON EMISSIONS (GreenOps 2.0)
   emissions:
     name: Carbon Footprint Report
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -397,7 +400,7 @@ PY
           "
 
       - name: Upload Emissions Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: carbon-emissions-report
           path: emissions.csv
@@ -406,21 +409,21 @@ PY
   # JOB 3: SECURITY CHECKS
   security:
     name: Security Audits
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 0 # Required for secret scanning
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -432,7 +435,7 @@ PY
         run: docker build -t valdrics-api-ci:${{ github.sha }} .
 
       - name: Scan API Image for CVEs (Trivy)
-        uses: aquasecurity/trivy-action@0.33.1
+        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
         with:
           image-ref: valdrics-api-ci:${{ github.sha }}
           format: table
@@ -441,16 +444,16 @@ PY
           severity: CRITICAL,HIGH
 
       - name: Terraform Security Scan (tfsec)
-        uses: aquasecurity/tfsec-action@v1.0.3
+        uses: aquasecurity/tfsec-action@b466648d6e39e7c75324f25d83891162a721f2d6 # v1.0.3
         with:
           working_directory: ./terraform
           soft_fail: false
           additional_args: --minimum-severity HIGH
 
       - name: Terraform Lint (tflint)
-        uses: terraform-linters/setup-tflint@v4
+        uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4
         with:
-          tflint_version: latest
+          tflint_version: v0.60.0
       - name: Run TFLint
         run: |
           cd terraform
@@ -458,17 +461,17 @@ PY
           tflint --minimum-failure-severity=error -f compact
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
       - name: Cache pnpm dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.pnpm-store
           key: pnpm-${{ runner.os }}-${{ hashFiles('dashboard/pnpm-lock.yaml') }}
@@ -481,20 +484,20 @@ PY
   # JOB 4: ENTERPRISE TDD RELEASE GATE
   enterprise-tdd-quality-gate:
     name: Enterprise TDD Quality Gate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test, migration-smoke, type-check, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -588,7 +591,7 @@ PY
         run: uv run python3 scripts/run_enterprise_tdd_gate.py
 
       - name: Upload Enterprise Gate Coverage Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always() && hashFiles('coverage-enterprise-gate.xml') != ''
         with:
           name: enterprise-tdd-gate-coverage
@@ -598,7 +601,7 @@ PY
   # JOB 5: DASHBOARD BROWSER GATES (split e2e/a11y/perf)
   dashboard-browser-gates:
     name: Dashboard ${{ matrix.label }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
@@ -620,15 +623,15 @@ PY
             artifact: playwright-report-perf
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Python (for backend)
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -637,17 +640,17 @@ PY
         run: uv sync --locked --dev
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4
         with:
           version: ${{ env.PNPM_VERSION }}
 
       - name: Cache pnpm dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.pnpm-store
           key: pnpm-${{ runner.os }}-${{ hashFiles('dashboard/pnpm-lock.yaml') }}
@@ -658,7 +661,7 @@ PY
         run: pnpm install --frozen-lockfile
 
       - name: Cache Playwright Browsers
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
@@ -678,7 +681,7 @@ PY
           API_URL: http://127.0.0.1:8000
 
       - name: Upload Playwright Report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: ${{ matrix.artifact }}
@@ -688,13 +691,13 @@ PY
   # JOB 6: HELM CHART VALIDATION
   helm-lint:
     name: Validate Helm Chart
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Set up Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
         with:
           version: v3.14.0
 

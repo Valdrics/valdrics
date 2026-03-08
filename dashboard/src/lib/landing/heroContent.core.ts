@@ -6,7 +6,6 @@ export const HERO_ROLE_CONTEXT: Record<
 		controlTitle: string;
 		metricsTitle: string;
 		subtitle: string;
-		quantPromise: string;
 		primaryIntent: string;
 	}
 > = Object.freeze({
@@ -15,7 +14,6 @@ export const HERO_ROLE_CONTEXT: Record<
 		metricsTitle: 'From cost dashboards to fast, owner-led engineering action.',
 		subtitle:
 			'Valdrics routes cloud and software spend alerts to the right owner, approval path, and measurable outcome.',
-		quantPromise: 'Target 10-18% controllable spend recovery opportunity in the first 90 days.',
 		primaryIntent: 'engineering_control'
 	},
 	finops: {
@@ -23,8 +21,6 @@ export const HERO_ROLE_CONTEXT: Record<
 		metricsTitle: 'From visibility reporting to faster financial action.',
 		subtitle:
 			'Valdrics turns spend findings into accountable owners, approval paths, and measurable savings.',
-		quantPromise:
-			'Target 30-50% fewer late-cycle escalations by formalizing ownership and action paths.',
 		primaryIntent: 'finops_governance'
 	},
 	security: {
@@ -32,8 +28,6 @@ export const HERO_ROLE_CONTEXT: Record<
 		metricsTitle: 'From anomalies to safe, reviewable remediation.',
 		subtitle:
 			'Valdrics routes spend and change findings through checks, approvals, and reviewable execution.',
-		quantPromise:
-			'Target measurable reduction in risky manual changes by enforcing pre-change checks.',
 		primaryIntent: 'security_governance'
 	},
 	cfo: {
@@ -41,8 +35,6 @@ export const HERO_ROLE_CONTEXT: Record<
 		metricsTitle: 'From spend metrics to board-ready economic control.',
 		subtitle:
 			'Valdrics ties spend movement to accountable owners, approvals, and measurable outcomes before variance compounds.',
-		quantPromise:
-			'Target stronger forecast confidence with one decision loop across engineering and finance.',
 		primaryIntent: 'executive_briefing'
 	}
 });
@@ -79,15 +71,15 @@ export const HERO_OUTCOME_CHIPS = Object.freeze([
 
 export const ABOVE_FOLD_TRUST_RAIL = Object.freeze([
 	{
-		title: 'Safe access model',
+		title: 'Read-only access',
 		detail: 'Read-only cloud roles where supported. Connector secrets stay encrypted at rest.'
 	},
 	{
-		title: 'Fast first rollout',
+		title: '3-10 day rollout',
 		detail: 'First production workflow typically goes live in 3-10 business days.'
 	},
 	{
-		title: 'Reviewable proof',
+		title: 'Export-ready records',
 		detail: 'Decision history and export-ready records support finance, security, and buyer review.'
 	}
 ]);

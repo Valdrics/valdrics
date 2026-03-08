@@ -3,8 +3,32 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
+variable "secondary_aws_region" {
+  description = "Secondary AWS region used for warm-standby regional failover."
+  type        = string
+  default     = "us-west-2"
+}
+
 variable "environment" {
   default = "prod"
+}
+
+variable "cluster_name" {
+  description = "Primary EKS cluster name prefix."
+  type        = string
+  default     = "valdrics"
+}
+
+variable "secondary_cluster_name" {
+  description = "Secondary EKS cluster name prefix used for regional failover."
+  type        = string
+  default     = "valdrics-dr"
+}
+
+variable "enable_multi_region_failover" {
+  description = "Provision warm-standby secondary-region infrastructure and cross-region database replication."
+  type        = bool
+  default     = false
 }
 
 variable "external_id" {

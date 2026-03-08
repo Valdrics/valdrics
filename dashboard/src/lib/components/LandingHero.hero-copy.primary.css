@@ -16,7 +16,7 @@
 	max-width: 76rem;
 	width: 100%;
 	margin: 0 auto;
-	row-gap: 0.15rem;
+	row-gap: 0.28rem;
 	justify-items: stretch;
 	text-align: center;
 }
@@ -125,18 +125,18 @@
 
 .landing-subtitle {
 	color: #dbe7f2;
-	font-size: 1.25rem;
+	font-size: 1.32rem;
 	font-weight: 500;
-	line-height: 1.55;
-	max-width: 44rem;
+	line-height: 1.58;
+	max-width: 48rem;
 	margin: 0 auto;
 	justify-self: center;
 }
 
 @media (min-width: 1024px) {
 	.landing-subtitle {
-		font-size: 1.34rem;
-		max-width: 60rem;
+		font-size: 1.48rem;
+		max-width: 52rem;
 	}
 }
 
@@ -145,7 +145,7 @@
 	flex-wrap: wrap;
 	gap: 0.75rem;
 	justify-content: center;
-	margin-top: 1.35rem;
+	margin-top: 1.05rem;
 	justify-self: center;
 	width: 100%;
 }
@@ -196,22 +196,31 @@
 }
 
 .landing-cta-note {
-	margin: 0.58rem 0 0 0;
-	color: var(--color-ink-300);
-	font-size: 0.97rem;
+	margin: 0.32rem 0 0 0;
+	color: var(--color-ink-200);
+	font-size: 0.96rem;
 	line-height: 1.45;
 	text-align: center;
-	max-width: 38rem;
+	max-width: 44rem;
 	justify-self: center;
 }
 
+.landing-cta-note strong {
+	color: #eef6fb;
+	font-weight: 800;
+}
+
+.landing-cta-note .landing-cta-link {
+	margin-left: 0.32rem;
+}
+
 .landing-hero-credibility {
-	margin-top: 1rem;
+	margin-top: 0.7rem;
 	display: grid;
-	gap: 0.6rem;
+	gap: 0;
 	justify-items: center;
 	width: 100%;
-	max-width: 62rem;
+	max-width: 52rem;
 	justify-self: center;
 }
 
@@ -225,24 +234,29 @@
 }
 
 .landing-hero-proof-rail {
-	display: grid;
-	gap: 0.55rem;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.5rem;
 	width: 100%;
-	max-width: 58rem;
-}
-
-@media (min-width: 960px) {
-	.landing-hero-proof-rail {
-		grid-template-columns: repeat(3, minmax(0, 1fr));
-	}
+	max-width: 42rem;
 }
 
 .landing-hero-proof-rail-item {
-	border: 1px solid rgb(255 255 255 / 0.08);
-	border-radius: var(--radius-lg);
-	padding: 0.72rem 0.82rem;
-	background: linear-gradient(145deg, rgb(10 16 24 / 0.62), rgb(8 14 21 / 0.36));
-	text-align: left;
+	margin: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid rgb(255 255 255 / 0.12);
+	border-radius: 9999px;
+	padding: 0.48rem 0.82rem;
+	background: rgb(10 16 24 / 0.66);
+	text-align: center;
+	font-size: 0.82rem;
+	font-weight: 800;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: #eef6fb;
 }
 
 .landing-hero-proof-rail-title {
@@ -263,9 +277,9 @@
 
 .landing-hero-credibility-note {
 	margin: 0;
-	max-width: 44rem;
-	font-size: 0.92rem;
-	line-height: 1.45;
+	max-width: 48rem;
+	font-size: 0.95rem;
+	line-height: 1.52;
 	color: #dce8f3;
 	text-align: center;
 }
@@ -273,6 +287,56 @@
 .landing-hero-credibility-note .landing-cta-link {
 	margin: 0 0.18rem;
 	display: inline-flex;
+}
+
+@media (max-width: 640px) {
+	.landing-copy {
+		row-gap: 0.22rem;
+	}
+
+	.landing-kicker {
+		max-width: 20rem;
+		gap: 0.35rem;
+	}
+
+	.landing-kicker-text {
+		font-size: 0.92rem;
+		line-height: 1.4;
+	}
+
+	.landing-title {
+		margin-top: 0.72rem;
+		margin-bottom: 0.62rem;
+		max-width: 11.8ch;
+		font-size: clamp(2.4rem, 10.8vw, 3.7rem);
+		line-height: 0.98;
+	}
+
+	.landing-subtitle {
+		font-size: 1.12rem;
+		line-height: 1.5;
+		max-width: 20rem;
+	}
+
+	.landing-cta {
+		margin-top: 0.88rem;
+	}
+
+	.landing-hero-credibility {
+		margin-top: 0.55rem;
+		max-width: 20rem;
+	}
+
+	.landing-hero-proof-rail {
+		gap: 0.45rem;
+		max-width: 20rem;
+	}
+
+	.landing-hero-proof-rail-item {
+		padding: 0.4rem 0.68rem;
+		font-size: 0.74rem;
+		letter-spacing: 0.05em;
+	}
 }
 
 .landing-trust-inline {

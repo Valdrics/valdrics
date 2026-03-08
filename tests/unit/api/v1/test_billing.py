@@ -57,8 +57,9 @@ async def test_get_public_plans_db_success(mock_db: AsyncMock) -> None:
 
     plans = await get_public_plans(MagicMock(), mock_db)
 
-    assert len(plans) == 1
-    assert plans[0]["name"] == "Starter"
+    assert len(plans) >= 2
+    assert plans[0]["id"] == "free"
+    assert any(plan["name"] == "Starter" for plan in plans)
 
 
 @pytest.mark.asyncio
@@ -66,6 +67,7 @@ async def test_get_public_plans_fallback_on_error(mock_db: AsyncMock) -> None:
     mock_db.execute.side_effect = SQLAlchemyError("DB Fail")
     plans = await get_public_plans(MagicMock(), mock_db)
     assert len(plans) > 0
+    assert plans[0]["id"] == "free"
 
 
 @pytest.mark.asyncio

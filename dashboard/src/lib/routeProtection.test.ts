@@ -40,6 +40,7 @@ describe('isPublicPath', () => {
 		expect(isPublicPath('/resources')).toBe(true);
 		expect(isPublicPath('/blog')).toBe(true);
 		expect(isPublicPath('/insights')).toBe(true);
+		expect(isPublicPath('/proof')).toBe(true);
 		expect(isPublicPath('/resources/valdrics-enterprise-one-pager.md')).toBe(true);
 		expect(isPublicPath('/enterprise')).toBe(true);
 		expect(isPublicPath('/talk-to-sales')).toBe(true);

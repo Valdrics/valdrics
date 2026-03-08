@@ -1,9 +1,4 @@
-"""
-OIDC Discovery Router
-
-Exposes the standard OIDC metadata and JWKS endpoints required
-for cloud providers to verify Valdrics identity tokens.
-"""
+"""OIDC workload-identity discovery and JWKS routes."""
 
 from typing import Any, Dict
 from fastapi import APIRouter, Request
@@ -18,7 +13,7 @@ router = APIRouter(tags=["oidc"])
 @router.get("/.well-known/openid-configuration")
 @auth_limit
 async def oidc_discovery(request: Request) -> Dict[str, Any]:
-    """Standard OIDC Discovery document."""
+    """Workload-identity discovery document for implemented OIDC surfaces."""
     return await OIDCService.get_discovery_doc()
 
 

@@ -32,11 +32,11 @@ async def test_get_discovery_doc():
     doc = await OIDCService.get_discovery_doc()
     assert "issuer" in doc
     assert "jwks_uri" in doc
-    assert "authorization_endpoint" in doc
-    assert "token_endpoint" in doc
-    assert "scopes_supported" in doc
     assert "claims_supported" in doc
     assert "tenant_id" in doc["claims_supported"]
+    assert doc["workload_identity_profile"] == "signed_jwks_identity_tokens"
+    assert "authorization_endpoint" not in doc
+    assert "token_endpoint" not in doc
 
 
 @pytest.mark.asyncio

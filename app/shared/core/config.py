@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     OTEL_EXPORTER_OTLP_ENDPOINT: Optional[str] = None  # Added for D5: Telemetry Sink
     OTEL_EXPORTER_OTLP_INSECURE: bool = False  # SEC-07: Secure Tracing
     OTEL_LOGS_EXPORT_ENABLED: bool = True
+    INTERNAL_METRICS_AUTH_TOKEN: Optional[str] = None
     CSRF_SECRET_KEY: Optional[str] = None  # SEC-01: CSRF
     CSRF_TEST_SECRET_KEY: Optional[str] = None
     TESTING: bool = False
@@ -105,6 +106,10 @@ class Settings(BaseSettings):
     WEBHOOK_ALLOWED_DOMAINS: list[str] = []  # Allowlist for generic webhook retries
     WEBHOOK_REQUIRE_HTTPS: bool = True
     WEBHOOK_BLOCK_PRIVATE_IPS: bool = True
+    ALLOW_INSECURE_OUTBOUND_TLS: bool = False
+    OUTBOUND_TLS_BREAK_GLASS_REASON: Optional[str] = None
+    OUTBOUND_TLS_BREAK_GLASS_EXPIRES_AT: Optional[str] = None
+    OUTBOUND_TLS_BREAK_GLASS_MAX_DURATION_HOURS: int = 24
     MARKETING_SUBSCRIBE_WEBHOOK_URL: Optional[str] = None
     # Only trust X-Forwarded-For when the deployment path is explicitly trusted.
     TRUST_PROXY_HEADERS: bool = False
@@ -259,6 +264,9 @@ class Settings(BaseSettings):
     BACKGROUND_JOB_DEAD_LETTER_RETENTION_DAYS: int = 30
     BACKGROUND_JOB_RETENTION_PURGE_BATCH_SIZE: int = 1000
     BACKGROUND_JOB_RETENTION_PURGE_MAX_BATCHES: int = 20
+    AUDIT_LOG_RETENTION_DAYS: int = 90
+    AUDIT_LOG_RETENTION_PURGE_BATCH_SIZE: int = 5000
+    AUDIT_LOG_RETENTION_PURGE_MAX_BATCHES: int = 20
     # Cost-record retention is plan-aware and enforced by the maintenance sweep.
     COST_RECORD_RETENTION_PURGE_BATCH_SIZE: int = 5000
     COST_RECORD_RETENTION_PURGE_MAX_BATCHES: int = 50
@@ -435,6 +443,7 @@ class Settings(BaseSettings):
     ENFORCEMENT_GATE_TIMEOUT_SECONDS: float = 2.0
     ENFORCEMENT_GLOBAL_ABUSE_GUARD_ENABLED: bool = True
     ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP: int = 1200
+    ENFORCEMENT_APPROVAL_TOKEN_SECRET: Optional[str] = None
     ENFORCEMENT_EXPORT_SIGNING_SECRET: Optional[str] = None
     ENFORCEMENT_EXPORT_SIGNING_KID: str = "enforcement-export-hmac-v1"
     ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS: int = 86400

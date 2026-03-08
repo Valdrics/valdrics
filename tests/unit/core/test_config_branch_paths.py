@@ -60,6 +60,7 @@ def _settings() -> Settings:
     s.REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE = False
     s.ENFORCEMENT_GATE_TIMEOUT_SECONDS = 2.0
     s.ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP = 1200
+    s.ENFORCEMENT_APPROVAL_TOKEN_SECRET = "p" * 48
     s.ENFORCEMENT_EXPORT_SIGNING_SECRET = None
     s.ENFORCEMENT_EXPORT_SIGNING_KID = "kid"
     s.ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS = 86400
@@ -308,13 +309,13 @@ def test_config_environment_safety_branch_paths() -> None:
     s.ADMIN_API_KEY = "a" * 32
     s.REDIS_URL = "redis://localhost:6379"
     s.RATELIMIT_ENABLED = False
-    s.CORS_ORIGINS = ["http://localhost:5173"]
-    s.API_URL = "http://api.example.com"
-    s.FRONTEND_URL = "http://app.example.com"
+    s.CORS_ORIGINS = ["https://app.example.com"]
+    s.API_URL = "https://api.example.com"
+    s.FRONTEND_URL = "https://app.example.com"
     s.WEB_CONCURRENCY = "not-an-int"
     with patch("app.shared.core.config.structlog.get_logger") as get_logger:
         s._validate_environment_safety()
-    assert get_logger.return_value.warning.call_count >= 2
+    assert get_logger.return_value.warning.call_count == 0
 
     s = _settings()
     s.TRUSTED_PROXY_CIDRS = ["not-a-cidr"]
@@ -400,4 +401,14 @@ def test_config_enforcement_guardrails_rejects_too_many_fallback_signing_keys() 
     s = _settings()
     s.ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS = ["x" * 32] * 6
     with pytest.raises(ValueError, match="at most 5 keys"):
+        s._validate_enforcement_guardrails()
+
+
+def test_config_enforcement_guardrails_rejects_short_approval_token_secret() -> None:
+    s = _settings()
+    s.ENFORCEMENT_APPROVAL_TOKEN_SECRET = "short"
+    with pytest.raises(
+        ValueError,
+        match="ENFORCEMENT_APPROVAL_TOKEN_SECRET must be >= 32 chars",
+    ):
         s._validate_enforcement_guardrails()

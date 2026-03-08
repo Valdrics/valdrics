@@ -43,7 +43,7 @@ resource "aws_subnet" "public" {
     Name                                           = "valdrics-public-${count.index}-${var.environment}"
     Environment                                    = var.environment
     "kubernetes.io/role/elb"                       = "1"
-    "kubernetes.io/cluster/valdrics-${var.environment}" = "shared"
+    "kubernetes.io/cluster/${var.cluster_name}-${var.environment}" = "shared"
   }
 }
 
@@ -57,7 +57,7 @@ resource "aws_subnet" "private" {
     Name                                           = "valdrics-private-${count.index}-${var.environment}"
     Environment                                    = var.environment
     "kubernetes.io/role/internal-elb"              = "1"
-    "kubernetes.io/cluster/valdrics-${var.environment}" = "shared"
+    "kubernetes.io/cluster/${var.cluster_name}-${var.environment}" = "shared"
   }
 }
 

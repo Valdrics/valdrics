@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 from uuid import UUID
 from enum import Enum
 import structlog
-from app.modules.optimization.adapters.common.remediation_clients import (
+from app.modules.optimization.domain.actions.recoverable_errors import (
     remediation_action_recoverable_exceptions,
 )
 from app.shared.core.retry import tenacity_retry

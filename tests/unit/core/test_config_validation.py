@@ -12,6 +12,8 @@ FAKE_PAYSTACK_PUBLIC_KEY = "example_paystack_public_TEST_KEY_NOT_REAL_1234567890
 FAKE_SUPABASE_SECRET = "x" * 32
 FAKE_CSRF_SECRET = "c" * 32
 FAKE_ENCRYPTION_KEY = "k" * 32
+FAKE_API_URL = "https://api.example.com"
+FAKE_FRONTEND_URL = "https://app.example.com"
 # Base64 for 'KDF_SALT_FOR_TESTING_32_BYTES_OK' (32 bytes)
 FAKE_KDF_SALT = "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="
 
@@ -118,6 +120,8 @@ class TestSettingsValidation:
                 ENVIRONMENT="production",
                 DATABASE_URL="postgresql+asyncpg://test",
                 REDIS_URL="redis://localhost:6379",
+                API_URL=FAKE_API_URL,
+                FRONTEND_URL=FAKE_FRONTEND_URL,
                 SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                 ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
                 CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
@@ -225,12 +229,11 @@ class TestSettingsValidation:
                 "REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE=true"
             ) in str(exc.value)
 
-    def test_settings_cors_origins_localhost_warning(self):
-        """Test warning for localhost origins in production."""
+    def test_settings_cors_origins_localhost_rejected_in_production(self):
+        """Strict environments must reject localhost/browser-dev origins."""
         with patch.dict("os.environ", {}, clear=True):
-            with patch("structlog.get_logger") as mock_logger:
-                # Must pass valid prod config to avoid other validation errors
-                settings = Settings(
+            with pytest.raises(ValidationError) as exc:
+                Settings(
                     DATABASE_URL="sqlite+aiosqlite:///:memory:",
                     SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                     ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
@@ -252,21 +255,14 @@ class TestSettingsValidation:
                     _env_file=None,
                 )
 
-                assert settings.is_production is True
-                # Should log warning about localhost in production
-                mock_logger.return_value.warning.assert_called()
-                # Find the call with "cors_localhost_in_production"
-                warning_calls = [
-                    args[0]
-                    for args, kwargs in mock_logger.return_value.warning.call_args_list
-                ]
-                assert "cors_localhost_in_production" in warning_calls
+            assert "CORS_ORIGINS" in str(exc.value)
+            assert "localhost" in str(exc.value)
 
-    def test_settings_frontend_url_https_warning(self):
-        """Test warning for non-HTTPS frontend URL in production."""
+    def test_settings_frontend_url_requires_https_in_production(self):
+        """Strict environments must reject non-HTTPS frontend URLs."""
         with patch.dict("os.environ", {}, clear=True):
-            with patch("structlog.get_logger") as mock_logger:
-                settings = Settings(
+            with pytest.raises(ValidationError) as exc:
+                Settings(
                     DATABASE_URL="sqlite+aiosqlite:///:memory:",
                     SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                     ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
@@ -276,7 +272,7 @@ class TestSettingsValidation:
                     TESTING=False,
                     ADMIN_API_KEY="a" * 32,  # Valid API Key
                     ENVIRONMENT="production",
-                    API_URL="https://api.example.com",  # Set to HTTPS to isolate frontend warning
+                    API_URL=FAKE_API_URL,
                     FRONTEND_URL="http://example.com",  # HTTP instead of HTTPS
                     REDIS_URL="redis://localhost:6379",
                     GROQ_API_KEY="g" * 32,
@@ -286,15 +282,7 @@ class TestSettingsValidation:
                     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     _env_file=None,
                 )
-
-                assert settings.is_production is True
-                # Should log warning about HTTP in production
-                mock_logger.return_value.warning.assert_called()
-                warning_calls = [
-                    args[0]
-                    for args, kwargs in mock_logger.return_value.warning.call_args_list
-                ]
-                assert "insecure_url_in_production" in warning_calls
+            assert "FRONTEND_URL must use an explicit https:// URL" in str(exc.value)
 
     def test_settings_llm_provider_key_missing(self):
         """Test validation when LLM provider is set but key is missing."""
@@ -358,6 +346,8 @@ class TestSettingsValidation:
                 ENVIRONMENT="production",
                 DATABASE_URL="sqlite+aiosqlite:///:memory:",
                 REDIS_URL="redis://localhost:6379",
+                API_URL=FAKE_API_URL,
+                FRONTEND_URL=FAKE_FRONTEND_URL,
                 SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                 ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,  # Required in prod
                 CSRF_SECRET_KEY=FAKE_CSRF_SECRET,  # Required in prod
@@ -406,6 +396,8 @@ class TestSettingsValidation:
                 Settings(
                     ENVIRONMENT="production",
                     DATABASE_URL="postgresql+asyncpg://test",
+                    API_URL=FAKE_API_URL,
+                    FRONTEND_URL=FAKE_FRONTEND_URL,
                     SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                     ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
                     CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
@@ -423,8 +415,9 @@ class TestSettingsValidation:
                     SLACK_CHANNEL_ID="C0123456789",
                     _env_file=None,
                 )
-            assert "SAAS_STRICT_INTEGRATIONS forbids env-based settings in production" in str(
-                exc.value
+            assert (
+                "SAAS_STRICT_INTEGRATIONS forbids env-based workflow and routing settings"
+                in str(exc.value)
             )
 
     def test_settings_saas_strict_integrations_allows_shared_slack_bot_token(self):
@@ -434,6 +427,8 @@ class TestSettingsValidation:
                 ENVIRONMENT="production",
                 DATABASE_URL="postgresql+asyncpg://test",
                 REDIS_URL="redis://localhost:6379",
+                API_URL=FAKE_API_URL,
+                FRONTEND_URL=FAKE_FRONTEND_URL,
                 SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                 ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
                 CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
@@ -511,6 +506,8 @@ class TestSettingsValidation:
                 ENVIRONMENT="production",
                 DATABASE_URL="postgresql+asyncpg://test",
                 REDIS_URL="redis://localhost:6379",
+                API_URL=FAKE_API_URL,
+                FRONTEND_URL=FAKE_FRONTEND_URL,
                 SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                 ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
                 CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
@@ -558,6 +555,8 @@ class TestSettingsValidation:
             settings = Settings(
                 ENVIRONMENT="production",
                 DATABASE_URL="postgresql+asyncpg://test",
+                API_URL=FAKE_API_URL,
+                FRONTEND_URL=FAKE_FRONTEND_URL,
                 SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                 ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
                 CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
@@ -592,6 +591,37 @@ class TestSettingsValidation:
             assert "ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS key must be >= 32" in str(
                 exc.value
             )
+
+    def test_settings_rejects_short_enforcement_approval_token_secret(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    GROQ_API_KEY="g" * 32,
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET="short-key",
+                    _env_file=None,
+                )
+            assert "ENFORCEMENT_APPROVAL_TOKEN_SECRET must be >= 32 chars" in str(
+                exc.value
+            )
+
+    def test_settings_accepts_enforcement_approval_token_secret(self):
+        with patch.dict("os.environ", {}, clear=True):
+            settings = Settings(
+                DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
+                GROQ_API_KEY="g" * 32,
+                ENFORCEMENT_APPROVAL_TOKEN_SECRET="a" * 48,
+                _env_file=None,
+            )
+            assert settings.ENFORCEMENT_APPROVAL_TOKEN_SECRET == "a" * 48
 
     def test_settings_accepts_enforcement_fallback_signing_keys(self):
         with patch.dict("os.environ", {}, clear=True):

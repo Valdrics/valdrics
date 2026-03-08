@@ -21,6 +21,8 @@ from app.shared.adapters.resource_usage_projection import (
 from app.shared.core.credentials import HybridCredentials
 from app.shared.core.currency import convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
+from app.shared.core.http import get_http_client
+from app.shared.core.outbound_tls import resolve_outbound_tls_verification
 
 logger = structlog.get_logger()
 
@@ -52,6 +54,17 @@ HYBRID_RESOURCE_USAGE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
 )
 
 
+class _SharedAsyncClientContext:
+    def __init__(self, client: httpx.AsyncClient):
+        self._client = client
+
+    async def __aenter__(self) -> httpx.AsyncClient:
+        return self._client
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
 async def _hybrid_get_request(
     *,
     url: str,
@@ -59,11 +72,13 @@ async def _hybrid_get_request(
     params: dict[str, Any] | None,
     verify_ssl: bool,
 ) -> httpx.Response:
-    async with httpx.AsyncClient(
+    client = get_http_client(verify=verify_ssl)
+    return await client.get(
+        url,
+        headers=headers,
+        params=params,
         timeout=_NATIVE_TIMEOUT_SECONDS,
-        verify=verify_ssl,
-    ) as client:
-        return await client.get(url, headers=headers, params=params)
+    )
 
 
 class HybridAdapter(HybridNativeConnectorMixin, BaseAdapter):
@@ -148,17 +163,22 @@ class HybridAdapter(HybridNativeConnectorMixin, BaseAdapter):
     def _resolve_verify_ssl(self) -> bool:
         raw = self._connector_config.get("verify_ssl")
         if isinstance(raw, bool):
-            return raw
-        raw = self._connector_config.get("ssl_verify")
-        if isinstance(raw, bool):
-            return raw
-        return True
+            verify_requested = raw
+        else:
+            raw = self._connector_config.get("ssl_verify")
+            verify_requested = raw if isinstance(raw, bool) else True
+        try:
+            return resolve_outbound_tls_verification(verify_requested)
+        except ValueError as exc:
+            raise ExternalAPIError(str(exc)) from exc
 
     def _native_timeout_seconds(self) -> float:
         return _NATIVE_TIMEOUT_SECONDS
 
-    def _http_async_client(self, *, timeout: float, verify: bool) -> httpx.AsyncClient:
-        return httpx.AsyncClient(timeout=timeout, verify=verify)
+    def _http_async_client(self, *, timeout: float, verify: bool) -> _SharedAsyncClientContext:
+        return _SharedAsyncClientContext(
+            get_http_client(verify=verify, timeout=timeout)
+        )
 
     async def _convert_to_usd(self, amount_local: float, currency_code: str) -> float:
         return float(await convert_to_usd(amount_local, currency_code))

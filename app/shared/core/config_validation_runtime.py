@@ -2,9 +2,122 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 import ipaddress
+from urllib.parse import urlparse
 
-import structlog
+from app.shared.core.cors_policy import validate_strict_cors_allowed_origins
+
+
+def _is_truthy(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _normalize_environment(value: object) -> str:
+    return str(value or "").strip().lower()
+
+
+def _strict_environment(settings_obj: object, *, env_production: str, env_staging: str) -> bool:
+    return _normalize_environment(getattr(settings_obj, "ENVIRONMENT", "")) in {
+        env_production,
+        env_staging,
+    }
+
+
+def _parse_break_glass_expiry(raw_value: object) -> datetime:
+    normalized = str(raw_value or "").strip()
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    parsed = datetime.fromisoformat(normalized)
+    if parsed.tzinfo is None:
+        raise ValueError("timezone offset required")
+    return parsed.astimezone(timezone.utc)
+
+
+def _validate_break_glass_window(
+    *,
+    enabled: bool,
+    reason: object,
+    expires_at: object,
+    max_duration_hours: object,
+    strict_env: bool,
+    setting_prefix: str,
+) -> None:
+    if not strict_env or not enabled:
+        return
+
+    reason_text = str(reason or "").strip()
+    if len(reason_text) < 10:
+        raise ValueError(
+            f"{setting_prefix}_REASON must be configured (min 10 chars) when {setting_prefix}=true in staging/production."
+        )
+
+    expires_text = str(expires_at or "").strip()
+    if not expires_text:
+        raise ValueError(
+            f"{setting_prefix}_EXPIRES_AT must be configured (ISO-8601 with timezone) when {setting_prefix}=true in staging/production."
+        )
+
+    try:
+        expires_dt = _parse_break_glass_expiry(expires_text)
+    except ValueError as exc:
+        raise ValueError(
+            f"{setting_prefix}_EXPIRES_AT must be a valid ISO-8601 timestamp with timezone."
+        ) from exc
+
+    now_utc = datetime.now(timezone.utc)
+    if expires_dt <= now_utc:
+        raise ValueError(f"{setting_prefix}_EXPIRES_AT must be in the future.")
+
+    try:
+        max_hours = int(max_duration_hours)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{setting_prefix}_MAX_DURATION_HOURS must be a positive integer.") from exc
+    if max_hours < 1:
+        raise ValueError(f"{setting_prefix}_MAX_DURATION_HOURS must be >= 1.")
+    if expires_dt > now_utc + timedelta(hours=max_hours):
+        raise ValueError(
+            f"{setting_prefix}_EXPIRES_AT exceeds the configured max break-glass window of {max_hours} hour(s)."
+        )
+
+
+def _validate_strict_public_url(url: object, *, name: str) -> None:
+    candidate = str(url or "").strip()
+    if not candidate:
+        raise ValueError(f"{name} must be configured in staging/production.")
+
+    parsed = urlparse(candidate)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise ValueError(f"{name} must use an explicit https:// URL in staging/production.")
+    if parsed.username or parsed.password:
+        raise ValueError(f"{name} must not include embedded credentials.")
+    if parsed.query or parsed.fragment:
+        raise ValueError(f"{name} must not include query strings or fragments.")
+
+    hostname = str(parsed.hostname or "").strip().lower()
+    if not hostname or hostname == "localhost":
+        raise ValueError(f"{name} must not point at localhost in staging/production.")
+
+    try:
+        host_ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return
+
+    if (
+        host_ip.is_private
+        or host_ip.is_loopback
+        or host_ip.is_link_local
+        or host_ip.is_multicast
+        or host_ip.is_unspecified
+        or host_ip.is_reserved
+    ):
+        raise ValueError(
+            f"{name} must not resolve to a private or non-routable IP in staging/production."
+        )
 
 
 def validate_turnstile_config(
@@ -44,16 +157,52 @@ def validate_turnstile_config(
 
 def validate_integration_config(settings_obj: object, *, is_production: bool) -> None:
     """Validate SaaS integration strict mode constraints."""
-    if bool(getattr(settings_obj, "SAAS_STRICT_INTEGRATIONS", False)):
-        sconf = [
-            getattr(settings_obj, "SLACK_CHANNEL_ID", None),
-            getattr(settings_obj, "JIRA_BASE_URL", None),
-            getattr(settings_obj, "GITHUB_ACTIONS_TOKEN", None),
-        ]
-        if any(sconf) and is_production:
-            raise ValueError(
-                "SAAS_STRICT_INTEGRATIONS forbids env-based settings in production."
-            )
+    if not _is_truthy(getattr(settings_obj, "SAAS_STRICT_INTEGRATIONS", False)):
+        return
+
+    environment = _normalize_environment(getattr(settings_obj, "ENVIRONMENT", ""))
+    if environment not in {"production", "staging"} and not is_production:
+        return
+
+    violations: list[str] = []
+    direct_env_fields = (
+        "SLACK_CHANNEL_ID",
+        "JIRA_BASE_URL",
+        "JIRA_EMAIL",
+        "JIRA_API_TOKEN",
+        "JIRA_PROJECT_KEY",
+        "GITHUB_ACTIONS_OWNER",
+        "GITHUB_ACTIONS_REPO",
+        "GITHUB_ACTIONS_WORKFLOW_ID",
+        "GITHUB_ACTIONS_TOKEN",
+        "GITLAB_CI_PROJECT_ID",
+        "GITLAB_CI_TRIGGER_TOKEN",
+        "GENERIC_CI_WEBHOOK_URL",
+        "GENERIC_CI_WEBHOOK_BEARER_TOKEN",
+    )
+    for field_name in direct_env_fields:
+        value = getattr(settings_obj, field_name, None)
+        if isinstance(value, str):
+            if value.strip():
+                violations.append(field_name)
+        elif value is not None:
+            violations.append(field_name)
+
+    feature_toggles = (
+        "GITHUB_ACTIONS_ENABLED",
+        "GITLAB_CI_ENABLED",
+        "GENERIC_CI_WEBHOOK_ENABLED",
+    )
+    for field_name in feature_toggles:
+        if _is_truthy(getattr(settings_obj, field_name, False)):
+            violations.append(field_name)
+
+    if violations:
+        violation_text = ", ".join(sorted(set(violations)))
+        raise ValueError(
+            "SAAS_STRICT_INTEGRATIONS forbids env-based workflow and routing settings "
+            f"in staging/production: {violation_text}."
+        )
 
 
 def validate_environment_safety(
@@ -78,7 +227,7 @@ def validate_environment_safety(
         except ValueError as exc:
             raise ValueError(f"TRUSTED_PROXY_CIDRS contains invalid CIDR: {cidr}") from exc
 
-    environment = getattr(settings_obj, "ENVIRONMENT", "")
+    environment = _normalize_environment(getattr(settings_obj, "ENVIRONMENT", ""))
     if (
         bool(getattr(settings_obj, "TRUST_PROXY_HEADERS", False))
         and environment in {env_production, env_staging}
@@ -88,10 +237,20 @@ def validate_environment_safety(
             "TRUSTED_PROXY_CIDRS must be configured when TRUST_PROXY_HEADERS=true in staging/production."
         )
 
-    if bool(getattr(settings_obj, "is_production", False)) or environment == env_staging:
+    strict_env = environment in {env_production, env_staging}
+
+    if strict_env:
         admin_api_key = getattr(settings_obj, "ADMIN_API_KEY", None)
         if not admin_api_key or len(str(admin_api_key)) < 32:
             raise ValueError("ADMIN_API_KEY must be >= 32 chars in staging/production.")
+
+        internal_metrics_auth_token = str(
+            getattr(settings_obj, "INTERNAL_METRICS_AUTH_TOKEN", "") or ""
+        ).strip()
+        if internal_metrics_auth_token and len(internal_metrics_auth_token) < 32:
+            raise ValueError(
+                "INTERNAL_METRICS_AUTH_TOKEN must be >= 32 chars when configured."
+            )
 
         web_concurrency_raw = str(
             getattr(settings_obj, "WEB_CONCURRENCY", 1) or 1
@@ -121,14 +280,40 @@ def validate_environment_safety(
                 "for temporary break-glass usage."
             )
 
-        logger = structlog.get_logger()
-        cors_origins = getattr(settings_obj, "CORS_ORIGINS", [])
-        if any("localhost" in o or "127.0.0.1" in o for o in cors_origins):
-            logger.warning("cors_localhost_in_production")
+        _validate_strict_public_url(
+            getattr(settings_obj, "API_URL", None),
+            name="API_URL",
+        )
+        _validate_strict_public_url(
+            getattr(settings_obj, "FRONTEND_URL", None),
+            name="FRONTEND_URL",
+        )
 
-        for url in [getattr(settings_obj, "API_URL", None), getattr(settings_obj, "FRONTEND_URL", None)]:
-            if url and str(url).startswith("http://"):
-                logger.warning("insecure_url_in_production", url=url)
+        _validate_break_glass_window(
+            enabled=_is_truthy(getattr(settings_obj, "ALLOW_INSECURE_OUTBOUND_TLS", False)),
+            reason=getattr(settings_obj, "OUTBOUND_TLS_BREAK_GLASS_REASON", None),
+            expires_at=getattr(settings_obj, "OUTBOUND_TLS_BREAK_GLASS_EXPIRES_AT", None),
+            max_duration_hours=getattr(
+                settings_obj,
+                "OUTBOUND_TLS_BREAK_GLASS_MAX_DURATION_HOURS",
+                24,
+            ),
+            strict_env=True,
+            setting_prefix="OUTBOUND_TLS_BREAK_GLASS",
+        )
+
+        audit_retention_days = int(getattr(settings_obj, "AUDIT_LOG_RETENTION_DAYS", 0) or 0)
+        if audit_retention_days < 1:
+            raise ValueError("AUDIT_LOG_RETENTION_DAYS must be >= 1.")
+
+        setattr(
+            settings_obj,
+            "CORS_ORIGINS",
+            validate_strict_cors_allowed_origins(
+            list(getattr(settings_obj, "CORS_ORIGINS", []) or []),
+            frontend_url=str(getattr(settings_obj, "FRONTEND_URL", "") or ""),
+            ),
+        )
 
 
 def validate_remediation_guardrails(
@@ -168,6 +353,14 @@ def validate_enforcement_guardrails(settings_obj: object) -> None:
         raise ValueError("ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP must be >= 1.")
     if getattr(settings_obj, "ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP", 0) > 100000:
         raise ValueError("ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP must be <= 100000.")
+
+    approval_token_secret = str(
+        getattr(settings_obj, "ENFORCEMENT_APPROVAL_TOKEN_SECRET", "") or ""
+    ).strip()
+    if approval_token_secret and len(approval_token_secret) < 32:
+        raise ValueError(
+            "ENFORCEMENT_APPROVAL_TOKEN_SECRET must be >= 32 chars when provided."
+        )
 
     export_signing_secret = str(
         getattr(settings_obj, "ENFORCEMENT_EXPORT_SIGNING_SECRET", "") or ""
@@ -234,4 +427,3 @@ def validate_enforcement_guardrails(settings_obj: object) -> None:
             raise ValueError(
                 "Each ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS key must be >= 32 chars."
             )
-

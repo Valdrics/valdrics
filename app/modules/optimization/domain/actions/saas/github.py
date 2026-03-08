@@ -4,6 +4,7 @@ from app.models.remediation import RemediationAction
 from app.modules.optimization.domain.actions.saas.base import BaseSaaSAction
 from app.modules.optimization.domain.actions.base import ExecutionResult, ExecutionStatus, RemediationContext
 from app.modules.optimization.domain.actions.factory import RemediationActionFactory
+from app.shared.core.http import get_http_client
 import structlog
 
 logger = structlog.get_logger()
@@ -63,21 +64,21 @@ class GitHubRevokeSeatAction(BaseSaaSAction):
         }
 
         try:
-            async with httpx.AsyncClient(timeout=20.0) as client:
-                # GitHub Remove organization member API
-                url = f"https://api.github.com/orgs/{org}/members/{resource_id}"
-                response = await client.delete(url, headers=headers)
+            client = get_http_client()
+            # GitHub Remove organization member API
+            url = f"https://api.github.com/orgs/{org}/members/{resource_id}"
+            response = await client.delete(url, headers=headers, timeout=20.0)
 
-                if response.status_code not in {204, 404}:
-                    return ExecutionResult(
-                        status=ExecutionStatus.FAILED,
-                        resource_id=resource_id,
-                        action_taken=RemediationAction.REVOKE_GITHUB_SEAT.value,
-                        error_message=(
-                            f"GitHub API failed with status {response.status_code}: "
-                            f"{response.text[:200]}"
-                        ),
-                    )
+            if response.status_code not in {204, 404}:
+                return ExecutionResult(
+                    status=ExecutionStatus.FAILED,
+                    resource_id=resource_id,
+                    action_taken=RemediationAction.REVOKE_GITHUB_SEAT.value,
+                    error_message=(
+                        f"GitHub API failed with status {response.status_code}: "
+                        f"{response.text[:200]}"
+                    ),
+                )
         except httpx.HTTPError as exc:
             logger.warning("github_revoke_http_failed", error=str(exc), org=org)
             return ExecutionResult(

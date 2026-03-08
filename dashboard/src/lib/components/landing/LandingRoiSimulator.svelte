@@ -132,6 +132,22 @@
 
 		<div class="glass-panel landing-sim-results">
 			<p class="landing-proof-k">Scenario Delta</p>
+			<div class="landing-sim-metrics">
+				<div class="landing-sim-metric is-highlight is-primary">
+					<p>Potential monthly recovery</p>
+					<strong>{formatUsd(scenarioWasteRecoveryMonthlyUsd, currencyCode)}</strong>
+					<span>Recoverable waste from reactive versus managed execution.</span>
+				</div>
+				<div class="landing-sim-metric is-highlight">
+					<p>{normalizedScenarioWindowMonths}-month recovery</p>
+					<strong>{formatUsd(scenarioWasteRecoveryWindowUsd, currencyCode)}</strong>
+					<span>Directionally modeled over your selected decision window.</span>
+				</div>
+				<div class="landing-sim-metric is-context">
+					<p>Spend context used</p>
+					<strong>{formatUsd(monthlySpendUsd, currencyCode)} / month</strong>
+				</div>
+			</div>
 			<div
 				class="landing-sim-chart"
 				role="img"
@@ -154,21 +170,6 @@
 						></span>
 					</div>
 					<div class="landing-sim-bar-value">{formatUsd(scenarioWasteWithUsd, currencyCode)}</div>
-				</div>
-			</div>
-
-			<div class="landing-sim-metrics">
-				<div class="landing-sim-metric">
-					<p>Recoverable waste / month</p>
-					<strong>{formatUsd(scenarioWasteRecoveryMonthlyUsd, currencyCode)}</strong>
-				</div>
-				<div class="landing-sim-metric">
-					<p>Recoverable waste / {normalizedScenarioWindowMonths} months</p>
-					<strong>{formatUsd(scenarioWasteRecoveryWindowUsd, currencyCode)}</strong>
-				</div>
-				<div class="landing-sim-metric">
-					<p>Spend context used</p>
-					<strong>{formatUsd(monthlySpendUsd, currencyCode)} / month</strong>
 				</div>
 			</div>
 			<p class="landing-roi-note">

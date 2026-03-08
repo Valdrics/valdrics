@@ -3,9 +3,9 @@
 This plan outlines the infrastructure targets for scaling the platform.
 
 It assumes the repository-managed `Helm + Terraform (AWS/EKS)` profile as the
-primary scale path. The `Cloudflare Pages + Koyeb` profile remains a supported
-managed-platform deployment surface, but it is not the primary basis for the
-high-scale targets below.
+sole supported production scale path. The `Cloudflare Pages + Koyeb` manifests
+remain a managed-platform preview/reference surface only and are excluded from
+the enterprise scale commitments below.
 
 ## 1. Metric Targets
 
@@ -24,7 +24,7 @@ high-scale targets below.
 
 ### Compute Workloads (API + Workers)
 - **Current**: FastAPI API replicas plus Celery workers with Redis-backed coordination.
-- **Managed PaaS profile**: `koyeb.yaml` and `koyeb-worker.yaml` must be deployed together; the API manifest alone is not a supported runtime topology.
+- **Managed-platform preview**: `koyeb.yaml` and `koyeb-worker.yaml` must be deployed together if used for preview evaluation; the API manifest alone is not a supported runtime topology.
 - **1k+ Users**: Scale API and worker pools independently and keep scheduler-driven sweeps bounded.
 - **Auto-Scaling**: Horizontal Pod Autoscaling (HPA) based on CPU and queue depth when running the Helm profile.
 

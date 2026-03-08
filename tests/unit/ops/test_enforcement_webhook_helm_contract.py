@@ -56,9 +56,22 @@ def _find_kind(
 
 def _valid_enforcement_webhook_values() -> dict[str, object]:
     return {
+        "replicaCount": 2,
+        "autoscaling": {"enabled": False},
+        "deploymentStrategy": {
+            "type": "RollingUpdate",
+            "rollingUpdate": {"maxUnavailable": 0, "maxSurge": 1},
+        },
+        "affinity": {
+            "podAntiAffinity": {
+                "requiredDuringSchedulingIgnoredDuringExecution": [
+                    {"topologyKey": "kubernetes.io/hostname"}
+                ]
+            }
+        },
         "enforcementWebhook": {
             "enabled": True,
-            "failurePolicy": "Ignore",
+            "failurePolicy": "Fail",
             "timeoutSeconds": 2,
             "matchPolicy": "Equivalent",
             "sideEffects": "None",
@@ -84,7 +97,7 @@ def _valid_enforcement_webhook_values() -> dict[str, object]:
                     "expression": "request.resource.resource != 'leases'",
                 }
             ],
-            "podDisruptionBudget": {"enabled": False, "maxUnavailable": 1},
+            "podDisruptionBudget": {"enabled": True, "maxUnavailable": 1},
             "service": {"namespace": "valdrics", "name": "valdrics-api", "port": 80},
             "certManager": {"enabled": False, "injectorSecretName": ""},
             "caBundle": "",
@@ -344,7 +357,7 @@ def test_helm_webhook_enabled_renders_hardened_defaults_and_match_conditions() -
     webhooks = webhook_obj.get("webhooks")
     assert isinstance(webhooks, list) and webhooks
     webhook = webhooks[0]
-    assert webhook["failurePolicy"] == "Ignore"
+    assert webhook["failurePolicy"] == "Fail"
     assert webhook["timeoutSeconds"] == 2
     selector = webhook["namespaceSelector"]
     assert selector["matchExpressions"][0]["key"] == "kubernetes.io/metadata.name"
@@ -354,6 +367,27 @@ def test_helm_webhook_enabled_renders_hardened_defaults_and_match_conditions() -
     match_conditions = webhook.get("matchConditions")
     assert isinstance(match_conditions, list) and match_conditions
     assert match_conditions[0]["name"] == "exclude-leases"
+
+
+def test_helm_webhook_default_fail_closed_renders_pdb() -> None:
+    rendered = _helm_template(
+        {
+            "enforcementWebhook": {
+                "enabled": True,
+            }
+        }
+    )
+    assert rendered.returncode == 0, rendered.stderr
+
+    objects = _rendered_objects(rendered.stdout)
+    webhook_obj = _find_kind(objects, kind="ValidatingWebhookConfiguration")
+    pdb_obj = _find_kind(objects, kind="PodDisruptionBudget")
+
+    assert isinstance(webhook_obj, dict)
+    webhooks = webhook_obj.get("webhooks")
+    assert isinstance(webhooks, list) and webhooks
+    assert webhooks[0]["failurePolicy"] == "Fail"
+    assert isinstance(pdb_obj, dict)
 
 
 def test_helm_webhook_cert_manager_requires_injector_secret_name() -> None:
@@ -583,4 +617,4 @@ def test_helm_webhook_fail_open_does_not_render_pdb_by_default() -> None:
 
     objects = _rendered_objects(rendered.stdout)
     pdb_obj = _find_kind(objects, kind="PodDisruptionBudget")
-    assert pdb_obj is None
+    assert isinstance(pdb_obj, dict)

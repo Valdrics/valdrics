@@ -52,6 +52,8 @@ def _initial_scan_payload(scanned_connections: int) -> dict[str, Any]:
         "orphan_network_components": [],
         "errors": [],
         "scanned_connections": scanned_connections,
+        "partial_results": False,
+        "scan_completeness": [],
     }
     return payload
 
@@ -122,6 +124,69 @@ class ZombieScanState:
                 bucket.append(item)
                 self.total_waste += cost
 
+        completeness = scan_results.get("scan_completeness")
+        if isinstance(completeness, dict):
+            plugins = completeness.get("plugins")
+            connection_region = region_override or completeness.get("region") or "global"
+            summary = {
+                "provider": provider_name,
+                "connection_id": connection_id,
+                "connection_name": connection_name,
+                "region": connection_region,
+                "degraded": bool(completeness.get("degraded", False)),
+                "error_count": int(completeness.get("error_count", 0) or 0),
+                "plugins": plugins if isinstance(plugins, dict) else {},
+            }
+            self.payload["scan_completeness"].append(summary)
+            if summary["degraded"]:
+                self.payload["partial_results"] = True
+                for plugin_key, plugin_metadata in summary["plugins"].items():
+                    if not isinstance(plugin_metadata, dict):
+                        continue
+                    if str(plugin_metadata.get("status") or "ok") == "ok":
+                        continue
+                    self.payload["errors"].append(
+                        {
+                            "provider": provider_name,
+                            "region": connection_region,
+                            "error": str(plugin_metadata.get("error") or "unknown"),
+                            "error_type": str(
+                                plugin_metadata.get("error_type") or "unknown"
+                            ),
+                            "connection_id": connection_id,
+                            "category": str(plugin_key),
+                            "status": str(plugin_metadata.get("status") or "failed"),
+                        }
+                    )
+
+            overall_error = completeness.get("overall_error")
+            if overall_error:
+                self.payload["partial_results"] = True
+                self.payload["errors"].append(
+                    {
+                        "provider": provider_name,
+                        "region": connection_region,
+                        "error": str(overall_error),
+                        "connection_id": connection_id,
+                        "category": "scan",
+                        "status": "failed",
+                    }
+                )
+
+        top_level_error = scan_results.get("error")
+        if top_level_error:
+            self.payload["partial_results"] = True
+            self.payload["errors"].append(
+                {
+                    "provider": provider_name,
+                    "region": region_override or scan_results.get("region") or "global",
+                    "error": str(top_level_error),
+                    "connection_id": connection_id,
+                    "category": "scan",
+                    "status": "failed",
+                }
+            )
+
     def append_error(
         self,
         *,
@@ -130,6 +195,7 @@ class ZombieScanState:
         error: str,
         connection_id: str,
     ) -> None:
+        self.payload["partial_results"] = True
         self.payload["errors"].append(
             {
                 "provider": provider,

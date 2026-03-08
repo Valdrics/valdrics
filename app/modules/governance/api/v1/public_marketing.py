@@ -3,14 +3,17 @@ from __future__ import annotations
 import hashlib
 from datetime import datetime, timezone
 
-import httpx
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.background_job import JobType
+from app.modules.governance.domain.jobs.processor import enqueue_job
 from app.shared.core.config import get_settings
-from app.shared.core.http import get_http_client
+from app.shared.db.session import get_db
 from app.shared.core.proxy_headers import resolve_client_ip
 from app.shared.core.rate_limit import rate_limit
 from app.shared.core.webhooks import validate_webhook_url
@@ -25,7 +28,7 @@ MARKETING_SUBSCRIBE_RECOVERABLE_EXCEPTIONS = (
     ConnectionError,
     TimeoutError,
     OSError,
-    httpx.HTTPError,
+    SQLAlchemyError,
 )
 
 
@@ -52,15 +55,17 @@ def _hash_email_for_public_flow(email: str) -> str:
     return hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()
 
 
-async def _deliver_marketing_subscribe_webhook(
+def _build_marketing_subscribe_job_payload(
     payload: MarketingSubscribeRequest,
-) -> None:
+) -> dict[str, object]:
     settings = get_settings()
     webhook_url = str(
         getattr(settings, "MARKETING_SUBSCRIBE_WEBHOOK_URL", "") or ""
     ).strip()
     if not webhook_url:
-        return
+        raise RuntimeError(
+            "MARKETING_SUBSCRIBE_WEBHOOK_URL must be configured for marketing subscribe delivery"
+        )
 
     allowlist = {
         str(domain).strip().lower()
@@ -79,20 +84,18 @@ async def _deliver_marketing_subscribe_webhook(
         block_private_ips=bool(getattr(settings, "WEBHOOK_BLOCK_PRIVATE_IPS", True)),
     )
 
-    client = get_http_client()
-    response = await client.post(
-        webhook_url,
-        json={
+    return {
+        "provider": "marketing_subscribe",
+        "url": webhook_url,
+        "data": {
             "email": str(payload.email).strip().lower(),
             "company": payload.company,
             "role": payload.role,
             "referrer": payload.referrer,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         },
-        headers={"Content-Type": "application/json"},
-        timeout=2.5,
-    )
-    response.raise_for_status()
+        "headers": {"Content-Type": "application/json"},
+    }
 
 
 @router.post("/marketing/subscribe", response_model=MarketingSubscribeResponse, status_code=202)
@@ -100,6 +103,7 @@ async def _deliver_marketing_subscribe_webhook(
 async def marketing_subscribe(
     request: Request,
     payload: MarketingSubscribeRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     email_hash = _hash_email_for_public_flow(str(payload.email))
     if payload.honey:
@@ -109,10 +113,16 @@ async def marketing_subscribe(
         )
 
     try:
-        await _deliver_marketing_subscribe_webhook(payload)
+        job_payload = _build_marketing_subscribe_job_payload(payload)
+        await enqueue_job(
+            db=db,
+            job_type=JobType.WEBHOOK_RETRY,
+            payload=job_payload,
+            max_attempts=5,
+        )
     except MARKETING_SUBSCRIBE_RECOVERABLE_EXCEPTIONS as exc:
         logger.error(
-            "marketing_subscribe_delivery_failed",
+            "marketing_subscribe_enqueue_failed",
             email_hash=email_hash,
             client_ip=resolve_client_ip(request, settings_obj=get_settings()),
             error=str(exc),

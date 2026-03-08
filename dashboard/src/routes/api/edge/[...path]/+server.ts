@@ -1,4 +1,4 @@
-import type { RequestHandler } from '@sveltejs/kit';
+import { error, type RequestHandler } from '@sveltejs/kit';
 import { resolveBackendOrigin } from '$lib/server/backend-origin';
 
 const CACHEABLE_GET_PREFIXES = ['/health/live', '/api/v1/billing/plans'];

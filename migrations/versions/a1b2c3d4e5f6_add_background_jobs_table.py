@@ -1,12 +1,16 @@
 """
-add background_jobs table for pg_cron scheduling
+Historical bootstrap migration: add background_jobs table during the earlier
+pg_cron-era scheduler rollout
 
 Revision ID: a1b2c3d4e5f6
 Revises: 5037d41942b1
 Create Date: 2026-01-14
 
 This migration creates the background_jobs table for durable job processing.
-Jobs survive app restarts and are processed by pg_cron.
+Jobs survive app restarts. The current production scheduler model is the
+authenticated internal scheduler documented in `docs/runbooks/partition_maintenance.md`;
+the pg_cron wording below reflects the historical rollout context for this
+migration only.
 """
 
 from alembic import op

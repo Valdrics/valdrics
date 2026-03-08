@@ -19,6 +19,17 @@ BILLING_PLAN_RECOVERABLE_ERRORS = (
 )
 
 
+def _sort_public_plans(plans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    order = {"free": 0, "starter": 1, "growth": 2, "pro": 3}
+    return sorted(
+        plans,
+        key=lambda plan: (
+            order.get(str(plan.get("id", "")).strip().lower(), 99),
+            str(plan.get("name", "")).strip().lower(),
+        ),
+    )
+
+
 async def load_public_plans(
     db: AsyncSession,
     *,
@@ -31,6 +42,30 @@ async def load_public_plans(
         get_tier_feature_maturity,
         normalize_tier,
     )
+
+    def build_catalog_plan(tier: PricingTier) -> dict[str, Any] | None:
+        config = TIER_CONFIG.get(tier)
+        if not config:
+            return None
+        price_cfg = config["price_usd"]
+        if isinstance(price_cfg, dict):
+            monthly_price = float(price_cfg["monthly"])
+            annual_price = float(price_cfg["annual"])
+        else:
+            monthly_price = float(price_cfg or 0)
+            annual_price = monthly_price * 12
+        return {
+            "id": tier.value,
+            "name": config.get("name", tier.value.capitalize()),
+            "price_monthly": monthly_price,
+            "price_annual": annual_price,
+            "period": "/mo",
+            "description": config.get("description", ""),
+            "features": config.get("display_features", []),
+            "feature_maturity": get_tier_feature_maturity(tier),
+            "cta": config.get("cta", "Get Started"),
+            "popular": tier == PricingTier.GROWTH,
+        }
 
     try:
         result = await db.execute(
@@ -46,7 +81,7 @@ async def load_public_plans(
         )
         db_plans = result.mappings().all()
         if db_plans:
-            return [
+            public_plans = [
                 {
                     "id": str(p["id"]),
                     "name": p["name"],
@@ -66,40 +101,37 @@ async def load_public_plans(
                 }
                 for p in db_plans
             ]
+            known_ids = {
+                str(plan["id"]).strip().lower()
+                for plan in public_plans
+            }
+            for tier in (
+                PricingTier.FREE,
+                PricingTier.STARTER,
+                PricingTier.GROWTH,
+                PricingTier.PRO,
+            ):
+                if tier.value in known_ids:
+                    continue
+                catalog_plan = build_catalog_plan(tier)
+                if catalog_plan is not None:
+                    public_plans.append(catalog_plan)
+            return _sort_public_plans(public_plans)
     except BILLING_PLAN_RECOVERABLE_ERRORS as exc:
         logger.warning("failed_to_fetch_plans_from_db", error=str(exc))
 
     public_plans: list[dict[str, Any]] = []
-    for tier in [PricingTier.STARTER, PricingTier.GROWTH, PricingTier.PRO]:
-        config = TIER_CONFIG.get(tier)
-        if not config:
-            continue
-        price_cfg = config["price_usd"]
-        if not isinstance(price_cfg, dict):
-            logger.error(
-                "invalid_tier_price_config",
-                tier=tier.value,
-                expected_type="dict",
-                actual_type=type(price_cfg).__name__,
-            )
-            continue
+    for tier in (
+        PricingTier.FREE,
+        PricingTier.STARTER,
+        PricingTier.GROWTH,
+        PricingTier.PRO,
+    ):
+        plan = build_catalog_plan(tier)
+        if plan is not None:
+            public_plans.append(plan)
 
-        public_plans.append(
-            {
-                "id": tier.value,
-                "name": config.get("name", tier.value.capitalize()),
-                "price_monthly": price_cfg["monthly"],
-                "price_annual": price_cfg["annual"],
-                "period": "/mo",
-                "description": config.get("description", ""),
-                "features": config.get("display_features", []),
-                "feature_maturity": get_tier_feature_maturity(tier),
-                "cta": config.get("cta", "Get Started"),
-                "popular": tier == PricingTier.GROWTH,
-            }
-        )
-
-    return public_plans
+    return _sort_public_plans(public_plans)
 
 
 def _usage_item(connected: int, limit_value: Any) -> ConnectionUsageItem:

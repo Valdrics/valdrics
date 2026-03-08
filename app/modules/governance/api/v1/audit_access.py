@@ -14,6 +14,7 @@ from app.modules.governance.domain.security.audit_log import AuditLog
 from app.shared.core.auth import CurrentUser, requires_role
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
+from app.shared.core.config import get_settings
 from app.shared.db.session import get_db
 
 logger = structlog.get_logger()
@@ -436,6 +437,7 @@ async def request_data_erasure(
             tenant_id=str(tenant_id),
             deleted_counts=deleted_counts,
         )
+        audit_retention_days = int(get_settings().AUDIT_LOG_RETENTION_DAYS)
 
         return {
             "status": "erasure_complete",
@@ -443,7 +445,10 @@ async def request_data_erasure(
             "deleted_counts": deleted_counts,
             "next_steps": [
                 "Close the tenant account via POST /api/v1/settings/account/close to revoke remaining access",
-                "Audit logs are retained for 90 days per SOC2 requirements",
+                (
+                    f"Audit logs are retained for {audit_retention_days} days and then "
+                    "purged automatically by the maintenance sweep"
+                ),
                 "Contact support@valdrics.com for any questions",
             ],
         }

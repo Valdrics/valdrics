@@ -454,8 +454,8 @@
 	flex-direction: column;
 	gap: 0.42rem;
 	text-align: left;
-	padding: 0.82rem 0.82rem 0.88rem;
-	min-height: 10.6rem;
+	padding: 0.88rem 0.88rem 0.92rem;
+	min-height: 9.8rem;
 	border-radius: 1rem;
 	border: 1px solid rgb(255 255 255 / 0.1);
 	background: linear-gradient(180deg, rgb(7 13 20 / 0.88), rgb(8 13 21 / 0.68));
@@ -546,7 +546,7 @@
 
 .approval-chain-stage-title {
 	margin: 0;
-	font-size: 0.76rem;
+	font-size: 0.72rem;
 	font-weight: 800;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
@@ -555,8 +555,8 @@
 
 .approval-chain-stage-metric {
 	margin: 0;
-	font-size: 0.94rem;
-	line-height: 1.35;
+	font-size: 0.99rem;
+	line-height: 1.42;
 	font-weight: 700;
 	color: white;
 	display: -webkit-box;
@@ -567,9 +567,9 @@
 
 .approval-chain-stage-subtitle {
 	margin: 0;
-	font-size: 0.8rem;
-	line-height: 1.35;
-	color: var(--color-ink-400);
+	font-size: 0.82rem;
+	line-height: 1.42;
+	color: var(--color-ink-300);
 	display: -webkit-box;
 	-webkit-line-clamp: 2;
 	-webkit-box-orient: vertical;
@@ -719,8 +719,9 @@
 
 .signal-summary-text {
 	margin: 0;
-	font-size: 0.84rem;
-	color: var(--color-ink-300);
+	font-size: 0.89rem;
+	line-height: 1.45;
+	color: var(--color-ink-200);
 }
 
 .signal-summary-text strong {
@@ -765,6 +766,7 @@
 
 .signal-walkthrough-text {
 	margin: 0;
-	font-size: 0.83rem;
-	color: var(--color-ink-400);
+	font-size: 0.88rem;
+	line-height: 1.4;
+	color: var(--color-ink-300);
 }

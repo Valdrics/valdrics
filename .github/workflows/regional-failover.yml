@@ -1,0 +1,79 @@
+name: Regional Failover
+
+on:
+  workflow_dispatch:
+    inputs:
+      secondary_region:
+        description: "Secondary AWS region hosting the warm-standby stack"
+        required: true
+        default: "us-west-2"
+      secondary_db_instance_id:
+        description: "Secondary-region RDS read replica identifier"
+        required: true
+      secondary_api_origin:
+        description: "Direct origin URL for the secondary API stack"
+        required: true
+      api_record_name:
+        description: "Cloudflare DNS record name to cut over"
+        required: true
+        default: "api.valdrics.example"
+      cloudflare_zone_id:
+        description: "Cloudflare zone id for the production API zone"
+        required: true
+      cloudflare_dns_record_id:
+        description: "Cloudflare DNS record id for the API CNAME"
+        required: true
+      dry_run:
+        description: "Skip mutation and emit failover evidence only"
+        required: true
+        default: "true"
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_VERSION: "0.9.21"
+
+jobs:
+  failover:
+    name: Execute Regional Failover
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: true
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install Dependencies
+        run: uv sync --locked --dev
+
+      - name: Execute Regional Failover Script
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: >-
+          uv run python scripts/run_regional_failover.py
+          --secondary-region "${{ inputs.secondary_region }}"
+          --secondary-db-instance-id "${{ inputs.secondary_db_instance_id }}"
+          --secondary-api-origin "${{ inputs.secondary_api_origin }}"
+          --api-record-name "${{ inputs.api_record_name }}"
+          --cloudflare-zone-id "${{ inputs.cloudflare_zone_id }}"
+          --cloudflare-dns-record-id "${{ inputs.cloudflare_dns_record_id }}"
+          --out regional-failover-evidence.json
+          ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
+
+      - name: Upload Failover Evidence
+        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874 # v4
+        with:
+          name: regional-failover-evidence
+          path: regional-failover-evidence.json

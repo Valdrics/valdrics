@@ -32,7 +32,7 @@ vi.mock('$app/stores', () => {
 });
 
 describe('pricing page public messaging', () => {
-	it('keeps Starter/Growth/Pro self-serve messaging while isolating enterprise lane copy', () => {
+	it('shows the free tier entry path plus self-serve paid plans and enterprise lane', () => {
 		render(Page, {
 			props: {
 				data: {
@@ -46,23 +46,31 @@ describe('pricing page public messaging', () => {
 		});
 
 		expect(screen.getByRole('heading', { level: 1, name: /simple, transparent pricing/i })).toBeTruthy();
-		expect(screen.getByText(/permanent free tier/i)).toBeTruthy();
+		expect(screen.getByText(/^Start on the permanent free tier,/i)).toBeTruthy();
+		expect(screen.getByRole('heading', { name: /^free tier for your first savings workflow$/i })).toBeTruthy();
+		expect(screen.getByRole('link', { name: /start on free tier/i }).getAttribute('href')).toContain(
+			'/auth/login?mode=signup&plan=free'
+		);
 		expect(screen.getByRole('heading', { name: /^starter$/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /^growth$/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /^pro$/i })).toBeTruthy();
+		expect(screen.getAllByText(/one owner-routed savings workflow/i).length).toBeGreaterThan(0);
 
-		expect(screen.getByRole('heading', { name: /enterprise governance/i })).toBeTruthy();
-		expect(screen.getByText(/optional advanced path/i)).toBeTruthy();
+		expect(
+			screen.getByRole('heading', {
+				name: /use the enterprise lane only when security or procurement needs a separate track/i
+			})
+		).toBeTruthy();
+		expect(
+			screen.getByText(/bring in sales when sso\/scim, security review, procurement/i)
+		).toBeTruthy();
+		expect(screen.getByText(/prices are shown in usd for easy plan comparison/i)).toBeTruthy();
+		expect(screen.getByText(/the free tier does not require a checkout session/i)).toBeTruthy();
 
-		const enterpriseCta = screen.getByRole('link', { name: /contact sales/i });
-		expect(enterpriseCta.getAttribute('href') || '').toContain('mailto:enterprise@valdrics.com');
-		expect(enterpriseCta.getAttribute('href') || '').toContain('cc=sales@valdrics.com');
-		expect(screen.getByRole('link', { name: /view enterprise overview/i }).getAttribute('href')).toBe(
-			'/enterprise'
-		);
-
-		const heroSubtitle = screen.getByText(/permanent free tier/i).closest('.hero-subtitle');
-		expect(heroSubtitle?.textContent?.toLowerCase()).toContain('start with a');
-		expect(heroSubtitle?.textContent?.toLowerCase()).not.toContain('procurement workflows');
+		const salesCta = screen.getAllByRole('link', { name: /talk to sales/i });
+		expect(salesCta.length).toBeGreaterThan(0);
+		expect(
+			screen.getByRole('link', { name: /view enterprise overview/i }).getAttribute('href')
+		).toBe('/enterprise');
 	});
 });

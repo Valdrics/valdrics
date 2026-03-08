@@ -4,7 +4,7 @@ from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 from uuid import UUID
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -130,7 +130,7 @@ async def load_approval_with_decision(
         )
     ).scalar_one_or_none()
     if approval is None:
-        raise HTTPException(status_code=404, detail="Approval request not found")
+        raise EnforcementDomainError(status_code=404, detail="Approval request not found")
 
     decision = (
         await self.db.execute(
@@ -141,7 +141,7 @@ async def load_approval_with_decision(
         )
     ).scalar_one_or_none()
     if decision is None:
-        raise HTTPException(status_code=404, detail="Approval decision not found")
+        raise EnforcementDomainError(status_code=404, detail="Approval decision not found")
 
     return approval, decision
 
@@ -151,7 +151,7 @@ def assert_pending(
     approval: EnforcementApprovalRequest,
 ) -> None:
     if approval.status != EnforcementApprovalStatus.PENDING:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail=f"Approval request is already {approval.status.value}",
         )

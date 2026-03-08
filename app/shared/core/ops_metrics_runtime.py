@@ -18,6 +18,16 @@ COST_RECORD_RETENTION_LAST_RUN = Gauge(
     ["tenant_tier"],
 )
 
+AUDIT_LOG_RETENTION_PURGED_TOTAL = Counter(
+    "valdrics_ops_audit_log_retention_purged_total",
+    "Total number of audit log records purged by retention enforcement",
+)
+
+AUDIT_LOG_RETENTION_LAST_RUN = Gauge(
+    "valdrics_ops_audit_log_retention_last_run_deleted",
+    "Number of audit log records deleted during the most recent retention sweep",
+)
+
 RUNTIME_CARBON_EMISSIONS_TOTAL = Counter(
     "valdrics_ops_runtime_carbon_emissions_kg_total",
     "Total runtime emissions measured by the application process in kilograms CO2eq",
@@ -67,3 +77,13 @@ def record_cost_retention_purge(tenant_tier: str, deleted_count: int) -> None:
             tenant_tier=normalized_tier
         ).inc(normalized_count)
 
+
+def record_audit_log_retention_purge(deleted_count: int) -> None:
+    """Persist audit-log retention results as Prometheus signals."""
+    normalized_count = int(deleted_count)
+    if normalized_count < 0:
+        raise ValueError("deleted_count must be >= 0")
+
+    AUDIT_LOG_RETENTION_LAST_RUN.set(normalized_count)
+    if normalized_count:
+        AUDIT_LOG_RETENTION_PURGED_TOTAL.inc(normalized_count)

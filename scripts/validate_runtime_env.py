@@ -13,7 +13,7 @@ import argparse
 import os
 import sys
 
-from app.shared.core.config import get_settings
+from app.shared.core.config import Settings
 from app.shared.core.runtime_dependencies import validate_runtime_dependencies
 
 
@@ -44,11 +44,9 @@ def main() -> int:
     if not args.allow_testing:
         os.environ["TESTING"] = "false"
 
-    # Rebuild settings from current environment.
-    get_settings.cache_clear()
-
     try:
-        settings = get_settings()
+        # Hermetic validation: never read repository-local `.env` during CI/runtime preflight.
+        settings = Settings(_env_file=None)
         validate_runtime_dependencies(settings)
     except (ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
         print(f"runtime_env_validation_failed: {exc}", file=sys.stderr)

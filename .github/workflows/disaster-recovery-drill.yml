@@ -16,6 +16,8 @@ env:
   DEBUG: "false"
   DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"
   DB_SSL_MODE: "require"
+  API_URL: "https://api.staging.valdrics.example"
+  FRONTEND_URL: "https://dashboard.staging.valdrics.example"
   CSRF_SECRET_KEY: "ci-csrf-secret-key-32-chars-min-000000"
   ENCRYPTION_KEY: "ci-encryption-key-32-chars-min-00000000"
   KDF_SALT: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
@@ -36,7 +38,7 @@ env:
 jobs:
   drill:
     name: Run Rebuild-and-Verify DR Drill
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -61,17 +63,21 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
+      otel-collector:
+        image: otel/opentelemetry-collector:0.145.0
+        ports:
+          - 4317:4317
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
       - name: Setup Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -91,6 +97,25 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as handle:
               handle.write(f"FORECASTER_BREAK_GLASS_EXPIRES_AT={expires_at}\n")
           PY
+
+      - name: Wait for OTEL Collector
+        run: |
+          python3 - <<'PY'
+          import socket
+          import time
+
+          deadline = time.time() + 30
+          while time.time() < deadline:
+              try:
+                  with socket.create_connection(("127.0.0.1", 4317), timeout=2):
+                      raise SystemExit(0)
+              except OSError:
+                  time.sleep(1)
+          raise SystemExit("otel collector failed to become ready on 127.0.0.1:4317")
+          PY
+
+      - name: Runtime Env Preflight
+        run: uv run python scripts/validate_runtime_env.py --environment staging
 
       - name: Apply Database Migrations
         run: uv run alembic upgrade head
@@ -129,11 +154,12 @@ jobs:
         run: |
           uv run python scripts/run_disaster_recovery_drill.py \
             --url http://127.0.0.1:8000 \
+            --max-duration-seconds 1200 \
             --out reports/dr/drill_${{ github.run_id }}.json
 
       - name: Upload DR Drill Evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dr-drill-evidence
           path: reports/dr/drill_${{ github.run_id }}.json
@@ -141,7 +167,7 @@ jobs:
 
       - name: Upload DR Drill API Log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dr-drill-api-log
           path: /tmp/valdrics-dr-drill.log
@@ -149,7 +175,7 @@ jobs:
 
       - name: Upload DR Drill Worker Log
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: dr-drill-worker-log
           path: /tmp/valdrics-dr-drill-worker.log

@@ -298,7 +298,6 @@ def test_export_manifest_signing_secret_and_key_id_resolution(monkeypatch) -> No
         "get_settings",
         lambda: SimpleNamespace(
             ENFORCEMENT_EXPORT_SIGNING_SECRET="a" * 32,
-            SUPABASE_JWT_SECRET="b" * 32,
             ENFORCEMENT_EXPORT_SIGNING_KID="explicit-kid",
             JWT_SIGNING_KID="jwt-kid",
         ),
@@ -311,12 +310,12 @@ def test_export_manifest_signing_secret_and_key_id_resolution(monkeypatch) -> No
         "get_settings",
         lambda: SimpleNamespace(
             ENFORCEMENT_EXPORT_SIGNING_SECRET="short",
-            SUPABASE_JWT_SECRET="b" * 32,
             ENFORCEMENT_EXPORT_SIGNING_KID="",
             JWT_SIGNING_KID="jwt-kid",
         ),
     )
-    assert service._resolve_export_manifest_signing_secret() == "b" * 32
+    with pytest.raises(HTTPException, match="not configured"):
+        service._resolve_export_manifest_signing_secret()
     assert service._resolve_export_manifest_signing_key_id() == "jwt-kid"
 
     monkeypatch.setattr(
@@ -324,7 +323,6 @@ def test_export_manifest_signing_secret_and_key_id_resolution(monkeypatch) -> No
         "get_settings",
         lambda: SimpleNamespace(
             ENFORCEMENT_EXPORT_SIGNING_SECRET="",
-            SUPABASE_JWT_SECRET="",
             ENFORCEMENT_EXPORT_SIGNING_KID="",
             JWT_SIGNING_KID="",
         ),
@@ -372,7 +370,10 @@ def test_decode_and_extract_approval_token_error_branches(monkeypatch) -> None:
         context.setattr(
             enforcement_service_module,
             "get_settings",
-            lambda: SimpleNamespace(SUPABASE_JWT_SECRET="too-short", API_URL="https://api"),
+            lambda: SimpleNamespace(
+                ENFORCEMENT_APPROVAL_TOKEN_SECRET="too-short",
+                API_URL="https://api",
+            ),
         )
         with pytest.raises(HTTPException, match="not configured"):
             service._decode_approval_token("token")
@@ -385,7 +386,7 @@ def test_decode_and_extract_approval_token_error_branches(monkeypatch) -> None:
             enforcement_service_module,
             "get_settings",
             lambda: SimpleNamespace(
-                SUPABASE_JWT_SECRET="s" * 32,
+                ENFORCEMENT_APPROVAL_TOKEN_SECRET="s" * 32,
                 ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=[],
                 API_URL="https://api",
             ),
@@ -399,7 +400,7 @@ def test_decode_and_extract_approval_token_error_branches(monkeypatch) -> None:
             enforcement_service_module,
             "get_settings",
             lambda: SimpleNamespace(
-                SUPABASE_JWT_SECRET="s" * 32,
+                ENFORCEMENT_APPROVAL_TOKEN_SECRET="s" * 32,
                 ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=[],
                 API_URL="https://api",
             ),

@@ -142,24 +142,20 @@ def _build_connect_args(settings_obj: Any, effective_url: str) -> dict[str, Any]
         if getattr(settings_obj, "DB_SSL_CA_CERT_PATH", None):
             ssl_context.load_verify_locations(cafile=settings_obj.DB_SSL_CA_CERT_PATH)
             ssl_context.verify_mode = ssl.CERT_REQUIRED
+            ssl_context.check_hostname = True
             logger.info(
                 "database_ssl_require_verified",
                 ca_cert=settings_obj.DB_SSL_CA_CERT_PATH,
             )
-        elif bool(getattr(settings_obj, "is_production", False)):
-            logger.critical(
-                "database_ssl_require_failed_production",
-                msg="SSL CA verification is REQUIRED in production/staging.",
-            )
-            raise ValueError(
-                "DB_SSL_CA_CERT_PATH is mandatory when DB_SSL_MODE=require in production."
-            )
         else:
-            ssl_context.check_hostname = False
-            ssl_context.verify_mode = ssl.CERT_NONE
-            logger.warning(
-                "database_ssl_require_insecure",
-                msg="SSL enabled but CA verification skipped. MitM risk!",
+            ssl_context.verify_mode = ssl.CERT_REQUIRED
+            ssl_context.check_hostname = True
+            logger.info(
+                "database_ssl_require_system_trust",
+                msg=(
+                    "SSL enabled with system trust store verification. "
+                    "Set DB_SSL_CA_CERT_PATH to pin an explicit CA bundle."
+                ),
             )
         if "postgresql" in effective_url:
             connect_args["ssl"] = ssl_context

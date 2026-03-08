@@ -58,4 +58,22 @@ describe('edge proxy auth forwarding', () => {
 		const headers = init.headers as Headers;
 		expect(headers.get('authorization')).toBeNull();
 	});
+
+	it('raises a 502 http error when the upstream request fails', async () => {
+		upstreamFetch.mockRejectedValueOnce(new Error('dial tcp timeout'));
+		const event = {
+			request: new Request('http://localhost:4173/api/edge/health/live'),
+			params: { path: 'health/live' },
+			locals: {
+				safeGetSession: vi.fn().mockResolvedValue({
+					session: null
+				})
+			},
+			platform: undefined
+		};
+
+		await expect(GET(event as unknown as Parameters<typeof GET>[0])).rejects.toMatchObject({
+			status: 502
+		});
+	});
 });

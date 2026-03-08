@@ -8,10 +8,10 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
 from pydantic import ValidationError
 
 import app.modules.enforcement.domain.service as enforcement_service_module
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError as HTTPException
 from app.models.enforcement import (
     EnforcementApprovalStatus,
     EnforcementCreditPoolType,

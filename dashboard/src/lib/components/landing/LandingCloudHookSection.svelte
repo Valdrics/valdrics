@@ -32,19 +32,12 @@
 	data-landing-section="cloud_hook"
 >
 	<div class="landing-hook glass-panel">
-		<p class="landing-proof-k">The alert gap</p>
-		<h2 class="landing-h2">Most tools stop at the alert.</h2>
+		<p class="landing-proof-k">Reactive vs controlled</p>
+		<h2 class="landing-h2">See the operating gap after detection.</h2>
 		<p class="landing-section-sub">
-			Valdrics continues from spend signal to owner, safety check, approval, and measurable
-			action in one loop.
+			Compare the reactive path teams already know with the controlled path Valdrics creates once
+			an alert gets an owner, checks, and approval.
 		</p>
-
-		<div class="landing-hook-highlight">
-			<p class="landing-hook-highlight-k">What changes</p>
-			<p class="landing-hook-highlight-v">
-				{activeHookState.ahaMoment}
-			</p>
-		</div>
 
 		<div class="landing-hook-switch" role="group" aria-label="Compare cloud operations">
 			{#each cloudHookStates as state, index (state.id)}

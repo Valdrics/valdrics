@@ -1,17 +1,17 @@
 """Operational and performance Prometheus metrics for Valdrics."""
 
-from collections.abc import Callable
-from functools import wraps
-from typing import Any, TypeVar, cast
+from typing import Any
 
 from prometheus_client import Counter, Histogram, Gauge
 import structlog
 import sys
-import time
 from app.shared.core import ops_metrics_runtime as _ops_metrics_runtime
+from app.shared.core import ops_metrics_recorders as _ops_metrics_recorders
 
 COST_RECORD_RETENTION_LAST_RUN = _ops_metrics_runtime.COST_RECORD_RETENTION_LAST_RUN
 COST_RECORD_RETENTION_PURGED_TOTAL = _ops_metrics_runtime.COST_RECORD_RETENTION_PURGED_TOTAL
+AUDIT_LOG_RETENTION_LAST_RUN = _ops_metrics_runtime.AUDIT_LOG_RETENTION_LAST_RUN
+AUDIT_LOG_RETENTION_PURGED_TOTAL = _ops_metrics_runtime.AUDIT_LOG_RETENTION_PURGED_TOTAL
 RUNTIME_CARBON_EMISSIONS_LAST_RUN = _ops_metrics_runtime.RUNTIME_CARBON_EMISSIONS_LAST_RUN
 RUNTIME_CARBON_EMISSIONS_TOTAL = _ops_metrics_runtime.RUNTIME_CARBON_EMISSIONS_TOTAL
 
@@ -20,6 +20,8 @@ def _sync_runtime_metric_exports() -> None:
     _ops_metrics_runtime.structlog = structlog
     _ops_metrics_runtime.COST_RECORD_RETENTION_LAST_RUN = COST_RECORD_RETENTION_LAST_RUN
     _ops_metrics_runtime.COST_RECORD_RETENTION_PURGED_TOTAL = COST_RECORD_RETENTION_PURGED_TOTAL
+    _ops_metrics_runtime.AUDIT_LOG_RETENTION_LAST_RUN = AUDIT_LOG_RETENTION_LAST_RUN
+    _ops_metrics_runtime.AUDIT_LOG_RETENTION_PURGED_TOTAL = AUDIT_LOG_RETENTION_PURGED_TOTAL
     _ops_metrics_runtime.RUNTIME_CARBON_EMISSIONS_LAST_RUN = RUNTIME_CARBON_EMISSIONS_LAST_RUN
     _ops_metrics_runtime.RUNTIME_CARBON_EMISSIONS_TOTAL = RUNTIME_CARBON_EMISSIONS_TOTAL
 
@@ -32,6 +34,11 @@ def record_runtime_carbon_emissions(emissions_kg: float | None) -> None:
 def record_cost_retention_purge(tenant_tier: str, deleted_count: int) -> None:
     _sync_runtime_metric_exports()
     _ops_metrics_runtime.record_cost_retention_purge(tenant_tier, deleted_count)
+
+
+def record_audit_log_retention_purge(deleted_count: int) -> None:
+    _sync_runtime_metric_exports()
+    _ops_metrics_runtime.record_audit_log_retention_purge(deleted_count)
 
 # --- Roadmap Compatibility Metrics ---
 STUCK_JOB_COUNT = Gauge(
@@ -93,6 +100,12 @@ SCAN_FAILURE_TOTAL = Counter(
     "valdrics_ops_scan_failure_total",
     "Total number of failed scans",
     ["provider", "region", "error_type"],
+)
+
+FINOPS_PROVIDER_FAILURES_TOTAL = Counter(
+    "valdrics_ops_finops_provider_failures_total",
+    "Total number of provider-specific failures encountered during FinOps background analysis",
+    ["provider", "error_type"],
 )
 
 # --- Cloud API Cost Governance ---
@@ -427,61 +440,38 @@ POTENTIAL_SAVINGS = Gauge(
     ["provider", "account_id"],
 )
 
-# Utility functions for metrics
-F = TypeVar("F", bound=Callable[..., Any])
-
-
-def time_operation(operation_name: str) -> Callable[[F], F]:
-    """Decorator to time operations and record metrics."""
-
-    def decorator(func: F) -> F:
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            start_time = time.time()
-            completed = False
-            try:
-                result = func(*args, **kwargs)
-                completed = True
-                return result
-            finally:
-                duration = time.time() - start_time
-                if "db" in operation_name.lower():
-                    if completed:
-                        DB_QUERY_DURATION.labels(operation_type=operation_name).observe(
-                            duration
-                        )
-                    elif sys.exc_info()[0] is not None:
-                        DB_QUERY_DURATION.labels(
-                            operation_type=f"{operation_name}_error"
-                        ).observe(duration)
-
-        return cast(F, wrapper)
-
-    return decorator
+def time_operation(operation_name: str) -> Any:
+    return _ops_metrics_recorders.time_operation(
+        operation_name=operation_name,
+        db_query_duration=DB_QUERY_DURATION,
+        sys_module=sys,
+    )
 
 
 def record_circuit_breaker_metrics(
     circuit_name: str, state: str, failures: int, successes: int
 ) -> None:
-    """Record circuit breaker metrics."""
-    # Map state to numeric value
-    state_value = {"closed": 0, "open": 1, "half_open": 2}.get(state, 0)
-    CIRCUIT_BREAKER_STATE.labels(circuit_name=circuit_name).set(state_value)
-
-    if failures > 0:
-        CIRCUIT_BREAKER_FAILURES.labels(circuit_name=circuit_name).inc(failures)
-
-    if successes > 0:
-        CIRCUIT_BREAKER_RECOVERIES.labels(circuit_name=circuit_name).inc(successes)
+    _ops_metrics_recorders.record_circuit_breaker_metrics(
+        circuit_name=circuit_name,
+        state=state,
+        failures=failures,
+        successes=successes,
+        circuit_breaker_state=CIRCUIT_BREAKER_STATE,
+        circuit_breaker_failures=CIRCUIT_BREAKER_FAILURES,
+        circuit_breaker_recoveries=CIRCUIT_BREAKER_RECOVERIES,
+    )
 
 
 def record_retry_metrics(operation_type: str, attempt: int) -> None:
-    """Record retry metrics."""
-    OPERATION_RETRIES_TOTAL.labels(
-        operation_type=operation_type, attempt=str(attempt)
-    ).inc()
+    _ops_metrics_recorders.record_retry_metrics(
+        operation_type=operation_type,
+        attempt=attempt,
+        operation_retries_total=OPERATION_RETRIES_TOTAL,
+    )
 
 
 def record_timeout_metrics(operation_type: str) -> None:
-    """Record timeout metrics."""
-    OPERATION_TIMEOUTS_TOTAL.labels(operation_type=operation_type).inc()
+    _ops_metrics_recorders.record_timeout_metrics(
+        operation_type=operation_type,
+        operation_timeouts_total=OPERATION_TIMEOUTS_TOTAL,
+    )

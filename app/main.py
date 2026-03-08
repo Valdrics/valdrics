@@ -34,6 +34,7 @@ from app.shared.core.cors_policy import (
 )
 from app.shared.core.logging import setup_logging
 from app.shared.core.middleware import (
+    InternalMetricsAccessMiddleware,
     RequestIDMiddleware,
     SecurityHeadersMiddleware,
     TrustedProxyHeadersMiddleware,
@@ -41,6 +42,9 @@ from app.shared.core.middleware import (
 from app.shared.core.security_metrics import CSRF_ERRORS, RATE_LIMIT_EXCEEDED
 from app.shared.core.ops_metrics import API_ERRORS_TOTAL
 from app.shared.core.docs_assets import render_redoc_ui_html, render_swagger_ui_html
+from app.shared.core.enforcement_http_boundary import (
+    register_enforcement_domain_exception_handler,
+)
 from app.shared.core.sentry import init_sentry
 from app.shared.core.runtime_dependencies import validate_runtime_dependencies
 from app.shared.core.validation_errors import sanitize_validation_errors
@@ -55,7 +59,6 @@ from app.shared.core.rate_limit import (
 )
 
 # Ensure all models are registered with SQLAlchemy
-
 from app.modules.governance.api.v1.scim import (
     ScimError,
     scim_error_response,
@@ -257,8 +260,7 @@ valdrics_app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
-# Justification (Finding #C1): Uvicorn requires 'app' name by default in start parameters.
-# Standard pattern to resolve FastAPI type collision with module-level common variable.
+# Uvicorn expects a module-level `app`; expose the typed alias without shadowing bugs.
 app: FastAPI = valdrics_app  # noqa: A001  # type: ignore[no-redef]
 router = valdrics_app
 
@@ -307,6 +309,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
             "message": message_text,
         },
     )
+register_enforcement_domain_exception_handler(valdrics_app, http_exception_handler)
 
 @valdrics_app.exception_handler(RequestValidationError)
 async def validation_exception_handler(
@@ -426,6 +429,7 @@ valdrics_app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Security headers and request ID
 valdrics_app.add_middleware(SecurityHeadersMiddleware)
 valdrics_app.add_middleware(RequestIDMiddleware)
+valdrics_app.add_middleware(InternalMetricsAccessMiddleware)
 valdrics_app.add_middleware(TrustedProxyHeadersMiddleware)
 
 # CORS - added LAST so it processes FIRST

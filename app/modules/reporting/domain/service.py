@@ -6,13 +6,12 @@ Orchestrates cost ingestion, aggregation, and attribution.
 import inspect
 import uuid
 import structlog
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Dict, Any, List, Awaitable, cast
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.shared.adapters.factory import AdapterFactory
 from app.modules.reporting.domain.persistence import CostPersistenceService
 from app.modules.reporting.domain.attribution_engine import AttributionEngine
 from app.models.aws_connection import AWSConnection
@@ -25,10 +24,12 @@ from app.models.hybrid_connection import HybridConnection
 from app.models.cloud import CloudAccount
 from app.shared.core.service import BaseService
 from app.shared.core.async_utils import maybe_call
+from app.shared.core.adapter_resolver import get_adapter_for_connection
 from app.shared.core.connection_state import resolve_connection_profile
 from app.shared.core.exceptions import ValdricsException
 
 logger = structlog.get_logger()
+
 REPORTING_INGEST_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     ValdricsException,
     SQLAlchemyError,
@@ -54,6 +55,15 @@ REPORTING_ATTRIBUTION_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
 
 
 class ReportingService(BaseService):
+    def __init__(
+        self,
+        db,
+        *,
+        adapter_resolver: Callable[[Any], Any] | None = None,
+    ):
+        super().__init__(db)
+        self._adapter_resolver = adapter_resolver or get_adapter_for_connection
+
     async def _get_all_connections(self, tenant_id: Any) -> List[Any]:
         """Fetch all cloud and Cloud+ connections for a tenant."""
         connections: List[
@@ -134,7 +144,7 @@ class ReportingService(BaseService):
         for conn in connections:
             try:
                 run_id = uuid.uuid4()
-                adapter = AdapterFactory.get_adapter(conn)
+                adapter = self._adapter_resolver(conn)
                 end_date = datetime.now(timezone.utc)
                 start_date = end_date - timedelta(days=days)
 

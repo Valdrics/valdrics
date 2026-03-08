@@ -193,6 +193,40 @@ async def test_sso_federation_validation_production_checks_and_guardrails(
 
 
 @pytest.mark.asyncio
+async def test_sso_federation_validation_reports_missing_strict_urls_without_localhost_fallback(
+    monkeypatch,
+) -> None:
+    tenant_id = uuid4()
+    settings = identity_api.get_settings()
+    monkeypatch.setattr(settings, "FRONTEND_URL", "", raising=False)
+    monkeypatch.setattr(settings, "API_URL", "", raising=False)
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production", raising=False)
+
+    identity = SimpleNamespace(
+        sso_enabled=False,
+        allowed_email_domains=[],
+        sso_federation_enabled=False,
+        sso_federation_mode="domain",
+        sso_federation_provider_id=None,
+    )
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = _ScalarOneResult(identity)
+
+    response = await identity_api.get_sso_federation_validation(
+        current_user=_admin_user(tenant_id),
+        db=mock_db,
+    )
+
+    checks = {item.name: item for item in response.checks}
+    assert response.frontend_url == ""
+    assert response.discovery_endpoint == ""
+    assert checks["config.frontend_url_configured"].passed is False
+    assert checks["config.api_url_configured"].passed is False
+    assert checks["supabase.expected_redirect_url_computed"].passed is False
+    assert checks["valdrics.discovery_endpoint_computed"].passed is False
+
+
+@pytest.mark.asyncio
 async def test_scim_token_match_and_mismatch_direct() -> None:
     tenant_id = uuid4()
     token_value = "tenant-scim-secret"

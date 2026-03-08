@@ -97,6 +97,8 @@ def test_build_connect_args_require_branches_with_and_without_ca() -> None:
         args = session_mod._build_connect_args(settings_ca, "postgresql+asyncpg://h/db")
     assert args["ssl"] is ssl_ctx
     ssl_ctx.load_verify_locations.assert_called_once_with(cafile="/tmp/ca.pem")
+    assert ssl_ctx.verify_mode == session_mod.ssl.CERT_REQUIRED
+    assert ssl_ctx.check_hostname is True
 
     ssl_ctx2 = MagicMock()
     settings_insecure = SimpleNamespace(
@@ -107,8 +109,9 @@ def test_build_connect_args_require_branches_with_and_without_ca() -> None:
     with patch("app.shared.db.session.ssl.create_default_context", return_value=ssl_ctx2):
         args2 = session_mod._build_connect_args(settings_insecure, "postgresql+asyncpg://h/db")
     assert args2["ssl"] is ssl_ctx2
-    assert ssl_ctx2.check_hostname is False
-    assert ssl_ctx2.verify_mode == session_mod.ssl.CERT_NONE
+    ssl_ctx2.load_verify_locations.assert_not_called()
+    assert ssl_ctx2.check_hostname is True
+    assert ssl_ctx2.verify_mode == session_mod.ssl.CERT_REQUIRED
 
     with patch("app.shared.db.session.ssl.create_default_context", return_value=MagicMock()):
         args3 = session_mod._build_connect_args(

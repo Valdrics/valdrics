@@ -11,6 +11,10 @@ output "db_endpoint" {
   value = module.db.db_endpoint
 }
 
+output "db_arn" {
+  value = module.db.db_arn
+}
+
 output "valdrics_role_arn" {
   value = module.iam.role_arn
 }
@@ -29,4 +33,16 @@ output "runtime_secret_arn" {
 
 output "runtime_secret_kms_key_arn" {
   value = module.secrets_rotation.runtime_kms_key_arn
+}
+
+output "secondary_region_enabled" {
+  value = var.enable_multi_region_failover
+}
+
+output "secondary_eks_cluster_name" {
+  value = try(module.secondary_eks[0].cluster_name, null)
+}
+
+output "secondary_db_endpoint" {
+  value = try(module.secondary_db[0].db_endpoint, null)
 }

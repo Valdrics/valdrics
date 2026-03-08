@@ -17,7 +17,7 @@ async def test_consume_approval_token_rejects_rotated_secret_without_fallback(
         fallback: list[str] | None = None,
     ) -> SimpleNamespace:
         return SimpleNamespace(
-            SUPABASE_JWT_SECRET=secret,
+            ENFORCEMENT_APPROVAL_TOKEN_SECRET=secret,
             API_URL="https://api.valdrics.local",
             JWT_SIGNING_KID="",
             ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=list(fallback or []),
@@ -181,7 +181,9 @@ async def test_consume_approval_token_rejects_project_claim_mismatch(db) -> None
     payload["project_id"] = "proj-evil"
 
     settings = enforcement_service_module.get_settings()
-    secret = str(getattr(settings, "SUPABASE_JWT_SECRET", "") or "").strip()
+    secret = str(
+        getattr(settings, "ENFORCEMENT_APPROVAL_TOKEN_SECRET", "") or ""
+    ).strip()
     tampered_token = enforcement_service_module.jwt.encode(
         payload,
         secret,
@@ -218,7 +220,9 @@ async def test_consume_approval_token_rejects_hourly_cost_claim_mismatch(db) -> 
     payload["max_hourly_delta_usd"] = "999.999999"
 
     settings = enforcement_service_module.get_settings()
-    secret = str(getattr(settings, "SUPABASE_JWT_SECRET", "") or "").strip()
+    secret = str(
+        getattr(settings, "ENFORCEMENT_APPROVAL_TOKEN_SECRET", "") or ""
+    ).strip()
     tampered_token = enforcement_service_module.jwt.encode(
         payload,
         secret,

@@ -19,6 +19,12 @@ variable "environment" {
   type        = string
 }
 
+variable "name_suffix" {
+  description = "Optional suffix used for secondary-region identifiers."
+  type        = string
+  default     = ""
+}
+
 variable "db_instance_class" {
   type    = string
   default = "db.t3.medium"
@@ -45,4 +51,22 @@ variable "skip_final_snapshot" {
   description = "Whether to skip final snapshot on DB deletion. Set false for production."
   type        = bool
   default     = false
+}
+
+variable "replicate_source_db_arn" {
+  description = "Optional primary DB ARN for creating a cross-region read replica."
+  type        = string
+  default     = ""
+}
+
+variable "multi_az" {
+  description = "Whether this DB instance should be Multi-AZ."
+  type        = bool
+  default     = true
+}
+
+variable "backup_retention_period" {
+  description = "Automated backup retention window in days."
+  type        = number
+  default     = 30
 }

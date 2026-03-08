@@ -32,5 +32,23 @@ def test_cache_module_enables_multi_az_failover() -> None:
 def test_db_module_enables_multi_az_rds() -> None:
     text = (REPO_ROOT / "terraform/modules/db/main.tf").read_text(encoding="utf-8")
 
-    assert "multi_az                     = true" in text
+    assert "multi_az                     = local.replica_enabled ? false : var.multi_az" in text
     assert 'contains(["prod", "production"], lower(var.environment))' in text
+
+
+def test_terraform_root_supports_optional_secondary_region_failover() -> None:
+    providers = (REPO_ROOT / "terraform/providers.tf").read_text(encoding="utf-8")
+    variables = (REPO_ROOT / "terraform/variables.tf").read_text(encoding="utf-8")
+    root_main = (REPO_ROOT / "terraform/main.tf").read_text(encoding="utf-8")
+    db_module = (REPO_ROOT / "terraform/modules/db/main.tf").read_text(encoding="utf-8")
+
+    assert 'alias  = "secondary"' in providers
+    assert 'variable "enable_multi_region_failover"' in variables
+    assert 'variable "secondary_aws_region"' in variables
+    assert 'module "secondary_network"' in root_main
+    assert 'module "secondary_eks"' in root_main
+    assert 'module "secondary_db"' in root_main
+    assert 'module "secondary_cache"' in root_main
+    assert "replicate_source_db_arn = module.db.db_arn" in root_main
+    assert "replicate_source_db          = local.replica_enabled ? var.replicate_source_db_arn : null" in db_module
+    assert 'resource "aws_kms_key" "replica"' in db_module

@@ -1,11 +1,36 @@
 from celery import Celery
 from app.shared.core.config import get_settings
+from app.shared.core.runtime_dependencies import validate_runtime_dependencies
 
 settings = get_settings()
 
-# Use Redis URL from settings, default to localhost if not set (development)
-broker_url = settings.REDIS_URL or "redis://localhost:6379/0"
-backend_url = settings.REDIS_URL or "redis://localhost:6379/0"
+
+def _redis_broker_url() -> str:
+    configured_url = str(getattr(settings, "REDIS_URL", "") or "").strip()
+    if configured_url:
+        return configured_url
+
+    host = str(getattr(settings, "REDIS_HOST", "") or "").strip()
+    port = str(getattr(settings, "REDIS_PORT", "") or "").strip()
+    if host and port:
+        return f"redis://{host}:{port}/0"
+
+    if settings.TESTING:
+        return "memory://"
+
+    if getattr(settings, "is_strict_environment", False):
+        raise RuntimeError(
+            "REDIS_URL is required for worker startup in staging/production."
+        )
+
+    return "redis://localhost:6379/0"
+
+
+if not settings.TESTING:
+    validate_runtime_dependencies(settings)
+
+broker_url = _redis_broker_url()
+backend_url = broker_url
 
 # Initialize Celery app
 celery_app = Celery(

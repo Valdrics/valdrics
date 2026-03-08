@@ -20,6 +20,14 @@ from unittest.mock import MagicMock, AsyncMock, patch
 os.environ.setdefault("TESTING", "true")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("SUPABASE_JWT_SECRET", "test-jwt-secret-for-testing-at-least-32-bytes")
+os.environ.setdefault(
+    "ENFORCEMENT_APPROVAL_TOKEN_SECRET",
+    "test-approval-token-secret-for-testing-at-least-32-bytes",
+)
+os.environ.setdefault(
+    "ENFORCEMENT_EXPORT_SIGNING_SECRET",
+    "test-export-signing-secret-for-testing-at-least-32-bytes",
+)
 os.environ.setdefault("ENCRYPTION_KEY", "32-byte-long-test-encryption-key")
 os.environ.setdefault("CSRF_SECRET_KEY", "test-csrf-secret-key-at-least-32-bytes")
 os.environ.setdefault("KDF_SALT", "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=")

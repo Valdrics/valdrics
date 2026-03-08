@@ -19,21 +19,21 @@ describe('talk-to-sales page', () => {
 			screen.getByRole('heading', { name: /commercial and procurement diligence/i })
 		).toBeTruthy();
 
-		const emailSalesLink = screen.getByRole('link', { name: /email sales/i });
-		expect(emailSalesLink.getAttribute('href') || '').toContain(
-			'mailto:enterprise@valdrics.com'
-		);
-		expect(emailSalesLink.getAttribute('href') || '').toContain('cc=sales@valdrics.com');
+			const emailSalesLinks = screen.getAllByRole('link', { name: /email sales/i });
+			expect(emailSalesLinks[0]?.getAttribute('href') || '').toContain(
+				'mailto:enterprise@valdrics.com'
+			);
+			expect(emailSalesLinks[0]?.getAttribute('href') || '').toContain('cc=sales@valdrics.com');
 
 		const resourcesLink = screen.getByRole('link', { name: /open sales resources/i });
 		expect(resourcesLink.getAttribute('href')).toBe('/resources');
 
-		const enterpriseOverviewLink = screen.getByRole('link', {
+		const enterpriseOverviewLink = screen.getAllByRole('link', {
 			name: /explore enterprise overview/i
-		});
-		expect(enterpriseOverviewLink.getAttribute('href')).toBe('/enterprise');
+		})[0];
+		expect(enterpriseOverviewLink?.getAttribute('href')).toBe('/enterprise');
 
-		const startFreeLink = screen.getByRole('link', { name: /start free instead/i });
-		expect(startFreeLink.getAttribute('href')).toContain('/auth/login?intent=talk_to_sales');
+		const startFreeLink = screen.getAllByRole('link', { name: /start free instead/i })[0];
+		expect(startFreeLink?.getAttribute('href')).toContain('/auth/login?intent=talk_to_sales');
 	});
 });

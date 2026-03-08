@@ -36,27 +36,44 @@ async function assertDownloadEndpoint(
 }
 
 async function goToLanding(page: Parameters<typeof test>[0]['page']) {
-	await page.goto(BASE_URL, { waitUntil: 'networkidle' });
+	await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
 	await expect(page.locator('#hero')).toBeVisible();
 }
 
 async function openResourcesMenu(page: Parameters<typeof test>[0]['page']) {
 	const button = page.locator('header').getByRole('button', { name: /^resources$/i });
-	const menu = page.locator('#public-resources-menu');
-	if (!(await menu.isVisible().catch(() => false))) {
+	await expect(button).toBeVisible();
+	for (let attempt = 0; attempt < 2; attempt += 1) {
+		const menu = page.locator('#public-resources-menu');
+		if (await menu.isVisible().catch(() => false)) {
+			return menu;
+		}
 		await button.click();
+		if (await menu.isVisible().catch(() => false)) {
+			return menu;
+		}
+		await page.waitForTimeout(150);
 	}
+	const menu = page.locator('#public-resources-menu');
 	await expect(menu).toBeVisible();
 	return menu;
 }
 
 async function openMobileMenu(page: Parameters<typeof test>[0]['page']) {
 	const toggle = page.getByRole('button', { name: /toggle menu/i });
-	const menu = page.locator('#public-mobile-menu');
 	await expect(toggle).toBeVisible();
-	if (!(await menu.isVisible().catch(() => false))) {
+	for (let attempt = 0; attempt < 2; attempt += 1) {
+		const menu = page.locator('#public-mobile-menu');
+		if (await menu.isVisible().catch(() => false)) {
+			return menu;
+		}
 		await toggle.click();
+		if (await menu.isVisible().catch(() => false)) {
+			return menu;
+		}
+		await page.waitForTimeout(150);
 	}
+	const menu = page.locator('#public-mobile-menu');
 	await expect(menu).toBeVisible();
 	return menu;
 }
@@ -117,14 +134,6 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await assertHashDestination(page, '#product', '#product');
 
 		await goToLanding(page);
-		await header.getByRole('link', { name: /^live demo$/i }).click();
-		await assertHashDestination(page, '#signal-map', '#signal-map');
-
-		await goToLanding(page);
-		await header.getByRole('link', { name: /^roi$/i }).click();
-		await assertHashDestination(page, '#simulator', '#simulator');
-
-		await goToLanding(page);
 		await header.getByRole('link', { name: /^pricing$/i }).click();
 		await assertPublicRoute(page, '/pricing', /simple, transparent pricing/i);
 
@@ -141,16 +150,12 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await assertPublicRoute(page, '/resources', /resources/i);
 
 		await goToLanding(page);
-		await (await openResourcesMenu(page)).getByRole('menuitem', { name: /^proof$/i }).click();
-		await assertHashDestination(page, '#trust', '#trust');
-
-		await goToLanding(page);
 		await (await openResourcesMenu(page)).getByRole('menuitem', { name: /^docs$/i }).click();
 		await assertPublicRoute(page, '/docs', /documentation/i);
 
 		await goToLanding(page);
-		await (await openResourcesMenu(page)).getByRole('menuitem', { name: /^blog$/i }).click();
-		await assertPublicRoute(page, '/insights', /insights/i);
+		await (await openResourcesMenu(page)).getByRole('menuitem', { name: /^proof pack$/i }).click();
+		await assertPublicRoute(page, '/proof', /executive and technical proof for buyer diligence/i);
 
 		await goToLanding(page);
 		await (await openResourcesMenu(page)).getByRole('menuitem', { name: /^insights$/i }).click();
@@ -166,10 +171,6 @@ test.describe('Public marketing smoke (desktop)', () => {
 
 		await goToLanding(page);
 		const hero = page.locator('#hero');
-		await hero.getByRole('link', { name: /live signal map/i }).click();
-		await assertHashDestination(page, '#signal-map', '#signal-map');
-
-		await goToLanding(page);
 		await hero.getByRole('link', { name: /see enterprise path/i }).click();
 		await assertPublicRoute(
 			page,
@@ -187,20 +188,6 @@ test.describe('Public marketing smoke (desktop)', () => {
 	});
 
 	test('keeps proof, pricing, trust, and footer CTAs on working destinations', async ({ page }) => {
-		await goToLanding(page);
-		const hero = page.locator('#hero');
-		await hero.getByRole('link', { name: /technical validation/i }).click();
-		await assertPublicRoute(page, '/docs/technical-validation', /public capability validation summary/i);
-
-		await goToLanding(page);
-		const accessChecklistHref = await hero
-			.getByRole('link', { name: /access checklist/i })
-			.getAttribute('href');
-		expect(accessChecklistHref || '').toMatch(/resources\/global-finops-compliance-workbook\.md$/);
-		if (accessChecklistHref) {
-			await assertDownloadEndpoint(page, accessChecklistHref, /text\/markdown|text\/plain/i);
-		}
-
 		await goToLanding(page);
 		const simulator = page.locator('#simulator');
 		await simulator.getByRole('link', { name: /review methodology/i }).click();
@@ -236,6 +223,15 @@ test.describe('Public marketing smoke (desktop)', () => {
 
 		await goToLanding(page);
 		const trust = page.locator('#trust');
+		const accessChecklistHref = await trust
+			.getByRole('link', { name: /access control & compliance checklist/i })
+			.getAttribute('href');
+		expect(accessChecklistHref || '').toMatch(/resources\/global-finops-compliance-workbook\.md$/);
+		if (accessChecklistHref) {
+			await assertDownloadEndpoint(page, accessChecklistHref, /text\/markdown|text\/plain/i);
+		}
+
+		await goToLanding(page);
 		await trust.getByRole('link', { name: /^talk to sales$/i }).click();
 		await assertPublicRoute(page, '/talk-to-sales', /talk to sales/i);
 
@@ -275,11 +271,15 @@ test.describe('Public marketing smoke (desktop)', () => {
 				path: '/enterprise',
 				heading: /control cloud and software economics with procurement-grade confidence/i
 			},
-			{ label: /^blog$/i, type: 'route', path: '/insights', heading: /insights/i },
+			{
+				label: /^proof pack$/i,
+				type: 'route',
+				path: '/proof',
+				heading: /executive and technical proof for buyer diligence/i
+			},
 			{ label: /^insights$/i, type: 'route', path: '/insights', heading: /insights/i },
 			{ label: /^talk to sales$/i, type: 'route', path: '/talk-to-sales', heading: /talk to sales/i },
 			{ label: /^pricing$/i, type: 'route', path: '/pricing', heading: /simple, transparent pricing/i },
-			{ label: /^trust$/i, type: 'hash', hash: '#trust', selector: '#trust' },
 			{ label: /^privacy$/i, type: 'route', path: '/privacy', heading: /privacy policy/i },
 			{ label: /^terms$/i, type: 'route', path: '/terms', heading: /terms of service/i },
 			{ label: /^status$/i, type: 'route', path: '/status', heading: /system status/i }
@@ -289,17 +289,12 @@ test.describe('Public marketing smoke (desktop)', () => {
 			await goToLanding(page);
 			const footer = page.getByRole('contentinfo');
 			const link = footer.getByRole('link', { name: footerCase.label });
-			if (footerCase.type === 'hash') {
-				const href = await link.getAttribute('href');
-				expect(href || '').toMatch(/#trust$/);
-				if (href) {
-					await page.goto(new URL(href, BASE_URL).toString(), { waitUntil: 'networkidle' });
-				}
-				await assertHashDestination(page, footerCase.hash, footerCase.selector);
-			} else {
-				await link.click();
-				await assertPublicRoute(page, footerCase.path, footerCase.heading);
+			const href = await link.getAttribute('href');
+			expect(href || '').toBeTruthy();
+			if (href) {
+				await page.goto(new URL(href, BASE_URL).toString(), { waitUntil: 'domcontentloaded' });
 			}
+			await assertPublicRoute(page, footerCase.path, footerCase.heading);
 		}
 
 		await goToLanding(page);
@@ -327,7 +322,7 @@ test.describe('Public marketing smoke (mobile)', () => {
 				name: /stop cloud and software waste|control every dollar|control cloud margin risk/i
 			})
 		).toBeVisible();
-		await expect(page.locator('#cloud-hook')).toBeVisible();
+		await expect(page.locator('#capabilities')).toBeVisible();
 		await expect(page.locator('#simulator')).toBeVisible();
 		await expect(page.locator('#plans')).toBeVisible();
 		await expect(page.locator('#trust')).toBeVisible();
@@ -355,10 +350,6 @@ test.describe('Public marketing smoke (mobile)', () => {
 		await assertHashDestination(page, '#product', '#product');
 
 		await goToLanding(page);
-		await (await openMobileMenu(page)).getByRole('link', { name: /^roi$/i }).click();
-		await assertHashDestination(page, '#simulator', '#simulator');
-
-		await goToLanding(page);
 		await (await openMobileMenu(page)).getByRole('link', { name: /^pricing$/i }).click();
 		await assertPublicRoute(page, '/pricing', /simple, transparent pricing/i);
 
@@ -369,5 +360,9 @@ test.describe('Public marketing smoke (mobile)', () => {
 			'/enterprise',
 			/control cloud and software economics with procurement-grade confidence/i
 		);
+
+		await goToLanding(page);
+		await (await openMobileMenu(page)).getByRole('link', { name: /^resources$/i }).click();
+		await assertPublicRoute(page, '/resources', /resources/i);
 	});
 });

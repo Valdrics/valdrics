@@ -69,3 +69,33 @@ Resolve the Kubernetes Secret name that backs runtime configuration.
 {{- .Values.existingSecrets.name -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+Resolve the public API hostname for strict-environment base URL settings.
+*/}}
+{{- define "valdrics.apiHost" -}}
+{{- $host := "" -}}
+{{- if and .Values.ingress.enabled (gt (len .Values.ingress.hosts) 0) -}}
+{{- $host = (index .Values.ingress.hosts 0).host | default "" -}}
+{{- end -}}
+{{- if $host -}}
+{{- $host -}}
+{{- else -}}
+{{- printf "%s.%s" .Values.global.subdomain .Values.global.baseDomain -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+Resolve the frontend hostname for strict-environment base URL settings.
+*/}}
+{{- define "valdrics.frontendHost" -}}
+{{- printf "%s.%s" .Values.global.frontendSubdomain .Values.global.baseDomain -}}
+{{- end }}
+
+{{- define "valdrics.apiUrl" -}}
+{{- printf "https://%s" (include "valdrics.apiHost" .) -}}
+{{- end }}
+
+{{- define "valdrics.frontendUrl" -}}
+{{- printf "https://%s" (include "valdrics.frontendHost" .) -}}
+{{- end }}

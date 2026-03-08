@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from typing import Any, Awaitable, Callable, Mapping
 from uuid import UUID
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 
 from app.models.enforcement import (
     EnforcementActionExecution,
@@ -27,12 +27,12 @@ async def complete_action_impl(
 ) -> EnforcementActionExecution:
     action = await get_action_fn(tenant_id=tenant_id, action_id=action_id)
     if action.status != EnforcementActionStatus.RUNNING:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail="Only running actions can be completed",
         )
     if action.locked_by_worker_id is not None and action.locked_by_worker_id != worker_id:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail="Action lease is owned by another worker",
         )
@@ -71,29 +71,29 @@ async def fail_action_impl(
 ) -> EnforcementActionExecution:
     action = await get_action_fn(tenant_id=tenant_id, action_id=action_id)
     if action.status != EnforcementActionStatus.RUNNING:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail="Only running actions can be failed",
         )
     if action.locked_by_worker_id is not None and action.locked_by_worker_id != worker_id:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail="Action lease is owned by another worker",
         )
 
     normalized_error_code = str(error_code or "").strip().lower()
     if not normalized_error_code:
-        raise HTTPException(status_code=422, detail="error_code is required")
+        raise EnforcementDomainError(status_code=422, detail="error_code is required")
     if len(normalized_error_code) > 64:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="error_code must be <= 64 characters",
         )
     normalized_error_message = str(error_message or "").strip()
     if not normalized_error_message:
-        raise HTTPException(status_code=422, detail="error_message is required")
+        raise EnforcementDomainError(status_code=422, detail="error_message is required")
     if len(normalized_error_message) > 1000:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="error_message must be <= 1000 characters",
         )
@@ -148,7 +148,7 @@ async def cancel_action_impl(
         EnforcementActionStatus.FAILED,
         EnforcementActionStatus.CANCELLED,
     }:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail="Terminal action cannot be cancelled",
         )
@@ -172,4 +172,3 @@ async def cancel_action_impl(
     await db.commit()
     await db.refresh(action)
     return action
-

@@ -5,7 +5,10 @@ from pathlib import Path
 from typing import Iterable
 
 import structlog
-from fastapi import HTTPException
+
+from app.modules.governance.domain.security.compliance_pack_contracts import (
+    CompliancePackValidationError,
+)
 
 logger = structlog.get_logger()
 
@@ -82,9 +85,8 @@ def normalize_optional_provider(
     supported_values = set(str(item) for item in supported_providers)
     if candidate not in supported_values:
         supported = ", ".join(sorted(supported_values))
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported {provider_name} '{provider}'. Use one of: {supported}",
+        raise CompliancePackValidationError(
+            f"Unsupported {provider_name} '{provider}'. Use one of: {supported}"
         )
     return candidate
 
@@ -100,5 +102,5 @@ def resolve_window(
     resolved_start = start or default_start
     resolved_end = end or default_end
     if resolved_start > resolved_end:
-        raise HTTPException(status_code=400, detail=error_detail)
+        raise CompliancePackValidationError(error_detail)
     return resolved_start, resolved_end

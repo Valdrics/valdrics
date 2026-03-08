@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Callable, cast
 from uuid import UUID
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import SQLAlchemyError
@@ -39,11 +39,11 @@ async def reconcile_reservation(
         )
     ).scalar_one_or_none()
     if decision is None:
-        raise HTTPException(status_code=404, detail="Decision not found")
+        raise EnforcementDomainError(status_code=404, detail="Decision not found")
 
     actual = quantize_fn(to_decimal_fn(actual_monthly_delta_usd), "0.0001")
     if actual < Decimal("0"):
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="actual_monthly_delta_usd must be >= 0",
         )
@@ -63,7 +63,7 @@ async def reconcile_reservation(
                 status=replay.status,
             ).inc()
             return replay
-        raise HTTPException(status_code=409, detail="Reservation is not active")
+        raise EnforcementDomainError(status_code=409, detail="Reservation is not active")
 
     # Claim active reservation atomically to prevent double-settlement when
     # concurrent workers race and row-level locks are unavailable/degraded.
@@ -88,7 +88,7 @@ async def reconcile_reservation(
             )
         ).scalar_one_or_none()
         if refreshed is None:
-            raise HTTPException(status_code=404, detail="Decision not found")
+            raise EnforcementDomainError(status_code=404, detail="Decision not found")
         replay = service._build_reservation_reconciliation_idempotent_replay(
             decision=refreshed,
             actual_monthly_delta_usd=actual,
@@ -101,7 +101,7 @@ async def reconcile_reservation(
                 status=replay.status,
             ).inc()
             return replay
-        raise HTTPException(status_code=409, detail="Reservation is not active")
+        raise EnforcementDomainError(status_code=409, detail="Reservation is not active")
     decision.reservation_active = False
 
     try:
@@ -167,7 +167,7 @@ async def reconcile_reservation(
 
         await service.db.commit()
     except (
-        HTTPException,
+        EnforcementDomainError,
         SQLAlchemyError,
         ArithmeticError,
         ValueError,
@@ -297,7 +297,7 @@ async def reconcile_overdue_reservations(
                 approval_row=approval_by_decision.get(decision.id),
             )
     except (
-        HTTPException,
+        EnforcementDomainError,
         SQLAlchemyError,
         ArithmeticError,
         ValueError,

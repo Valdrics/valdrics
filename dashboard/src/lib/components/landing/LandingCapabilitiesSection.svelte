@@ -11,14 +11,13 @@
 
 <section
 	id="capabilities"
-	class="container mx-auto px-6 pb-16 landing-section-lazy"
+	class="container mx-auto px-6 pt-8 pb-16 md:pt-10 landing-section-lazy"
 	data-landing-section="capabilities"
 >
 	<div class="landing-section-head">
-		<h2 class="landing-h2">What happens between alert and action</h2>
+		<h2 class="landing-h2">What Valdrics coordinates</h2>
 		<p class="landing-section-sub">
-			Most platforms stop at detection. Valdrics keeps the owner, guardrails, approval, and
-			outcome visible until the action is complete.
+			One operating layer for owner routing, guardrails, approvals, and recorded outcomes.
 		</p>
 	</div>
 
@@ -51,7 +50,6 @@
 
 	<div class="landing-coverage-grid-head">
 		<p class="landing-proof-k">Decision ledger</p>
-		<p class="landing-p">This is the path most competitor pages skip.</p>
 	</div>
 
 	<div class="landing-decision-ledger">

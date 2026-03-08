@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, cast
 from uuid import UUID
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,7 +75,7 @@ def materialize_policy_contract_payload(
         try:
             document_model = policy_document_model_cls.model_validate(policy_document)
         except ValidationError as exc:
-            raise HTTPException(
+            raise EnforcementDomainError(
                 status_code=422,
                 detail={
                     "message": "policy_document is invalid",
@@ -135,17 +135,17 @@ def materialize_policy_contract_payload(
         "0.0001",
     )
     if hard_deny_threshold <= Decimal("0"):
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="hard_deny_above_monthly_usd must be greater than 0",
         )
     if auto_approve_threshold < Decimal("0"):
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="auto_approve_below_monthly_usd must be >= 0",
         )
     if auto_approve_threshold > hard_deny_threshold:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail=(
                 "auto_approve_below_monthly_usd cannot exceed "
@@ -167,12 +167,12 @@ def materialize_policy_contract_payload(
         else None
     )
     if plan_ceiling is not None and plan_ceiling < Decimal("0"):
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="plan_monthly_ceiling_usd must be >= 0 when provided",
         )
     if enterprise_ceiling is not None and enterprise_ceiling < Decimal("0"):
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=422,
             detail="enterprise_monthly_ceiling_usd must be >= 0 when provided",
         )

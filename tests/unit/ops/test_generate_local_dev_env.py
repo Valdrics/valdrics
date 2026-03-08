@@ -63,6 +63,7 @@ def test_generate_local_dev_env_derives_required_key_shapes(tmp_path: Path) -> N
                 "KDF_SALT=",
                 "ADMIN_API_KEY=",
                 "INTERNAL_JOB_SECRET=",
+                "ENFORCEMENT_APPROVAL_TOKEN_SECRET=",
                 "ENFORCEMENT_EXPORT_SIGNING_SECRET=",
             ]
         ),
@@ -77,6 +78,7 @@ def test_generate_local_dev_env_derives_required_key_shapes(tmp_path: Path) -> N
     assert len(values["SUPABASE_JWT_SECRET"]) >= 32
     assert len(values["ADMIN_API_KEY"]) >= 32
     assert len(values["INTERNAL_JOB_SECRET"]) >= 32
+    assert len(values["ENFORCEMENT_APPROVAL_TOKEN_SECRET"]) >= 32
     assert len(values["ENFORCEMENT_EXPORT_SIGNING_SECRET"]) >= 32
     assert len(values["ENCRYPTION_KEY"]) >= 32
     assert len(base64.b64decode(values["KDF_SALT"])) == 32

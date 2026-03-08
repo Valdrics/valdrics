@@ -93,6 +93,7 @@ Recommended alignment with enforcement rollout mode:
 
 - `shadow` or early `soft` rollout: `failurePolicy: Ignore` (fail-open on webhook unavailability).
 - mature `hard` rollout with proven SLO + HA: `failurePolicy: Fail` (fail-closed).
+- repository production default: `failurePolicy: Fail`; soft rollout must be an explicit override
 
 ### 2.2 Webhook baseline example
 
@@ -103,7 +104,7 @@ metadata:
   name: valdrics-enforcement-gate
 webhooks:
   - name: gate.enforcement.valdrics.io
-    failurePolicy: Ignore
+    failurePolicy: Fail
     timeoutSeconds: 2
     sideEffects: None
     admissionReviewVersions: ["v1"]
@@ -128,8 +129,11 @@ Use chart values to make rollout intent explicit:
 ```yaml
 enforcementWebhook:
   enabled: true
-  failurePolicy: Ignore   # soft rollout profile
+  failurePolicy: Fail     # production default profile
   timeoutSeconds: 2
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
   service:
     namespace: valdrics
     name: valdrics-api
@@ -137,19 +141,14 @@ enforcementWebhook:
   path: /api/v1/enforcement/gate/k8s/admission/review
 ```
 
-For hard rollout, change only:
+For soft rollout, change only:
 
 ```yaml
 enforcementWebhook:
-  failurePolicy: Fail
+  failurePolicy: Ignore
   podDisruptionBudget:
-    enabled: true
+    enabled: false
     maxUnavailable: 1
-deploymentStrategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxUnavailable: 0
-    maxSurge: 1
 ```
 
 Guardrails enforced by chart contract:

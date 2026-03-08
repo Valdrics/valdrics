@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Any, Mapping, cast
 from uuid import UUID
 
-from fastapi import HTTPException
+from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 from sqlalchemy import select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -43,10 +43,10 @@ async def create_or_get_approval_request(
         )
     ).scalar_one_or_none()
     if decision is None:
-        raise HTTPException(status_code=404, detail="Decision not found")
+        raise EnforcementDomainError(status_code=404, detail="Decision not found")
 
     if decision.decision != EnforcementDecisionType.REQUIRE_APPROVAL:
-        raise HTTPException(
+        raise EnforcementDomainError(
             status_code=409,
             detail="Approval request can only be created for REQUIRE_APPROVAL decisions",
         )
@@ -122,7 +122,7 @@ async def list_pending_approvals(
                 reviewer=reviewer,
                 enforce_requester_separation=False,
             )
-        except HTTPException:
+        except EnforcementDomainError:
             continue
         allowed.append((approval, decision))
     return allowed
@@ -174,7 +174,7 @@ async def approve_request(
             approval_row=approval,
         )
         await db.commit()
-        raise HTTPException(status_code=409, detail="Approval request has expired")
+        raise EnforcementDomainError(status_code=409, detail="Approval request has expired")
 
     policy = await get_or_create_policy_fn(tenant_id)
     routing_trace = await enforce_reviewer_authority_fn(
@@ -311,7 +311,7 @@ async def consume_approval_token(
 ) -> tuple[EnforcementApprovalRequest, EnforcementDecision]:
     def _token_reject(*, event: str, status_code: int, detail: str) -> None:
         approval_token_events_counter.labels(event=event).inc()
-        raise HTTPException(status_code=status_code, detail=detail)
+        raise EnforcementDomainError(status_code=status_code, detail=detail)
 
     normalized_token = str(approval_token or "").strip()
     if not normalized_token:

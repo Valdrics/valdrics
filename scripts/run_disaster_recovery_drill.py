@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import time
 from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
@@ -23,6 +24,12 @@ def _parse_args() -> argparse.Namespace:
         "--out",
         default="",
         help="Optional path for a JSON evidence report.",
+    )
+    parser.add_argument(
+        "--max-duration-seconds",
+        type=int,
+        default=1200,
+        help="Fail if the rebuild-and-verify drill exceeds this duration.",
     )
     return parser.parse_args()
 
@@ -45,6 +52,8 @@ async def _request_json(
 
 async def main() -> None:
     args = _parse_args()
+    started_at = datetime.now(timezone.utc)
+    monotonic_start = time.perf_counter()
     base_url = str(args.url).rstrip("/")
     user_id = str(uuid4())
     email = f"dr-drill-{user_id[:8]}@valdrics.local"
@@ -88,7 +97,13 @@ async def main() -> None:
 
     evidence = {
         "captured_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": started_at.isoformat(),
         "target_url": base_url,
+        "regional_recovery_mode": "manual_restore_redeploy_reroute",
+        "regional_recovery_contract_scope": "repository_managed_application_surface",
+        "regional_recovery_rto_seconds": int(args.max_duration_seconds),
+        "regional_recovery_rpo_contract": "provider_backup_restore_external_to_repository",
+        "regional_recovery_rehearsal_cadence": "monthly",
         "steps": {
             "health_live": {"status_code": live_status, "payload": live_payload},
             "health_deep": {"status_code": health_status, "payload": health_payload},
@@ -99,6 +114,9 @@ async def main() -> None:
             "costs_query": {"status_code": costs_status, "payload": costs_payload},
         },
     }
+    duration_seconds = round(time.perf_counter() - monotonic_start, 3)
+    evidence["duration_seconds"] = duration_seconds
+    evidence["rebuild_and_verify_objective_seconds"] = int(args.max_duration_seconds)
 
     if args.out:
         with open(args.out, "w", encoding="utf-8") as handle:
@@ -113,8 +131,12 @@ async def main() -> None:
     }
     if failing:
         raise SystemExit(f"Disaster recovery drill failed: {failing}")
+    if duration_seconds > int(args.max_duration_seconds):
+        raise SystemExit(
+            "Disaster recovery drill exceeded rebuild-and-verify objective: "
+            f"{duration_seconds}s > {int(args.max_duration_seconds)}s"
+        )
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-

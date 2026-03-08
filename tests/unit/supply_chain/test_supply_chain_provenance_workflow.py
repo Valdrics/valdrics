@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+PINNED_WORKFLOW_PATHS = (
+    REPO_ROOT / ".github/workflows/ci.yml",
+    REPO_ROOT / ".github/workflows/security-scan.yml",
+    REPO_ROOT / ".github/workflows/sbom.yml",
+    REPO_ROOT / ".github/workflows/performance-gate.yml",
+    REPO_ROOT / ".github/workflows/disaster-recovery-drill.yml",
+    REPO_ROOT / ".github/workflows/cla.yml",
+)
 
 
 def test_sbom_workflow_has_attestation_permissions() -> None:
@@ -105,14 +114,35 @@ def test_performance_gate_supports_reuse_and_ci_automation() -> None:
     assert "uvicorn app.main:app" in perf_text
     assert 'ENVIRONMENT: "staging"' in perf_text
     assert 'TESTING: "false"' in perf_text
+    assert 'API_URL: "https://api.staging.valdrics.example"' in perf_text
+    assert 'FRONTEND_URL: "https://dashboard.staging.valdrics.example"' in perf_text
     assert "postgres:16.8-alpine" in perf_text
     assert "redis:7.2.5-alpine" in perf_text
+    assert "otel/opentelemetry-collector:0.145.0" in perf_text
+    assert "Wait for OTEL Collector" in perf_text
+    assert "uv run python scripts/validate_runtime_env.py --environment staging" in perf_text
     assert "uv run alembic upgrade head" in perf_text
     assert "uv run celery -A app.shared.core.celery_app:celery_app worker -l info" in perf_text
     assert "performance-health-gate:" in ci_text
     assert "performance-dashboard-gate:" in ci_text
     assert "performance-ops-gate:" in ci_text
     assert "uses: ./.github/workflows/performance-gate.yml" in ci_text
+
+
+def test_strict_runtime_preflight_is_hermetic_and_explicit_in_workflows() -> None:
+    ci_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    dr_text = (
+        REPO_ROOT / ".github/workflows/disaster-recovery-drill.yml"
+    ).read_text(encoding="utf-8")
+
+    assert 'API_URL: "https://api.validation.example.com"' in ci_text
+    assert 'FRONTEND_URL: "https://app.validation.example.com"' in ci_text
+    assert 'OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"' in ci_text
+    assert 'API_URL: "https://api.staging.valdrics.example"' in dr_text
+    assert 'FRONTEND_URL: "https://dashboard.staging.valdrics.example"' in dr_text
+    assert "otel/opentelemetry-collector:0.145.0" in dr_text
+    assert "Wait for OTEL Collector" in dr_text
+    assert "uv run python scripts/validate_runtime_env.py --environment staging" in dr_text
 
 
 def test_ci_and_security_workflows_fail_on_high_or_critical_infra_and_container_findings() -> None:
@@ -125,3 +155,24 @@ def test_ci_and_security_workflows_fail_on_high_or_critical_infra_and_container_
     assert "--minimum-severity HIGH" in ci_text
     assert "severity: 'CRITICAL,HIGH'" in security_text
     assert "exit-code: '1'" in security_text
+
+
+def test_ci_workflow_pins_tflint_setup_version() -> None:
+    ci_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "tflint_version: latest" not in ci_text
+    assert "tflint_version: v0.60.0" in ci_text
+
+
+def test_critical_workflows_use_immutable_action_shas_and_fixed_runner_images() -> None:
+    uses_pattern = re.compile(
+        r"uses:\s+([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)?)@([^\s#]+)"
+    )
+
+    for workflow_path in PINNED_WORKFLOW_PATHS:
+        text = workflow_path.read_text(encoding="utf-8")
+        assert "runs-on: ubuntu-latest" not in text
+        for _, ref in uses_pattern.findall(text):
+            assert re.fullmatch(r"[0-9a-f]{40}", ref), (
+                f"{workflow_path.name} uses non-immutable action ref {ref!r}"
+            )

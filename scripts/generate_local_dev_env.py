@@ -47,6 +47,9 @@ def _build_overrides(seed: str) -> dict[str, str]:
         "KDF_SALT": _derive_b64(seed, "KDF_SALT"),
         "ADMIN_API_KEY": _derive_hex(seed, "ADMIN_API_KEY"),
         "INTERNAL_JOB_SECRET": _derive_hex(seed, "INTERNAL_JOB_SECRET"),
+        "ENFORCEMENT_APPROVAL_TOKEN_SECRET": _derive_hex(
+            seed, "ENFORCEMENT_APPROVAL_TOKEN_SECRET"
+        ),
         "ENFORCEMENT_EXPORT_SIGNING_SECRET": _derive_hex(
             seed, "ENFORCEMENT_EXPORT_SIGNING_SECRET"
         ),

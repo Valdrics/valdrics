@@ -10,6 +10,8 @@ Rotate all high-impact credentials immediately:
 
 - `DATABASE_URL` / DB password or token
 - `SUPABASE_JWT_SECRET`
+- `ENFORCEMENT_APPROVAL_TOKEN_SECRET`
+- `ENFORCEMENT_EXPORT_SIGNING_SECRET`
 - `ENCRYPTION_KEY` and fallback encryption keys
 - `ADMIN_API_KEY`
 - `PAYSTACK_SECRET_KEY`

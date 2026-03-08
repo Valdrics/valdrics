@@ -24,6 +24,7 @@ from app.shared.adapters.resource_usage_projection import (
 from app.shared.core.currency import ExchangeRateUnavailableError, convert_to_usd
 from app.shared.core.exceptions import ExternalAPIError
 from app.shared.core.credentials import SaaSCredentials
+from app.shared.core.http import get_http_client
 
 logger = structlog.get_logger()
 
@@ -74,8 +75,13 @@ async def _saas_get_request(
     headers: dict[str, str],
     params: dict[str, Any] | None = None,
 ) -> httpx.Response:
-    async with httpx.AsyncClient(timeout=_NATIVE_TIMEOUT_SECONDS) as client:
-        return await client.get(url, headers=headers, params=params)
+    client = get_http_client()
+    return await client.get(
+        url,
+        headers=headers,
+        params=params,
+        timeout=_NATIVE_TIMEOUT_SECONDS,
+    )
 
 
 class SaaSAdapter(BaseAdapter):
