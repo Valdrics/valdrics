@@ -57,7 +57,10 @@ async def test_with_backoff_throttle_retry_multiple():
         ]
     )
 
-    with patch("asyncio.sleep", new_callable=AsyncMock):
+    with (
+        patch("asyncio.sleep", new_callable=AsyncMock),
+        patch("app.shared.adapters.rate_limiter._JITTER_RNG.uniform", return_value=0.0),
+    ):
         result = await with_backoff(mock_coro, max_retries=3)
 
         assert result == "success"
@@ -73,7 +76,10 @@ async def test_with_backoff_generic_throttle_exception():
 
     mock_coro = AsyncMock(side_effect=[CustomThrottle("too fast"), "success"])
 
-    with patch("asyncio.sleep", new_callable=AsyncMock):
+    with (
+        patch("asyncio.sleep", new_callable=AsyncMock),
+        patch("app.shared.adapters.rate_limiter._JITTER_RNG.uniform", return_value=0.0),
+    ):
         result = await with_backoff(
             mock_coro, throttle_exceptions=(CustomThrottle,), max_retries=3
         )
@@ -140,7 +146,10 @@ async def test_with_backoff_throttle_retry():
         side_effect=[ClientError(error_response, "operation"), "success"]
     )
 
-    with patch("asyncio.sleep", new_callable=AsyncMock):
+    with (
+        patch("asyncio.sleep", new_callable=AsyncMock),
+        patch("app.shared.adapters.rate_limiter._JITTER_RNG.uniform", return_value=0.0),
+    ):
         result = await with_backoff(mock_coro, max_retries=3)
 
         assert result == "success"
@@ -155,7 +164,10 @@ async def test_with_backoff_max_retries_exceeded():
     error_response = {"Error": {"Code": "ThrottlingException"}}
     mock_coro = AsyncMock(side_effect=ClientError(error_response, "operation"))
 
-    with patch("asyncio.sleep", new_callable=AsyncMock):
+    with (
+        patch("asyncio.sleep", new_callable=AsyncMock),
+        patch("app.shared.adapters.rate_limiter._JITTER_RNG.uniform", return_value=0.0),
+    ):
         with pytest.raises(ClientError):
             await with_backoff(mock_coro, max_retries=2)
 

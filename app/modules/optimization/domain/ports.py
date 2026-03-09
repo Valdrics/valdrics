@@ -209,11 +209,13 @@ class BaseZombieDetector(ABC):
                 plugin_metadata["item_count"] = int(len(items))
                 plugin_metadata["validated_item_count"] = int(len(validated_items))
                 completeness = results["scan_completeness"]
-                assert isinstance(completeness, dict)
-                cast(dict[str, Any], completeness)["plugins"][category_key] = plugin_metadata
+                if not isinstance(completeness, dict):
+                    raise RuntimeError("scan_completeness metadata must be a dict")
+                completeness_dict = cast(dict[str, Any], completeness)
+                completeness_dict["plugins"][category_key] = plugin_metadata
                 if plugin_metadata.get("status") != "ok":
-                    cast(dict[str, Any], completeness)["degraded"] = True
-                    cast(dict[str, Any], completeness)["error_count"] = int(
+                    completeness_dict["degraded"] = True
+                    completeness_dict["error_count"] = int(
                         completeness.get("error_count", 0)
                     ) + 1
 
@@ -243,10 +245,12 @@ class BaseZombieDetector(ABC):
             )
             results["error"] = str(e)
             completeness = results["scan_completeness"]
-            assert isinstance(completeness, dict)
-            cast(dict[str, Any], completeness)["degraded"] = True
-            cast(dict[str, Any], completeness)["overall_error"] = str(e)
-            cast(dict[str, Any], completeness)["error_count"] = int(
+            if not isinstance(completeness, dict):
+                raise RuntimeError("scan_completeness metadata must be a dict") from e
+            completeness_dict = cast(dict[str, Any], completeness)
+            completeness_dict["degraded"] = True
+            completeness_dict["overall_error"] = str(e)
+            completeness_dict["error_count"] = int(
                 completeness.get("error_count", 0)
             ) + 1
 

@@ -83,6 +83,8 @@ describe('Landing decomposition lead capture and exit intent', () => {
 		expect(onTrackCta).toHaveBeenCalledWith('cta_view', 'exit_prompt', 'desktop_exit_intent');
 
 		await fireEvent.click(screen.getByRole('button', { name: /close prompt/i }));
-		expect(localStorage.getItem('valdrics.landing.exit_prompt.dismissed.v1')).toBe('1');
+		const dismissedUntil = Number(localStorage.getItem('valdrics.landing.exit_prompt.dismissed.v2'));
+		expect(Number.isFinite(dismissedUntil)).toBe(true);
+		expect(dismissedUntil).toBeGreaterThan(Date.now());
 	});
 });

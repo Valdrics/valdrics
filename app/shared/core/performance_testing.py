@@ -8,7 +8,7 @@ and measuring system performance under various conditions.
 import asyncio
 import time
 import statistics
-from typing import Dict, Any, List, Callable, Awaitable
+from typing import Dict, Any, List
 from dataclasses import dataclass, field
 from datetime import timedelta
 import httpx

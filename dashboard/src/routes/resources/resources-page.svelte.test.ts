@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
+import { readable } from 'svelte/store';
 import Page from './+page.svelte';
 
 vi.mock('$app/paths', () => ({
-	base: ''
+	base: '',
+	assets: ''
+}));
+
+vi.mock('$app/stores', () => ({
+	page: readable({ url: new URL('https://example.com/resources') })
 }));
 
 describe('resources page contact directory', () => {
@@ -11,8 +17,8 @@ describe('resources page contact directory', () => {
 		render(Page);
 
 		expect(screen.getByRole('heading', { name: /contact directory/i })).toBeTruthy();
-		expect(screen.getByRole('link', { name: /open enterprise page/i }).getAttribute('href')).toBe(
-			'/enterprise'
+		expect(screen.getAllByRole('link', { name: /open resource/i })[0]?.getAttribute('href')).toBe(
+			'/resources/enterprise-governance-overview'
 		);
 		expect(screen.getByRole('link', { name: /enterprise@valdrics\.com/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /sales@valdrics\.com/i })).toBeTruthy();

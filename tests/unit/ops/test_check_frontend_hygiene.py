@@ -116,3 +116,35 @@ def test_run_fails_when_svelte_transition_directive_is_present(
 
     assert run(tmp_path) == 1
     assert "Svelte transition directives are disallowed under strict CSP" in capsys.readouterr().out
+
+
+def test_run_allows_public_api_url_in_approved_backend_origin_file(tmp_path: Path) -> None:
+    _seed_safe_dashboard(tmp_path)
+    _write(
+        tmp_path / "dashboard/src/lib/server/backend-origin.ts",
+        """
+import { PUBLIC_API_URL } from '$env/static/public';
+
+export const backendOrigin = PUBLIC_API_URL;
+""".strip(),
+    )
+
+    assert run(tmp_path) == 0
+
+
+def test_run_fails_when_svelte_uses_html_injection_without_sanitization(
+    tmp_path: Path,
+    capsys,
+) -> None:
+    _seed_safe_dashboard(tmp_path)
+    _write(
+        tmp_path / "dashboard/src/lib/UnsafeMeta.svelte",
+        """
+<svelte:head>
+  {@html '<script type="application/ld+json">{}</script>'}
+</svelte:head>
+""".strip(),
+    )
+
+    assert run(tmp_path) == 1
+    assert "`{@html ...}` requires DOMPurify.sanitize(...)" in capsys.readouterr().out

@@ -75,6 +75,7 @@ from app.modules.enforcement.domain.service_response_ops import (
     gate_result_to_response,  # noqa: F401
 )
 from app.modules.enforcement.domain.service_utils import (
+    _as_utc,  # noqa: F401
     _computed_context_snapshot,  # noqa: F401
     _default_required_permission_for_environment,  # noqa: F401
     _is_production_environment,
@@ -111,6 +112,8 @@ from app.shared.core.ops_metrics import (  # noqa: F401
 
 
 logger = structlog.get_logger()
+
+__all__ = ["EnforcementService", "gate_result_to_response"]
 
 
 def _gate_lock_timeout_seconds() -> float:

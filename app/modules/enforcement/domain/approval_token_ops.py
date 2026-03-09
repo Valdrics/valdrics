@@ -7,6 +7,13 @@ from uuid import UUID
 
 from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 
+ENFORCEMENT_APPROVAL_TOKEN_TYPE = (
+    "enforcement_approval"  # nosec B105 - protocol token type label
+)
+ENFORCEMENT_APPROVAL_SUBJECT_PREFIX = (
+    "enforcement_approval:"  # nosec B105 - JWT subject namespace, not a credential
+)
+
 
 def decode_approval_token(
     approval_token: str,
@@ -67,7 +74,7 @@ def decode_approval_token(
                 },
             )
             token_type = str(payload.get("token_type", "")).strip()
-            if token_type != "enforcement_approval":
+            if token_type != ENFORCEMENT_APPROVAL_TOKEN_TYPE:
                 continue
             return cast(Mapping[str, Any], payload)
         except expired_error_type as exc:
@@ -187,7 +194,7 @@ def build_approval_token(
     payload: dict[str, Any] = {
         "iss": str(getattr(settings, "API_URL", "")).rstrip("/"),
         "aud": "enforcement_gate",
-        "sub": f"enforcement_approval:{approval.id}",
+        "sub": f"{ENFORCEMENT_APPROVAL_SUBJECT_PREFIX}{approval.id}",
         "iat": int(now.timestamp()),
         "nbf": int(now.timestamp()),
         "exp": int(expires_at.timestamp()),
@@ -201,7 +208,7 @@ def build_approval_token(
         "max_monthly_delta_usd": str(to_decimal_fn(decision.estimated_monthly_delta_usd)),
         "max_hourly_delta_usd": str(to_decimal_fn(decision.estimated_hourly_delta_usd)),
         "resource_reference": decision.resource_reference,
-        "token_type": "enforcement_approval",
+        "token_type": ENFORCEMENT_APPROVAL_TOKEN_TYPE,
     }
 
     headers: dict[str, str] | None = None

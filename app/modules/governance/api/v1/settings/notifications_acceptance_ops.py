@@ -123,6 +123,19 @@ async def run_slack_connectivity_test(
             message="Tenant context required. Please complete onboarding.",
         )
 
+    tier = normalize_tier(current_user.tier)
+    if not is_feature_enabled(tier, FeatureFlag.SLACK_INTEGRATION):
+        return IntegrationAcceptanceResult(
+            channel="slack",
+            event_type=AuditEventType.INTEGRATION_TEST_SLACK.value,
+            success=False,
+            status_code=status.HTTP_403_FORBIDDEN,
+            message=(
+                "Slack integration requires the Growth plan or higher. "
+                f"Current tier: {tier.value}"
+            ),
+        )
+
     slack = await get_tenant_slack_service(db, current_user.tenant_id)
     if slack is None:
         return IntegrationAcceptanceResult(

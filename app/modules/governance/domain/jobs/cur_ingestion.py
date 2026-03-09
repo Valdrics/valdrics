@@ -1,7 +1,7 @@
 import structlog
 from datetime import datetime, timedelta, timezone
 import uuid
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models.aws_connection import AWSConnection
@@ -155,7 +155,7 @@ class CURIngestionJob:
             is_preliminary=True,
         )
         connection.last_ingested_at = end_date
-        await maybe_await(self.db.add(connection))
+        self.db.add(connection)
 
         logger.info(
             "cur_ingestion_completed",
@@ -169,12 +169,12 @@ class CURIngestionJob:
         )
 
     @staticmethod
-    def _build_cur_adapter(connection: AWSConnection):
+    def _build_cur_adapter(connection: AWSConnection) -> Any:
         from app.shared.adapters.factory import AdapterFactory
 
         return AdapterFactory.get_adapter(connection)
 
-    def _build_persistence_service(self):
+    def _build_persistence_service(self) -> Any:
         from app.modules.reporting.domain.persistence import CostPersistenceService
 
         if self.db is None:

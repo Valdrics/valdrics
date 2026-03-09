@@ -2,6 +2,7 @@
 	import { base } from '$app/paths';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 	import type { SavingsProofDrilldownResponse, SavingsProofResponse } from './savingsTypes';
 
 	interface Props {
@@ -51,6 +52,8 @@
 		loadDrilldown,
 		downloadCsv
 	}: Props = $props();
+
+	const upgradePrompt = getUpgradePrompt('pro', 'savings proof');
 </script>
 
 <div class="space-y-8">
@@ -109,10 +112,13 @@
 			</div>
 
 			{#if !isProPlus(data.subscription?.tier)}
-				<div class="absolute inset-0 z-10 flex items-center justify-center bg-transparent">
-					<a href={`${base}/billing`} class="btn btn-primary shadow-lg pointer-events-auto">
-						Upgrade to Unlock Savings Proof
-					</a>
+				<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+					<div class="max-w-md space-y-3 pointer-events-auto">
+						<h3 class="text-lg font-semibold text-white">{upgradePrompt.heading}</h3>
+						<p class="text-sm text-ink-300">{upgradePrompt.body}</p>
+						<p class="text-xs text-ink-500">{upgradePrompt.footnote}</p>
+						<a href={`${base}/billing`} class="btn btn-primary shadow-lg">{upgradePrompt.cta}</a>
+					</div>
 				</div>
 			{/if}
 

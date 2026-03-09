@@ -52,7 +52,7 @@ _RLS_EXEMPT_TABLE_PATTERN = re.compile(
 class _DBRuntime:
     settings: Any
     engine: AsyncEngine
-    session_maker: async_sessionmaker[AsyncSession]
+    session_maker: async_sessionmaker["GuardedAsyncSession"]
     effective_url: str
 
 

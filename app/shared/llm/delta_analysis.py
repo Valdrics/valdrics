@@ -245,8 +245,10 @@ class DeltaAnalysisService:
                 continue
 
             # At this point we have both current and previous resource entries.
-            assert current is not None
-            assert previous is not None
+            if current is None or previous is None:
+                raise RuntimeError(
+                    "Delta analysis lost resource state while diffing snapshots"
+                )
             prev_cost = previous["daily_cost"]
             curr_cost = current["daily_cost"]
             change = curr_cost - prev_cost

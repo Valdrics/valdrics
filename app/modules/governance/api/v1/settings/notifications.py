@@ -24,6 +24,7 @@ from app.modules.governance.api.v1.settings.notification_settings_ops import (
     build_notification_settings_audit_payload as _build_notification_settings_audit_payload_impl,
     build_notification_settings_create_kwargs as _build_notification_settings_create_kwargs_impl,
     enforce_incident_integrations_access as _enforce_incident_integrations_access_impl,
+    enforce_slack_integration_access as _enforce_slack_integration_access_impl,
     validate_notification_settings_requirements as _validate_notification_settings_requirements_impl,
 )
 from app.modules.governance.api.v1.settings.notifications_acceptance_ops import (
@@ -116,34 +117,27 @@ def _to_acceptance_evidence_item(row: AuditLog) -> IntegrationAcceptanceEvidence
         details=_normalize_acceptance_details(details),
     )
 
-
-# ============================================================
-# API Endpoints
-# ============================================================
-
-
 @router.get("/notifications", response_model=NotificationSettingsResponse)
 async def get_notification_settings(
     current_user: CurrentUser = Depends(get_current_user_with_db_context),
     db: AsyncSession = Depends(get_db),
 ) -> NotificationSettingsResponse:
-    """
-    Get notification settings for the current tenant.
-
-    Creates default settings if none exist.
-    """
     result = await db.execute(
         select(NotificationSettings).where(
             NotificationSettings.tenant_id == current_user.tenant_id
         )
     )
     settings = result.scalar_one_or_none()
+    tier = normalize_tier(current_user.tier)
+    slack_feature_allowed_by_tier = is_feature_enabled(
+        tier, FeatureFlag.SLACK_INTEGRATION
+    )
 
     # Create default settings if not exists
     if not settings:
         settings = NotificationSettings(
             tenant_id=current_user.tenant_id,
-            slack_enabled=True,
+            slack_enabled=slack_feature_allowed_by_tier,
             jira_enabled=False,
             jira_issue_type="Task",
             digest_schedule="daily",
@@ -162,7 +156,9 @@ async def get_notification_settings(
             tenant_id=str(current_user.tenant_id),
         )
 
-    return _to_notification_response_impl(settings)
+    return _to_notification_response_impl(
+        settings, slack_feature_allowed_by_tier=slack_feature_allowed_by_tier
+    )
 
 
 @router.put("/notifications", response_model=NotificationSettingsResponse)
@@ -171,17 +167,24 @@ async def update_notification_settings(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> NotificationSettingsResponse:
-    """
-    Update notification settings for the current tenant.
-
-    Creates settings if none exist.
-    """
     result = await db.execute(
         select(NotificationSettings).where(
             NotificationSettings.tenant_id == current_user.tenant_id
         )
     )
     settings = result.scalar_one_or_none()
+    tier = normalize_tier(current_user.tier)
+    slack_feature_allowed_by_tier = is_feature_enabled(
+        tier, FeatureFlag.SLACK_INTEGRATION
+    )
+    _enforce_slack_integration_access_impl(
+        data=data,
+        current_tier=current_user.tier,
+        normalize_tier_fn=normalize_tier,
+        is_feature_enabled_fn=is_feature_enabled,
+        slack_integration_feature=FeatureFlag.SLACK_INTEGRATION,
+        raise_http_exception_fn=_raise_http_exception,
+    )
     _enforce_incident_integrations_access_impl(
         data=data,
         current_tier=current_user.tier,
@@ -226,7 +229,9 @@ async def update_notification_settings(
         _build_notification_settings_audit_payload_impl(settings),
     )
 
-    return _to_notification_response_impl(settings)
+    return _to_notification_response_impl(
+        settings, slack_feature_allowed_by_tier=slack_feature_allowed_by_tier
+    )
 
 
 @router.get(
@@ -237,9 +242,6 @@ async def get_policy_notification_diagnostics(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> PolicyNotificationDiagnosticsResponse:
-    """
-    Diagnose why policy notifications are or are not deliverable for this tenant.
-    """
     from app.shared.core.config import get_settings
 
     notification_result = await db.execute(
@@ -257,6 +259,9 @@ async def get_policy_notification_diagnostics(
     remediation_settings = remediation_result.scalar_one_or_none()
 
     tier = normalize_tier(current_user.tier)
+    slack_feature_allowed_by_tier = is_feature_enabled(
+        tier, FeatureFlag.SLACK_INTEGRATION
+    )
     feature_allowed_by_tier = is_feature_enabled(
         tier, FeatureFlag.INCIDENT_INTEGRATIONS
     )
@@ -265,6 +270,7 @@ async def get_policy_notification_diagnostics(
     slack = _to_slack_policy_diagnostics_impl(
         remediation_settings,
         notification_settings,
+        feature_allowed_by_tier=slack_feature_allowed_by_tier,
         has_bot_token=bool(app_settings.SLACK_BOT_TOKEN),
         has_default_channel=bool(app_settings.SLACK_CHANNEL_ID),
     )
@@ -289,11 +295,6 @@ async def test_slack_notification(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """
-    Send a test notification to Slack.
-
-    Uses the configured Slack channel or override.
-    """
     return await _execute_notification_channel_test(
         channel="slack",
         request_path="/api/v1/settings/notifications/test-slack",
@@ -363,9 +364,6 @@ async def capture_notification_acceptance_evidence(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> IntegrationAcceptanceCaptureResponse:
-    """
-    Execute integration connectivity checks and persist audit-grade acceptance evidence.
-    """
     if current_user.tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -458,9 +456,6 @@ async def list_notification_acceptance_evidence(
     limit: int = 50,
     run_id: str | None = None,
 ) -> IntegrationAcceptanceEvidenceListResponse:
-    """
-    List persisted notification/workflow acceptance evidence for this tenant.
-    """
     if current_user.tenant_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

@@ -25,16 +25,8 @@
 		formatCurrencyAmount,
 		SUPPORTED_CURRENCIES
 	} from '$lib/landing/roiCalculator';
-	import {
-		getReducedMotionPreference,
-		observeReducedMotionPreference
-	} from '$lib/landing/reducedMotion';
-	import {
-		BUYER_ROLE_VIEWS,
-		CLOUD_HOOK_STATES,
-		HERO_ROLE_CONTEXT,
-		MICRO_DEMO_STEPS
-	} from '$lib/landing/heroContent';
+	import { getReducedMotionPreference, observeReducedMotionPreference } from '$lib/landing/reducedMotion';
+	import { BUYER_ROLE_VIEWS, CLOUD_HOOK_STATES, HERO_ROLE_CONTEXT, MICRO_DEMO_STEPS } from '$lib/landing/heroContent';
 	import LandingHeroView from '$lib/components/landing/LandingHeroView.svelte';
 	import './LandingHero.css';
 	const DEFAULT_EXPERIMENT_ASSIGNMENTS: LandingExperimentAssignments = Object.freeze({
@@ -46,14 +38,12 @@
 	});
 	const SNAPSHOT_ROTATION_MS = 4400;
 	const DEMO_ROTATION_MS = 3200;
-	const LANDING_SCROLL_MILESTONES = Object.freeze([25, 50, 75, 95]);
-	const LANDING_CONSENT_KEY = 'valdrics.cookie_consent.v1';
+	const LANDING_SCROLL_MILESTONES = Object.freeze([25, 50, 75, 95]), LANDING_CONSENT_KEY = 'valdrics.cookie_consent.v1';
 	const GEO_CURRENCY_HINT_ENDPOINT = `${base}/api/geo/currency`;
 	const GEO_CURRENCY_HINT_TIMEOUT_MS = 1200;
 	const DEFAULT_SIGNAL_SNAPSHOT = REALTIME_SIGNAL_SNAPSHOTS[0];
-	const ONE_PAGER_HREF = `${base}/resources/valdrics-enterprise-one-pager.md`;
-	const TALK_TO_SALES_PATH = `${base}/talk-to-sales`;
-	const ENTERPRISE_PATH = `${base}/enterprise`;
+	const ONE_PAGER_HREF = `${base}/resources/valdrics-enterprise-one-pager.md`, RESOURCES_PATH = `${base}/resources`;
+	const SUBSCRIBE_API_PATH = `${base}/api/marketing/subscribe`, TALK_TO_SALES_PATH = `${base}/talk-to-sales`, ENTERPRISE_PATH = `${base}/enterprise`;
 	const SUPPORTED_CURRENCY_CODES = new Set(SUPPORTED_CURRENCIES.map((currency) => currency.code));
 	type LandingMotionProfile = 'subtle' | 'cinematic';
 	if (!DEFAULT_SIGNAL_SNAPSHOT) {
@@ -392,7 +382,8 @@
 	onScenarioWasteWithChange={handleScenarioWasteWithChange}
 	onScenarioWindowChange={handleScenarioWindowChange}
 	{roiPlannerHref} {freeTierCtaHref} {buildPlanCtaHref} {plansTalkToSalesHref}
-	{requestValidationBriefingHref} onePagerHref={ONE_PAGER_HREF} onTrackCta={trackCta}
+	{requestValidationBriefingHref} onePagerHref={ONE_PAGER_HREF}
+	subscribeApiPath={SUBSCRIBE_API_PATH} resourcesHref={RESOURCES_PATH} onTrackCta={trackCta}
 	{cookieBannerVisible} onSetTelemetryConsent={setTelemetryConsent}
 	onCloseCookieBanner={closeCookieBanner} onOpenCookieSettings={openCookieSettings}
 	{showBackToTop}

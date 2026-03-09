@@ -27,7 +27,10 @@ async def check():
         ]
         
         for table in tables:
-            res = await conn.execute(text(f"SELECT rowsecurity FROM pg_tables WHERE tablename = '{table}'"))
+            res = await conn.execute(
+                text("SELECT rowsecurity FROM pg_tables WHERE tablename = :table_name"),
+                {"table_name": table},
+            )
             row = res.fetchone()
             rls_enabled = row[0] if row else "NOT FOUND"
             print(f"Table {table}: RLS Enabled = {rls_enabled}")

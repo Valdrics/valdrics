@@ -1,41 +1,10 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
+	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
+	import { listPublicContent } from '$lib/content/publicContent';
 
-	type InsightEntry = {
-		title: string;
-		audience: string;
-		summary: string;
-		ctaLabel: string;
-		href: string;
-	};
-
-	const insights: readonly InsightEntry[] = [
-		{
-			title: 'How Engineering and Finance Run One Weekly Spend Review',
-			audience: 'Engineering + FinOps',
-			summary:
-				'A practical operating rhythm for moving from spend signal to owner-assigned action in under one week.',
-			ctaLabel: 'Open Playbook',
-			href: `${base}/resources`
-		},
-		{
-			title: 'GreenOps Decision Framework for Cost, Carbon, and Risk',
-			audience: 'Platform + Sustainability',
-			summary:
-				'Use deterministic decision criteria to balance budget pressure with cleaner-runtime opportunities.',
-			ctaLabel: 'Open GreenOps Guide',
-			href: `${base}/greenops`
-		},
-		{
-			title: 'CFO Brief: Building a Procurement-Ready TCO Narrative',
-			audience: 'CFO + Procurement',
-			summary:
-				'Structure subscription, rollout effort, and expected recovery opportunities for executive approval.',
-			ctaLabel: 'Download ROI Worksheet',
-			href: `${base}/resources/valdrics-roi-assumptions.csv`
-		}
-	];
+	const insights = listPublicContent('insights');
 
 	const heroHighlights = [
 		{
@@ -53,13 +22,13 @@
 	] as const;
 </script>
 
-<svelte:head>
-	<title>Insights | Valdrics</title>
-	<meta
-		name="description"
-		content="Valdrics insights and operating playbooks for cloud, SaaS, ITAM/license, GreenOps, and finance-led spend control execution."
-	/>
-</svelte:head>
+<PublicPageMeta
+	title="Insights"
+	description="Valdrics insights and operating playbooks for cloud, SaaS, ITAM/license, GreenOps, and finance-led spend control execution."
+	pageType="CollectionPage"
+	pageSection="Insights"
+	keywords={['insights', 'playbooks', 'waste review', 'greenops', 'finops']}
+/>
 
 <PublicMarketingPage
 	kicker="Insights"
@@ -92,21 +61,21 @@
 			</div>
 
 			<div class="public-page__grid public-page__grid--3">
-				{#each insights as insight (insight.title)}
+				{#each insights as insight (insight.slug)}
 					<article
 						class={`public-page__card ${
-							insight.title === 'How Engineering and Finance Run One Weekly Spend Review'
+							insight.slug === 'why-detection-without-ownership-fails'
 								? 'public-page__card--accent public-page__card--featured'
-								: insight.title === 'GreenOps Decision Framework for Cost, Carbon, and Risk'
+								: insight.slug === 'from-alert-to-approved-action'
 									? 'public-page__card--dark'
 									: 'public-page__card--featured'
 						}`}
 					>
-						<p class="public-page__card-kicker">{insight.audience}</p>
+						<p class="public-page__card-kicker">{insight.audiences.join(' + ')}</p>
 						<h2 class="public-page__card-title">{insight.title}</h2>
 						<p class="public-page__card-copy">{insight.summary}</p>
 						<div class="public-page__actions-row">
-							<a href={insight.href} class="btn btn-secondary">{insight.ctaLabel}</a>
+							<a href={`${base}/insights/${insight.slug}`} class="btn btn-secondary">Open Insight</a>
 						</div>
 					</article>
 				{/each}

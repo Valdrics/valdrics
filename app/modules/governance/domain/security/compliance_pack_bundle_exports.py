@@ -1,6 +1,5 @@
 from datetime import date, datetime, time, timezone
-from typing import Any, Callable, Optional, cast
-from uuid import UUID
+from typing import Any, Callable, Optional
 
 import csv
 import io
@@ -173,7 +172,7 @@ async def run_focus_export(
             focus_writer.writerow(FOCUS_V13_CORE_COLUMNS)
 
             async for focus_row in export_service.export_rows(
-                tenant_id=cast(UUID, actor.tenant_id),
+                tenant_id=actor.tenant_id,
                 start_date=focus_window_start,
                 end_date=focus_window_end,
                 provider=normalized_focus_provider,
@@ -243,7 +242,7 @@ async def run_savings_proof_export(
 
         service = SavingsProofService(db)
         payload = await service.generate(
-            tenant_id=cast(UUID, actor.tenant_id),
+            tenant_id=actor.tenant_id,
             tier=str(actor.tier),
             start_date=savings_window_start,
             end_date=savings_window_end,
@@ -270,7 +269,7 @@ async def run_savings_proof_export(
             _append_unique(included_files, drill_csv_path)
 
             drill_payload = await service.drilldown(
-                tenant_id=cast(UUID, actor.tenant_id),
+                tenant_id=actor.tenant_id,
                 tier=str(actor.tier),
                 start_date=savings_window_start,
                 end_date=savings_window_end,
@@ -454,7 +453,7 @@ async def run_close_package_export(
 
         close_service = CostReconciliationService(db)
         package = await close_service.generate_close_package(
-            tenant_id=cast(UUID, actor.tenant_id),
+            tenant_id=actor.tenant_id,
             start_date=close_window_start,
             end_date=close_window_end,
             enforce_finalized=bool(close_enforce_finalized),

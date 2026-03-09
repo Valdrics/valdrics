@@ -61,8 +61,13 @@ class _SharedAsyncClientContext:
     async def __aenter__(self) -> httpx.AsyncClient:
         return self._client
 
-    async def __aexit__(self, exc_type, exc, tb) -> None:
-        return None
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: object | None,
+    ) -> None:
+        del exc_type, exc, tb
 
 
 async def _hybrid_get_request(

@@ -210,6 +210,43 @@ def test_main_flags_m01_when_file_budget_exceeded(tmp_path: Path) -> None:
     assert exit_code == 1
 
 
+def test_main_ignores_optimization_package_markers_for_m01(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "scripts/verify_python_module_size_budget.py",
+        (
+            "DEFAULT_MAX_LINES = 700\n"
+            "PREFERRED_MAX_LINES = 500\n"
+            "MODULE_LINE_BUDGET_OVERRIDES: dict[str, int] = {}\n"
+            "override_budget = 700\n"
+            "max(default_max_lines, override_budget)\n"
+            "default=\"strict\"\n"
+        ),
+    )
+    for idx in range(105):
+        _write(
+            tmp_path / f"app/modules/optimization/domain/generated_{idx}.py",
+            "pass\n",
+        )
+    for package in (
+        "app/modules/optimization/__init__.py",
+        "app/modules/optimization/domain/__init__.py",
+        "app/modules/optimization/adapters/__init__.py",
+    ):
+        _write(tmp_path / package, "")
+
+    exit_code = main(
+        [
+            "--repo-root",
+            str(tmp_path),
+            "--skip-report-check",
+            "--finding",
+            "M-01",
+        ]
+    )
+
+    assert exit_code == 0
+
+
 def test_main_flags_m03_when_bundle_exceeds_default_budget(tmp_path: Path) -> None:
     _write_lines(
         tmp_path / "app/modules/governance/domain/security/compliance_pack_bundle.py",

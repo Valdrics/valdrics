@@ -83,4 +83,23 @@ describe('savings proof page', () => {
 			expect(getMock).toHaveBeenCalled();
 		});
 	});
+
+	it('shows pro plan prompt for non-pro tiers without loading report data', async () => {
+		const data = {
+			user: { id: 'user-id' },
+			session: { access_token: 'token' },
+			subscription: { tier: 'growth', status: 'active' }
+		} as unknown as PageData;
+
+		render(Page, { data });
+
+		expect(screen.getByText('Move to Pro for savings proof')).toBeTruthy();
+		expect(document.body.textContent || '').toMatch(
+			/best for teams that want higher automation depth, finance close support, cloud-plus connectors/i
+		);
+		expect(screen.getByRole('link', { name: /View Pro plan/i })).toBeTruthy();
+		await waitFor(() => {
+			expect(getMock).not.toHaveBeenCalled();
+		});
+	});
 });

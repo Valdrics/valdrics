@@ -8,10 +8,8 @@ from uuid import UUID
 import structlog
 from fastapi import HTTPException
 from sqlalchemy import func, select
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.cloud import CloudAccount, CostRecord
 from app.modules.reporting.api.v1.costs_acceptance_ledger_quality import (
     build_ledger_quality_metrics,
 )

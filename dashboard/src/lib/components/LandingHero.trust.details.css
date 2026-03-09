@@ -1,0 +1,92 @@
+@media (min-width: 768px) {
+	.landing-steps {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+.landing-step {
+	position: relative;
+	overflow: hidden;
+	text-align: center;
+}
+.landing-step::before {
+	content: '';
+	position: absolute;
+	inset: 0 0 auto 0;
+	height: 2px;
+	background: linear-gradient(90deg, rgb(34 211 238 / 0.9), rgb(16 185 129 / 0.75));
+	opacity: 0.75;
+}
+.landing-step-n {
+	margin: 0 0 0.35rem 0;
+	font-size: var(--text-xs);
+	letter-spacing: 0.16em;
+	font-weight: 900;
+	color: var(--color-ink-500);
+	text-transform: uppercase;
+}
+.landing-evidence-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: var(--space-4);
+}
+@media (min-width: 900px) {
+	.landing-evidence-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+.landing-evidence-card {
+	display: grid;
+	gap: 0.45rem;
+	text-align: left;
+}
+.landing-trust-ecosystem {
+	margin-top: 1rem;
+	text-align: center;
+}
+.landing-trust-badges {
+	margin-top: 0.55rem;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.45rem;
+	justify-content: flex-start;
+}
+.landing-trust-badge {
+	padding: 0.33rem 0.62rem;
+	border-radius: 9999px;
+	border: 1px solid rgb(255 255 255 / 0.14);
+	background: rgb(9 14 22 / 0.52);
+	font-size: 0.84rem;
+	font-weight: 700;
+	color: var(--color-ink-200);
+}
+.landing-trust-badge.is-featured {
+	border-color: var(--color-accent-600);
+	background: linear-gradient(135deg, rgb(6 182 212 / 0.2), rgb(9 14 22 / 0.6));
+	color: var(--color-ink-100);
+	box-shadow: 0 0 12px rgb(6 182 212 / 0.15);
+}
+.landing-trust-benchmarks {
+	margin-top: 1rem;
+	display: grid;
+	gap: var(--space-4);
+	grid-template-columns: 1fr;
+}
+@media (min-width: 900px) {
+	.landing-trust-benchmarks {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+.landing-trust-benchmark-k {
+	margin: 0.65rem 0 0 0;
+	font-size: 0.84rem;
+	font-weight: 700;
+	color: var(--color-ink-100);
+}
+.landing-trust-benchmark {
+	background: rgb(6 12 18 / 0.76);
+	border-color: rgb(255 255 255 / 0.14);
+	text-align: center;
+}
+.landing-trust-benchmark .landing-p {
+	color: var(--color-ink-100);
+}

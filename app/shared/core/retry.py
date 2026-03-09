@@ -25,6 +25,7 @@ from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
 T = TypeVar("T")
+_JITTER_RNG = random.SystemRandom()
 DEADLOCK_RETRY_RECOVERABLE_EXCEPTIONS = (
     RuntimeError,
     ConnectionError,
@@ -111,7 +112,7 @@ class RetryManager:
         delay = min(base_delay * (multiplier**attempt), max_delay)
 
         # Add jitter (±25%) to prevent thundering herd
-        jitter = delay * 0.25 * (random.random() * 2 - 1)
+        jitter = delay * 0.25 * (_JITTER_RNG.random() * 2 - 1)
         final_delay = delay + jitter
 
         return max(0.001, final_delay)  # Minimum 1ms delay
@@ -260,7 +261,7 @@ async def execute_with_deadlock_retry(
             ):
                 if attempt < max_attempts - 1:
                     # Exponential backoff for deadlocks
-                    delay = base_delay * (2**attempt) + random.uniform(0, 0.1)
+                    delay = base_delay * (2**attempt) + _JITTER_RNG.uniform(0, 0.1)
 
                     logger.warning(
                         "database_deadlock_detected_retry",

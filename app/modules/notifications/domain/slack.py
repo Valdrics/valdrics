@@ -310,13 +310,27 @@ async def get_tenant_slack_service(
     Returns None when Slack is disabled or not fully configured.
     """
     from app.models.notification_settings import NotificationSettings
+    from app.models.tenant import Tenant
     from app.shared.core.config import get_settings
+    from app.shared.core.pricing import FeatureFlag, is_feature_enabled, normalize_tier
 
     try:
         tenant_uuid = UUID(str(tenant_id))
     except ValueError:
         logger.warning(
             "tenant_slack_settings_invalid_tenant_id", tenant_id=str(tenant_id)
+        )
+        return None
+
+    tenant_result = await db.execute(select(Tenant.plan).where(Tenant.id == tenant_uuid))
+    tenant_plan = tenant_result.scalar_one_or_none()
+    if not is_feature_enabled(
+        normalize_tier(tenant_plan), FeatureFlag.SLACK_INTEGRATION
+    ):
+        logger.info(
+            "tenant_slack_settings_blocked_by_tier",
+            tenant_id=str(tenant_uuid),
+            tenant_plan=str(tenant_plan or "free"),
         )
         return None
 

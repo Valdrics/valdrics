@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import json
 import os
+import tempfile
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -119,7 +120,7 @@ def _ensure_test_env() -> Path:
         "KDF_SALT",
         "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=",
     )
-    sqlite_path = Path("/tmp/valdrics_enforcement_stress.sqlite")
+    sqlite_path = Path(tempfile.gettempdir()) / "valdrics_enforcement_stress.sqlite"
     os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{sqlite_path}")
     return sqlite_path
 

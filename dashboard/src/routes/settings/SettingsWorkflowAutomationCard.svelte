@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { base } from '$app/paths';
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 	import { type PolicyDiagnostics } from './settingsPageSchemas';
 	import { INITIAL_NOTIFICATION_SETTINGS } from './settingsPageInitialState';
 
@@ -24,6 +26,8 @@
 		testWorkflowDispatch,
 		runPolicyDiagnostics
 	}: Props = $props();
+
+	const upgradePrompt = getUpgradePrompt('pro', 'workflow automation');
 </script>
 
 <div class="mt-4 rounded-xl border border-ink-700 p-4 bg-ink-900/30 space-y-4">
@@ -34,9 +38,21 @@
 		{/if}
 	</div>
 	<p class="text-xs text-ink-400">
-		Route policy and remediation events into your CI runbooks using tenant-scoped
-		credentials.
+		Route policy and remediation events into external CI runbooks using tenant-scoped
+		credentials. This automation lane starts on Pro because it creates external tickets,
+		dispatches, and approval activity.
 	</p>
+
+	{#if !isProTier}
+		<div class="rounded-lg border border-ink-700/80 bg-ink-950/40 p-3 space-y-2">
+			<p class="text-xs font-semibold text-white">{upgradePrompt.heading}</p>
+			<p class="text-xs text-ink-400">{upgradePrompt.body}</p>
+			<p class="text-[11px] text-ink-500">{upgradePrompt.footnote}</p>
+			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full sm:!w-auto">
+				{upgradePrompt.cta}
+			</a>
+		</div>
+	{/if}
 
 	<label class="flex items-center gap-3 cursor-pointer">
 		<input

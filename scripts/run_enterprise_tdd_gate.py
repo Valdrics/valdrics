@@ -5,7 +5,8 @@ from __future__ import annotations
 import argparse
 import os
 import shlex
-import subprocess
+import shutil
+import subprocess  # nosec B404 - controlled local gate execution only
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -24,6 +25,20 @@ def _repo_root() -> Path:
 
 def _format_command(cmd: Sequence[str]) -> str:
     return " ".join(shlex.quote(part) for part in cmd)
+
+
+def _resolve_command(cmd: Sequence[str]) -> list[str]:
+    if not cmd:
+        raise ValueError("Gate command must not be empty")
+    executable = str(cmd[0]).strip()
+    if not executable:
+        raise ValueError("Gate command executable must not be empty")
+    if Path(executable).is_absolute():
+        return list(cmd)
+    resolved = shutil.which(executable)
+    if not resolved:
+        raise RuntimeError(f"Required gate executable not found: {executable}")
+    return [resolved, *list(cmd[1:])]
 
 
 def run_gate(*, dry_run: bool) -> int:
@@ -47,8 +62,13 @@ def run_gate(*, dry_run: bool) -> int:
             print(f"[enterprise-gate] {rendered}")
             if dry_run:
                 continue
+            resolved_cmd = _resolve_command(cmd)
             try:
-                subprocess.run(cmd, check=True, env=command_env)
+                subprocess.run(
+                    resolved_cmd,
+                    check=True,
+                    env=command_env,
+                )  # nosec B603 - commands are sourced from repo-managed gate config
             except subprocess.CalledProcessError:
                 coverage_args = _parse_coverage_report_args(cmd)
                 if coverage_args is None:

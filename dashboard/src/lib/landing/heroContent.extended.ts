@@ -51,7 +51,7 @@ function toPlanCompareCard(plan: PricingPlan): PlanCompareCard {
 		badge: story.badge,
 		headline: story.headline,
 		summary: story.summary,
-		priceNote: `Monthly starting price. ${story.note}`,
+		priceNote: `$${plan.price_monthly}/mo starting price. ${story.note}`,
 		bestFor: story.bestFor,
 		whyUpgrade: story.whyUpgrade,
 		features: [...plan.features]

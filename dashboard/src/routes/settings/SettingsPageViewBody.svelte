@@ -4,6 +4,7 @@
 	import EnforcementOpsCard from '$lib/components/EnforcementOpsCard.svelte';
 	import EnforcementSettingsCard from '$lib/components/EnforcementSettingsCard.svelte';
 	import IdentitySettingsCard from '$lib/components/IdentitySettingsCard.svelte';
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 	import SettingsActiveOpsCard from './SettingsActiveOpsCard.svelte';
 	import SettingsAiStrategyCard from './SettingsAiStrategyCard.svelte';
 	import { INITIAL_ACTIVEOPS_SETTINGS, INITIAL_CARBON_SETTINGS, INITIAL_LLM_SETTINGS, INITIAL_NOTIFICATION_SETTINGS, INITIAL_PROVIDER_MODELS } from './settingsPageInitialState';
@@ -110,6 +111,7 @@
 	} = $props();
 
 	const isGrowthTier = $derived(['growth', 'pro', 'enterprise'].includes(data.subscription?.tier ?? ''));
+	const carbonUpgradePrompt = getUpgradePrompt('growth', 'GreenOps controls');
 </script>
 
 <div class="space-y-8">
@@ -181,10 +183,15 @@
 				</div>
 
 				{#if !isGrowthTier}
-					<div class="absolute inset-0 z-10 flex items-center justify-center bg-transparent">
-						<a href={`${base}/billing`} class="btn btn-primary shadow-lg pointer-events-auto">
-							Upgrade to Unlock GreenOps
-						</a>
+					<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+						<div class="max-w-md space-y-3 pointer-events-auto">
+							<h3 class="text-lg font-semibold text-white">{carbonUpgradePrompt.heading}</h3>
+							<p class="text-sm text-ink-300">{carbonUpgradePrompt.body}</p>
+							<p class="text-xs text-ink-500">{carbonUpgradePrompt.footnote}</p>
+							<a href={`${base}/billing`} class="btn btn-primary shadow-lg">
+								{carbonUpgradePrompt.cta}
+							</a>
+						</div>
 					</div>
 				{/if}
 

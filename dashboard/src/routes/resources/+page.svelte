@@ -1,66 +1,11 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
+	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import { PUBLIC_EXTENDED_CONTACT_CHANNELS } from '$lib/landing/publicNav';
+	import { listPublicContent } from '$lib/content/publicContent';
 
-	type ResourceEntry = {
-		category: string;
-		title: string;
-		summary: string;
-		href: string;
-		ctaLabel: string;
-	};
-
-	const resources: readonly ResourceEntry[] = [
-		{
-			category: 'Enterprise',
-			title: 'Enterprise Governance Overview',
-			summary:
-				'Review Valdrics enterprise control architecture, procurement-ready diligence path, and rollout model in one destination.',
-			href: `${base}/enterprise`,
-			ctaLabel: 'Open Enterprise Page'
-		},
-		{
-			category: 'Playbook',
-			title: 'Cloud Waste Review Checklist',
-			summary:
-				'Run a weekly 30-minute review that aligns finance and engineering on top waste risks and owners.',
-			href: `${base}/docs`,
-			ctaLabel: 'Open Resource'
-		},
-		{
-			category: 'Guide',
-			title: 'GreenOps Decision Framework',
-			summary:
-				'Balance cost, reliability, and carbon impact with decision rules that teams can execute safely.',
-			href: `${base}/greenops`,
-			ctaLabel: 'Open Resource'
-		},
-		{
-			category: 'Template',
-			title: 'SaaS and License Governance Starter Pack',
-			summary:
-				'Use role-based approval and owner-routing templates for software renewals and license optimization.',
-			href: `${base}/docs/technical-validation`,
-			ctaLabel: 'Open Resource'
-		},
-		{
-			category: 'Collateral',
-			title: 'Executive One-Pager (Download)',
-			summary:
-				'Share a concise procurement and rollout brief with finance, engineering, and leadership stakeholders.',
-			href: `${base}/resources/valdrics-enterprise-one-pager.md`,
-			ctaLabel: 'Download One-Pager'
-		},
-		{
-			category: 'Template',
-			title: 'ROI Assumptions Worksheet (CSV)',
-			summary:
-				'Model TCO assumptions and controllable spend opportunity before procurement and budget review.',
-			href: `${base}/resources/valdrics-roi-assumptions.csv`,
-			ctaLabel: 'Download Worksheet'
-		}
-	];
+	const resources = listPublicContent('resources');
 
 	const heroHighlights = [
 		{
@@ -78,13 +23,13 @@
 	] as const;
 </script>
 
-<svelte:head>
-	<title>Resources | Valdrics</title>
-	<meta
-		name="description"
-		content="Valdrics resources: practical playbooks, templates, and guides for cloud, SaaS, license, and GreenOps cost control."
-	/>
-</svelte:head>
+<PublicPageMeta
+	title="Resources"
+	description="Valdrics resources: practical playbooks, templates, and guides for cloud, SaaS, license, and GreenOps cost control."
+	pageType="CollectionPage"
+	pageSection="Resources"
+	keywords={['resources', 'downloads', 'greenops', 'saas governance', 'procurement']}
+/>
 
 <PublicMarketingPage
 	kicker="Resource Hub"
@@ -117,29 +62,29 @@
 				<p class="public-page__eyebrow">Library</p>
 				<h2 id="resources-library-title" class="public-page__section-title">Use the right asset for the buying moment</h2>
 				<p class="public-page__section-subtitle">
-					Each asset is tuned for a specific stage: self-serve evaluation, internal alignment, or
-					formal diligence.
+					Each asset is tuned for a specific stage: self-serve evaluation, team rollout alignment,
+					or formal diligence.
 				</p>
 			</div>
 
 			<div class="public-page__grid public-page__grid--3">
-				{#each resources as resource (resource.title)}
+				{#each resources as resource (resource.slug)}
 						<article
 							class={`public-page__card ${
-								resource.title === 'Enterprise Governance Overview'
+								resource.slug === 'enterprise-governance-overview'
 									? 'public-page__card--accent public-page__card--featured'
-									: resource.title === 'GreenOps Decision Framework'
+									: resource.slug === 'greenops-decision-framework'
 										? 'public-page__card--dark'
-										: resource.title === 'Executive One-Pager (Download)'
+										: resource.slug === 'executive-one-pager'
 											? 'public-page__card--featured'
 											: ''
 							}`}
 						>
-						<p class="public-page__card-kicker">{resource.category}</p>
+						<p class="public-page__card-kicker">{resource.kicker}</p>
 						<h2 class="public-page__card-title">{resource.title}</h2>
 						<p class="public-page__card-copy">{resource.summary}</p>
 						<div class="public-page__actions-row">
-							<a href={resource.href} class="btn btn-secondary">{resource.ctaLabel}</a>
+							<a href={`${base}/resources/${resource.slug}`} class="btn btn-secondary">Open Resource</a>
 						</div>
 					</article>
 				{/each}

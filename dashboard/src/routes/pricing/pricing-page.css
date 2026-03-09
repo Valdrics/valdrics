@@ -177,30 +177,40 @@
 	display: grid;
 	gap: 0.7rem;
 	margin: 0;
-	padding: 0.95rem 1rem;
-	border: 1px solid rgb(8 126 164 / 0.12);
-	border-radius: 1rem;
-	background: rgb(255 255 255 / 0.64);
+	padding: 0.85rem 0 0;
+	border: 0;
+	border-top: 1px solid rgb(8 126 164 / 0.12);
+	background: transparent;
 }
 
 .pricing-plan-context__row {
 	display: grid;
-	gap: 0.22rem;
+	grid-template-columns: minmax(0, 6.2rem) minmax(0, 1fr);
+	gap: 0.65rem;
+	align-items: start;
 }
 
 .pricing-plan-context__label {
 	margin: 0;
-	font-size: 0.74rem;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 1.7rem;
+	padding: 0.16rem 0.5rem;
+	border: 1px solid rgb(8 126 164 / 0.14);
+	border-radius: 999px;
+	background: rgb(255 255 255 / 0.72);
+	font-size: 0.68rem;
 	font-weight: 800;
-	letter-spacing: 0.1em;
+	letter-spacing: 0.08em;
 	text-transform: uppercase;
 	color: var(--color-ink-600);
 }
 
 .pricing-plan-context__value {
 	margin: 0;
-	font-size: 0.94rem;
-	line-height: 1.55;
+	font-size: 0.91rem;
+	line-height: 1.48;
 	color: var(--color-ink-800);
 }
 
@@ -329,6 +339,20 @@
 	.pricing-entry-card__price {
 		min-width: 0;
 		text-align: left;
+	}
+
+	.pricing-plan-context {
+		padding-top: 0.75rem;
+		gap: 0.55rem;
+	}
+
+	.pricing-plan-context__row {
+		grid-template-columns: 1fr;
+		gap: 0.34rem;
+	}
+
+	.pricing-plan-context__label {
+		justify-self: start;
 	}
 
 	.pricing-plan-grid {

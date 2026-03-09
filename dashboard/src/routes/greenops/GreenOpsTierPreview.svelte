@@ -1,9 +1,12 @@
 <script lang="ts">
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
+
 	interface Props {
 		toAppPath: (path: string) => string;
 	}
 
 	let { toAppPath }: Props = $props();
+	const upgradePrompt = getUpgradePrompt('growth', 'GreenOps visibility');
 </script>
 
 <div class="relative">
@@ -11,15 +14,17 @@
 		class="absolute inset-0 z-20 flex flex-col items-center justify-center text-center bg-ink-950/60 backdrop-blur-[1px] rounded-xl"
 	>
 		<div class="text-6xl mb-4">🌱</div>
-		<h2 class="text-2xl font-bold text-white mb-2">Upgrade to Unlock GreenOps</h2>
+		<h2 class="text-2xl font-bold text-white mb-2">{upgradePrompt.heading}</h2>
+		<p class="text-ink-300 max-w-md mb-3">{upgradePrompt.body}</p>
+		<p class="text-ink-500 text-xs max-w-md mb-6">{upgradePrompt.footnote}</p>
 		<p class="text-ink-300 max-w-md mb-6">
-			Track your cloud carbon footprint, get green region recommendations, and monitor sustainability
-			metrics.
+			Track cloud carbon footprint, compare greener regions, and monitor sustainability metrics once
+			your workspace moves into the Growth operating lane.
 		</p>
 		<div class="flex items-center gap-2 mb-6">
-			<span class="badge badge-warning">Growth Plan Required</span>
+			<span class="badge badge-warning">{upgradePrompt.badge}</span>
 		</div>
-		<a href={toAppPath('/billing')} class="btn btn-primary"> Upgrade to Growth </a>
+		<a href={toAppPath('/billing')} class="btn btn-primary">{upgradePrompt.cta}</a>
 	</div>
 
 	<div class="opacity-50 pointer-events-none select-none">

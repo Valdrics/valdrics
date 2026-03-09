@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
+import { readable } from 'svelte/store';
 import Page from './+page.svelte';
 
 vi.mock('$app/paths', () => ({
-	base: ''
+	base: '',
+	assets: ''
+}));
+
+vi.mock('$app/stores', () => ({
+	page: readable({ url: new URL('https://example.com/insights') })
 }));
 
 describe('insights page', () => {
@@ -13,28 +19,25 @@ describe('insights page', () => {
 		expect(screen.getByRole('heading', { level: 1, name: /insights/i })).toBeTruthy();
 		expect(
 			screen.getByRole('heading', {
-				name: /how engineering and finance run one weekly spend review/i
+				name: /why detection without ownership fails/i
 			})
 		).toBeTruthy();
 		expect(
 			screen.getByRole('heading', {
-				name: /greenops decision framework for cost, carbon, and risk/i
+				name: /how to run a weekly waste review/i
 			})
 		).toBeTruthy();
 		expect(
 			screen.getByRole('heading', {
-				name: /cfo brief: building a procurement-ready tco narrative/i
+				name: /from alert to approved action/i
 			})
 		).toBeTruthy();
 
-		expect(screen.getByRole('link', { name: /open playbook/i }).getAttribute('href')).toBe(
-			'/resources'
+		expect(screen.getAllByRole('link', { name: /open insight/i })[0]?.getAttribute('href')).toBe(
+			'/insights/why-detection-without-ownership-fails'
 		);
-		expect(screen.getByRole('link', { name: /open greenops guide/i }).getAttribute('href')).toBe(
-			'/greenops'
-		);
-		expect(screen.getByRole('link', { name: /download roi worksheet/i }).getAttribute('href')).toBe(
-			'/resources/valdrics-roi-assumptions.csv'
+		expect(screen.getAllByRole('link', { name: /open insight/i })[2]?.getAttribute('href')).toBe(
+			'/insights/from-alert-to-approved-action'
 		);
 	});
 });

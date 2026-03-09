@@ -238,9 +238,7 @@ Source audit: `/home/daretechie/.gemini/antigravity/brain/c6c55133-7d83-4352-ab2
   - `artifact.json`
 - retained ignore policy for root-local scratch artifacts:
   - `.gitignore` (`/feedback.md` added; other root artifact guards already present)
-- local notes moved out of repository root into docs namespace:
-  - `docs/notes/feedback_2026-02-22.md`
-  - `docs/notes/useLanding.md`
+- local notes moved out of repository root into docs namespace during the historical pass; those temporary note files were later retired and replaced by active contract docs
 
 3. Vulnerability-management hardening in CI:
 - added Docker image CVE scan job steps in security pipeline:

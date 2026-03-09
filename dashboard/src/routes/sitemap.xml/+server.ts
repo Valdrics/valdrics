@@ -1,4 +1,5 @@
 import type { RequestHandler } from './$types';
+import { listPublicSitemapEntries } from '$lib/content/publicContent';
 
 type SitemapEntry = {
 	path: string;
@@ -52,9 +53,22 @@ export const GET: RequestHandler = ({ url }) => {
 		process.env.PUBLIC_SITEMAP_LASTMOD ?? process.env.SITEMAP_LASTMOD
 	);
 
-	const urlsXml = PUBLIC_ENTRIES.map((entry) => {
+	const dynamicEntries = listPublicSitemapEntries();
+	const entries = [
+		...PUBLIC_ENTRIES,
+		...dynamicEntries.map((entry) => ({
+			path: entry.path,
+			changefreq: entry.changefreq,
+			priority: entry.priority
+		}))
+	];
+
+	const urlsXml = entries.map((entry) => {
 		const loc = new URL(`${basePath}${entry.path}`, url.origin).toString();
-		const lastmod = configuredLastMod ? `<lastmod>${escapeXml(configuredLastMod)}</lastmod>` : '';
+		const dynamicLastMod = dynamicEntries.find((candidate) => candidate.path === entry.path)?.lastmod;
+		const normalizedDynamicLastMod = normalizeConfiguredLastMod(dynamicLastMod);
+		const lastmodValue = configuredLastMod ?? normalizedDynamicLastMod;
+		const lastmod = lastmodValue ? `<lastmod>${escapeXml(lastmodValue)}</lastmod>` : '';
 		const changefreq = entry.changefreq ? `<changefreq>${entry.changefreq}</changefreq>` : '';
 		const priority =
 			typeof entry.priority === 'number' ? `<priority>${entry.priority.toFixed(1)}</priority>` : '';

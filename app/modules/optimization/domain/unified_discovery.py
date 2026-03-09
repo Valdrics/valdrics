@@ -44,7 +44,7 @@ class UnifiedDiscoveryService:
         self._aws_session_factory = aws_session_factory
 
     @staticmethod
-    def _build_aws_resource_explorer(connection: AWSConnection) -> object:
+    def _build_aws_resource_explorer(connection: AWSConnection) -> Any:
         from app.shared.adapters.aws_resource_explorer import AWSResourceExplorerAdapter
 
         return AWSResourceExplorerAdapter(connection)
@@ -60,13 +60,13 @@ class UnifiedDiscoveryService:
     @staticmethod
     def _build_region_discovery(
         connection: AWSConnection, credentials: dict[str, str]
-    ) -> object:
+    ) -> Any:
         from app.modules.optimization.adapters.aws.region_discovery import RegionDiscovery
 
         return RegionDiscovery(credentials=credentials, connection=connection)
 
     @staticmethod
-    def _build_aws_session() -> object:
+    def _build_aws_session() -> Any:
         import aioboto3
 
         return aioboto3.Session()

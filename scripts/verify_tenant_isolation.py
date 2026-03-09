@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
+import shutil
+import subprocess  # nosec B404 - controlled local git/pytest invocation only
+import sys
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -41,14 +43,29 @@ def _truncate(text: str, limit: int = 4000) -> str:
     return text[-limit:]
 
 
+def _resolve_executable(name: str) -> str:
+    resolved = shutil.which(name)
+    if not resolved:
+        raise RuntimeError(f"Required executable not found: {name}")
+    return resolved
+
+
+def _normalize_test_selector(value: str) -> str:
+    candidate = str(value or "").strip()
+    if not candidate or candidate.startswith("-"):
+        raise ValueError(f"Invalid pytest selector: {value!r}")
+    return candidate
+
+
 def _git_sha() -> str | None:
+    git_executable = _resolve_executable("git")
     try:
         proc = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
+            [git_executable, "rev-parse", "HEAD"],
             check=False,
             capture_output=True,
             text=True,
-        )
+        )  # nosec B603 - fixed git subcommand without shell expansion
     except OSError:
         return None
     sha = (proc.stdout or "").strip()
@@ -56,23 +73,15 @@ def _git_sha() -> str | None:
 
 
 def run_pytest(tests: list[str]) -> dict[str, Any]:
-    cmd = ["uv", "run", "pytest", "--no-cov", "-q", *tests]
+    normalized_tests = [_normalize_test_selector(test) for test in tests]
+    cmd = [sys.executable, "-m", "pytest", "--no-cov", "-q", *normalized_tests]
     start = time.perf_counter()
-    try:
-        proc = subprocess.run(
-            cmd,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except FileNotFoundError:
-        cmd = ["python", "-m", "pytest", "--no-cov", "-q", *tests]
-        proc = subprocess.run(
-            cmd,
-            check=False,
-            capture_output=True,
-            text=True,
-        )
+    proc = subprocess.run(
+        cmd,
+        check=False,
+        capture_output=True,
+        text=True,
+    )  # nosec B603 - pytest invocation uses validated selectors and current interpreter
     duration = time.perf_counter() - start
 
     stdout = (proc.stdout or "").strip()

@@ -39,6 +39,13 @@ OIDC_GCP_VERIFY_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     TypeError,
     ValueError,
 )
+GCP_STS_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:token-exchange"
+GCP_STS_REQUESTED_TOKEN_TYPE = (
+    "urn:ietf:params:oauth:token-type:access_token"  # nosec B105 - RFC token-type URN
+)
+GCP_STS_SUBJECT_TOKEN_TYPE = (
+    "urn:ietf:params:oauth:token-type:id_token"  # nosec B105 - RFC token-type URN
+)
 
 
 class OIDCService:
@@ -182,11 +189,11 @@ class OIDCService:
                 tenant_id=tenant_id, audience=audience
             )
             payload = {
-                "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+                "grant_type": GCP_STS_GRANT_TYPE,
                 "audience": audience,
                 "scope": settings.GCP_OIDC_SCOPE,
-                "requested_token_type": "urn:ietf:params:oauth:token-type:access_token",
-                "subject_token_type": "urn:ietf:params:oauth:token-type:id_token",
+                "requested_token_type": GCP_STS_REQUESTED_TOKEN_TYPE,
+                "subject_token_type": GCP_STS_SUBJECT_TOKEN_TYPE,
                 "subject_token": subject_token,
             }
 

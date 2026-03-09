@@ -102,7 +102,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await expect(page).toHaveURL(/\/docs$/);
 		await expect(page.getByRole('heading', { level: 1, name: /documentation/i })).toBeVisible();
 
-		await page.getByRole('link', { name: /open api docs/i }).click();
+		await page.getByRole('link', { name: /open api docs/i }).first().click();
 		await expect(page).toHaveURL(/\/docs\/api$/);
 		await expect(page.getByRole('heading', { level: 1, name: /api reference/i })).toBeVisible();
 
@@ -308,6 +308,85 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await expect(
 			footer.getByRole('link', { name: /security contact security@valdrics.com/i })
 		).toHaveAttribute('href', /^mailto:security@valdrics\.com$/i);
+	});
+
+	test('public content slug routes and enterprise intake destinations stay operational', async ({
+		page
+	}) => {
+		await assertPublicRoute(
+			page,
+			'/docs/quick-start-workspace',
+			/quick start a valdrics workspace/i
+		);
+		await assertPublicRoute(
+			page,
+			'/resources/executive-one-pager',
+			/executive one-pager/i
+		);
+		await assertPublicRoute(
+			page,
+			'/insights/from-alert-to-approved-action',
+			/from alert to approved action/i
+		);
+		await assertPublicRoute(page, '/proof/safe-access-model', /safe access model/i);
+
+		await page.goto(`${BASE_URL}/enterprise`);
+		await page.getByRole('link', { name: /request enterprise briefing/i }).click();
+		await expect(page).toHaveURL(/\/talk-to-sales(\?.*)?$/);
+		await expect(page.getByRole('heading', { level: 1, name: /talk to sales/i })).toBeVisible();
+		await expect(page).toHaveURL(/intent=enterprise_briefing/);
+	});
+
+	test('talk-to-sales success flow submits one inquiry with marketing context', async ({ page }) => {
+		let capturedPayload: Record<string, unknown> | null = null;
+		await page.route('**/api/marketing/talk-to-sales', async (route) => {
+			capturedPayload = route.request().postDataJSON() as Record<string, unknown>;
+			await route.fulfill({
+				status: 202,
+				contentType: 'application/json',
+				body: JSON.stringify({ ok: true, accepted: true, inquiryId: 'inq-e2e-1' })
+			});
+		});
+
+		await page.goto(
+			`${BASE_URL}/talk-to-sales?utm_source=linkedin&utm_medium=paid&utm_campaign=q1`
+		);
+		await page.getByLabel(/name/i).fill('Buyer One');
+		await page.getByLabel(/work email/i).fill('buyer@example.com');
+		await page.getByLabel(/company/i).fill('Example Inc');
+		await page.getByLabel(/role/i).fill('VP Platform');
+		await page.getByLabel(/cloud and saas scope/i).fill('AWS and SaaS');
+		await page.getByRole('button', { name: /send inquiry/i }).click();
+
+		await expect(page.getByRole('status')).toContainText(/inquiry received/i);
+		expect(capturedPayload).toMatchObject({
+			name: 'Buyer One',
+			email: 'buyer@example.com',
+			company: 'Example Inc',
+			role: 'VP Platform',
+			deploymentScope: 'AWS and SaaS',
+			utmSource: 'linkedin',
+			utmMedium: 'paid',
+			utmCampaign: 'q1'
+		});
+	});
+
+	test('talk-to-sales failure flow preserves inline error handling', async ({ page }) => {
+		await page.route('**/api/marketing/talk-to-sales', async (route) => {
+			await route.fulfill({
+				status: 503,
+				contentType: 'application/json',
+				body: JSON.stringify({ ok: false, error: 'delivery_failed' })
+			});
+		});
+
+		await page.goto(`${BASE_URL}/talk-to-sales`);
+		await page.getByLabel(/name/i).fill('Buyer One');
+		await page.getByLabel(/work email/i).fill('buyer@example.com');
+		await page.getByLabel(/company/i).fill('Example Inc');
+		await page.getByRole('button', { name: /send inquiry/i }).click();
+
+		await expect(page.getByRole('alert')).toContainText(/could not route the inquiry/i);
 	});
 });
 

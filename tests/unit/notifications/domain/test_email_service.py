@@ -1,6 +1,9 @@
-import pytest
 import smtplib
+from datetime import datetime
 from unittest.mock import patch, ANY
+
+import pytest
+
 from app.modules.notifications.domain.email_service import EmailService
 
 
@@ -83,3 +86,62 @@ async def test_send_account_downgraded(email_service):
             "user@example.com"
         )
         assert result is True
+
+
+@pytest.mark.asyncio
+async def test_send_sales_inquiry_notification_success(email_service):
+    with patch("smtplib.SMTP") as mock_smtp:
+        mock_server = mock_smtp.return_value.__enter__.return_value
+
+        result = await email_service.send_sales_inquiry_notification(
+            inquiry_id="inq-1",
+            submitted_at=datetime(2026, 3, 9, 12, 0, 0),
+            name="Buyer One",
+            email="buyer@example.com",
+            company="Example Inc",
+            role="FinOps",
+            team_size="21-50",
+            deployment_scope="AWS + Datadog",
+            timeline="this_quarter",
+            interest_area="security_review",
+            message="Need security review support.",
+            source="pricing_page",
+            referrer="https://valdrics.com/pricing",
+            utm_source="linkedin",
+            utm_medium="paid_social",
+            utm_campaign="q1",
+        )
+
+        assert result is True
+        mock_server.sendmail.assert_called_once_with(
+            "noreply@valdrics.io",
+            ["enterprise@valdrics.com", "sales@valdrics.com"],
+            ANY,
+        )
+        sent_message = mock_server.sendmail.call_args.args[2]
+        assert "Reply-To: buyer@example.com" in sent_message
+        assert "Valdrics sales inquiry: Example Inc" in sent_message
+
+
+@pytest.mark.asyncio
+async def test_send_sales_inquiry_notification_rejects_header_injection(email_service):
+    result = await email_service.send_sales_inquiry_notification(
+        inquiry_id="inq-1",
+        submitted_at=datetime(2026, 3, 9, 12, 0, 0),
+        name="Buyer One",
+        email="buyer@example.com\r\nBcc:bad@example.com",
+        company="Example Inc",
+        role=None,
+        team_size=None,
+        deployment_scope=None,
+        timeline=None,
+        interest_area=None,
+        message=None,
+        source=None,
+        referrer=None,
+        utm_source=None,
+        utm_medium=None,
+        utm_campaign=None,
+    )
+
+    assert result is False

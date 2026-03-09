@@ -143,7 +143,6 @@
  D docs/ops/evidence/valdrics_disposition_register_2026-02-28.json
  D docs/ops/evidence/valdrics_disposition_register_TEMPLATE.json
  M docs/ops/incident_response_runbook.md
- M docs/ops/pricing_competitiveness_fact_check_2026-02-17.md
  M docs/runbooks/disaster_recovery.md
  M docs/runbooks/emergency_disconnect.md
  M docs/runbooks/enforcement_incident_response.md

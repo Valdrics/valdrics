@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import tempfile
 from contextlib import suppress
 from datetime import timedelta
 from pathlib import Path
@@ -36,7 +37,7 @@ async def bootstrap_in_process_app_and_token() -> tuple[httpx.ASGITransport, str
     ensure_test_env_for_in_process()
 
     # Use a file-backed sqlite DB so multiple connections share the same state.
-    sqlite_path = Path("/tmp/valdrics_acceptance_capture.sqlite")
+    sqlite_path = Path(tempfile.gettempdir()) / "valdrics_acceptance_capture.sqlite"
     os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{sqlite_path}")
 
     # Import after env is set.

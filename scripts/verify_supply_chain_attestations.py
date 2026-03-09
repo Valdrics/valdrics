@@ -7,16 +7,110 @@ import json
 import os
 import re
 import shlex
-import subprocess
+import shutil
+import subprocess  # nosec B404 - controlled GitHub CLI invocation only
 from collections.abc import Sequence
 from pathlib import Path
 
 MIN_GH_VERSION: tuple[int, int, int] = (2, 67, 0)
 DEFAULT_SIGNER_WORKFLOW = ".github/workflows/sbom.yml"
+DEFAULT_ARTIFACT_PATHS: tuple[Path, ...] = (
+    Path("sbom/valdrics-python-sbom.json"),
+    Path("sbom/valdrics-container-sbom.json"),
+    Path("provenance/supply-chain-manifest.json"),
+)
+REPO_SLUG_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+GITHUB_REMOTE_PATTERN = re.compile(
+    r"(?:git@github\.com:|https://github\.com/|ssh://git@github\.com/)"
+    r"(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?/?$"
+)
 
 
 def _format_command(cmd: Sequence[str]) -> str:
     return " ".join(shlex.quote(part) for part in cmd)
+
+
+def _resolve_gh_executable() -> str:
+    gh_executable = shutil.which("gh")
+    if not gh_executable:
+        raise RuntimeError("GitHub CLI executable `gh` is required")
+    return gh_executable
+
+
+def _resolve_git_executable() -> str:
+    git_executable = shutil.which("git")
+    if not git_executable:
+        raise RuntimeError("Git executable `git` is required")
+    return git_executable
+
+
+def _normalize_repo_slug(value: str) -> str:
+    candidate = str(value or "").strip()
+    if not candidate:
+        return ""
+    if REPO_SLUG_PATTERN.fullmatch(candidate) is None:
+        raise ValueError("`repo` is required (OWNER/REPO).")
+    return candidate
+
+
+def _repo_slug_from_remote_url(remote_url: str) -> str:
+    match = GITHUB_REMOTE_PATTERN.fullmatch(str(remote_url or "").strip())
+    if match is None:
+        return ""
+    return f"{match.group('owner')}/{match.group('repo')}"
+
+
+def _resolve_repo_from_git_remote() -> str:
+    try:
+        git_executable = _resolve_git_executable()
+    except RuntimeError:
+        return ""
+    completed = subprocess.run(
+        [git_executable, "remote", "get-url", "origin"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )  # nosec B603 - fixed git subcommand with no shell expansion
+    if completed.returncode != 0:
+        return ""
+    return _repo_slug_from_remote_url(completed.stdout)
+
+
+def _resolve_repo_slug(value: str) -> str:
+    explicit = _normalize_repo_slug(value)
+    if explicit:
+        return explicit
+    env_repo = _normalize_repo_slug(os.environ.get("GITHUB_REPOSITORY", ""))
+    if env_repo:
+        return env_repo
+    remote_repo = _normalize_repo_slug(_resolve_repo_from_git_remote())
+    if remote_repo:
+        return remote_repo
+    raise ValueError("`repo` is required (OWNER/REPO).")
+
+
+def _resolve_artifact_paths(artifacts: Sequence[Path]) -> tuple[Path, ...]:
+    if artifacts:
+        return tuple(artifacts)
+    return DEFAULT_ARTIFACT_PATHS
+
+
+def _run_gh_command(
+    args: Sequence[str],
+) -> subprocess.CompletedProcess[str]:
+    gh_executable = _resolve_gh_executable()
+    return subprocess.run(
+        [gh_executable, *args],
+        check=False,
+        capture_output=True,
+        text=True,
+    )  # nosec B603 - trusted gh CLI invocation with fixed argument structure
+
+
+def _materialize_gh_command(cmd: Sequence[str]) -> list[str]:
+    if not cmd or cmd[0] != "gh":
+        raise ValueError(f"Unexpected gh command shape: {cmd!r}")
+    return [_resolve_gh_executable(), *list(cmd[1:])]
 
 
 def _parse_semver(version_text: str) -> tuple[int, int, int]:
@@ -27,12 +121,7 @@ def _parse_semver(version_text: str) -> tuple[int, int, int]:
 
 
 def check_gh_cli_version() -> tuple[int, int, int]:
-    completed = subprocess.run(
-        ["gh", "version"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    completed = _run_gh_command(("version",))
     if completed.returncode != 0:
         message = completed.stderr.strip() or completed.stdout.strip()
         raise RuntimeError(
@@ -47,12 +136,7 @@ def check_gh_cli_version() -> tuple[int, int, int]:
             f"required >= {MIN_GH_VERSION[0]}.{MIN_GH_VERSION[1]}.{MIN_GH_VERSION[2]}"
         )
 
-    attestation_help = subprocess.run(
-        ["gh", "attestation", "verify", "--help"],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    attestation_help = _run_gh_command(("attestation", "verify", "--help"))
     if attestation_help.returncode != 0:
         details = attestation_help.stderr.strip() or attestation_help.stdout.strip()
         raise RuntimeError(
@@ -127,6 +211,14 @@ def verify_attestations(
         raise ValueError("At least one --artifact is required.")
 
     if not dry_run:
+        for artifact in artifacts:
+            artifact_path = artifact.resolve()
+            if not artifact_path.exists() or not artifact_path.is_file():
+                raise FileNotFoundError(
+                    f"Artifact path does not exist or is not a file: {artifact.as_posix()}"
+                )
+
+    if not dry_run:
         gh_version = check_gh_cli_version()
         print(
             "[attestation-verify] using gh "
@@ -135,26 +227,26 @@ def verify_attestations(
 
     for artifact in artifacts:
         artifact_path = artifact.resolve()
-        if not artifact_path.exists() or not artifact_path.is_file():
-            raise FileNotFoundError(
-                f"Artifact path does not exist or is not a file: {artifact.as_posix()}"
-            )
-
         cmd = build_verify_command(
             artifact=artifact_path,
             repo=repo,
             signer_workflow=signer_workflow,
         )
+        if dry_run and (not artifact_path.exists() or not artifact_path.is_file()):
+            print(
+                "[attestation-verify] warning missing local artifact in dry-run: "
+                f"{artifact.as_posix()}"
+            )
         print(f"[attestation-verify] {_format_command(cmd)}")
         if dry_run:
             continue
 
         completed = subprocess.run(
-            cmd,
+            _materialize_gh_command(cmd),
             check=False,
             capture_output=True,
             text=True,
-        )
+        )  # nosec B603 - trusted gh CLI invocation with validated local artifact path
         if completed.returncode != 0:
             details = completed.stderr.strip() or completed.stdout.strip()
             raise RuntimeError(
@@ -173,7 +265,10 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--repo",
         default=os.environ.get("GITHUB_REPOSITORY", ""),
-        help="Repository in OWNER/REPO format (defaults to $GITHUB_REPOSITORY).",
+        help=(
+            "Repository in OWNER/REPO format "
+            "(defaults to $GITHUB_REPOSITORY, then git origin remote)."
+        ),
     )
     parser.add_argument(
         "--signer-workflow",
@@ -188,7 +283,10 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         action="append",
         default=[],
         metavar="PATH",
-        help="Artifact file path to verify; may be supplied multiple times.",
+        help=(
+            "Artifact file path to verify; may be supplied multiple times. "
+            "Defaults to the workflow subject paths when omitted."
+        ),
     )
     parser.add_argument(
         "--dry-run",
@@ -200,9 +298,9 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
-    artifacts = tuple(Path(item) for item in args.artifact)
+    artifacts = _resolve_artifact_paths(tuple(Path(item) for item in args.artifact))
     return verify_attestations(
-        repo=str(args.repo),
+        repo=_resolve_repo_slug(str(args.repo)),
         signer_workflow=str(args.signer_workflow),
         artifacts=artifacts,
         dry_run=bool(args.dry_run),

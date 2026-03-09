@@ -47,10 +47,10 @@ def _safe_rate(value: Any) -> float:
 
 
 def _cache_key(
-    provider: str,
-    resource_type: str,
-    resource_size: str,
-    region: str,
+    provider: Any,
+    resource_type: Any,
+    resource_size: Any,
+    region: Any,
 ) -> tuple[str, str, str, str]:
     return (
         _normalize_key(provider),

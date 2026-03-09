@@ -1,6 +1,9 @@
+import sqlite3
 import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+
+from sqlalchemy.exc import OperationalError
 
 from app.shared.core.health import HealthService
 
@@ -185,6 +188,46 @@ async def test_check_background_jobs_exception():
 
     assert result["status"] == "unknown"
     assert "db fail" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_check_background_jobs_missing_table_skips_in_testing():
+    db = AsyncMock()
+    db.execute.side_effect = OperationalError(
+        "SELECT count(*) FROM background_jobs",
+        {},
+        sqlite3.OperationalError("no such table: background_jobs"),
+    )
+    service = HealthService(db=db)
+
+    with patch(
+        "app.shared.core.health_check_ops.get_settings",
+        return_value=SimpleNamespace(TESTING=True),
+    ):
+        result = await service._check_background_jobs()
+
+    assert result["status"] == "disabled"
+    assert "not initialized in testing" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_check_background_jobs_missing_table_stays_unknown_outside_testing():
+    db = AsyncMock()
+    db.execute.side_effect = OperationalError(
+        "SELECT count(*) FROM background_jobs",
+        {},
+        sqlite3.OperationalError("no such table: background_jobs"),
+    )
+    service = HealthService(db=db)
+
+    with patch(
+        "app.shared.core.health_check_ops.get_settings",
+        return_value=SimpleNamespace(TESTING=False),
+    ):
+        result = await service._check_background_jobs()
+
+    assert result["status"] == "unknown"
+    assert "background_jobs" in result["error"]
 
 
 @pytest.mark.asyncio

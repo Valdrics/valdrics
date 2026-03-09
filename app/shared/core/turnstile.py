@@ -16,6 +16,7 @@ logger = structlog.get_logger()
 _SURFACE_PUBLIC_ASSESSMENT = "public_assessment"
 _SURFACE_SSO_DISCOVERY = "sso_discovery"
 _SURFACE_ONBOARD = "onboard"
+_SURFACE_PUBLIC_SALES_INTAKE = "public_sales_intake"
 _TURNSTILE_TOKEN_HEADERS = ("x-turnstile-token", "cf-turnstile-token")
 
 
@@ -26,6 +27,10 @@ def _surface_required(settings: Any, surface: str) -> bool:
         return bool(getattr(settings, "TURNSTILE_REQUIRE_SSO_DISCOVERY", False))
     if surface == _SURFACE_ONBOARD:
         return bool(getattr(settings, "TURNSTILE_REQUIRE_ONBOARD", False))
+    if surface == _SURFACE_PUBLIC_SALES_INTAKE:
+        return bool(
+            getattr(settings, "TURNSTILE_REQUIRE_PUBLIC_SALES_INTAKE", False)
+        )
     return False
 
 
@@ -195,9 +200,14 @@ async def require_turnstile_for_onboard(request: Request) -> None:
     await _enforce_turnstile_for_surface(request, _SURFACE_ONBOARD)
 
 
+async def require_turnstile_for_public_sales_intake(request: Request) -> None:
+    await _enforce_turnstile_for_surface(request, _SURFACE_PUBLIC_SALES_INTAKE)
+
+
 __all__ = [
     "require_turnstile_for_public_assessment",
     "require_turnstile_for_sso_discovery",
     "require_turnstile_for_onboard",
+    "require_turnstile_for_public_sales_intake",
     "_verify_turnstile_with_cloudflare",
 ]

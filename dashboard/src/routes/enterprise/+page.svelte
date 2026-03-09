@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
+	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import './enterprise-page.css';
 
+	const enterpriseIntakeHref = `${base}/talk-to-sales?intent=enterprise_briefing&entry=enterprise`;
 	const enterpriseMailHref =
 		'mailto:enterprise@valdrics.com?cc=sales@valdrics.com&subject=Valdrics%20Enterprise%20Evaluation&body=Organization%20name%3A%0AStakeholders%3A%0ACloud%2FSaaS%20scope%3A%0ATarget%20timeline%3A';
 
@@ -30,13 +32,13 @@
 	] as const;
 </script>
 
-<svelte:head>
-	<title>Enterprise Governance | Valdrics</title>
-	<meta
-		name="description"
-		content="Evaluate Valdrics enterprise governance readiness for cloud and software spend control, including security review, procurement diligence, and rollout operating model."
-	/>
-</svelte:head>
+<PublicPageMeta
+	title="Enterprise Governance"
+	description="Evaluate Valdrics enterprise governance readiness for cloud and software spend control, including security review, procurement diligence, and rollout operating model."
+	pageType="WebPage"
+	pageSection="Enterprise Governance"
+	keywords={['enterprise', 'procurement', 'security review', 'governance', 'scim']}
+/>
 
 <div class="enterprise-shell">
 	<div class="enterprise-bg-glow enterprise-bg-glow-a" aria-hidden="true"></div>
@@ -77,13 +79,16 @@
 			and a formal enterprise diligence lane for security, risk, procurement, and executive review.
 		</p>
 		<div class="enterprise-hero-cta">
-			<a href={enterpriseMailHref} class="btn btn-primary pulse-glow">Request Enterprise Briefing</a>
+			<a href={enterpriseIntakeHref} class="btn btn-primary pulse-glow">Request Enterprise Briefing</a>
 			<a href={`${base}/talk-to-sales`} class="btn btn-secondary">Talk to Sales</a>
 			<a href={`${base}/auth/login?intent=enterprise_preview`} class="btn btn-secondary"
 				>Start Free Workspace</a
 			>
 		</div>
-		<p class="enterprise-cta-note">Validation briefing is ungated. No login required.</p>
+		<p class="enterprise-cta-note">
+			Validation briefing is ungated. No login required. Prefer direct email?
+			<a href={enterpriseMailHref}>enterprise@valdrics.com</a>
+		</p>
 		<div class="enterprise-metric-grid" aria-label="Enterprise readiness highlights">
 			<article class="enterprise-metric-card">
 				<p class="enterprise-metric-k">Validation Scope</p>
@@ -134,7 +139,7 @@
 				<li>Review governance artifacts, SCIM, and deployment controls before full production activation.</li>
 				<li>Operate a staged rollout with explicit control checkpoints.</li>
 			</ul>
-			<a href={enterpriseMailHref} class="btn btn-primary">Open Enterprise Intake</a>
+			<a href={enterpriseIntakeHref} class="btn btn-primary">Open Enterprise Intake</a>
 		</article>
 	</section>
 

@@ -35,6 +35,7 @@ def _settings(**overrides: object) -> SimpleNamespace:
         "TURNSTILE_REQUIRE_PUBLIC_ASSESSMENT": True,
         "TURNSTILE_REQUIRE_SSO_DISCOVERY": True,
         "TURNSTILE_REQUIRE_ONBOARD": True,
+        "TURNSTILE_REQUIRE_PUBLIC_SALES_INTAKE": True,
         "TESTING": False,
         "ENVIRONMENT": "test",
     }
@@ -88,6 +89,13 @@ def test_should_enforce_branching() -> None:
             turnstile._should_enforce(
                 _settings(TURNSTILE_REQUIRE_PUBLIC_ASSESSMENT=False),
                 "public_assessment",
+            )
+            is False
+        )
+        assert (
+            turnstile._should_enforce(
+                _settings(TURNSTILE_REQUIRE_PUBLIC_SALES_INTAKE=False),
+                "public_sales_intake",
             )
             is False
         )

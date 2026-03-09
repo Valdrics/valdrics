@@ -3,6 +3,7 @@ import uuid
 from httpx import AsyncClient
 from app.models.tenant import UserRole
 from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.pricing import PricingTier
 
 
 
@@ -42,7 +43,11 @@ async def test_notifications_settings_lifecycle(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@notify.io", role=UserRole.ADMIN
+        id=user_id,
+        tenant_id=tenant_id,
+        email="test@notify.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.GROWTH,
     )
     app.dependency_overrides[get_current_user] = lambda: mock_user
 

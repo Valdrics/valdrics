@@ -1,6 +1,10 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
+	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
+	import { listPublicContent } from '$lib/content/publicContent';
+
+	const docsEntries = listPublicContent('docs');
 
 	const heroHighlights = [
 		{
@@ -18,13 +22,13 @@
 	] as const;
 </script>
 
-<svelte:head>
-	<title>Documentation | Valdrics</title>
-	<meta
-		name="description"
-		content="Valdrics documentation for setup, dashboard workflows, API usage, and operational guidance."
-	/>
-</svelte:head>
+<PublicPageMeta
+	title="Documentation"
+	description="Valdrics documentation for setup, dashboard workflows, API usage, and operational guidance."
+	pageType="CollectionPage"
+	pageSection="Documentation"
+	keywords={['documentation', 'api', 'technical validation', 'setup', 'governance']}
+/>
 
 <PublicMarketingPage
 	kicker="Documentation"
@@ -61,25 +65,16 @@
 			</div>
 
 			<div class="public-page__grid public-page__grid--2">
-					<article class="public-page__card public-page__card--accent public-page__card--featured">
-						<h2 class="public-page__card-title">Quick Start</h2>
-					<p class="public-page__card-copy">
-						Start a workspace, connect your first providers, and prioritize the biggest cost and risk
-						signals first.
-					</p>
-					<a href={`${base}/auth/login?mode=signup`} class="btn btn-secondary">Start Free Workspace</a>
-				</article>
-
-					<article class="public-page__card public-page__card--dark">
-						<h2 class="public-page__card-title">API Reference</h2>
+				<article class="public-page__card public-page__card--dark">
+					<h2 class="public-page__card-title">API Reference</h2>
 					<p class="public-page__card-copy">
 						Review endpoint groups and request examples for product and platform integrations.
 					</p>
 					<a href={`${base}/docs/api`} class="btn btn-secondary">Open API Docs</a>
 				</article>
 
-					<article class="public-page__card public-page__card--featured">
-						<h2 class="public-page__card-title">Technical Validation</h2>
+				<article class="public-page__card public-page__card--featured">
+					<h2 class="public-page__card-title">Technical Validation</h2>
 					<p class="public-page__card-copy">
 						Review the buyer-safe capability-to-API validation summary used for technical diligence.
 					</p>
@@ -88,35 +83,22 @@
 					</a>
 				</article>
 
-				<article class="public-page__card">
-					<h2 class="public-page__card-title">Resources Hub</h2>
-					<p class="public-page__card-copy">
-						Read practical playbooks for cloud, GreenOps, SaaS, and license optimization programs.
-					</p>
-					<div class="public-page__actions-row">
-						<a href={`${base}/resources`} class="btn btn-secondary">Open Resources</a>
-						<a href={`${base}/insights`} class="btn btn-secondary">Open Insights</a>
-					</div>
-				</article>
-
-				<article class="public-page__card">
-					<h2 class="public-page__card-title">Plan & Access</h2>
-					<p class="public-page__card-copy">
-						See current plan capabilities, billing model, and upgrade paths for advanced workflows.
-					</p>
-					<a href={`${base}/pricing`} class="btn btn-secondary">View Pricing</a>
-				</article>
-
-				<article class="public-page__card">
-					<h2 class="public-page__card-title">Policies & Legal</h2>
-					<p class="public-page__card-copy">
-						Review service terms, privacy commitments, and data handling posture.
-					</p>
-					<div class="public-page__actions-row">
-						<a href={`${base}/terms`} class="btn btn-secondary">Terms</a>
-						<a href={`${base}/privacy`} class="btn btn-secondary">Privacy</a>
-					</div>
-				</article>
+				{#each docsEntries as entry (entry.slug)}
+					<article
+						class={`public-page__card ${
+							entry.slug === 'quick-start-workspace'
+								? 'public-page__card--accent public-page__card--featured'
+								: ''
+						}`}
+					>
+						<p class="public-page__card-kicker">{entry.kicker}</p>
+						<h2 class="public-page__card-title">{entry.title}</h2>
+						<p class="public-page__card-copy">{entry.summary}</p>
+						<div class="public-page__actions-row">
+							<a href={`${base}/docs/${entry.slug}`} class="btn btn-secondary">Open guide</a>
+						</div>
+					</article>
+				{/each}
 			</div>
 		</section>
 

@@ -237,4 +237,26 @@ describe('connections page API wiring', () => {
 		);
 		await screen.findByText('SaaS connector validation failed');
 	});
+
+	it('shows growth plan prompts for cross-cloud expansion on lower tiers', async () => {
+		render(Page, { data: pageData('free') });
+		await screen.findByText('Cloud Accounts');
+		await screen.findAllByRole('link', { name: /View Growth plan/i });
+
+		expect(document.body.textContent || '').toMatch(
+			/best for teams that need broader provider coverage, owner routing, slack-integrated workflows, sso rollout/i
+		);
+		expect(screen.getAllByRole('link', { name: /View Growth plan/i }).length).toBeGreaterThan(0);
+	});
+
+	it('shows pro plan prompts for cloud-plus connectors before pro', async () => {
+		render(Page, { data: pageData('growth') });
+		await screen.findByText('Cloud Accounts');
+		await screen.findAllByRole('link', { name: /View Pro plan/i });
+
+		expect(document.body.textContent || '').toMatch(
+			/best for teams that want higher automation depth, finance close support, cloud-plus connectors/i
+		);
+		expect(screen.getAllByRole('link', { name: /View Pro plan/i }).length).toBeGreaterThan(0);
+	});
 });

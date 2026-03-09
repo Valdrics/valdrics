@@ -194,7 +194,7 @@
 
 						<td class="py-3 pr-4">
 							<div class="flex flex-col">
-								{#if finding.owner === 'Upgrade to Growth'}
+								{#if finding.owner === 'Growth Plan Required'}
 									<span
 										class="text-xs font-bold text-warning-400 flex items-center gap-1"
 										title="Owner Attribution requires Growth tier"

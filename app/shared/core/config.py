@@ -1,4 +1,6 @@
 from functools import lru_cache
+from pathlib import Path
+import tempfile
 from threading import Lock
 from typing import Optional
 import structlog
@@ -23,10 +25,8 @@ from app.shared.core.config_validation_observability import (
 )
 
 # Environment Constants (Finding #10)
-ENV_PRODUCTION = "production"
-ENV_STAGING = "staging"
-ENV_DEVELOPMENT = "development"
-ENV_LOCAL = "local"
+ENV_PRODUCTION, ENV_STAGING = "production", "staging"
+ENV_DEVELOPMENT, ENV_LOCAL = "development", "local"
 @lru_cache
 def get_settings() -> "Settings":
     """Returns a singleton instance of the application settings."""
@@ -34,8 +34,8 @@ def get_settings() -> "Settings":
     # Require explicit configuration via environment / .env for all non-test runs.
     return Settings()
 
-_settings_reload_lock = Lock()
 SETTINGS_RELOAD_CACHE_REFRESH_RECOVERABLE_EXCEPTIONS = (ImportError, AttributeError, RuntimeError, TypeError, ValueError)
+_settings_reload_lock = Lock()
 def reload_settings_from_environment() -> "Settings":
     """
     Atomically refresh the cached settings from current environment values.
@@ -85,7 +85,7 @@ class Settings(BaseSettings):
     SENTRY_DSN: Optional[str] = None
     EXPOSE_API_DOCUMENTATION_PUBLICLY: bool = False
     WEB_CONCURRENCY: int = 2
-    APP_RUNTIME_DATA_DIR: str = "/tmp/valdrics"
+    APP_RUNTIME_DATA_DIR: str = str(Path(tempfile.gettempdir()) / "valdrics")
     RATELIMIT_ENABLED: bool = True
     # In staging/production, distributed rate limiting is required by default.
     # This override exists only for controlled break-glass situations.
@@ -102,6 +102,7 @@ class Settings(BaseSettings):
     TURNSTILE_REQUIRE_PUBLIC_ASSESSMENT: bool = True
     TURNSTILE_REQUIRE_SSO_DISCOVERY: bool = True
     TURNSTILE_REQUIRE_ONBOARD: bool = True
+    TURNSTILE_REQUIRE_PUBLIC_SALES_INTAKE: bool = True
     INTERNAL_JOB_SECRET: Optional[str] = None
     WEBHOOK_ALLOWED_DOMAINS: list[str] = []  # Allowlist for generic webhook retries
     WEBHOOK_REQUIRE_HTTPS: bool = True

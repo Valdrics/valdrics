@@ -5,6 +5,8 @@ This module exists to make sure SQLAlchemy's registry is populated in any runtim
 that uses the ORM outside of `app/main.py` (scripts, workers, one-off jobs).
 """
 
+from typing import Any
+
 from sqlalchemy import event
 from sqlalchemy.orm import Mapper, configure_mappers
 
@@ -34,6 +36,7 @@ from app.models import (  # noqa: F401
     optimization,
     platform_connection,
     pricing,
+    public_sales_inquiry,
     realized_savings,
     remediation,
     remediation_settings,
@@ -65,7 +68,7 @@ def _apply_relationship_loader_policy() -> None:
 
 
 @event.listens_for(Mapper, "mapper_configured")
-def _on_mapper_configured(mapper: Mapper, _class: type[object]) -> None:
+def _on_mapper_configured(mapper: Mapper[Any], _class: type[object]) -> None:
     for relation in mapper.relationships:
         if relation.lazy == "select":
             relation.lazy = "raise_on_sql"

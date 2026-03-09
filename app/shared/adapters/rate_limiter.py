@@ -30,6 +30,7 @@ INITIAL_BACKOFF_SECONDS = 1.0
 MAX_BACKOFF_SECONDS = 60.0
 MAX_RETRIES = 5
 JITTER_FACTOR = 0.1  # 10% jitter
+_JITTER_RNG = random.SystemRandom()
 
 T = TypeVar("T")
 
@@ -154,7 +155,7 @@ async def with_backoff(
                     raise
 
                 # Add jitter to prevent thundering herd
-                jitter = random.uniform(-JITTER_FACTOR, JITTER_FACTOR) * backoff
+                jitter = _JITTER_RNG.uniform(-JITTER_FACTOR, JITTER_FACTOR) * backoff
                 sleep_time = backoff + jitter
 
                 logger.info(
@@ -176,7 +177,7 @@ async def with_backoff(
             if attempt >= max_retries:
                 raise
 
-            jitter = random.uniform(-JITTER_FACTOR, JITTER_FACTOR) * backoff
+            jitter = _JITTER_RNG.uniform(-JITTER_FACTOR, JITTER_FACTOR) * backoff
             sleep_time = backoff + jitter
 
             logger.info(

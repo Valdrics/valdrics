@@ -13,6 +13,7 @@ export type PolicyDiagnostics = {
 	has_notification_settings: boolean;
 	policy_enabled: boolean;
 	slack: PolicyChannelDiagnostics & {
+		feature_allowed_by_tier: boolean;
 		has_bot_token: boolean;
 		has_default_channel: boolean;
 		has_channel_override: boolean;

@@ -7,6 +7,7 @@
 	import IdentityDiagnosticsSection from '$lib/components/identity/IdentityDiagnosticsSection.svelte';
 	import IdentityScimSection from '$lib/components/identity/IdentityScimSection.svelte';
 	import IdentitySsoSection from '$lib/components/identity/IdentitySsoSection.svelte';
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 	import {
 		isGrowthPlus,
 		parseDomains,
@@ -300,6 +301,8 @@
 			(_, i) => i !== index
 		);
 	}
+
+	const upgradePrompt = getUpgradePrompt('growth', 'identity controls');
 </script>
 
 <div
@@ -318,10 +321,13 @@
 	</div>
 
 	{#if !isGrowthPlus(tier)}
-		<div class="absolute inset-0 z-10 flex items-center justify-center bg-transparent">
-			<a href={`${base}/billing`} class="btn btn-primary shadow-lg pointer-events-auto">
-				Upgrade to Unlock Identity Controls
-			</a>
+		<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+			<div class="max-w-md space-y-3 pointer-events-auto">
+				<h3 class="text-lg font-semibold text-white">{upgradePrompt.heading}</h3>
+				<p class="text-sm text-ink-300">{upgradePrompt.body}</p>
+				<p class="text-xs text-ink-500">{upgradePrompt.footnote}</p>
+				<a href={`${base}/billing`} class="btn btn-primary shadow-lg">{upgradePrompt.cta}</a>
+			</div>
 		</div>
 	{/if}
 

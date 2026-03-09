@@ -14,6 +14,7 @@
 	import LandingPlansSection from '$lib/components/landing/LandingPlansSection.svelte';
 	import LandingTrustSection from '$lib/components/landing/LandingTrustSection.svelte';
 	import LandingCookieConsent from '$lib/components/landing/LandingCookieConsent.svelte';
+	import LandingExitIntentPrompt from '$lib/components/landing/LandingExitIntentPrompt.svelte';
 
 	let {
 		motionProfile,
@@ -66,6 +67,8 @@
 		plansTalkToSalesHref,
 		requestValidationBriefingHref,
 		onePagerHref,
+		subscribeApiPath,
+		resourcesHref,
 		onTrackCta,
 		cookieBannerVisible,
 		onSetTelemetryConsent,
@@ -137,6 +140,8 @@
 		plansTalkToSalesHref: string;
 		requestValidationBriefingHref: string;
 		onePagerHref: string;
+		subscribeApiPath: string;
+		resourcesHref: string;
 		onTrackCta: (action: string, section: string, value: string) => void;
 		cookieBannerVisible: boolean;
 		onSetTelemetryConsent: (accepted: boolean) => void;
@@ -338,4 +343,11 @@
 			Cookie Settings
 		</button>
 	{/if}
+
+	<LandingExitIntentPrompt
+		startFreeHref={primaryCtaHref}
+		{resourcesHref}
+		{subscribeApiPath}
+		{onTrackCta}
+	/>
 </div>

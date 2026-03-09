@@ -107,7 +107,7 @@ class PartitionMaintenanceService:
                 text(
                     f"ALTER TABLE cost_records_archive "
                     f"ADD COLUMN IF NOT EXISTS {safe_column_name} {column_type}"
-                )
+                )  # nosec B608 - validated identifier and introspected column type
             )
 
         archive_columns = await self._fetch_table_columns("cost_records_archive")
@@ -145,7 +145,12 @@ class PartitionMaintenanceService:
             return 0
 
         source_row_count = int(
-            await self.db.scalar(text(f"SELECT COUNT(*) FROM {safe_partition_name}")) or 0
+            await self.db.scalar(
+                text(
+                    f"SELECT COUNT(*) FROM {safe_partition_name}"  # nosec B608 - partition identifier is validated locally
+                )
+            )
+            or 0
         )
         update_columns = [
             column_name
@@ -160,22 +165,27 @@ class PartitionMaintenanceService:
             for column_name in update_columns
         )
         upsert_clause = (
-            f"DO UPDATE SET {update_sql}, archived_at = NOW()"
+            f"DO UPDATE SET {update_sql}, archived_at = NOW()"  # nosec B608 - update_sql is built from validated identifiers only
             if update_sql
             else "DO UPDATE SET archived_at = NOW()"
         )
+        archive_sql = f"""\
+INSERT INTO cost_records_archive ({column_sql}, archived_at)
+SELECT {column_sql}, NOW()
+FROM {safe_partition_name}
+ON CONFLICT (id, recorded_at) {upsert_clause}
+"""  # nosec B608 - partition/table identifiers are validated locally
+        await self.db.execute(text(archive_sql))
         await self.db.execute(
             text(
-                f"""
-                INSERT INTO cost_records_archive ({column_sql}, archived_at)
-                SELECT {column_sql}, NOW()
-                FROM {safe_partition_name}
-                ON CONFLICT (id, recorded_at) {upsert_clause}
-                """
+                f"DELETE FROM {safe_partition_name}"  # nosec B608 - partition identifier is validated locally
             )
         )
-        await self.db.execute(text(f"DELETE FROM {safe_partition_name}"))
-        await self.db.execute(text(f"DROP TABLE IF EXISTS {safe_partition_name}"))
+        await self.db.execute(
+            text(
+                f"DROP TABLE IF EXISTS {safe_partition_name}"  # nosec B608 - partition identifier is validated locally
+            )
+        )
         logger.info(
             "partition_archived",
             partition=safe_partition_name,
@@ -226,11 +236,15 @@ class PartitionMaintenanceService:
                             CREATE TABLE IF NOT EXISTS {partition_name} 
                             PARTITION OF {table} 
                             FOR VALUES FROM ('{start_str}') TO ('{end_str}')
-                        """))
+                        """))  # nosec B608 - identifiers come from fixed allowlist/date format
                         # For production-grade multi-tenant safety, always enable RLS
                         # even if the parent has it, for consistency and defense-in-depth.
-                        await self.db.execute(text(f"ALTER TABLE {partition_name} ENABLE ROW LEVEL SECURITY"))
-                        await self.db.execute(text(f"ALTER TABLE {partition_name} FORCE ROW LEVEL SECURITY"))
+                        await self.db.execute(
+                            text(f"ALTER TABLE {partition_name} ENABLE ROW LEVEL SECURITY")
+                        )  # nosec B608 - validated partition identifier
+                        await self.db.execute(
+                            text(f"ALTER TABLE {partition_name} FORCE ROW LEVEL SECURITY")
+                        )  # nosec B608 - validated partition identifier
                         
                         created_count += 1
                         logger.info("partition_created", table=table, partition=partition_name)

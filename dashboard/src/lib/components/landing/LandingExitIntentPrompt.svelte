@@ -13,18 +13,23 @@
 		onTrackCta: (action: string, section: string, value: string) => void;
 	} = $props();
 
-	const DISMISS_KEY = 'valdrics.landing.exit_prompt.dismissed.v1';
+	const DISMISS_KEY = 'valdrics.landing.exit_prompt.dismissed.v2';
+	const DISMISS_SUPPRESSION_MS = 1000 * 60 * 60 * 24 * 14;
+	const SUBSCRIBED_SUPPRESSION_MS = 1000 * 60 * 60 * 24 * 180;
 
 	let open = $state(false);
 	let email = $state('');
 	let submitting = $state(false);
 	let status = $state<'idle' | 'success' | 'error'>('idle');
 
+	function persistDismissal(durationMs: number): void {
+		if (typeof window === 'undefined') return;
+		window.localStorage.setItem(DISMISS_KEY, String(Date.now() + durationMs));
+	}
+
 	function dismiss(): void {
 		open = false;
-		if (typeof window !== 'undefined') {
-			window.localStorage.setItem(DISMISS_KEY, '1');
-		}
+		persistDismissal(DISMISS_SUPPRESSION_MS);
 	}
 
 	async function submit(event: SubmitEvent): Promise<void> {
@@ -46,6 +51,7 @@
 				throw new Error(`subscribe_${response.status}`);
 			}
 			status = 'success';
+			persistDismissal(SUBSCRIBED_SUPPRESSION_MS);
 			onTrackCta('cta_click', 'exit_prompt', 'newsletter_subscribe_success');
 		} catch {
 			status = 'error';
@@ -58,7 +64,11 @@
 		if (typeof window === 'undefined') return;
 		if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 1023px)').matches)
 			return;
-		if (window.localStorage.getItem(DISMISS_KEY) === '1') return;
+		const dismissedUntil = Number(window.localStorage.getItem(DISMISS_KEY) ?? '0');
+		if (Number.isFinite(dismissedUntil) && dismissedUntil > Date.now()) return;
+		if (dismissedUntil > 0) {
+			window.localStorage.removeItem(DISMISS_KEY);
+		}
 
 		const handleMouseOut = (event: MouseEvent) => {
 			if (open) return;

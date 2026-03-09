@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
-import subprocess
+import subprocess  # nosec B404 - controlled local pytest invocation only
 import sys
 import time
 from dataclasses import dataclass
@@ -119,6 +119,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _validate_selector(selector: str) -> str:
+    candidate = str(selector or "").strip()
+    if not candidate or candidate.startswith("-") or not candidate.startswith("tests/"):
+        raise ValueError(f"Invalid pytest selector: {selector!r}")
+    return candidate
+
+
 def _run_selector(
     *,
     selector: str,
@@ -131,7 +138,7 @@ def _run_selector(
         "pytest",
         "-q",
         "--no-cov",
-        selector,
+        _validate_selector(selector),
     ]
     subprocess_env = os.environ.copy()
     subprocess_env.pop("DATABASE_URL", None)
@@ -151,7 +158,7 @@ def _run_selector(
                 text=True,
                 timeout=timeout_seconds,
                 env=subprocess_env,
-            )
+            )  # nosec B603 - pytest invocation uses validated repo-local selector
         except subprocess.TimeoutExpired as exc:
             last_output = f"timeout after {timeout_seconds:.1f}s: {selector} ({exc})"
             if attempt < attempts:

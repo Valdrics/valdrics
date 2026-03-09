@@ -7,6 +7,7 @@ from app.modules.governance.domain.jobs.handlers.notifications import (
     WebhookRetryHandler,
 )
 from app.models.background_job import BackgroundJob
+from app.models.public_sales_inquiry import PublicSalesInquiry
 
 
 @pytest.mark.asyncio
@@ -86,6 +87,104 @@ async def test_notification_execute_non_tenant_fallback_service(db):
 
 
 @pytest.mark.asyncio
+async def test_notification_execute_sales_inquiry_email_success(db):
+    handler = NotificationHandler()
+    inquiry = PublicSalesInquiry(
+        name="Buyer One",
+        email="buyer@example.com",
+        company="Example Inc",
+        email_hash="a" * 64,
+        inquiry_fingerprint="b" * 64,
+        delivery_status="pending",
+    )
+    db.add(inquiry)
+    await db.commit()
+    await db.refresh(inquiry)
+    job = BackgroundJob(
+        payload={"provider": "sales_intake_email", "inquiry_id": str(inquiry.id)}
+    )
+
+    mock_service = AsyncMock()
+    mock_service.send_sales_inquiry_notification.return_value = True
+
+    with patch(
+        "app.modules.notifications.domain.email_service.get_operational_email_service",
+        return_value=mock_service,
+    ):
+        result = await handler.execute(job, db)
+
+    await db.refresh(inquiry)
+    assert result["status"] == "completed"
+    assert result["success"] is True
+    assert inquiry.delivery_status == "delivered"
+    assert inquiry.delivery_attempts == 1
+    assert inquiry.delivered_at is not None
+
+
+@pytest.mark.asyncio
+async def test_notification_execute_sales_inquiry_email_skips_already_delivered(db):
+    handler = NotificationHandler()
+    inquiry = PublicSalesInquiry(
+        name="Buyer One",
+        email="buyer@example.com",
+        company="Example Inc",
+        email_hash="a" * 64,
+        inquiry_fingerprint="b" * 64,
+        delivery_status="delivered",
+    )
+    db.add(inquiry)
+    await db.commit()
+    await db.refresh(inquiry)
+    job = BackgroundJob(
+        payload={"provider": "sales_intake_email", "inquiry_id": str(inquiry.id)}
+    )
+
+    with patch(
+        "app.modules.notifications.domain.email_service.get_operational_email_service"
+    ) as mock_factory:
+        result = await handler.execute(job, db)
+
+    assert result["status"] == "skipped"
+    assert result["reason"] == "already_delivered"
+    mock_factory.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_notification_execute_sales_inquiry_email_failure_marks_inquiry(db):
+    handler = NotificationHandler()
+    inquiry = PublicSalesInquiry(
+        name="Buyer One",
+        email="buyer@example.com",
+        company="Example Inc",
+        email_hash="a" * 64,
+        inquiry_fingerprint="b" * 64,
+        delivery_status="pending",
+    )
+    db.add(inquiry)
+    await db.commit()
+    await db.refresh(inquiry)
+    job = BackgroundJob(
+        payload={"provider": "sales_intake_email", "inquiry_id": str(inquiry.id)}
+    )
+
+    mock_service = AsyncMock()
+    mock_service.send_sales_inquiry_notification.return_value = False
+
+    with (
+        patch(
+            "app.modules.notifications.domain.email_service.get_operational_email_service",
+            return_value=mock_service,
+        ),
+        pytest.raises(RuntimeError, match="sales_inquiry_email_delivery_failed"),
+    ):
+        await handler.execute(job, db)
+
+    await db.refresh(inquiry)
+    assert inquiry.delivery_status == "delivery_failed"
+    assert inquiry.delivery_attempts == 1
+
+
+@pytest.mark.asyncio
 async def test_webhook_retry_execute_generic_success(db):
     handler = WebhookRetryHandler()
     job = BackgroundJob(
@@ -116,6 +215,44 @@ async def test_webhook_retry_execute_generic_success(db):
             headers={"Content-Type": "application/json"},
             timeout=30,
         )
+
+
+@pytest.mark.asyncio
+async def test_webhook_retry_execute_marketing_subscribe_payload(db):
+    handler = WebhookRetryHandler()
+    job = BackgroundJob(
+        payload={
+            "provider": "marketing_subscribe",
+            "url": "https://hooks.example.com/subscribe",
+            "data": {"email": "buyer@example.com"},
+            "headers": {"Content-Type": "application/json"},
+        }
+    )
+
+    with (
+        patch("app.shared.core.http.get_http_client") as MockGetClient,
+        patch(
+            "app.modules.governance.domain.jobs.handlers.notifications.get_settings",
+            return_value=SimpleNamespace(
+                WEBHOOK_ALLOWED_DOMAINS=["example.com"],
+                WEBHOOK_REQUIRE_HTTPS=True,
+                WEBHOOK_BLOCK_PRIVATE_IPS=True,
+            ),
+        ),
+    ):
+        mock_client = MockGetClient.return_value
+        mock_client.post = AsyncMock(return_value=MagicMock(status_code=202))
+
+        result = await handler.execute(job, db)
+
+    assert result["status"] == "completed"
+    assert result["status_code"] == 202
+    mock_client.post.assert_awaited_with(
+        "https://hooks.example.com/subscribe",
+        json={"email": "buyer@example.com"},
+        headers={"Content-Type": "application/json"},
+        timeout=30,
+    )
 
 
 @pytest.mark.asyncio

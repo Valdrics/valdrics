@@ -67,6 +67,8 @@ function buildProps(sectionOrderVariant: 'problem_first' | 'workflow_first') {
 		plansTalkToSalesHref: '/talk-to-sales',
 		requestValidationBriefingHref: '/talk-to-sales?source=trust_validation',
 		onePagerHref: '/resources/one-pager.md',
+		subscribeApiPath: '/api/marketing/subscribe',
+		resourcesHref: '/resources',
 		onTrackCta: vi.fn(),
 		cookieBannerVisible: false,
 		onSetTelemetryConsent: vi.fn(),

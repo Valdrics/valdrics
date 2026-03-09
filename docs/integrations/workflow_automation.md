@@ -2,6 +2,12 @@
 
 Valdrics can trigger external automation workflows on remediation policy and execution events.
 
+## Availability
+
+- Tier: **Pro**, **Enterprise**
+- Related package note: tenant-scoped Slack delivery starts on **Growth**, but workflow dispatch, Jira, Teams,
+  and external CI orchestration remain in the **Pro** automation lane.
+
 ## Supported targets
 
 - GitHub Actions (`workflow_dispatch`)

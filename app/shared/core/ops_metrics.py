@@ -17,7 +17,7 @@ RUNTIME_CARBON_EMISSIONS_TOTAL = _ops_metrics_runtime.RUNTIME_CARBON_EMISSIONS_T
 
 
 def _sync_runtime_metric_exports() -> None:
-    _ops_metrics_runtime.structlog = structlog
+    setattr(_ops_metrics_runtime, "structlog", structlog)
     _ops_metrics_runtime.COST_RECORD_RETENTION_LAST_RUN = COST_RECORD_RETENTION_LAST_RUN
     _ops_metrics_runtime.COST_RECORD_RETENTION_PURGED_TOTAL = COST_RECORD_RETENTION_PURGED_TOTAL
     _ops_metrics_runtime.AUDIT_LOG_RETENTION_LAST_RUN = AUDIT_LOG_RETENTION_LAST_RUN

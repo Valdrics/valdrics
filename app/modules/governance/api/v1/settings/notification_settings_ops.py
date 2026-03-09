@@ -36,6 +36,35 @@ def enforce_incident_integrations_access(
     )
 
 
+def enforce_slack_integration_access(
+    *,
+    data: Any,
+    current_tier: Any,
+    normalize_tier_fn: Callable[[Any], Any],
+    is_feature_enabled_fn: Callable[[Any, Any], bool],
+    slack_integration_feature: Any,
+    raise_http_exception_fn: Callable[[int, str], None],
+) -> None:
+    needs_slack_integration = bool(
+        getattr(data, "slack_enabled", False)
+        or getattr(data, "slack_channel_override", None)
+    )
+    if not needs_slack_integration:
+        return
+
+    tier = normalize_tier_fn(current_tier)
+    if is_feature_enabled_fn(tier, slack_integration_feature):
+        return
+
+    raise_http_exception_fn(
+        403,
+        (
+            f"Feature '{slack_integration_feature.value}' requires an upgrade. "
+            f"Current tier: {tier.value}"
+        ),
+    )
+
+
 def build_notification_settings_create_kwargs(
     *,
     data: Any,

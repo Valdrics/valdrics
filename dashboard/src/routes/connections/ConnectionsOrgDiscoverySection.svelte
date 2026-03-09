@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 
 	interface CloudConnection {
 		is_management_account?: boolean;
@@ -48,6 +49,7 @@
 	const pendingCount = $derived(
 		discoveredAccounts.filter((account) => account.status === 'discovered').length
 	);
+	const growthUpgradePrompt = getUpgradePrompt('growth', 'AWS organization discovery');
 </script>
 
 {#if awsConnection?.is_management_account}
@@ -74,7 +76,7 @@
 
 				<div class="flex items-center gap-3">
 					{#if !growthTier}
-						<span class="badge badge-warning">Growth Tier Required</span>
+						<span class="badge badge-warning">{growthUpgradePrompt.badge}</span>
 					{:else}
 						<button
 							type="button"
@@ -99,14 +101,14 @@
 			{#if !growthTier}
 				<div class="py-20 text-center glass-panel bg-black/20 border-white/5">
 					<div class="mb-6 text-5xl">🔒</div>
-					<h3 class="text-xl font-bold mb-2">Enterprise Organization Discovery</h3>
-					<p class="text-ink-400 max-w-md mx-auto mb-8">
-						Unlock the ability to automatically discover, monitor, and optimize hundreds of member
-						accounts across your entire AWS Organization.
+					<h3 class="text-xl font-bold mb-2">{growthUpgradePrompt.heading}</h3>
+					<p class="text-ink-400 max-w-xl mx-auto mb-3">{growthUpgradePrompt.body}</p>
+					<p class="text-xs text-ink-500 max-w-xl mx-auto mb-8">
+						{growthUpgradePrompt.footnote}
 					</p>
-					<a href={`${base}/billing`} class="btn btn-primary !w-auto px-8 py-3"
-						>Upgrade to Growth Tier</a
-					>
+					<a href={`${base}/billing`} class="btn btn-primary !w-auto px-8 py-3">
+						{growthUpgradePrompt.cta}
+					</a>
 				</div>
 			{:else}
 				<div class="grid grid-cols-1 lg:grid-cols-4 gap-6 mb-8">

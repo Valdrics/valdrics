@@ -53,7 +53,8 @@ describe('IdentitySettingsCard', () => {
 
 		expect(screen.getByText('Identity (SSO/SCIM)')).toBeTruthy();
 		expect(screen.getByText('Growth Plan Required')).toBeTruthy();
-		expect(screen.getByRole('link', { name: /Upgrade to Unlock Identity Controls/i })).toBeTruthy();
+		expect(screen.getByText(/best for teams that need broader provider coverage, owner routing/i)).toBeTruthy();
+		expect(screen.getByRole('link', { name: /View Growth plan/i })).toBeTruthy();
 		await waitFor(() => {
 			expect(getMock).not.toHaveBeenCalled();
 		});

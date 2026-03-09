@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from typing import Any, Callable, TypeVar
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -35,6 +37,9 @@ from app.shared.db.session import get_db
 
 router = APIRouter(tags=["Audit"])
 _validate_evidence_payload = validate_evidence_payload
+_CaptureResponseT = TypeVar("_CaptureResponseT")
+_ItemModelT = TypeVar("_ItemModelT")
+_ListResponseT = TypeVar("_ListResponseT")
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,10 +100,10 @@ async def _capture_evidence_response(
     user: AdminComplianceUser,
     db: AsyncSession,
     config: _EvidenceEndpointConfig,
-    response_model: object,
+    response_model: Callable[..., _CaptureResponseT],
     resource_id: str,
     success: bool,
-) -> object:
+) -> _CaptureResponseT:
     run_id, event = await capture_evidence_event(
         user=user,
         db=db,
@@ -126,10 +131,10 @@ async def _list_evidence_response(
     db: AsyncSession,
     limit: int,
     config: _EvidenceEndpointConfig,
-    payload_model: object,
-    item_model: object,
-    list_response_model: object,
-) -> object:
+    payload_model: Any,
+    item_model: Callable[..., _ItemModelT],
+    list_response_model: Callable[..., _ListResponseT],
+) -> _ListResponseT:
     items = await list_evidence_items(
         user=user,
         db=db,

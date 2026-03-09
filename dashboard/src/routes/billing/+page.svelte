@@ -3,6 +3,7 @@
 	import { api } from '$lib/api';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { normalizeCheckoutUrl } from '$lib/utils';
+	import './billing-page.css';
 
 	import type { PageData } from './$types';
 	import {
@@ -61,6 +62,25 @@
 
 	function getDisplayedMonthlyPrice(plan: PricingPlan): number {
 		return billingCycle === 'monthly' ? plan.price_monthly : Math.round(plan.price_annual / 12);
+	}
+
+	function getPlanBadge(plan: PricingPlan): string {
+		return plan.story?.badge ?? (plan.popular ? 'Most popular' : 'Plan');
+	}
+
+	function getPlanValueNote(plan: PricingPlan): string {
+		if (!plan.story?.note) {
+			if (billingCycle === 'annual' && plan.price_annual > 0) {
+				return `Billed annually at ${formatUsd(plan.price_annual)}. Save ${formatUsd(getAnnualSavings(plan))} per year.`;
+			}
+			return `${formatUsd(getDisplayedMonthlyPrice(plan))}/mo starting price.`;
+		}
+
+		if (billingCycle === 'annual' && plan.price_annual > 0) {
+			return `${formatUsd(plan.price_annual)} billed yearly. Effective ${formatUsd(getDisplayedMonthlyPrice(plan))}/mo. ${plan.story.note}`;
+		}
+
+		return `${formatUsd(plan.price_monthly)}/mo starting price. ${plan.story.note}`;
 	}
 
 	function getAnnualSavings(plan: PricingPlan): number {
@@ -290,7 +310,7 @@
 				<article class={`card billing-plan-card ${plan.popular ? 'billing-plan-card--popular' : ''}`}>
 					<div class="billing-plan-card__head">
 						<div>
-							<p class="billing-card__kicker">{plan.popular ? 'Most popular' : 'Plan'}</p>
+							<p class="billing-card__kicker">{getPlanBadge(plan)}</p>
 							<h3 class="billing-card__title">{plan.name}</h3>
 						</div>
 						{#if isCurrentPlan(plan.id)}
@@ -302,11 +322,18 @@
 						<span>/mo</span>
 					</p>
 					<p class="billing-card__copy">{plan.description}</p>
-					{#if billingCycle === 'annual' && plan.price_annual > 0}
-						<p class="billing-plan-card__annual-note">
-							Billed annually at {formatUsd(plan.price_annual)}. Save {formatUsd(getAnnualSavings(plan))}
-							per year.
-						</p>
+					<p class="billing-plan-card__annual-note">{getPlanValueNote(plan)}</p>
+					{#if plan.story}
+						<div class="billing-plan-card__story">
+							<div class="billing-plan-card__story-row">
+								<span>Best for</span>
+								<p>{plan.story.bestFor}</p>
+							</div>
+							<div class="billing-plan-card__story-row">
+								<span>Why teams upgrade</span>
+								<p>{plan.story.whyUpgrade}</p>
+							</div>
+						</div>
 					{/if}
 					<ul class="billing-bullets">
 						{#each plan.features as feature (feature)}
@@ -351,243 +378,3 @@
 		</div>
 	</section>
 </div>
-
-<style>
-	.billing-page {
-		padding-bottom: 1rem;
-	}
-
-	.billing-header,
-	.billing-section-head,
-	.billing-plan-card__head,
-	.billing-current-plan__meta,
-	.billing-enterprise-card__actions {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-	}
-
-	.billing-header {
-		padding-top: 0.25rem;
-	}
-
-	.billing-header__eyebrow,
-	.billing-card__kicker {
-		margin: 0;
-		font-size: 0.75rem;
-		font-weight: 700;
-		letter-spacing: 0.16em;
-		text-transform: uppercase;
-		color: var(--color-accent-400);
-	}
-
-	.billing-header__title,
-	.billing-card__title,
-	.billing-section-head__title {
-		margin: 0.35rem 0 0;
-		font-weight: 700;
-	}
-
-	.billing-header__title {
-		font-size: clamp(2rem, 3vw, 2.6rem);
-	}
-
-	.billing-header__copy,
-	.billing-card__copy,
-	.billing-section-head__note {
-		margin: 0.6rem 0 0;
-		max-width: 44rem;
-		line-height: 1.7;
-		color: var(--color-ink-400);
-	}
-
-	.billing-header__meta {
-		display: grid;
-		justify-items: end;
-		gap: 0.55rem;
-	}
-
-	.billing-header__tier,
-	.billing-current-plan__date,
-	.billing-usage-card__footnote,
-	.billing-plan-card__annual-note {
-		font-size: 0.82rem;
-		color: var(--color-ink-500);
-	}
-
-	.billing-alert {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 1rem 1.1rem;
-		border-radius: 1rem;
-		border: 1px solid transparent;
-	}
-
-	.billing-alert p {
-		margin: 0;
-	}
-
-	.billing-alert--success {
-		border-color: rgb(34 197 94 / 0.24);
-		background: rgb(34 197 94 / 0.1);
-		color: rgb(134 239 172);
-	}
-
-	.billing-alert--error {
-		border-color: rgb(239 68 68 / 0.24);
-		background: rgb(239 68 68 / 0.1);
-		color: rgb(252 165 165);
-	}
-
-	.billing-summary-grid,
-	.billing-plan-grid,
-	.billing-usage-grid {
-		display: grid;
-		gap: 1rem;
-	}
-
-	.billing-summary-grid {
-		grid-template-columns: repeat(2, minmax(0, 1fr));
-	}
-
-	.billing-usage-grid {
-		grid-template-columns: repeat(5, minmax(0, 1fr));
-	}
-
-	.billing-plan-grid {
-		grid-template-columns: repeat(4, minmax(0, 1fr));
-	}
-
-	.billing-current-plan,
-	.billing-notes,
-	.billing-plan-card,
-	.billing-usage-card,
-	.billing-enterprise-card {
-		display: grid;
-		gap: 1rem;
-	}
-
-	.billing-plan-card--popular {
-		border-color: rgb(18 158 192 / 0.28);
-		box-shadow:
-			0 0 0 1px rgb(18 158 192 / 0.08),
-			0 20px 42px rgb(18 158 192 / 0.12);
-	}
-
-	.billing-plan-card__price,
-	.billing-usage-card__value {
-		margin: 0;
-		font-size: clamp(2rem, 3vw, 2.5rem);
-		font-weight: 700;
-		line-height: 1;
-	}
-
-	.billing-plan-card__price span,
-	.billing-usage-card__value span {
-		font-size: 0.95rem;
-		font-weight: 500;
-		color: var(--color-ink-500);
-	}
-
-	.billing-bullets {
-		display: grid;
-		gap: 0.7rem;
-		padding: 0;
-		margin: 0;
-		list-style: none;
-	}
-
-	.billing-bullets li {
-		position: relative;
-		padding-left: 1rem;
-		line-height: 1.55;
-		color: var(--color-ink-300);
-	}
-
-	.billing-bullets li::before {
-		content: '';
-		position: absolute;
-		left: 0;
-		top: 0.56rem;
-		width: 0.42rem;
-		height: 0.42rem;
-		border-radius: 999px;
-		background: var(--color-brand-600);
-		box-shadow: 0 0 0 4px rgb(18 158 192 / 0.12);
-	}
-
-	.billing-cycle-toggle {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.22rem;
-		border: 1px solid rgb(255 255 255 / 0.08);
-		border-radius: 999px;
-		background: rgb(15 23 42 / 0.32);
-	}
-
-	.billing-cycle-toggle button {
-		border: 0;
-		background: transparent;
-		color: var(--color-ink-400);
-		padding: 0.55rem 0.9rem;
-		border-radius: 999px;
-		font-size: 0.9rem;
-		font-weight: 600;
-		cursor: pointer;
-	}
-
-	.billing-cycle-toggle button.active {
-		background: var(--color-brand-600);
-		color: white;
-	}
-
-	.billing-usage-card__bar {
-		position: relative;
-		height: 0.5rem;
-		border-radius: 999px;
-		background: rgb(148 163 184 / 0.18);
-		overflow: hidden;
-	}
-
-	.billing-usage-card__bar span {
-		display: block;
-		height: 100%;
-		border-radius: inherit;
-		background: linear-gradient(90deg, rgb(18 158 192), rgb(59 130 246));
-	}
-
-	.billing-enterprise-card {
-		border-style: dashed;
-	}
-
-	@media (max-width: 1200px) {
-		.billing-usage-grid,
-		.billing-plan-grid {
-			grid-template-columns: repeat(2, minmax(0, 1fr));
-		}
-	}
-
-	@media (max-width: 900px) {
-		.billing-header,
-		.billing-section-head,
-		.billing-plan-card__head,
-		.billing-current-plan__meta,
-		.billing-enterprise-card__actions {
-			flex-direction: column;
-			align-items: flex-start;
-		}
-
-		.billing-summary-grid,
-		.billing-usage-grid,
-		.billing-plan-grid {
-			grid-template-columns: 1fr;
-		}
-
-		.billing-header__meta {
-			justify-items: start;
-		}
-	}
-</style>

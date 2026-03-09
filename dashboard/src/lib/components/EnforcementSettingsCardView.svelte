@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 	import type {
 		EnforcementBudget,
 		EnforcementCredit,
@@ -53,6 +54,8 @@
 		onUpsertBudget: () => void | Promise<void>;
 		onCreateCredit: () => void | Promise<void>;
 	} = $props();
+
+	const upgradePrompt = getUpgradePrompt('pro', 'enforcement controls');
 </script>
 
 <div class="card stagger-enter relative" class:opacity-60={!proPlus} class:pointer-events-none={!proPlus}>
@@ -66,10 +69,13 @@
 	</div>
 
 	{#if !proPlus}
-		<div class="absolute inset-0 z-10 flex items-center justify-center bg-transparent">
-			<a href={billingHref} class="btn btn-primary shadow-lg pointer-events-auto">
-				Upgrade to Unlock Enforcement Controls
-			</a>
+		<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+			<div class="max-w-md space-y-3 pointer-events-auto">
+				<h3 class="text-lg font-semibold text-white">{upgradePrompt.heading}</h3>
+				<p class="text-sm text-ink-300">{upgradePrompt.body}</p>
+				<p class="text-xs text-ink-500">{upgradePrompt.footnote}</p>
+				<a href={billingHref} class="btn btn-primary shadow-lg">{upgradePrompt.cta}</a>
+			</div>
 		</div>
 	{/if}
 

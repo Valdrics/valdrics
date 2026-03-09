@@ -7,8 +7,10 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.governance.api.v1 import public_marketing as public_marketing_api
 from app.models.background_job import BackgroundJob, JobType
 from app.models.landing_telemetry_rollup import LandingTelemetryDailyRollup
+from app.models.public_sales_inquiry import PublicSalesInquiry
 from app.models.tenant import Tenant
 from app.models.sso_domain_mapping import SsoDomainMapping
 
@@ -27,6 +29,41 @@ def _exception_group_contains(
             _exception_group_contains(nested, exc_type) for nested in error.exceptions
         )
     return False
+
+
+@pytest.mark.asyncio
+async def test_public_sales_inquiry_lock_uses_pg_advisory_lock_for_postgres() -> None:
+    execute = AsyncMock()
+    db = SimpleNamespace(
+        get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="postgresql")),
+        execute=execute,
+    )
+
+    fingerprint = "a" * 64
+    await public_marketing_api._acquire_public_sales_inquiry_lock(db, fingerprint)  # type: ignore[arg-type]
+
+    assert execute.await_count == 1
+    statement = execute.await_args.args[0]
+    params = execute.await_args.args[1]
+    assert "pg_advisory_xact_lock" in str(statement)
+    assert params["lock_id"] == public_marketing_api._public_sales_inquiry_lock_id(
+        fingerprint
+    )
+
+
+@pytest.mark.asyncio
+async def test_public_sales_inquiry_lock_skips_non_postgres_backends() -> None:
+    execute = AsyncMock()
+    db = SimpleNamespace(
+        get_bind=lambda: SimpleNamespace(dialect=SimpleNamespace(name="sqlite")),
+        execute=execute,
+    )
+
+    await public_marketing_api._acquire_public_sales_inquiry_lock(
+        db, "b" * 64
+    )  # type: ignore[arg-type]
+
+    execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -315,17 +352,34 @@ async def test_marketing_subscribe_accepts_valid_payload(
     assert payload["ok"] is True
     assert payload["accepted"] is True
     assert len(payload["emailHash"]) == 64
-    jobs = (
+    job_rows = (
         await db.execute(
-            select(BackgroundJob).where(
+            select(BackgroundJob.id, BackgroundJob.payload).where(
                 BackgroundJob.job_type == JobType.WEBHOOK_RETRY.value
             )
         )
-    ).scalars().all()
-    assert len(jobs) == 1
-    assert jobs[0].payload["provider"] == "marketing_subscribe"
-    assert jobs[0].payload["url"] == "https://hooks.example.com/subscribe"
-    assert jobs[0].payload["data"]["email"] == "buyer@example.com"
+    ).all()
+    assert len(job_rows) >= 1
+    matching_payloads = [
+        row.payload
+        for row in job_rows
+        if isinstance(row.payload, dict)
+        and row.payload.get("provider") == "marketing_subscribe"
+    ]
+    assert len(matching_payloads) == 1
+    assert matching_payloads[0] == {
+        "provider": "marketing_subscribe",
+        "url": "https://hooks.example.com/subscribe",
+        "data": {
+            "email": "buyer@example.com",
+            "company": "Example Inc",
+            "role": "FinOps",
+            "referrer": "landing-page",
+            "timestamp": matching_payloads[0]["data"]["timestamp"],
+        },
+        "headers": {"Content-Type": "application/json"},
+    }
+    assert isinstance(matching_payloads[0]["data"]["timestamp"], str)
 
 
 @pytest.mark.asyncio
@@ -357,6 +411,189 @@ async def test_marketing_subscribe_enqueue_failure_returns_503(async_client: Asy
     payload = response.json()
     assert payload["ok"] is False
     assert payload["error"] == "delivery_failed"
+
+
+@pytest.mark.asyncio
+async def test_public_sales_inquiry_accepts_valid_payload(
+    async_client: AsyncClient, db: AsyncSession
+) -> None:
+    with patch(
+        "app.modules.governance.api.v1.public_marketing.get_operational_email_service",
+        return_value=SimpleNamespace(),
+    ):
+        response = await async_client.post(
+            "/api/v1/public/marketing/talk-to-sales",
+            json={
+                "name": "Buyer One",
+                "email": "buyer@example.com",
+                "company": "Example Inc",
+                "role": "FinOps lead",
+                "teamSize": "21-50",
+                "deploymentScope": "AWS + Datadog",
+                "timeline": "this_quarter",
+                "interestArea": "security_review",
+                "message": "Need security review support.",
+                "source": "pricing_page",
+                "utmSource": "linkedin",
+            },
+        )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["accepted"] is True
+    assert len(payload["emailHash"]) == 64
+    inquiry = (
+        await db.execute(select(PublicSalesInquiry).order_by(PublicSalesInquiry.created_at.desc()))
+    ).scalar_one()
+    assert inquiry.email_hash == payload["emailHash"]
+    assert inquiry.company == "Example Inc"
+    assert inquiry.interest_area == "security_review"
+    jobs = (
+        await db.execute(
+            select(BackgroundJob).where(
+                BackgroundJob.job_type == JobType.NOTIFICATION.value
+            )
+        )
+    ).scalars().all()
+    assert len(jobs) == 1
+    assert jobs[0].payload["provider"] == "sales_intake_email"
+    assert jobs[0].payload["inquiry_id"] == str(inquiry.id)
+
+
+@pytest.mark.asyncio
+async def test_public_sales_inquiry_accepts_max_length_payload(
+    async_client: AsyncClient, db: AsyncSession
+) -> None:
+    max_length_email = (
+        f"{'a' * 64}@{'b' * 63}.{'c' * 63}.{'d' * 61}"
+    )
+    payload = {
+        "name": "N" * 120,
+        "email": max_length_email,
+        "company": "C" * 120,
+        "role": "R" * 120,
+        "teamSize": "1000+",
+        "deploymentScope": "D" * 200,
+        "timeline": "evaluating",
+        "interestArea": "executive_briefing",
+        "message": "M" * 2000,
+        "referrer": "https://example.com/ref",
+        "source": "S" * 120,
+        "utmSource": "U" * 120,
+        "utmMedium": "V" * 120,
+        "utmCampaign": "W" * 120,
+    }
+
+    with patch(
+        "app.modules.governance.api.v1.public_marketing.get_operational_email_service",
+        return_value=SimpleNamespace(),
+    ):
+        response = await async_client.post(
+            "/api/v1/public/marketing/talk-to-sales",
+            json=payload,
+        )
+
+    assert response.status_code == 202
+    inquiry = (
+        await db.execute(select(PublicSalesInquiry).order_by(PublicSalesInquiry.created_at.desc()))
+    ).scalar_one()
+    assert inquiry.name == payload["name"]
+    assert inquiry.email == payload["email"]
+    assert inquiry.company == payload["company"]
+    assert inquiry.role == payload["role"]
+    assert inquiry.team_size == payload["teamSize"]
+    assert inquiry.deployment_scope == payload["deploymentScope"]
+    assert inquiry.timeline == payload["timeline"]
+    assert inquiry.interest_area == payload["interestArea"]
+    assert inquiry.message == payload["message"]
+    assert inquiry.source == payload["source"]
+    assert inquiry.utm_source == payload["utmSource"]
+    assert inquiry.utm_medium == payload["utmMedium"]
+    assert inquiry.utm_campaign == payload["utmCampaign"]
+
+
+@pytest.mark.asyncio
+async def test_public_sales_inquiry_deduplicates_recent_matching_payloads(
+    async_client: AsyncClient, db: AsyncSession
+) -> None:
+    payload = {
+        "name": "Buyer One",
+        "email": "buyer@example.com",
+        "company": "Example Inc",
+        "timeline": "this_quarter",
+        "interestArea": "plan_fit",
+    }
+
+    with patch(
+        "app.modules.governance.api.v1.public_marketing.get_operational_email_service",
+        return_value=SimpleNamespace(),
+    ):
+        first = await async_client.post("/api/v1/public/marketing/talk-to-sales", json=payload)
+        second = await async_client.post("/api/v1/public/marketing/talk-to-sales", json=payload)
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert second.json()["inquiryId"] == first.json()["inquiryId"]
+    inquiries = (await db.execute(select(PublicSalesInquiry))).scalars().all()
+    assert len(inquiries) == 1
+    jobs = (
+        await db.execute(
+            select(BackgroundJob).where(
+                BackgroundJob.job_type == JobType.NOTIFICATION.value
+            )
+        )
+    ).scalars().all()
+    assert len(jobs) == 1
+
+
+@pytest.mark.asyncio
+async def test_public_sales_inquiry_honeypot_returns_accepted_without_persisting(
+    async_client: AsyncClient, db: AsyncSession
+) -> None:
+    response = await async_client.post(
+        "/api/v1/public/marketing/talk-to-sales",
+        json={
+            "name": "Buyer One",
+            "email": "buyer@example.com",
+            "company": "Example Inc",
+            "honey": "filled",
+        },
+    )
+
+    assert response.status_code == 202
+    assert response.json()["accepted"] is True
+    inquiries = (await db.execute(select(PublicSalesInquiry))).scalars().all()
+    assert inquiries == []
+
+
+@pytest.mark.asyncio
+async def test_public_sales_inquiry_enqueue_failure_returns_503_and_rolls_back(
+    async_client: AsyncClient, db: AsyncSession
+) -> None:
+    with (
+        patch(
+            "app.modules.governance.api.v1.public_marketing.get_operational_email_service",
+            return_value=SimpleNamespace(),
+        ),
+        patch(
+            "app.modules.governance.api.v1.public_marketing.enqueue_job",
+            new=AsyncMock(side_effect=RuntimeError("queue unavailable")),
+        ),
+    ):
+        response = await async_client.post(
+            "/api/v1/public/marketing/talk-to-sales",
+            json={
+                "name": "Buyer One",
+                "email": "buyer@example.com",
+                "company": "Example Inc",
+            },
+        )
+
+    assert response.status_code == 503
+    assert response.json()["error"] == "delivery_failed"
+    inquiries = (await db.execute(select(PublicSalesInquiry))).scalars().all()
+    assert inquiries == []
 
 
 @pytest.mark.asyncio
@@ -432,6 +669,7 @@ def _turnstile_strict_settings() -> SimpleNamespace:
         TURNSTILE_REQUIRE_PUBLIC_ASSESSMENT=True,
         TURNSTILE_REQUIRE_SSO_DISCOVERY=True,
         TURNSTILE_REQUIRE_ONBOARD=True,
+        TURNSTILE_REQUIRE_PUBLIC_SALES_INTAKE=True,
         TESTING=True,
         ENVIRONMENT="test",
     )
@@ -485,6 +723,52 @@ async def test_sso_discovery_requires_turnstile_token(async_client: AsyncClient)
         )
     assert response.status_code == 400
     assert response.json()["error"] == "turnstile_token_required"
+
+
+@pytest.mark.asyncio
+async def test_public_sales_inquiry_requires_turnstile_token(async_client: AsyncClient):
+    with patch(
+        "app.shared.core.turnstile.get_settings",
+        return_value=_turnstile_strict_settings(),
+    ):
+        response = await async_client.post(
+            "/api/v1/public/marketing/talk-to-sales",
+            json={
+                "name": "Buyer One",
+                "email": "buyer@example.com",
+                "company": "Example Inc",
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "turnstile_token_required"
+
+
+@pytest.mark.asyncio
+async def test_public_sales_inquiry_rejects_invalid_turnstile(async_client: AsyncClient):
+    with (
+        patch(
+            "app.shared.core.turnstile.get_settings",
+            return_value=_turnstile_strict_settings(),
+        ),
+        patch(
+            "app.shared.core.turnstile._verify_turnstile_with_cloudflare",
+            new_callable=AsyncMock,
+            return_value={"success": False, "error-codes": ["invalid-input-response"]},
+        ),
+    ):
+        response = await async_client.post(
+            "/api/v1/public/marketing/talk-to-sales",
+            json={
+                "name": "Buyer One",
+                "email": "buyer@example.com",
+                "company": "Example Inc",
+            },
+            headers={"X-Turnstile-Token": "invalid-token"},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "turnstile_verification_failed"
 
 
 @pytest.mark.asyncio
