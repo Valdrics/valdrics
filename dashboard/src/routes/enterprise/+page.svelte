@@ -15,7 +15,7 @@
 		{
 			title: 'Security Posture',
 			detail:
-				'Validate SSO, SCIM, role boundaries, and audit trails against internal security review criteria.'
+				'Validate SCIM, deployment controls, role boundaries, audit trails, and evidence handling against internal security review criteria.'
 		},
 		{
 			title: 'Commercial Readiness',
@@ -131,7 +131,7 @@
 			<h3>Formal diligence and procurement workflows</h3>
 			<ul>
 				<li>Coordinate security, legal, procurement, and finance sign-off.</li>
-				<li>Review governance artifacts before full production activation.</li>
+				<li>Review governance artifacts, SCIM, and deployment controls before full production activation.</li>
 				<li>Operate a staged rollout with explicit control checkpoints.</li>
 			</ul>
 			<a href={enterpriseMailHref} class="btn btn-primary">Open Enterprise Intake</a>

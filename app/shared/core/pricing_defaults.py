@@ -11,6 +11,7 @@ DEFAULT_RATES = {
         "volume": {
             "gp2": 0.10 / AVERAGE_BILLING_MONTH_HOURS,  # $0.10/GB-month
             "gp3": 0.08 / AVERAGE_BILLING_MONTH_HOURS,  # $0.08/GB-month
+            "snapshot_gb": 0.05 / AVERAGE_BILLING_MONTH_HOURS,  # $0.05/GB-month
         },
         "ip": 0.005,  # $0.005/hour for unused EIP
         "instance": {
@@ -22,6 +23,12 @@ DEFAULT_RATES = {
         },
         "nat_gateway": 0.045,  # $0.045 per hour
         "elb": 0.0225,  # ~$16/month
+        "elasticache": {
+            # Repo baseline for low-end cache nodes. Exact rates should be overridden
+            # by live catalog sync when the resource type is covered.
+            "cache.t3.micro": 12.0 / AVERAGE_BILLING_MONTH_HOURS,
+            "default": 30.0 / AVERAGE_BILLING_MONTH_HOURS,
+        },
         "rds": {
             "db.t3.micro": 0.017,
             "db.t3.small": 0.034,
@@ -30,6 +37,10 @@ DEFAULT_RATES = {
         },
         "redshift": 0.25,  # $0.25/hour per node
         "sagemaker": 0.15,  # $0.15/hour per endpoint instance
+        "sagemaker_notebook": {
+            "ml.t3.medium": 0.15,
+            "default": 0.15,
+        },
         "ecr": 0.10 / AVERAGE_BILLING_MONTH_HOURS,  # $0.10/GB-month
         # OpenSearch on-demand baseline rates (hourly)
         "opensearch": {

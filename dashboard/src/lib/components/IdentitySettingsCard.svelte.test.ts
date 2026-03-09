@@ -45,31 +45,31 @@ describe('IdentitySettingsCard', () => {
 		postMock.mockReset();
 	});
 
-	it('renders upgrade overlay when tier is below pro', async () => {
+	it('renders upgrade overlay when tier is below growth', async () => {
 		render(IdentitySettingsCard, {
 			accessToken: 'token',
 			tier: 'free'
 		});
 
 		expect(screen.getByText('Identity (SSO/SCIM)')).toBeTruthy();
-		expect(screen.getByText('Pro Plan Required')).toBeTruthy();
+		expect(screen.getByText('Growth Plan Required')).toBeTruthy();
 		expect(screen.getByRole('link', { name: /Upgrade to Unlock Identity Controls/i })).toBeTruthy();
 		await waitFor(() => {
 			expect(getMock).not.toHaveBeenCalled();
 		});
 	});
 
-	it('shows guidance when pro tier but no access token', async () => {
+	it('shows guidance when growth tier but no access token', async () => {
 		render(IdentitySettingsCard, {
 			accessToken: null,
-			tier: 'pro'
+			tier: 'growth'
 		});
 
 		await screen.findByText(/Identity controls are available to tenant admins/i);
 		expect(getMock).not.toHaveBeenCalled();
 	});
 
-	it('loads and renders identity settings for pro tier', async () => {
+	it('loads and renders identity settings for growth tier', async () => {
 		getMock.mockResolvedValueOnce(
 			jsonResponse({
 				sso_enabled: false,
@@ -84,7 +84,7 @@ describe('IdentitySettingsCard', () => {
 		);
 		getMock.mockResolvedValueOnce(
 			jsonResponse({
-				tier: 'pro',
+				tier: 'growth',
 				sso: {
 					enabled: false,
 					allowed_email_domains: ['valdrics.io'],
@@ -112,7 +112,7 @@ describe('IdentitySettingsCard', () => {
 		);
 		getMock.mockResolvedValue(
 			jsonResponse({
-				tier: 'pro',
+				tier: 'growth',
 				sso: {
 					enabled: true,
 					allowed_email_domains: ['example.com'],
@@ -141,7 +141,7 @@ describe('IdentitySettingsCard', () => {
 
 		render(IdentitySettingsCard, {
 			accessToken: 'token',
-			tier: 'pro'
+			tier: 'growth'
 		});
 
 		await screen.findByText(/Enable SSO enforcement/i);

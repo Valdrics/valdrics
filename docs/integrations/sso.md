@@ -1,4 +1,4 @@
-# SSO (Federation + Enforcement) (Pro+)
+# SSO (Federation + Enforcement) (Growth+)
 
 Valdrics supports two complementary layers:
 
@@ -13,7 +13,7 @@ Valdrics supports two complementary layers:
   - IdP/provider creation, certificates, and metadata lifecycle (SAML/OIDC provider setup remains in Supabase).
 
 ## Availability
-- Tier: **Pro**, **Enterprise**
+- Tier: **Growth**, **Pro**, **Enterprise**
 
 ## How It Works
 When configured:

@@ -20,6 +20,7 @@ from app.modules.enforcement.api.v1.schemas import (
 from app.modules.enforcement.domain.action_errors import EnforcementActionError
 from app.modules.enforcement.domain.actions import EnforcementActionOrchestrator
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
+from app.shared.core.enforcement_http_boundary import build_http_exception
 from app.shared.core.pricing import FeatureFlag
 from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
@@ -65,7 +66,7 @@ async def _translate_action_errors(awaitable: Awaitable[T]) -> T:
     try:
         return await awaitable
     except EnforcementActionError as exc:
-        raise exc.to_http_exception() from exc
+        raise build_http_exception(exc) from exc
 
 
 @router.post("/actions/requests", response_model=ActionExecutionResponse)

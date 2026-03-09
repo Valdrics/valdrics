@@ -62,6 +62,10 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     assert "scripts/run_regional_failover.py" in recovery
     assert "enable_multi_region_failover=true" in recovery
     assert "secondary_db_endpoint" in recovery
+    assert "aws_role_to_assume" in recovery
+    assert "GitHub OIDC" in recovery
+    assert "/health" in recovery
+    assert "success=true" in recovery
     assert "regional_recovery_mode=automated_secondary_region_failover" in recovery
     assert "1200 seconds" in recovery
     assert "duration_seconds" in recovery
@@ -79,6 +83,10 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     assert "scripts/run_regional_failover.py" in failover
     assert "enable_multi_region_failover=true" in failover
     assert "secondary_db_endpoint" in failover
+    assert "aws_role_to_assume" in failover
+    assert "GitHub OIDC" in failover
+    assert "/health" in failover
+    assert "success=true" in failover
     assert "regional_recovery_mode=automated_secondary_region_failover" in failover
     assert "1200 seconds" in failover
     assert "duration_seconds" in failover
@@ -117,6 +125,9 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     assert "CLOUDFLARE_API_TOKEN" in regional_failover_workflow
     assert "secondary_db_instance_id" in regional_failover_workflow
     assert "secondary_api_origin" in regional_failover_workflow
+    assert "aws_role_to_assume" in regional_failover_workflow
+    assert "id-token: write" in regional_failover_workflow
+    assert "configure_github_oidc_aws_credentials.py" in regional_failover_workflow
 
 
 def test_architecture_overview_does_not_overclaim_domain_purity_or_raw_k8s() -> None:

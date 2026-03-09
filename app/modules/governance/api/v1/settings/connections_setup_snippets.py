@@ -19,8 +19,12 @@ router = APIRouter()
 
 @router.post("/aws/setup", response_model=TemplateResponse)
 @rate_limit("10/minute")
-async def get_aws_setup_templates(request: Request) -> TemplateResponse:
+async def get_aws_setup_templates(
+    request: Request,
+    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+) -> TemplateResponse:
     """Get CloudFormation/Terraform templates and Magic Link for AWS setup."""
+    _require_tenant_id(current_user)
     external_id = AWSConnection.generate_external_id()
     templates = AWSConnectionService.get_setup_templates(external_id)
     return TemplateResponse(**templates)

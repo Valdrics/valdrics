@@ -1,4 +1,5 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch, AsyncMock
 from app.modules.optimization.adapters.aws.detector import AWSZombieDetector
 from app.modules.optimization.adapters.aws.plugins import UnattachedVolumesPlugin
@@ -55,3 +56,44 @@ async def test_execute_plugin_scan(detector):
     assert kwargs["session"] == detector.session
     assert kwargs["region"] == "us-west-2"
     assert kwargs["credentials"] == detector.credentials
+
+
+@pytest.mark.asyncio
+async def test_scan_all_marks_partial_inventory_discovery(detector):
+    detector.connection = SimpleNamespace(tenant_id="tenant-1")
+
+    with (
+        patch(
+            "app.modules.optimization.domain.unified_discovery.UnifiedDiscoveryService"
+        ) as discovery_cls,
+        patch(
+            "app.modules.optimization.domain.ports.BaseZombieDetector.scan_all",
+            new=AsyncMock(
+                return_value={
+                    "provider": "aws",
+                    "partial_results": False,
+                    "scan_completeness": {
+                        "provider": "aws",
+                        "region": "us-west-2",
+                        "degraded": False,
+                        "error_count": 0,
+                        "plugins": {},
+                        "overall_error": None,
+                    },
+                }
+            ),
+        ),
+    ):
+        discovery_cls.return_value.discover_aws_inventory = AsyncMock(
+            return_value=SimpleNamespace(
+                total_count=7,
+                discovery_method="native-api-fallback-partial",
+            )
+        )
+
+        results = await detector.scan_all()
+
+    assert results["partial_results"] is True
+    assert results["scan_completeness"]["degraded"] is True
+    assert results["scan_completeness"]["inventory_discovery"]["status"] == "partial"
+    assert results["inventory_discovery"]["resource_count"] == 7

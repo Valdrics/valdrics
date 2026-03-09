@@ -24,7 +24,6 @@ from app.models.hybrid_connection import HybridConnection
 from app.models.cloud import CloudAccount
 from app.shared.core.service import BaseService
 from app.shared.core.async_utils import maybe_call
-from app.shared.core.adapter_resolver import get_adapter_for_connection
 from app.shared.core.connection_state import resolve_connection_profile
 from app.shared.core.exceptions import ValdricsException
 
@@ -62,7 +61,7 @@ class ReportingService(BaseService):
         adapter_resolver: Callable[[Any], Any] | None = None,
     ):
         super().__init__(db)
-        self._adapter_resolver = adapter_resolver or get_adapter_for_connection
+        self._adapter_resolver = adapter_resolver
 
     async def _get_all_connections(self, tenant_id: Any) -> List[Any]:
         """Fetch all cloud and Cloud+ connections for a tenant."""
@@ -98,6 +97,10 @@ class ReportingService(BaseService):
         connections = await self._get_all_connections(tenant_id)
         if not connections:
             return {"status": "skipped", "reason": "no_active_connections"}
+        if self._adapter_resolver is None:
+            raise RuntimeError(
+                "ReportingService requires an adapter_resolver for ingestion"
+            )
 
         persistence = CostPersistenceService(self.db)
         results = []

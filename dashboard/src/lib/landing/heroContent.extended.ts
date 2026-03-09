@@ -1,4 +1,9 @@
 import { getPublicCustomerCommentsFeed } from '$lib/landing/customerCommentsFeed';
+import {
+	DEFAULT_PRICING_PLANS,
+	getStartingPriceLabel,
+	type PricingPlan
+} from '$lib/pricing/publicPlans';
 
 export const CUSTOMER_QUOTES = Object.freeze(
 	getPublicCustomerCommentsFeed().map((record) => ({
@@ -21,49 +26,54 @@ export const COMPLIANCE_FOUNDATION_BADGES = Object.freeze([
 	'Tenant isolation'
 ]);
 
-export const PLAN_COMPARE_CARDS = Object.freeze([
-	{
-		id: 'starter',
-		name: 'Starter',
-		price: 'From $49/mo',
-		kicker: 'For focused cloud teams',
-		detail: 'Best for a single-provider start when one team needs owner-routed spend control.',
-		priceNote: 'Monthly starting price. Best fit for a single-provider operating scope.',
-		features: ['Single cloud provider (AWS)', 'Budgets + owner-routed alerts', 'Baseline owner action workflows']
-	},
-	{
-		id: 'growth',
-		name: 'Growth',
-		price: 'From $149/mo',
-		kicker: 'For cross-functional FinOps',
-		detail: 'Best for multi-cloud teams that need approval routing, GreenOps visibility, and guided execution.',
-		priceNote: 'Monthly starting price. Built for broader provider coverage and team governance.',
-		features: ['AWS + Azure + GCP coverage', 'Approval workflows + GreenOps', 'Non-production auto-remediation']
-	},
-	{
-		id: 'pro',
-		name: 'Pro',
-		price: 'From $299/mo',
-		kicker: 'For enterprise teams',
-		detail:
-			'Best for teams that want broader automation, API-first operations, and expanded commercial support.',
-		priceNote: 'Monthly starting price. Adds deeper automation, API access, and priority support.',
-		features: ['Automated remediation tracks', 'Priority support + full API access', 'Expanded governance support']
+type PlanCompareCard = {
+	id: string;
+	name: string;
+	price: string;
+	badge: string;
+	headline: string;
+	summary: string;
+	priceNote: string;
+	bestFor: string;
+	whyUpgrade: string;
+	features: string[];
+};
+
+function toPlanCompareCard(plan: PricingPlan): PlanCompareCard {
+	const story = plan.story;
+	if (!story) {
+		throw new Error(`Missing public plan story for plan ${plan.id}`);
 	}
-]);
+	return {
+		id: plan.id,
+		name: plan.name,
+		price: getStartingPriceLabel(plan),
+		badge: story.badge,
+		headline: story.headline,
+		summary: story.summary,
+		priceNote: `Monthly starting price. ${story.note}`,
+		bestFor: story.bestFor,
+		whyUpgrade: story.whyUpgrade,
+		features: [...plan.features]
+	};
+}
+
+export const PLAN_COMPARE_CARDS = Object.freeze(
+	DEFAULT_PRICING_PLANS.filter((plan) => plan.id !== 'free').map((plan) => toPlanCompareCard(plan))
+);
 
 export const PLANS_PRICING_EXPLANATION =
-	'Starting prices shown here are monthly entry points. Plan fit changes with provider coverage, workflow automation depth, and support needs.';
+	'Monthly starting prices shown here are entry points. Upgrade as provider coverage, workflow automation depth, and governance needs expand.';
 
 export const FREE_TIER_HIGHLIGHTS = Object.freeze([
-	'One owner-routed savings workflow on the free tier',
-	'Cloud and software signal map access',
-	'Baseline owner routing and approval workflow',
-	'BYOK supported in the current lineup; daily AI limits still apply by tier'
+	'Permanent free workspace for one live savings workflow',
+	'1 AWS account with core dashboards and alerts',
+	'Weekly zombie scans plus 30-day history',
+	'1 guided AI analysis per day with BYOK support'
 ]);
 
 export const FREE_TIER_LIMIT_NOTE =
-	'Free is best for proving one workflow. Upgrade when you need multi-cloud coverage, more automation, or expanded governance support.';
+	'Free is best for proving one workflow permanently. Upgrade when you need more provider coverage, team rollout controls, or finance-grade governance.';
 
 export const IMPLEMENTATION_COST_FACTS = Object.freeze([
 	'Typical rollout: 3-10 business days for first production workflow.',

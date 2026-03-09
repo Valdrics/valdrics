@@ -228,14 +228,16 @@ def test_get_aws_setup_templates():
     assert "magic_link" in templates
     assert "ext-123" in templates["magic_link"]
     assert "terraform_snippet" in templates
+    assert "githubusercontent.com" in templates["cfn_template"]
 
 
 def test_get_aws_setup_templates_falls_back_to_us_east_1_for_invalid_region():
     with patch(
-        "app.shared.core.cloud_connection.get_settings",
+        "app.shared.connections.aws.get_settings",
         return_value=MagicMock(
             AWS_DEFAULT_REGION="global",
             AWS_SUPPORTED_REGIONS=["us-east-1", "eu-west-1"],
+            CLOUDFORMATION_TEMPLATE_URL="https://templates.example.com/aws-role.yaml",
         ),
     ):
         templates = CloudConnectionService.get_aws_setup_templates("ext-123")

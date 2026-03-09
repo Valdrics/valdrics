@@ -11,6 +11,9 @@ from app.modules.optimization.adapters.common.rightsizing_common import (
     is_small_shape,
     utc_window,
 )
+from app.modules.optimization.adapters.aws.plugins.pricing_evidence import (
+    build_pricing_fields,
+)
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 from app.modules.reporting.domain.pricing.service import PricingService
@@ -36,14 +39,13 @@ class OverprovisionedEc2Plugin(ZombiePlugin):
         return "overprovisioned_ec2_instances"
 
     @staticmethod
-    def _estimate_monthly_cost(instance_type: str, region: str) -> float:
-        estimated = PricingService.estimate_monthly_waste(
+    def _estimate_pricing_quote(instance_type: str, region: str):
+        return PricingService.estimate_monthly_waste_quote(
             provider="aws",
             resource_type="instance",
             resource_size=instance_type,
             region=region,
         )
-        return round(float(estimated), 2)
 
     async def scan(
         self,
@@ -139,20 +141,22 @@ class OverprovisionedEc2Plugin(ZombiePlugin):
         if not evaluation.has_data or not evaluation.below_threshold:
             return None
 
-        estimated_monthly_cost = self._estimate_monthly_cost(
+        pricing_quote = self._estimate_pricing_quote(
             instance_type=instance_type,
             region=region,
         )
+        estimated_monthly_cost = round(float(pricing_quote.monthly_cost_usd), 2)
         if estimated_monthly_cost <= 0.0:
             logger.warning(
                 "aws_rightsizing_pricing_unavailable",
                 instance_id=instance_id,
                 instance_type=instance_type,
                 region=region,
+                pricing_source=pricing_quote.source,
             )
             return None
 
-        return build_rightsizing_finding(
+        finding = build_rightsizing_finding(
             resource_id=instance_id,
             resource_type="AWS EC2 Instance",
             resource_name=self._get_name_tag(instance),
@@ -164,6 +168,8 @@ class OverprovisionedEc2Plugin(ZombiePlugin):
             action="resize_ec2_instance",
             confidence_score=0.85,
         )
+        finding.update(build_pricing_fields(pricing_quote))
+        return finding
 
     def _get_name_tag(self, instance: dict[str, Any]) -> str:
         for tag in instance.get("Tags", []):

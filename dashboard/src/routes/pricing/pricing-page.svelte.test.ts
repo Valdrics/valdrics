@@ -54,7 +54,15 @@ describe('pricing page public messaging', () => {
 		expect(screen.getByRole('heading', { name: /^starter$/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /^growth$/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /^pro$/i })).toBeTruthy();
-		expect(screen.getAllByText(/one owner-routed savings workflow/i).length).toBeGreaterThan(0);
+		expect(screen.getAllByText(/one live savings workflow|one workflow/i).length).toBeGreaterThan(0);
+		expect(screen.getAllByText(/^Best for$/i).length).toBeGreaterThanOrEqual(4);
+		expect(screen.getAllByText(/^Why teams upgrade$/i).length).toBeGreaterThanOrEqual(4);
+		expect(
+			screen.getByText(/one team needs daily review cadence, limited azure\/gcp visibility/i)
+		).toBeTruthy();
+		expect(
+			screen.getByText(/teams usually move up when finance close, auditability, cloud\+ connectors/i)
+		).toBeTruthy();
 
 		expect(
 			screen.getByRole('heading', {
@@ -62,10 +70,10 @@ describe('pricing page public messaging', () => {
 			})
 		).toBeTruthy();
 		expect(
-			screen.getByText(/bring in sales when sso\/scim, security review, procurement/i)
+			screen.getByText(/bring in sales when scim, private deployment, procurement, or custom control requirements/i)
 		).toBeTruthy();
 		expect(screen.getByText(/prices are shown in usd for easy plan comparison/i)).toBeTruthy();
-		expect(screen.getByText(/the free tier does not require a checkout session/i)).toBeTruthy();
+		expect(screen.getByText(/the permanent free tier does not require a checkout session/i)).toBeTruthy();
 
 		const salesCta = screen.getAllByRole('link', { name: /talk to sales/i });
 		expect(salesCta.length).toBeGreaterThan(0);

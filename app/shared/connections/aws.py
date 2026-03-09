@@ -1,3 +1,4 @@
+from urllib.parse import quote
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -7,6 +8,7 @@ import structlog
 from app.models.aws_connection import AWSConnection
 from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
+from app.shared.core.config import get_settings
 from app.shared.core.exceptions import ResourceNotFoundError, AdapterError
 
 logger = structlog.get_logger()
@@ -40,13 +42,41 @@ class AWSConnectionService:
         """
         Returns CloudFormation and Terraform snippets for provisioning the Valdrics role.
         """
-        # Simplistic implementation for now, usually reads from files or templates
+        settings = get_settings()
+        template_url = str(getattr(settings, "CLOUDFORMATION_TEMPLATE_URL", "") or "").strip()
+        if not template_url:
+            raise RuntimeError("CLOUDFORMATION_TEMPLATE_URL must be configured for AWS setup templates")
+
+        configured_region = str(getattr(settings, "AWS_DEFAULT_REGION", "") or "").strip()
+        supported_regions = {
+            str(region).strip()
+            for region in getattr(settings, "AWS_SUPPORTED_REGIONS", [])
+            if str(region).strip()
+        }
+        if configured_region and (
+            not supported_regions or configured_region in supported_regions
+        ):
+            console_region = configured_region
+        else:
+            console_region = "us-east-1"
+        encoded_template_url = quote(template_url, safe="")
         return {
             "external_id": external_id,
-            "cloudformation_yaml": f"https://valdrics-public.s3.amazonaws.com/templates/valdrics-role.yaml?external_id={external_id}",
+            "cloudformation_yaml": template_url,
             "terraform_hcl": f'module "valdrics_connection" {{ source = "valdrics/aws-connection" external_id = "{external_id}" }}',
-            "magic_link": f"https://app.valdrics.ai/onboard/aws?external_id={external_id}",
-            "instructions": "Follow the link to setup your AWS connection.",
+            "magic_link": (
+                "https://console.aws.amazon.com/cloudformation/home"
+                f"?region={console_region}"
+                "#/stacks/create/review"
+                "?stackName=ValdricsAccess"
+                f"&templateURL={encoded_template_url}"
+                f"&param_ExternalId={external_id}"
+            ),
+            "instructions": (
+                "Launch the CloudFormation stack from the AWS console link or use the "
+                "Terraform snippet to provision the cross-account role, then create the "
+                "AWS connection with the generated external ID."
+            ),
             "permissions_summary": ["sts:AssumeRole"],
         }
 

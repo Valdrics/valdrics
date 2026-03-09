@@ -1,6 +1,9 @@
 from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from botocore.exceptions import ClientError
+from app.modules.optimization.adapters.aws.plugins.pricing_evidence import (
+    build_pricing_fields,
+)
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 import structlog
@@ -134,14 +137,14 @@ class UnattachedVolumesPlugin(ZombiePlugin):
                                 PricingService,
                             )
 
-                            monthly_cost = PricingService.estimate_monthly_waste(
+                            volume_quote = PricingService.estimate_monthly_waste_quote(
                                 provider="aws",
                                 resource_type="volume",
                                 resource_size="gp2",  # Defaulting to gp2 if unknown
                                 region=region,
                                 quantity=size_gb,
                             )
-                            backup_cost = PricingService.estimate_monthly_waste(
+                            backup_quote = PricingService.estimate_monthly_waste_quote(
                                 provider="aws",
                                 resource_type="volume",
                                 resource_size="snapshot_gb",  # Internal key for snap-GB
@@ -154,8 +157,14 @@ class UnattachedVolumesPlugin(ZombiePlugin):
                                     "resource_id": vol_id,
                                     "resource_type": "EBS Volume",
                                     "size_gb": size_gb,
-                                    "monthly_cost": round(monthly_cost, 2),
-                                    "backup_cost_monthly": round(backup_cost, 2),
+                                    "backup_cost_monthly": round(
+                                        backup_quote.monthly_cost_usd, 2
+                                    ),
+                                    "backup_pricing_evidence": (
+                                        build_pricing_fields(backup_quote)[
+                                            "pricing_evidence"
+                                        ]
+                                    ),
                                     "created": vol["CreateTime"].isoformat(),
                                     "recommendation": "Delete if no longer needed",
                                     "action": "delete_volume",
@@ -164,6 +173,7 @@ class UnattachedVolumesPlugin(ZombiePlugin):
                                     "confidence_score": 0.98
                                     if total_ops == 0
                                     else 0.85,
+                                    **build_pricing_fields(volume_quote),
                                 }
                             )
         except ClientError as e:
@@ -235,7 +245,7 @@ class OldSnapshotsPlugin(ZombiePlugin):
                             )
 
                             size_gb = snap.get("VolumeSize", 0)
-                            monthly_cost = PricingService.estimate_monthly_waste(
+                            snapshot_quote = PricingService.estimate_monthly_waste_quote(
                                 provider="aws",
                                 resource_type="volume",
                                 resource_size="snapshot_gb",
@@ -251,13 +261,13 @@ class OldSnapshotsPlugin(ZombiePlugin):
                                     "age_days": (
                                         datetime.now(timezone.utc) - start_time
                                     ).days,
-                                    "monthly_cost": round(monthly_cost, 2),
                                     "backup_cost_monthly": 0,
                                     "recommendation": "Delete if backup no longer needed",
                                     "action": "delete_snapshot",
                                     "supports_backup": False,
                                     "explainability_notes": f"Snapshot is {(datetime.now(timezone.utc) - start_time).days} days old, exceeding standard data retention policies.",
                                     "confidence_score": 0.99,
+                                    **build_pricing_fields(snapshot_quote),
                                 }
                             )
         except ClientError as e:

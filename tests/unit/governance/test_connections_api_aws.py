@@ -15,17 +15,18 @@ pytest_plugins = ("tests.unit.governance.connections_api_fixtures",)
 def test_tier_gates_are_enforced(auth_user):
     from app.modules.governance.api.v1.settings.connections_helpers import (
         check_cloud_plus_tier,
-        check_growth_tier,
+        check_multi_cloud_tier,
     )
     from fastapi import HTTPException
 
-    # Growth+ gates multi-cloud connections (Azure/GCP).
+    # Starter+ gates multi-cloud connections (Azure/GCP).
+    auth_user.tier = PricingTier.FREE
     with pytest.raises(HTTPException) as exc:
-        check_growth_tier(auth_user)
+        check_multi_cloud_tier(auth_user)
     assert exc.value.status_code == 403
 
-    auth_user.tier = PricingTier.GROWTH
-    assert check_growth_tier(auth_user) == PricingTier.GROWTH
+    auth_user.tier = PricingTier.STARTER
+    assert check_multi_cloud_tier(auth_user) == PricingTier.STARTER
 
     # Pro+ gates Cloud+ connectors (SaaS/License).
     with pytest.raises(HTTPException) as cloud_exc:
@@ -37,7 +38,7 @@ def test_tier_gates_are_enforced(auth_user):
 
 
 @pytest.mark.asyncio
-async def test_aws_setup_templates(ac):
+async def test_aws_setup_templates(ac, override_auth):
     with patch(
         "app.shared.connections.aws.AWSConnectionService.get_setup_templates"
     ) as mock_service:

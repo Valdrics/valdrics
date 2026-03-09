@@ -67,39 +67,39 @@ def test_require_tenant_id_raises_when_missing() -> None:
     assert exc.value.status_code == 404
 
 
-def test_enforce_growth_tier_rejects_free(user: CurrentUser) -> None:
+def test_enforce_multi_cloud_tier_rejects_free(user: CurrentUser) -> None:
     with pytest.raises(HTTPException) as exc:
-        connections_helpers._enforce_growth_tier(PricingTier.FREE, user)
+        connections_helpers._enforce_multi_cloud_tier(PricingTier.FREE, user)
     assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_check_growth_tier_denied_for_free(
+async def test_check_multi_cloud_tier_denied_for_free(
     user: CurrentUser, db: MagicMock
 ) -> None:
     user.tier = PricingTier.FREE
     with pytest.raises(HTTPException) as exc:
-        connections_helpers.check_growth_tier(user)
+        connections_helpers.check_multi_cloud_tier(user)
     assert exc.value.status_code == 403
     db.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_check_growth_tier_denied_again(
+async def test_check_multi_cloud_tier_denied_again(
     user: CurrentUser, db: MagicMock
 ) -> None:
     user.tier = PricingTier.FREE
     with pytest.raises(HTTPException) as exc:
-        connections_helpers.check_growth_tier(user)
-    assert exc.value.status_code == 403  # GROWTH required
+        connections_helpers.check_multi_cloud_tier(user)
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
-async def test_check_growth_tier_allows_growth(
+async def test_check_multi_cloud_tier_allows_starter(
     user: CurrentUser, db: MagicMock
 ) -> None:
-    user.tier = PricingTier.GROWTH
-    connections_helpers.check_growth_tier(user)
+    user.tier = PricingTier.STARTER
+    connections_helpers.check_multi_cloud_tier(user)
 
 
 @pytest.mark.asyncio
@@ -215,7 +215,7 @@ async def test_create_azure_connection_duplicate_raises(
         client_secret="secret",
     )
     db.scalar.return_value = SimpleNamespace(id=uuid4())
-    with patch.object(cloud_api, "check_growth_tier", new=MagicMock()):
+    with patch.object(cloud_api, "check_multi_cloud_tier", new=MagicMock()):
         with pytest.raises(HTTPException) as exc:
             await cloud_api.create_azure_connection(
                 MagicMock(), payload, user, db
@@ -245,7 +245,7 @@ async def test_create_gcp_connection_duplicate_raises(
     )
     db.scalar.return_value = SimpleNamespace(id=uuid4())
     with patch.object(
-        cloud_api, "check_growth_tier", return_value=PricingTier.GROWTH
+        cloud_api, "check_multi_cloud_tier", return_value=PricingTier.STARTER
     ):
         with pytest.raises(HTTPException) as exc:
             await cloud_api.create_gcp_connection(MagicMock(), payload, db, user)
@@ -264,7 +264,7 @@ async def test_create_gcp_connection_workload_identity_failure(
     db.scalar.return_value = None
     with (
         patch.object(
-            cloud_api, "check_growth_tier", return_value=PricingTier.GROWTH
+            cloud_api, "check_multi_cloud_tier", return_value=PricingTier.STARTER
         ),
         patch(
             "app.shared.connections.oidc.OIDCService.verify_gcp_access",

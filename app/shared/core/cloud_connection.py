@@ -24,7 +24,6 @@ from app.shared.core.connection_queries import (
     get_connection_model,
     list_tenant_connections,
 )
-from app.shared.core.config import get_settings
 from app.shared.core.logging import audit_log
 from app.shared.core.provider import normalize_provider, resolve_provider_from_connection
 
@@ -187,29 +186,13 @@ class CloudConnectionService:
         return str(connection_id) if connection_id is not None else None
 
     @staticmethod
-    def _resolve_aws_console_region() -> str:
-        settings = get_settings()
-        configured = str(getattr(settings, "AWS_DEFAULT_REGION", "") or "").strip()
-        supported = {
-            str(region).strip()
-            for region in getattr(settings, "AWS_SUPPORTED_REGIONS", [])
-            if str(region).strip()
-        }
-        if configured and configured in supported:
-            return configured
-        return "us-east-1"
-
-    @staticmethod
     def get_aws_setup_templates(external_id: str) -> dict[str, str]:
         """AWS specific onboarding templates."""
-        console_region = CloudConnectionService._resolve_aws_console_region()
+        from app.shared.connections.aws import AWSConnectionService
+
+        templates = AWSConnectionService.get_setup_templates(external_id)
         return {
-            "magic_link": f"https://console.aws.amazon.com/cloudformation/home?region={console_region}#/stacks/create/review?stackName=ValdricsAccess&templateURL=https://valdrics-public.s3.amazonaws.com/templates/aws-access.yaml&param_ExternalId={external_id}",
-            "cfn_template": "https://valdrics-public.s3.amazonaws.com/templates/aws-access.yaml",
-            "terraform_snippet": (
-                'resource "aws_iam_role" "valdrics_access" {\n'
-                '  name = "ValdricsAccessRole"\n'
-                f'  assume_role_policy = jsonencode({{... external_id = "{external_id}" ...}})\n'
-                "}"
-            ),
+            "magic_link": str(templates["magic_link"]),
+            "cfn_template": str(templates["cloudformation_yaml"]),
+            "terraform_snippet": str(templates["terraform_hcl"]),
         }

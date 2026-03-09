@@ -45,7 +45,6 @@ from app.modules.governance.domain.security.compliance_pack_bundle_state import 
 from app.modules.governance.domain.security.compliance_pack_support import (
     load_reference_documents,
 )
-from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
 
@@ -89,11 +88,12 @@ async def export_compliance_pack_bundle(
     close_end_date: Optional[date],
     close_enforce_finalized: bool,
     close_max_restatements: int,
+    app_environment: str,
+    app_version: str,
     sanitize_csv_cell: Callable[[Any], str],
 ) -> CompliancePackBundleResult:
     exported_at = datetime.now(timezone.utc)
     run_id = str(uuid4())
-    app_settings = get_settings()
 
     if start_date and end_date and start_date > end_date:
         raise CompliancePackValidationError("start_date must be <= end_date")
@@ -325,8 +325,8 @@ async def export_compliance_pack_bundle(
         exported_at=exported_at,
         run_id=run_id,
         actor=actor,
-        app_environment=app_settings.ENVIRONMENT,
-        app_version=app_settings.VERSION,
+        app_environment=app_environment,
+        app_version=app_version,
         start_date=start_date,
         end_date=end_date,
         evidence_limit=int(evidence_limit),

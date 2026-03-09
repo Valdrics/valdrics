@@ -93,6 +93,25 @@ def _get_rds_client(*, region_name: str) -> Any:
     return boto3.client("rds", region_name=region_name)
 
 
+def _get_sts_client(*, region_name: str) -> Any:
+    import boto3
+
+    return boto3.client("sts", region_name=region_name)
+
+
+def _get_caller_identity(sts_client: Any) -> dict[str, Any]:
+    response = sts_client.get_caller_identity()
+    return {
+        "account": str(response.get("Account") or "").strip(),
+        "arn": str(response.get("Arn") or "").strip(),
+        "user_id": str(response.get("UserId") or "").strip(),
+        "assumed_role": str(
+            os.getenv("FAILOVER_AWS_ROLE_TO_ASSUME", "") or ""
+        ).strip()
+        or None,
+    }
+
+
 def _describe_db_instance(rds_client: Any, *, db_instance_id: str) -> dict[str, Any]:
     response = rds_client.describe_db_instances(DBInstanceIdentifier=db_instance_id)
     instances = list(response.get("DBInstances", []) or [])
@@ -137,6 +156,83 @@ async def _assert_secondary_api_live(
         "GET",
         f"{_normalize_origin(secondary_api_origin)}/health/live",
     )
+
+
+def _validate_readiness_payload(payload: object) -> None:
+    if not isinstance(payload, dict):
+        raise SystemExit("Secondary API readiness check returned a non-JSON payload")
+
+    overall_status = str(payload.get("status") or "").strip().lower()
+    if overall_status not in {"healthy", "degraded"}:
+        raise SystemExit(
+            f"Secondary API readiness status is not acceptable: {overall_status or 'missing'}"
+        )
+
+    checks = payload.get("checks")
+    if not isinstance(checks, dict):
+        raise SystemExit("Secondary API readiness payload is missing checks")
+
+    database = checks.get("database")
+    if not isinstance(database, dict) or str(database.get("status") or "").strip().lower() != "up":
+        raise SystemExit("Secondary API readiness failed database verification")
+
+    cache = checks.get("cache")
+    cache_status = (
+        str(cache.get("status") or "").strip().lower()
+        if isinstance(cache, dict)
+        else ""
+    )
+    if cache_status in {"down", "unhealthy"}:
+        raise SystemExit("Secondary API readiness failed cache verification")
+
+    background_jobs = checks.get("background_jobs")
+    jobs_status = (
+        str(background_jobs.get("status") or "").strip().lower()
+        if isinstance(background_jobs, dict)
+        else ""
+    )
+    if jobs_status != "healthy":
+        raise SystemExit(
+            "Secondary API readiness requires healthy background job processing state"
+        )
+    worker_health = (
+        background_jobs.get("worker_health")
+        if isinstance(background_jobs, dict)
+        else None
+    )
+    worker_status = (
+        str(worker_health.get("status") or "").strip().lower()
+        if isinstance(worker_health, dict)
+        else ""
+    )
+    worker_count = (
+        int(worker_health.get("worker_count") or 0)
+        if isinstance(worker_health, dict)
+        else 0
+    )
+    if worker_status != "healthy" or worker_count <= 0:
+        raise SystemExit(
+            "Secondary API readiness requires healthy Celery worker heartbeat coverage"
+        )
+
+
+async def _assert_secondary_api_ready(
+    client: httpx.AsyncClient,
+    *,
+    secondary_api_origin: str,
+) -> tuple[int, object]:
+    return await _request_json(
+        client,
+        "GET",
+        f"{_normalize_origin(secondary_api_origin)}/health",
+    )
+
+
+def _assert_cloudflare_cutover_success(payload: object) -> None:
+    if not isinstance(payload, dict):
+        raise SystemExit("Cloudflare DNS cutover returned a non-JSON payload")
+    if payload.get("success") is not True:
+        raise SystemExit("Cloudflare DNS cutover did not report success=true")
 
 
 async def _cutover_cloudflare_dns(
@@ -186,6 +282,7 @@ async def main() -> None:
         evidence["steps"] = {
             "promote_replica": {"mode": "dry_run", "db_instance_id": args.secondary_db_instance_id},
             "health_live": {"mode": "dry_run", "url": f"{evidence['secondary_api_origin']}/health/live"},
+            "health_ready": {"mode": "dry_run", "url": f"{evidence['secondary_api_origin']}/health"},
             "cutover_dns": {
                 "mode": "dry_run",
                 "record_name": args.api_record_name,
@@ -194,6 +291,8 @@ async def main() -> None:
         }
     else:
         api_token = str(os.getenv("CLOUDFLARE_API_TOKEN", "") or "").strip()
+        sts_client = _get_sts_client(region_name=args.secondary_region)
+        evidence["aws_execution_identity"] = _get_caller_identity(sts_client)
         rds_client = _get_rds_client(region_name=args.secondary_region)
         rds_client.promote_read_replica(DBInstanceIdentifier=args.secondary_db_instance_id)
         promoted_instance = _wait_for_replica_promotion(
@@ -228,6 +327,20 @@ async def main() -> None:
                     f"Secondary API health check failed before cutover: {health_status}"
                 )
 
+            readiness_status, readiness_payload = await _assert_secondary_api_ready(
+                client,
+                secondary_api_origin=str(evidence["secondary_api_origin"]),
+            )
+            evidence["steps"]["health_ready"] = {
+                "status_code": readiness_status,
+                "payload": readiness_payload,
+            }
+            if readiness_status >= 400:
+                raise SystemExit(
+                    f"Secondary API readiness check failed before cutover: {readiness_status}"
+                )
+            _validate_readiness_payload(readiness_payload)
+
             dns_status, dns_payload = await _cutover_cloudflare_dns(
                 client,
                 api_token=api_token,
@@ -242,6 +355,7 @@ async def main() -> None:
             }
             if dns_status >= 400:
                 raise SystemExit(f"Cloudflare DNS cutover failed: {dns_status}")
+            _assert_cloudflare_cutover_success(dns_payload)
 
     duration_seconds = round(time.perf_counter() - monotonic_start, 3)
     evidence["duration_seconds"] = duration_seconds

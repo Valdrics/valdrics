@@ -1,5 +1,5 @@
-export function isProPlus(currentTier: string | null | undefined): boolean {
-	return ['pro', 'enterprise'].includes((currentTier ?? '').toLowerCase());
+export function isGrowthPlus(currentTier: string | null | undefined): boolean {
+	return ['growth', 'pro', 'enterprise'].includes((currentTier ?? '').toLowerCase());
 }
 
 export function apiRootFromPublicApiUrl(publicApiUrl: string): string {

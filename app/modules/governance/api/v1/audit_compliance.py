@@ -14,6 +14,7 @@ from app.modules.governance.domain.security.compliance_pack_contracts import (
     CompliancePackValidationError,
 )
 from app.shared.core.auth import CurrentUser
+from app.shared.core.config import get_settings
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
 from app.shared.db.session import get_db
@@ -164,6 +165,8 @@ async def export_compliance_pack(
             close_end_date=close_end_date,
             close_enforce_finalized=close_enforce_finalized,
             close_max_restatements=close_max_restatements,
+            app_environment=get_settings().ENVIRONMENT,
+            app_version=get_settings().VERSION,
             sanitize_csv_cell=_sanitize_csv_cell,
         )
     except CompliancePackValidationError as exc:

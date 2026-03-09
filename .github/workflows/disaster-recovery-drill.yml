@@ -22,6 +22,8 @@ env:
   ENCRYPTION_KEY: "ci-encryption-key-32-chars-min-00000000"
   KDF_SALT: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
   SUPABASE_JWT_SECRET: "ci-supabase-jwt-secret-32-chars-0000"
+  ENFORCEMENT_APPROVAL_TOKEN_SECRET: "ci-enforcement-approval-secret-0000000000"
+  ENFORCEMENT_EXPORT_SIGNING_SECRET: "ci-enforcement-export-signing-secret-0000"
   ADMIN_API_KEY: "ci-admin-api-key-32-chars-min-0000000"
   GROQ_API_KEY: "testing"
   PAYSTACK_SECRET_KEY: "example_paystack_secret_ci_validation_only"

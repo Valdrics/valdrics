@@ -1,5 +1,5 @@
 """
-Azure and GCP connection endpoints (Growth+).
+Azure and GCP connection endpoints (Starter+).
 """
 
 from uuid import UUID
@@ -19,7 +19,7 @@ from app.schemas.connections import (
 from app.modules.governance.api.v1.settings.connections_helpers import (
     _enforce_connection_limit,
     _require_tenant_id,
-    check_growth_tier,
+    check_multi_cloud_tier,
 )
 from app.shared.connections.azure import AzureConnectionService
 from app.shared.connections.gcp import GCPConnectionService
@@ -45,7 +45,7 @@ async def create_azure_connection(
     db: AsyncSession = Depends(get_db),
 ) -> AzureConnection:
     tenant_id = _require_tenant_id(current_user)
-    plan = check_growth_tier(current_user)
+    plan = check_multi_cloud_tier(current_user)
 
     connection = await db.scalar(
         select(AzureConnection).where(
@@ -97,7 +97,7 @@ async def verify_azure_connection(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    check_growth_tier(current_user)
+    check_multi_cloud_tier(current_user)
     return await AzureConnectionService(db).verify_connection(
         connection_id, _require_tenant_id(current_user)
     )
@@ -150,7 +150,7 @@ async def create_gcp_connection(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
 ) -> GCPConnection:
     tenant_id = _require_tenant_id(current_user)
-    plan = check_growth_tier(current_user)
+    plan = check_multi_cloud_tier(current_user)
 
     connection = await db.scalar(
         select(GCPConnection).where(
@@ -213,7 +213,7 @@ async def verify_gcp_connection(
     current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    check_growth_tier(current_user)
+    check_multi_cloud_tier(current_user)
     return await GCPConnectionService(db).verify_connection(
         connection_id, _require_tenant_id(current_user)
     )

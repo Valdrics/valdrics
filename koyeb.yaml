@@ -80,6 +80,10 @@ definition:
       secret: valdrics-redis-url
     - name: SUPABASE_JWT_SECRET
       secret: valdrics-jwt-secret
+    - name: ENFORCEMENT_APPROVAL_TOKEN_SECRET
+      secret: valdrics-enforcement-approval-token-secret
+    - name: ENFORCEMENT_EXPORT_SIGNING_SECRET
+      secret: valdrics-enforcement-export-signing-secret
     - name: OTEL_EXPORTER_OTLP_ENDPOINT
       secret: valdrics-otlp-endpoint
     - name: ENCRYPTION_KEY

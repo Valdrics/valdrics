@@ -7,6 +7,13 @@ import pytest
 from app.modules.reporting.domain.service import ReportingService
 
 
+def _service_with_adapter(mock_db, mock_adapter: AsyncMock) -> ReportingService:
+    return ReportingService(
+        mock_db,
+        adapter_resolver=MagicMock(return_value=mock_adapter),
+    )
+
+
 @pytest.mark.asyncio
 async def test_ingest_syncs_cloud_account_registry(
     mock_db,
@@ -17,17 +24,15 @@ async def test_ingest_syncs_cloud_account_registry(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine"),
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(mock_adapter, {"cost_usd": "50.0"})
 
         mock_persistence_instance = make_persistence_stub(records_saved=1)
@@ -48,17 +53,15 @@ async def test_ingest_triggers_attribution(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine") as mock_attribution,
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(mock_adapter, {"cost_usd": "100.0"})
 
         mock_persistence_instance = make_persistence_stub(records_saved=1)
@@ -83,17 +86,15 @@ async def test_ingest_handles_attribution_failure(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine") as mock_attribution,
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(mock_adapter, {"cost_usd": "50.0"})
 
         mock_persistence_instance = make_persistence_stub(records_saved=1)
@@ -120,17 +121,15 @@ async def test_ingest_aggregates_costs(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine"),
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(
             mock_adapter,
             {"cost_usd": "10.0"},
@@ -160,17 +159,15 @@ async def test_ingest_handles_null_costs(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine"),
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(
             mock_adapter,
             {"cost_usd": "10.0"},
@@ -196,17 +193,15 @@ async def test_ingest_updates_connection_last_ingested_at(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine"),
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(mock_adapter, {"cost_usd": "100.0"})
 
         mock_persistence_instance = make_persistence_stub(records_saved=1)
@@ -227,17 +222,15 @@ async def test_ingest_respects_days_parameter(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine"),
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(mock_adapter, {"cost_usd": "1.0"})
 
         mock_persistence_instance = make_persistence_stub(records_saved=1)
@@ -261,17 +254,15 @@ async def test_ingest_response_has_required_fields(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine"),
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(mock_adapter, {"cost_usd": "50.0"})
 
         mock_persistence_instance = make_persistence_stub(records_saved=1)

@@ -2,8 +2,13 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from botocore.exceptions import ClientError
 import structlog
+from app.modules.optimization.adapters.aws.plugins.pricing_evidence import (
+    build_pricing_fields,
+    serialize_pricing_quote,
+)
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
+from app.modules.reporting.domain.pricing.service import PricingService
 
 logger = structlog.get_logger()
 
@@ -90,11 +95,7 @@ class OrphanLoadBalancersPlugin(ZombiePlugin):
                                     break
 
                             if not has_healthy_targets:
-                                from app.modules.reporting.domain.pricing.service import (
-                                    PricingService,
-                                )
-
-                                monthly_cost = PricingService.estimate_monthly_waste(
+                                pricing_quote = PricingService.estimate_monthly_waste_quote(
                                     provider="aws", resource_type="elb", region=region
                                 )
                                 zombies.append(
@@ -103,7 +104,12 @@ class OrphanLoadBalancersPlugin(ZombiePlugin):
                                         "resource_name": lb_name,
                                         "resource_type": "Load Balancer",
                                         "lb_type": lb_type,
-                                        "monthly_cost": round(monthly_cost, 2),
+                                        "monthly_cost": round(
+                                            pricing_quote.monthly_cost_usd, 2
+                                        ),
+                                        "pricing_evidence": serialize_pricing_quote(
+                                            pricing_quote
+                                        ),
                                         "recommendation": "Delete if no longer needed",
                                         "action": "delete_load_balancer",
                                         "supports_backup": False,
@@ -214,12 +220,8 @@ class UnderusedNatGatewaysPlugin(ZombiePlugin):
                                 )
 
                                 if total_connections < 100:
-                                    from app.modules.reporting.domain.pricing.service import (
-                                        PricingService,
-                                    )
-
-                                    monthly_cost = (
-                                        PricingService.estimate_monthly_waste(
+                                    pricing_quote = (
+                                        PricingService.estimate_monthly_waste_quote(
                                             provider="aws",
                                             resource_type="nat_gateway",
                                             region=region,
@@ -229,11 +231,11 @@ class UnderusedNatGatewaysPlugin(ZombiePlugin):
                                         {
                                             "resource_id": nat_id,
                                             "resource_type": "NAT Gateway",
-                                            "monthly_cost": round(monthly_cost, 2),
                                             "recommendation": "Delete or consolidate underused NAT Gateway",
                                             "action": "manual_review",
                                             "explainability_notes": f"NAT Gateway has extremely low traffic ({total_connections} connection attempts in 7 days).",
                                             "confidence_score": 0.85,
+                                            **build_pricing_fields(pricing_quote),
                                         }
                                     )
                             except ClientError as e:

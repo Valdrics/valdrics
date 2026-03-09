@@ -4,8 +4,10 @@
 		FREE_TIER_HIGHLIGHTS,
 		FREE_TIER_LIMIT_NOTE,
 		IMPLEMENTATION_COST_FACTS,
-		PLAN_COMPARE_CARDS
+		PLAN_COMPARE_CARDS,
+		PLANS_PRICING_EXPLANATION
 	} from '$lib/landing/heroContent';
+	import { DEFAULT_PRICING_PLANS } from '$lib/pricing/publicPlans';
 
 	let {
 		buildFreeTierCtaHref,
@@ -18,6 +20,12 @@
 		talkToSalesHref: string;
 		onTrackCta: (action: string, section: string, value: string) => void;
 	} = $props();
+
+	const freePlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'free');
+
+	if (!freePlan?.story) {
+		throw new Error('Landing plans section requires a free-plan public story.');
+	}
 </script>
 
 <section
@@ -27,22 +35,16 @@
 >
 	<div class="landing-section-head">
 		<h2 class="landing-h2">Choose a plan and launch fast</h2>
-		<p class="landing-section-sub">
-			Monthly starting prices shown here are entry points. Upgrade as provider coverage,
-			automation depth, and governance needs expand.
-		</p>
+		<p class="landing-section-sub">{PLANS_PRICING_EXPLANATION}</p>
 	</div>
 
 	<div class="landing-free-tier-card glass-panel">
 		<div class="landing-free-tier-head">
 			<div>
-				<p class="landing-free-tier-badge">Start here first</p>
+				<p class="landing-free-tier-badge">{freePlan.story.badge}</p>
 				<p class="landing-proof-k">Start Free</p>
-				<h3 class="landing-h3">Free tier for your first savings workflow</h3>
-				<p class="landing-p">
-					Start at $0, prove one workflow, and upgrade only when you need more coverage, automation,
-					or governance depth.
-				</p>
+				<h3 class="landing-h3">{freePlan.story.headline}</h3>
+				<p class="landing-p">{freePlan.story.summary}</p>
 			</div>
 			<div class="landing-free-tier-price">
 				<p class="landing-free-tier-price-k">Entry Price</p>
@@ -54,6 +56,16 @@
 				<li>{feature}</li>
 			{/each}
 		</ul>
+		<dl class="landing-plan-context" aria-label="Free plan fit and upgrade path">
+			<div class="landing-plan-context__row">
+				<dt class="landing-plan-context__label">Best for</dt>
+				<dd class="landing-plan-context__value">{freePlan.story.bestFor}</dd>
+			</div>
+			<div class="landing-plan-context__row">
+				<dt class="landing-plan-context__label">Why teams upgrade</dt>
+				<dd class="landing-plan-context__value">{freePlan.story.whyUpgrade}</dd>
+			</div>
+		</dl>
 		<p class="landing-free-tier-limit">{FREE_TIER_LIMIT_NOTE}</p>
 		<div class="landing-free-tier-cta">
 			<a
@@ -70,16 +82,26 @@
 	<div class="landing-plans-grid">
 		{#each PLAN_COMPARE_CARDS as plan (plan.id)}
 			<article class="glass-panel landing-plan-card">
-				<p class="landing-proof-k">{plan.kicker}</p>
+				<p class="landing-proof-k">{plan.badge}</p>
 				<h3 class="landing-h3">{plan.name}</h3>
 				<p class="landing-plan-price">{plan.price}</p>
 				<p class="landing-plan-price-note">{plan.priceNote}</p>
-				<p class="landing-p">{plan.detail}</p>
+				<p class="landing-p">{plan.summary}</p>
 				<ul class="landing-plan-features">
 					{#each plan.features as feature (feature)}
 						<li>{feature}</li>
 					{/each}
 				</ul>
+				<dl class="landing-plan-context" aria-label={`${plan.name} plan fit and upgrade path`}>
+					<div class="landing-plan-context__row">
+						<dt class="landing-plan-context__label">Best for</dt>
+						<dd class="landing-plan-context__value">{plan.bestFor}</dd>
+					</div>
+					<div class="landing-plan-context__row">
+						<dt class="landing-plan-context__label">Why teams upgrade</dt>
+						<dd class="landing-plan-context__value">{plan.whyUpgrade}</dd>
+					</div>
+				</dl>
 				<a
 					href={buildPlanCtaHref(plan.id)}
 					class="btn btn-secondary landing-plan-secondary-cta"

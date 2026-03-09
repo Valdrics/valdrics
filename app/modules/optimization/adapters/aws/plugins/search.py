@@ -4,6 +4,9 @@ from typing import Any, Dict
 from botocore.exceptions import ClientError
 import structlog
 
+from app.modules.optimization.adapters.aws.plugins.pricing_evidence import (
+    serialize_pricing_quote,
+)
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 from app.modules.reporting.domain.pricing.service import PricingService
@@ -71,7 +74,7 @@ class IdleOpenSearchPlugin(ZombiePlugin):
         return False
 
     @staticmethod
-    def _estimate_monthly_cost(status: dict[str, Any], region: str) -> float:
+    def _estimate_monthly_cost_details(status: dict[str, Any], region: str) -> dict[str, Any]:
         cluster_config = status.get("ClusterConfig") or {}
         if not isinstance(cluster_config, dict):
             cluster_config = {}
@@ -82,13 +85,17 @@ class IdleOpenSearchPlugin(ZombiePlugin):
             default=1,
         )
 
-        monthly_cost = PricingService.estimate_monthly_waste(
+        cluster_quote = PricingService.estimate_monthly_waste_quote(
             provider="aws",
             resource_type="opensearch",
             resource_size=instance_type,
             region=region,
             quantity=float(instance_count),
         )
+        monthly_cost = cluster_quote.monthly_cost_usd
+        pricing_breakdown: dict[str, Any] = {
+            "cluster": serialize_pricing_quote(cluster_quote),
+        }
 
         dedicated_master_enabled = bool(cluster_config.get("DedicatedMasterEnabled"))
         if dedicated_master_enabled:
@@ -99,15 +106,27 @@ class IdleOpenSearchPlugin(ZombiePlugin):
                 cluster_config.get("DedicatedMasterCount"),
                 default=3,
             )
-            monthly_cost += PricingService.estimate_monthly_waste(
+            master_quote = PricingService.estimate_monthly_waste_quote(
                 provider="aws",
                 resource_type="opensearch_master",
                 resource_size=master_type,
                 region=region,
                 quantity=float(master_count),
             )
+            monthly_cost += master_quote.monthly_cost_usd
+            pricing_breakdown["dedicated_masters"] = serialize_pricing_quote(
+                master_quote
+            )
 
-        return round(monthly_cost, 2)
+        return {
+            "monthly_cost": round(monthly_cost, 2),
+            "pricing_evidence": pricing_breakdown,
+        }
+
+    @staticmethod
+    def _estimate_monthly_cost(status: dict[str, Any], region: str) -> float:
+        details = IdleOpenSearchPlugin._estimate_monthly_cost_details(status, region)
+        return float(details["monthly_cost"])
 
     async def scan(
         self,
@@ -185,15 +204,17 @@ class IdleOpenSearchPlugin(ZombiePlugin):
                     )
 
                     if has_data and not has_requests:
+                        pricing_details = self._estimate_monthly_cost_details(
+                            status, region
+                        )
                         zombies.append(
                             {
                                 "resource_id": arn,
                                 "resource_type": "AWS OpenSearch Domain",
                                 "resource_name": domain_name,
                                 "region": region,
-                                "monthly_cost": self._estimate_monthly_cost(
-                                    status, region
-                                ),
+                                "monthly_cost": pricing_details["monthly_cost"],
+                                "pricing_evidence": pricing_details["pricing_evidence"],
                                 "recommendation": "Snapshot and delete unused OpenSearch domain",
                                 "action": "snapshot_and_delete_opensearch",
                                 "confidence_score": 0.9,

@@ -95,7 +95,7 @@ async def test_sso_discovery_domain_mode_success(
     import uuid
 
     tenant_id = uuid.uuid4()
-    tenant = Tenant(id=tenant_id, name="Tenant SSO Domain", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Tenant SSO Domain", plan="growth")
     db.add(tenant)
     db.add(
         SsoDomainMapping(
@@ -126,7 +126,7 @@ async def test_sso_discovery_provider_id_mode_success(
     import uuid
 
     tenant_id = uuid.uuid4()
-    tenant = Tenant(id=tenant_id, name="Tenant SSO Provider", plan="enterprise")
+    tenant = Tenant(id=tenant_id, name="Tenant SSO Provider", plan="growth")
     db.add(tenant)
     db.add(
         SsoDomainMapping(
@@ -366,7 +366,7 @@ async def test_sso_discovery_unknown_mode_falls_back_to_domain(
     import uuid
 
     tenant_id = uuid.uuid4()
-    db.add(Tenant(id=tenant_id, name="Tenant Unknown Mode", plan="pro"))
+    db.add(Tenant(id=tenant_id, name="Tenant Unknown Mode", plan="growth"))
     db.add(
         SsoDomainMapping(
             tenant_id=tenant_id,

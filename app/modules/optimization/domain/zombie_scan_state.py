@@ -128,6 +128,7 @@ class ZombieScanState:
         if isinstance(completeness, dict):
             plugins = completeness.get("plugins")
             connection_region = region_override or completeness.get("region") or "global"
+            inventory_discovery = completeness.get("inventory_discovery")
             summary = {
                 "provider": provider_name,
                 "connection_id": connection_id,
@@ -136,6 +137,11 @@ class ZombieScanState:
                 "degraded": bool(completeness.get("degraded", False)),
                 "error_count": int(completeness.get("error_count", 0) or 0),
                 "plugins": plugins if isinstance(plugins, dict) else {},
+                "inventory_discovery": (
+                    dict(inventory_discovery)
+                    if isinstance(inventory_discovery, dict)
+                    else {}
+                ),
             }
             self.payload["scan_completeness"].append(summary)
             if summary["degraded"]:
@@ -158,6 +164,30 @@ class ZombieScanState:
                             "status": str(plugin_metadata.get("status") or "failed"),
                         }
                     )
+                inventory_summary = summary.get("inventory_discovery")
+                if isinstance(inventory_summary, dict):
+                    inventory_status = str(inventory_summary.get("status") or "ok")
+                    if inventory_status != "ok":
+                        self._mark_connection_items_manual_review(
+                            provider_name=provider_name,
+                            connection_id=connection_id,
+                            connection_region=connection_region,
+                            inventory_summary=inventory_summary,
+                        )
+                        self.payload["errors"].append(
+                            {
+                                "provider": provider_name,
+                                "region": connection_region,
+                                "error": str(
+                                    inventory_summary.get("coverage_limitations")
+                                    or "Inventory discovery is partial or degraded"
+                                ),
+                                "error_type": "InventoryDiscoveryPartial",
+                                "connection_id": connection_id,
+                                "category": "inventory_discovery",
+                                "status": inventory_status,
+                            }
+                        )
 
             overall_error = completeness.get("overall_error")
             if overall_error:
@@ -186,6 +216,45 @@ class ZombieScanState:
                     "status": "failed",
                 }
             )
+
+    def _mark_connection_items_manual_review(
+        self,
+        *,
+        provider_name: str,
+        connection_id: str,
+        connection_region: str,
+        inventory_summary: dict[str, Any],
+    ) -> None:
+        inventory_status = str(inventory_summary.get("status") or "partial")
+        inventory_note = str(
+            inventory_summary.get("coverage_limitations")
+            or "Inventory discovery is partial or degraded; manual review is required."
+        )
+        for category, bucket in self.payload.items():
+            if category in {"errors", "scan_completeness"}:
+                continue
+            if not isinstance(bucket, list):
+                continue
+            for item in bucket:
+                if not isinstance(item, dict):
+                    continue
+                if str(item.get("provider") or "") != provider_name:
+                    continue
+                if str(item.get("connection_id") or "") != connection_id:
+                    continue
+                item_region = str(item.get("region") or connection_region or "global")
+                if connection_region not in {"", "global"} and item_region != connection_region:
+                    continue
+                item["requires_manual_review"] = True
+                item["automated_action_allowed"] = False
+                item["decision_gate"] = "manual_review_required"
+                item["inventory_discovery_status"] = inventory_status
+                item["inventory_discovery_note"] = inventory_note
+                notes = str(item.get("explainability_notes") or "").strip()
+                if inventory_note not in notes:
+                    item["explainability_notes"] = (
+                        f"{notes} Manual review required because {inventory_note}".strip()
+                    )
 
     def append_error(
         self,

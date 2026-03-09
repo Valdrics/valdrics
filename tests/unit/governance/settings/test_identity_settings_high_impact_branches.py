@@ -21,7 +21,7 @@ from app.shared.core.pricing import PricingTier
 
 
 async def _seed_admin(
-    db: AsyncSession, *, plan: str = "pro", email: str = "admin@example.com"
+    db: AsyncSession, *, plan: str = "growth", email: str = "admin@example.com"
 ) -> tuple[Tenant, User, dict[str, str]]:
     tenant = Tenant(id=uuid.uuid4(), name=f"Tenant {email}", plan=plan)
     user = User(
@@ -44,7 +44,7 @@ def _admin_override_user(tenant_id: uuid.UUID, email: str = "admin@example.com")
         email=email,
         tenant_id=tenant_id,
         role=UserRole.ADMIN,
-        tier=PricingTier.PRO,
+        tier=PricingTier.GROWTH,
     )
 
 
@@ -142,7 +142,7 @@ def test_identity_settings_update_validation_branches(
 async def test_identity_diagnostics_reports_sso_and_scim_issues(
     ac, db: AsyncSession
 ) -> None:
-    tenant, _user, headers = await _seed_admin(db, plan="pro", email="admin@example.com")
+    tenant, _user, headers = await _seed_admin(db, plan="growth", email="admin@example.com")
 
     identity = TenantIdentitySettings(
         tenant_id=tenant.id,
@@ -182,7 +182,7 @@ async def test_identity_diagnostics_detects_admin_lockout_risk(
     ac, db: AsyncSession
 ) -> None:
     tenant, _user, _headers = await _seed_admin(
-        db, plan="pro", email="admin@example.com"
+        db, plan="growth", email="admin@example.com"
     )
 
     db.add(
@@ -223,7 +223,7 @@ async def test_identity_sso_validation_production_checks_and_provider_requiremen
     monkeypatch.setattr(settings, "API_URL", "http://api.local", raising=False)
 
     tenant, _user, _headers = await _seed_admin(
-        db, plan="pro", email="admin@example.com"
+        db, plan="growth", email="admin@example.com"
     )
     db.add(
         TenantIdentitySettings(
@@ -259,7 +259,7 @@ async def test_identity_sso_validation_production_checks_and_provider_requiremen
 
 @pytest.mark.asyncio
 async def test_identity_scim_test_token_requires_enterprise(ac, db: AsyncSession) -> None:
-    _tenant, _user, headers = await _seed_admin(db, plan="pro")
+    _tenant, _user, headers = await _seed_admin(db, plan="growth")
 
     response = await ac.post(
         "/api/v1/settings/identity/scim/test-token",
@@ -316,10 +316,10 @@ async def test_identity_update_rejects_cross_tenant_domain_conflict(
     ac, db: AsyncSession
 ) -> None:
     tenant_a, _user_a, headers_a = await _seed_admin(
-        db, plan="pro", email="admin@shared.example"
+        db, plan="growth", email="admin@shared.example"
     )
     tenant_b, _user_b, _headers_b = await _seed_admin(
-        db, plan="pro", email="other@example.com"
+        db, plan="growth", email="other@example.com"
     )
 
     db.add(

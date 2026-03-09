@@ -12,6 +12,8 @@ FAKE_PAYSTACK_PUBLIC_KEY = "example_paystack_public_TEST_KEY_NOT_REAL_1234567890
 FAKE_SUPABASE_SECRET = "x" * 32
 FAKE_CSRF_SECRET = "c" * 32
 FAKE_ENCRYPTION_KEY = "k" * 32
+FAKE_ENFORCEMENT_APPROVAL_SECRET = "a" * 48
+FAKE_ENFORCEMENT_EXPORT_SECRET = "e" * 48
 FAKE_API_URL = "https://api.example.com"
 FAKE_FRONTEND_URL = "https://app.example.com"
 # Base64 for 'KDF_SALT_FOR_TESTING_32_BYTES_OK' (32 bytes)
@@ -62,6 +64,8 @@ class TestSettingsValidation:
                     TESTING=False,
                     GROQ_API_KEY="g" * 32,
                     DB_SSL_MODE="invalid_mode",
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,
                 )
             assert "DB_SSL_MODE must be secure in production" in str(exc.value)
@@ -86,6 +90,8 @@ class TestSettingsValidation:
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     EXPOSE_API_DOCUMENTATION_PUBLICLY=True,
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,
                 )
 
@@ -107,6 +113,8 @@ class TestSettingsValidation:
                     GROQ_API_KEY="g" * 32,
                     DB_SSL_MODE="verify-ca",
                     DB_SSL_CA_CERT_PATH=None,  # Missing CA cert
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,
                 )
 
@@ -135,6 +143,8 @@ class TestSettingsValidation:
                 PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                 ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                 _env_file=None,
             )
 
@@ -177,6 +187,8 @@ class TestSettingsValidation:
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,
                 )
 
@@ -221,6 +233,8 @@ class TestSettingsValidation:
                     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     REMEDIATION_KILL_SWITCH_SCOPE="global",
                     REMEDIATION_KILL_SWITCH_ALLOW_GLOBAL_SCOPE=False,
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,
                 )
 
@@ -252,6 +266,8 @@ class TestSettingsValidation:
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,
                 )
 
@@ -280,6 +296,8 @@ class TestSettingsValidation:
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,
                 )
             assert "FRONTEND_URL must use an explicit https:// URL" in str(exc.value)
@@ -303,6 +321,8 @@ class TestSettingsValidation:
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,  # Ignore .env
                 )
 
@@ -358,6 +378,8 @@ class TestSettingsValidation:
                 PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                 ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                 DEBUG=False,
                 TESTING=False,
                 _env_file=None,
@@ -413,6 +435,8 @@ class TestSettingsValidation:
                     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     SAAS_STRICT_INTEGRATIONS=True,
                     SLACK_CHANNEL_ID="C0123456789",
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,
                 )
             assert (
@@ -444,6 +468,8 @@ class TestSettingsValidation:
                 ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                 SAAS_STRICT_INTEGRATIONS=True,
                 SLACK_BOT_TOKEN="xoxb-shared-token",
+                ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                 _env_file=None,
             )
             assert settings.SAAS_STRICT_INTEGRATIONS is True
@@ -469,6 +495,8 @@ class TestSettingsValidation:
                     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                     DB_USE_NULL_POOL=True,
                     DB_EXTERNAL_POOLER=False,
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,
                 )
             assert "DB_USE_NULL_POOL=true requires DB_EXTERNAL_POOLER=true" in str(
@@ -494,6 +522,8 @@ class TestSettingsValidation:
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,
                 )
         assert "WEB_CONCURRENCY > 1 requires CIRCUIT_BREAKER_DISTRIBUTED_STATE" in str(
@@ -521,6 +551,8 @@ class TestSettingsValidation:
                 PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                 ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                 _env_file=None,
             )
         assert settings.CIRCUIT_BREAKER_DISTRIBUTED_STATE is True
@@ -544,6 +576,8 @@ class TestSettingsValidation:
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
                     PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                    ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                    ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                     _env_file=None,
                 )
             assert "REDIS_URL is required for distributed rate limiting" in str(
@@ -571,6 +605,8 @@ class TestSettingsValidation:
                 PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
                 ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
                 ALLOW_IN_MEMORY_RATE_LIMITS=True,
+                ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
                 _env_file=None,
             )
             assert settings.ALLOW_IN_MEMORY_RATE_LIMITS is True
@@ -706,3 +742,56 @@ class TestSettingsValidation:
             )
             assert settings.ENFORCEMENT_EXPORT_SIGNING_SECRET == "x" * 48
             assert settings.ENFORCEMENT_EXPORT_SIGNING_KID == "enf-export-v2"
+
+    def test_settings_require_enforcement_signing_keys_in_production(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    ENVIRONMENT="production",
+                    DATABASE_URL="postgresql+asyncpg://test",
+                    REDIS_URL="redis://localhost:6379",
+                    API_URL=FAKE_API_URL,
+                    FRONTEND_URL=FAKE_FRONTEND_URL,
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    DEBUG=False,
+                    TESTING=False,
+                    DB_SSL_MODE="require",
+                    ADMIN_API_KEY="a" * 32,
+                    GROQ_API_KEY="g" * 32,
+                    PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                    PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                    ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                    _env_file=None,
+                )
+            assert "ENFORCEMENT_APPROVAL_TOKEN_SECRET" in str(exc.value)
+
+    def test_settings_accept_production_enforcement_signing_keys(self):
+        with patch.dict("os.environ", {}, clear=True):
+            settings = Settings(
+                ENVIRONMENT="production",
+                DATABASE_URL="postgresql+asyncpg://test",
+                REDIS_URL="redis://localhost:6379",
+                API_URL=FAKE_API_URL,
+                FRONTEND_URL=FAKE_FRONTEND_URL,
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
+                DEBUG=False,
+                TESTING=False,
+                DB_SSL_MODE="require",
+                ADMIN_API_KEY="a" * 32,
+                GROQ_API_KEY="g" * 32,
+                PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
+                PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
+                ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
+                ENFORCEMENT_APPROVAL_TOKEN_SECRET="a" * 48,
+                ENFORCEMENT_EXPORT_SIGNING_SECRET="x" * 48,
+                _env_file=None,
+            )
+
+            assert settings.ENFORCEMENT_APPROVAL_TOKEN_SECRET == "a" * 48
+            assert settings.ENFORCEMENT_EXPORT_SIGNING_SECRET == "x" * 48

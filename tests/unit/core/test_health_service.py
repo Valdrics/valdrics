@@ -106,11 +106,21 @@ async def test_check_background_jobs_stuck():
 
     stuck_result = MagicMock()
     stuck_result.scalar.return_value = 3
-    db.execute = AsyncMock(return_value=stuck_result)
+    stats_row = MagicMock(total=3, pending=3, running=0, failed=0)
+    stats_result = MagicMock()
+    stats_result.first.return_value = stats_row
+    db.execute = AsyncMock(side_effect=[stuck_result, stats_result])
 
-    result = await service._check_background_jobs()
+    with patch(
+        "app.shared.core.health_check_ops._probe_worker_health",
+        new=AsyncMock(
+            return_value={"status": "healthy", "worker_count": 1, "workers": ["worker@a"]}
+        ),
+    ):
+        result = await service._check_background_jobs()
     assert result["status"] == "degraded"
     assert result["stuck_jobs"] == 3
+    assert result["worker_health"]["status"] == "healthy"
 
 
 @pytest.mark.asyncio
@@ -127,9 +137,16 @@ async def test_check_background_jobs_stats():
 
     db.execute = AsyncMock(side_effect=[stuck_result, stats_result])
 
-    result = await service._check_background_jobs()
+    with patch(
+        "app.shared.core.health_check_ops._probe_worker_health",
+        new=AsyncMock(
+            return_value={"status": "healthy", "worker_count": 1, "workers": ["worker@a"]}
+        ),
+    ):
+        result = await service._check_background_jobs()
     assert result["status"] == "healthy"
     assert result["queue_stats"]["total_jobs"] == 5
     assert result["queue_stats"]["pending_jobs"] == 2
     assert result["queue_stats"]["running_jobs"] == 1
     assert result["queue_stats"]["failed_jobs"] == 0
+    assert result["worker_health"]["worker_count"] == 1

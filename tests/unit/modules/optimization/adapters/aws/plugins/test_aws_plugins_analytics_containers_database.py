@@ -1,5 +1,6 @@
 import pytest
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.modules.optimization.adapters.aws.plugins.analytics import IdleSageMakerPlugin
@@ -83,12 +84,26 @@ async def test_idle_sagemaker_cloudwatch(monkeypatch):
     )
 
     with patch(
-        "app.modules.reporting.domain.pricing.service.PricingService.estimate_monthly_waste",
-        return_value=100.0,
+        "app.modules.reporting.domain.pricing.service.PricingService.estimate_monthly_waste_quote",
+        return_value=SimpleNamespace(
+            monthly_cost_usd=100.0,
+            source="default_catalog",
+            requested_region="us-east-1",
+            effective_region="global",
+            hourly_rate_usd=0.0,
+            pricing_metadata={
+                "coverage_scope": "repo_default_catalog",
+                "pricing_confidence": "regionalized_default_baseline",
+                "match_strategy": "global_default_regionalized",
+            },
+        ),
     ):
         zombies = await plugin.scan(session=MagicMock(), region="us-east-1")
         assert len(zombies) == 1
         assert zombies[0]["resource_id"] == "ep-1"
+        assert zombies[0]["pricing_evidence"]["pricing_confidence"] == (
+            "regionalized_default_baseline"
+        )
 
 
 @pytest.mark.asyncio

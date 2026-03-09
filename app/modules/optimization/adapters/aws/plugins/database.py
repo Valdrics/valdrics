@@ -2,6 +2,9 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from botocore.exceptions import ClientError
 import structlog
+from app.modules.optimization.adapters.aws.plugins.pricing_evidence import (
+    build_pricing_fields,
+)
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 from app.modules.reporting.domain.pricing.service import PricingService
@@ -134,7 +137,7 @@ class IdleRdsPlugin(ZombiePlugin):
                             avg_connections = res["Values"][0]
                             if avg_connections < connection_threshold:
                                 db_class = db["class"]
-                                monthly_cost = PricingService.estimate_monthly_waste(
+                                pricing_quote = PricingService.estimate_monthly_waste_quote(
                                     provider="aws",
                                     resource_type="rds",
                                     resource_size=db_class,
@@ -148,12 +151,12 @@ class IdleRdsPlugin(ZombiePlugin):
                                         "db_class": db_class,
                                         "engine": db["engine"],
                                         "avg_connections": round(avg_connections, 2),
-                                        "monthly_cost": round(monthly_cost, 2),
                                         "recommendation": "Stop or delete if not needed",
                                         "action": "stop_rds_instance",
                                         "supports_backup": True,
                                         "explainability_notes": f"Database has shown near-zero active connections (avg {round(avg_connections, 2)}) over the past {days} days.",
                                         "confidence_score": 0.96,
+                                        **build_pricing_fields(pricing_quote),
                                     }
                                 )
 
@@ -253,19 +256,22 @@ class ColdRedshiftPlugin(ZombiePlugin):
                                     for d in metrics.get("Datapoints", [])
                                 )
                                 if total_conns == 0:
+                                    pricing_quote = (
+                                        PricingService.estimate_monthly_waste_quote(
+                                            provider="aws",
+                                            resource_type="redshift",
+                                            region=region,
+                                        )
+                                    )
                                     zombies.append(
                                         {
                                             "resource_id": cluster_id,
                                             "resource_type": "Redshift Cluster",
-                                            "monthly_cost": PricingService.estimate_monthly_waste(
-                                                provider="aws",
-                                                resource_type="redshift",
-                                                region=region,
-                                            ),
                                             "recommendation": "Delete idle cluster",
                                             "action": "delete_redshift_cluster",
                                             "explainability_notes": "Redshift cluster has had 0 database connections detected in the last 7 days.",
                                             "confidence_score": 0.97,
+                                            **build_pricing_fields(pricing_quote),
                                         }
                                     )
                             except ClientError as e:

@@ -91,8 +91,45 @@ async def test_metric_has_non_zero_handles_invalid_and_non_positive_datapoints()
 
 def test_estimate_monthly_cost_handles_non_dict_cluster_and_dedicated_masters() -> None:
     with patch(
-        "app.modules.optimization.adapters.aws.plugins.search.PricingService.estimate_monthly_waste",
-        side_effect=[10.0, 20.0, 30.0],
+        "app.modules.optimization.adapters.aws.plugins.search.PricingService.estimate_monthly_waste_quote",
+        side_effect=[
+            SimpleNamespace(
+                monthly_cost_usd=10.0,
+                source="default_catalog",
+                requested_region="us-east-1",
+                effective_region="global",
+                hourly_rate_usd=0.0,
+                pricing_metadata={
+                    "coverage_scope": "repo_default_catalog",
+                    "pricing_confidence": "regionalized_default_baseline",
+                    "match_strategy": "global_default_regionalized",
+                },
+            ),
+            SimpleNamespace(
+                monthly_cost_usd=20.0,
+                source="default_catalog",
+                requested_region="us-east-1",
+                effective_region="global",
+                hourly_rate_usd=0.0,
+                pricing_metadata={
+                    "coverage_scope": "repo_default_catalog",
+                    "pricing_confidence": "regionalized_default_baseline",
+                    "match_strategy": "global_default_regionalized",
+                },
+            ),
+            SimpleNamespace(
+                monthly_cost_usd=30.0,
+                source="default_catalog",
+                requested_region="us-east-1",
+                effective_region="global",
+                hourly_rate_usd=0.0,
+                pricing_metadata={
+                    "coverage_scope": "repo_default_catalog",
+                    "pricing_confidence": "regionalized_default_baseline",
+                    "match_strategy": "global_default_regionalized",
+                },
+            ),
+        ],
     ) as estimate:
         no_cluster = IdleOpenSearchPlugin._estimate_monthly_cost(
             {"ClusterConfig": "invalid"},
@@ -117,6 +154,58 @@ def test_estimate_monthly_cost_handles_non_dict_cluster_and_dedicated_masters() 
     assert estimate.call_args_list[1].kwargs["quantity"] == 1.0
     assert estimate.call_args_list[2].kwargs["resource_type"] == "opensearch_master"
     assert estimate.call_args_list[2].kwargs["quantity"] == 3.0
+
+
+def test_estimate_monthly_cost_details_include_pricing_provenance() -> None:
+    with patch(
+        "app.modules.optimization.adapters.aws.plugins.search.PricingService.estimate_monthly_waste_quote",
+        side_effect=[
+            SimpleNamespace(
+                monthly_cost_usd=25.0,
+                source="aws_pricing_api",
+                requested_region="us-east-1",
+                effective_region="us-east-1",
+                hourly_rate_usd=0.034247,
+                pricing_metadata={
+                    "coverage_scope": "curated_live_catalog",
+                    "pricing_confidence": "catalog_exact",
+                    "match_strategy": "exact_region_size",
+                    "catalog_probe": "opensearch-data-node",
+                },
+            ),
+            SimpleNamespace(
+                monthly_cost_usd=15.0,
+                source="default_catalog",
+                requested_region="us-east-1",
+                effective_region="global",
+                hourly_rate_usd=0.020548,
+                pricing_metadata={
+                    "coverage_scope": "repo_default_catalog",
+                    "pricing_confidence": "regionalized_default_baseline",
+                    "match_strategy": "global_default_regionalized",
+                },
+            ),
+        ],
+    ):
+        details = IdleOpenSearchPlugin._estimate_monthly_cost_details(
+            {
+                "ClusterConfig": {
+                    "InstanceType": "m6g.large.search",
+                    "InstanceCount": 1,
+                    "DedicatedMasterEnabled": True,
+                    "DedicatedMasterType": "t3.small.search",
+                    "DedicatedMasterCount": 3,
+                }
+            },
+            "us-east-1",
+        )
+
+    assert details["monthly_cost"] == 40.0
+    assert details["pricing_evidence"]["cluster"]["source"] == "aws_pricing_api"
+    assert (
+        details["pricing_evidence"]["dedicated_masters"]["pricing_confidence"]
+        == "regionalized_default_baseline"
+    )
 
 
 @pytest.mark.asyncio
@@ -206,4 +295,3 @@ async def test_scan_logs_outer_exception() -> None:
 
     assert zombies == []
     logger_error.assert_called_once()
-
