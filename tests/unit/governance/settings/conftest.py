@@ -1,14 +1,23 @@
 from __future__ import annotations
 
+import os
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from typing import Any
+from pathlib import Path
+from tempfile import mkstemp
+from typing import Any, TYPE_CHECKING
 
 import pytest
+import pytest_asyncio
 
 from app.shared.core.auth import CurrentUser, UserRole, get_current_user
 from app.shared.core.pricing import PricingTier
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+    from httpx import AsyncClient
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 _UNSET = object()
 
@@ -55,6 +64,105 @@ def override_current_user() -> Callable[[Any, CurrentUser], Iterator[CurrentUser
             app.dependency_overrides.pop(get_current_user, None)
 
     return _override
+
+
+@pytest_asyncio.fixture
+async def async_engine() -> AsyncGenerator[Any, None]:
+    from sqlalchemy import create_engine
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from app.models.background_job import BackgroundJob
+    from app.models.notification_settings import NotificationSettings
+    from app.models.remediation_settings import RemediationSettings
+    from app.models.sso_domain_mapping import SsoDomainMapping
+    from app.models.tenant import Tenant, User
+    from app.models.tenant_identity_settings import TenantIdentitySettings
+    from app.modules.governance.domain.security.audit_log import AuditLog
+
+    fd, raw_path = mkstemp(prefix="valdrics-settings-", suffix=".sqlite")
+    os.close(fd)
+    Path(raw_path).unlink(missing_ok=True)
+    path = Path(raw_path)
+
+    sync_engine = create_engine(f"sqlite:///{path}")
+    Tenant.metadata.create_all(
+        sync_engine,
+        tables=[
+            Tenant.__table__,
+            User.__table__,
+            BackgroundJob.__table__,
+            NotificationSettings.__table__,
+            RemediationSettings.__table__,
+            SsoDomainMapping.__table__,
+            TenantIdentitySettings.__table__,
+            AuditLog.__table__,
+        ],
+    )
+    sync_engine.dispose()
+
+    engine = create_async_engine(f"sqlite+aiosqlite:///{path}")
+    try:
+        yield engine
+    finally:
+        await engine.dispose()
+        path.unlink(missing_ok=True)
+
+
+@pytest_asyncio.fixture
+async def db_session(async_engine: Any) -> AsyncGenerator["AsyncSession", None]:
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+    session_maker = async_sessionmaker(
+        async_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    async with session_maker() as session:
+        try:
+            yield session
+        finally:
+            await session.rollback()
+            await session.close()
+
+
+@pytest_asyncio.fixture
+async def db(db_session: "AsyncSession") -> "AsyncSession":
+    return db_session
+
+
+@pytest_asyncio.fixture
+async def async_client(
+    app: Any, db: "AsyncSession"
+) -> AsyncGenerator["AsyncClient", None]:
+    from httpx import ASGITransport, AsyncClient
+
+    from app.shared.db.session import get_db, get_system_db
+
+    old_db_override = app.dependency_overrides.get(get_db)
+    old_system_db_override = app.dependency_overrides.get(get_system_db)
+    app.dependency_overrides[get_db] = lambda: db
+    app.dependency_overrides[get_system_db] = lambda: db
+
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            setattr(client, "app", app)
+            yield client
+    finally:
+        if old_db_override is not None:
+            app.dependency_overrides[get_db] = old_db_override
+        else:
+            app.dependency_overrides.pop(get_db, None)
+
+        if old_system_db_override is not None:
+            app.dependency_overrides[get_system_db] = old_system_db_override
+        else:
+            app.dependency_overrides.pop(get_system_db, None)
+
+
+@pytest_asyncio.fixture
+async def ac(async_client: "AsyncClient") -> "AsyncClient":
+    return async_client
 
 
 @pytest.fixture

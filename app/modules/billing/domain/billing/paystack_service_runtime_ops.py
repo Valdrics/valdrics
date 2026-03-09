@@ -84,6 +84,16 @@ def infer_interval_days(charge_data: dict[str, Any]) -> int:
     return 30
 
 
+def _coerce_optional_datetime(value: Any) -> datetime | None:
+    return value if isinstance(value, datetime) else None
+
+
+def _require_datetime(value: Any, *, field_name: str) -> datetime:
+    if not isinstance(value, datetime):
+        raise TypeError(f"{field_name} must resolve to a datetime")
+    return value
+
+
 async def fetch_provider_next_payment_date(
     subscription: Any,
     *,
@@ -113,11 +123,15 @@ async def fetch_provider_next_payment_date(
     if not isinstance(data, dict):
         return None
 
-    return (
-        parse_paystack_datetime_fn(data.get("next_payment_date"))
-        or parse_paystack_datetime_fn(data.get("next_payment"))
-        or parse_paystack_datetime_fn(data.get("current_period_end"))
-    )
+    for raw_value in (
+        data.get("next_payment_date"),
+        data.get("next_payment"),
+        data.get("current_period_end"),
+    ):
+        parsed_value = _coerce_optional_datetime(parse_paystack_datetime_fn(raw_value))
+        if parsed_value is not None:
+            return parsed_value
+    return None
 
 
 def compute_fallback_next_payment_date(
@@ -148,13 +162,20 @@ async def resolve_renewal_next_payment_date(
     infer_interval_days_fn: Any,
     compute_fallback_next_payment_date_fn: Any,
 ) -> datetime:
-    provider_next_payment = await fetch_provider_next_payment_date_fn(subscription)
+    provider_next_payment = _coerce_optional_datetime(
+        await fetch_provider_next_payment_date_fn(subscription)
+    )
     if provider_next_payment is not None:
         return provider_next_payment
 
-    payload_next_payment = parse_paystack_datetime_fn(charge_data.get("next_payment_date"))
+    payload_next_payment = _coerce_optional_datetime(
+        parse_paystack_datetime_fn(charge_data.get("next_payment_date"))
+    )
     if payload_next_payment is not None:
         return payload_next_payment
 
     interval_days = infer_interval_days_fn(charge_data)
-    return compute_fallback_next_payment_date_fn(subscription, interval_days)
+    return _require_datetime(
+        compute_fallback_next_payment_date_fn(subscription, interval_days),
+        field_name="next_payment_date",
+    )

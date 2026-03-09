@@ -1,9 +1,9 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
-	import { assets, base } from '$app/paths';
+	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
+	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import { api } from '$lib/api';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import {
@@ -141,31 +141,13 @@
 	}
 </script>
 
-<svelte:head>
-	<title>Pricing | Valdrics</title>
-	<meta
-		name="description"
-		content="Simple, transparent Valdrics pricing. Start on the permanent free tier, prove one workflow, and upgrade only when you need broader provider coverage, team rollout controls, or finance-grade governance."
-	/>
-	<meta property="og:title" content="Pricing | Valdrics" />
-	<meta
-		property="og:description"
-		content="Compare the Valdrics free, Starter, Growth, and Pro plans for cloud and software spend control."
-	/>
-	<meta property="og:type" content="website" />
-	<meta property="og:url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
-	<meta property="og:image" content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()} />
-	<meta name="twitter:card" content="summary_large_image" />
-	<meta name="twitter:title" content="Pricing | Valdrics" />
-	<meta
-		name="twitter:description"
-		content="Start with the permanent free tier, then move to Starter, Growth, or Pro as provider coverage, rollout controls, and governance needs expand."
-	/>
-	<meta
-		name="twitter:image"
-		content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()}
-	/>
-</svelte:head>
+<PublicPageMeta
+	title="Pricing"
+	description="Simple, transparent Valdrics pricing. Start on the permanent free tier, prove one workflow, and upgrade only when you need broader provider coverage, team rollout controls, or finance-grade governance."
+	pageType="WebPage"
+	pageSection="Pricing"
+	keywords={['pricing', 'free tier', 'starter', 'growth', 'pro', 'enterprise']}
+/>
 
 <PublicMarketingPage
 	kicker="Pricing"
@@ -304,8 +286,8 @@
 
 						<p class="pricing-plan-price__note">
 							{billingCycle === 'annual'
-								? `${formatUsd(plan.price_annual)} billed yearly`
-								: `Starting monthly price. ${story.note}`}
+								? `${formatUsd(plan.price_annual)} billed yearly. Effective ${formatUsd(getDisplayedMonthlyPrice(plan))}/mo. ${story.note}`
+								: `${formatUsd(plan.price_monthly)}/mo starting price. ${story.note}`}
 						</p>
 
 						<ul class="public-page__list">

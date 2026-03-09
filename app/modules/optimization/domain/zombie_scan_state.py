@@ -110,12 +110,12 @@ class ZombieScanState:
                         "is_gpu": (
                             bool(item.get("is_gpu", False))
                             if self.has_precision
-                            else "Upgrade to Growth"
+                            else "Growth Plan Required"
                         ),
                         "owner": (
                             item.get("owner", "unknown")
                             if self.has_attribution
-                            else "Upgrade to Growth"
+                            else "Growth Plan Required"
                         ),
                     }
                 )
@@ -146,24 +146,26 @@ class ZombieScanState:
             self.payload["scan_completeness"].append(summary)
             if summary["degraded"]:
                 self.payload["partial_results"] = True
-                for plugin_key, plugin_metadata in summary["plugins"].items():
-                    if not isinstance(plugin_metadata, dict):
-                        continue
-                    if str(plugin_metadata.get("status") or "ok") == "ok":
-                        continue
-                    self.payload["errors"].append(
-                        {
-                            "provider": provider_name,
-                            "region": connection_region,
-                            "error": str(plugin_metadata.get("error") or "unknown"),
-                            "error_type": str(
-                                plugin_metadata.get("error_type") or "unknown"
-                            ),
-                            "connection_id": connection_id,
-                            "category": str(plugin_key),
-                            "status": str(plugin_metadata.get("status") or "failed"),
-                        }
-                    )
+                plugins_summary = summary.get("plugins")
+                if isinstance(plugins_summary, dict):
+                    for plugin_key, plugin_metadata in plugins_summary.items():
+                        if not isinstance(plugin_metadata, dict):
+                            continue
+                        if str(plugin_metadata.get("status") or "ok") == "ok":
+                            continue
+                        self.payload["errors"].append(
+                            {
+                                "provider": provider_name,
+                                "region": connection_region,
+                                "error": str(plugin_metadata.get("error") or "unknown"),
+                                "error_type": str(
+                                    plugin_metadata.get("error_type") or "unknown"
+                                ),
+                                "connection_id": connection_id,
+                                "category": str(plugin_key),
+                                "status": str(plugin_metadata.get("status") or "failed"),
+                            }
+                        )
                 inventory_summary = summary.get("inventory_discovery")
                 if isinstance(inventory_summary, dict):
                     inventory_status = str(inventory_summary.get("status") or "ok")

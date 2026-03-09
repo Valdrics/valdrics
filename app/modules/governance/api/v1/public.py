@@ -200,7 +200,7 @@ async def _upsert_landing_rollup(
     if dialect == "postgresql":
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-        stmt = (
+        postgres_stmt = (
             pg_insert(LandingTelemetryDailyRollup)
             .values(**insert_values)
             .on_conflict_do_update(
@@ -208,13 +208,13 @@ async def _upsert_landing_rollup(
                 set_=set_values,
             )
         )
-        await db.execute(stmt)
+        await db.execute(postgres_stmt)
         return
 
     if dialect == "sqlite":
         from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-        stmt = (
+        sqlite_stmt = (
             sqlite_insert(LandingTelemetryDailyRollup)
             .values(**insert_values)
             .on_conflict_do_update(
@@ -222,7 +222,7 @@ async def _upsert_landing_rollup(
                 set_=set_values,
             )
         )
-        await db.execute(stmt)
+        await db.execute(sqlite_stmt)
         return
 
     existing = (

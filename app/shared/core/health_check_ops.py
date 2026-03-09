@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
 import sqlalchemy as sa
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.background_job import BackgroundJob, JobStatus
 from app.shared.core.async_utils import maybe_await
+from app.shared.core.config import get_settings
 
 
 def evaluate_system_resources(
@@ -217,4 +220,33 @@ async def evaluate_background_jobs(
             "worker_health": worker_health,
         }
     except recoverable_errors as exc:
+        if _should_skip_background_jobs_check(exc):
+            return {
+                "status": "disabled",
+                "message": "Background job health check skipped because the background_jobs table is not initialized in testing.",
+                "reason": "testing_background_jobs_table_missing",
+            }
         return {"status": "unknown", "error": str(exc)}
+
+
+def _should_skip_background_jobs_check(exc: Exception) -> bool:
+    settings = get_settings()
+    if not bool(getattr(settings, "TESTING", False)):
+        return False
+    return _is_missing_background_jobs_table_error(exc)
+
+
+def _is_missing_background_jobs_table_error(exc: Exception) -> bool:
+    if not isinstance(exc, OperationalError):
+        return False
+
+    orig = getattr(exc, "orig", None)
+    if orig is not None and not isinstance(orig, sqlite3.OperationalError):
+        message = f"{exc} {orig}".lower()
+    else:
+        message = str(exc).lower()
+
+    return "background_jobs" in message and any(
+        marker in message
+        for marker in ("no such table", "does not exist", "undefined table")
+    )

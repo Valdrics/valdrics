@@ -6,7 +6,9 @@ import subprocess
 import pytest
 
 from scripts.verify_supply_chain_attestations import (
+    DEFAULT_ARTIFACT_PATHS,
     MIN_GH_VERSION,
+    _repo_slug_from_remote_url,
     build_verify_command,
     check_gh_cli_version,
     main,
@@ -63,13 +65,40 @@ def test_verify_attestations_rejects_missing_artifact_file() -> None:
             repo="acme/valdrics",
             signer_workflow=".github/workflows/sbom.yml",
             artifacts=(Path("missing.json"),),
-            dry_run=True,
+            dry_run=False,
         )
+
+
+def test_verify_attestations_dry_run_allows_missing_artifact_file(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = verify_attestations(
+        repo="acme/valdrics",
+        signer_workflow=".github/workflows/sbom.yml",
+        artifacts=(Path("missing.json"),),
+        dry_run=True,
+    )
+
+    captured = capsys.readouterr().out
+    assert exit_code == 0
+    assert "warning missing local artifact in dry-run" in captured
+
+
+def test_repo_slug_from_remote_url_supports_common_github_formats() -> None:
+    assert _repo_slug_from_remote_url("git@github.com:Valdrics/valdrics.git") == "Valdrics/valdrics"
+    assert _repo_slug_from_remote_url("https://github.com/Valdrics/valdrics.git") == "Valdrics/valdrics"
+    assert _repo_slug_from_remote_url("ssh://git@github.com/Valdrics/valdrics") == "Valdrics/valdrics"
+    assert _repo_slug_from_remote_url("https://gitlab.com/acme/repo.git") == ""
 
 
 def test_check_gh_cli_version_rejects_old_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations._resolve_gh_executable",
+        lambda: "gh",
+    )
+
     def _fake_run(
         cmd: list[str],
         *,
@@ -97,6 +126,10 @@ def test_check_gh_cli_version_rejects_old_version(
 def test_check_gh_cli_version_rejects_missing_attestation_subcommand(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations._resolve_gh_executable",
+        lambda: "gh",
+    )
     calls = {"count": 0}
 
     def _fake_run(
@@ -133,6 +166,10 @@ def test_check_gh_cli_version_rejects_missing_attestation_subcommand(
 def test_check_gh_cli_version_accepts_supported_cli(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations._resolve_gh_executable",
+        lambda: "gh",
+    )
     calls = {"count": 0}
 
     def _fake_run(
@@ -198,6 +235,10 @@ def test_verify_attestations_executes_gh_verify_for_each_artifact(
         lambda: MIN_GH_VERSION,
     )
     monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations._resolve_gh_executable",
+        lambda: "gh",
+    )
+    monkeypatch.setattr(
         "scripts.verify_supply_chain_attestations.subprocess.run",
         _fake_run,
     )
@@ -242,6 +283,10 @@ def test_verify_attestations_rejects_empty_verification_results(
         lambda: MIN_GH_VERSION,
     )
     monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations._resolve_gh_executable",
+        lambda: "gh",
+    )
+    monkeypatch.setattr(
         "scripts.verify_supply_chain_attestations.subprocess.run",
         _fake_run,
     )
@@ -271,3 +316,22 @@ def test_main_dry_run_succeeds(tmp_path: Path) -> None:
         ]
     )
     assert exit_code == 0
+
+
+def test_main_dry_run_uses_git_remote_and_default_artifacts(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations._resolve_repo_from_git_remote",
+        lambda: "Valdrics/valdrics",
+    )
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+
+    exit_code = main(["--dry-run"])
+
+    captured = capsys.readouterr().out
+    assert exit_code == 0
+    assert "Valdrics/valdrics" in captured
+    for artifact in DEFAULT_ARTIFACT_PATHS:
+        assert artifact.as_posix() in captured

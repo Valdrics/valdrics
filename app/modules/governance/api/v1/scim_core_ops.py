@@ -8,15 +8,15 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 
-def extract_bearer_token(request: Request, *, scim_error_cls: type[Exception]) -> str:
+def extract_bearer_token(request: Request, *, scim_error_cls: Any) -> str:
     raw = (request.headers.get("Authorization") or "").strip()
     if not raw.lower().startswith("bearer "):
-        raise scim_error_cls(  # type: ignore[misc]
+        raise scim_error_cls(
             401, "Missing or invalid Authorization header", scim_type="invalidSyntax"
         )
     token = raw.split(" ", 1)[-1].strip()
     if not token:
-        raise scim_error_cls(401, "Missing bearer token", scim_type="invalidSyntax")  # type: ignore[misc]
+        raise scim_error_cls(401, "Missing bearer token", scim_type="invalidSyntax")
     return token
 
 
@@ -184,11 +184,19 @@ def resolve_entitlements_from_groups(
     resolve_entitlements_from_groups_impl: Any,
     normalize_scim_group_fn: Any,
 ) -> tuple[str | None, str | None]:
-    return resolve_entitlements_from_groups_impl(
+    resolved = resolve_entitlements_from_groups_impl(
         group_names,
         mappings,
         normalize_scim_group_fn=normalize_scim_group_fn,
     )
+    if not isinstance(resolved, tuple) or len(resolved) != 2:
+        raise TypeError("resolve_entitlements_from_groups_impl must return a 2-tuple")
+    role_raw, persona_raw = resolved
+    if role_raw is not None and not isinstance(role_raw, str):
+        raise TypeError("Resolved SCIM role must be a string or None")
+    if persona_raw is not None and not isinstance(persona_raw, str):
+        raise TypeError("Resolved SCIM persona must be a string or None")
+    return role_raw, persona_raw
 
 
 def make_scim_error(

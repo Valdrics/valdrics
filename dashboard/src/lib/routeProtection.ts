@@ -19,6 +19,8 @@ const PUBLIC_SEGMENT_PREFIXES = [
 	'/auth',
 	'/pricing',
 	'/docs',
+	'/insights',
+	'/proof',
 	'/resources',
 	'/.well-known',
 	'/api/marketing',

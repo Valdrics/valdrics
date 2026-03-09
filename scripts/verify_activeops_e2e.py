@@ -104,8 +104,12 @@ async def verify_active_ops() -> None:
         )
         persisted = result_persisted.scalar_one_or_none()
 
-        assert persisted is not None
-        assert persisted.status.value == "pending"
+        if persisted is None:
+            raise RuntimeError("Persisted remediation request could not be reloaded")
+        if persisted.status.value != "pending":
+            raise RuntimeError(
+                f"Unexpected remediation request status: {persisted.status.value}"
+            )
 
         print(f"📊 Verified status: {persisted.status.value}")
         print("🏆 ActiveOps Verification PASSED.")

@@ -3,12 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
-from sqlalchemy.exc import IntegrityError
 
 from app.models.enforcement import (
     EnforcementActionStatus,
@@ -27,6 +25,10 @@ from app.modules.enforcement.domain.actions import (
 )
 from app.modules.enforcement.domain.service import EnforcementService, GateInput
 from app.shared.core.auth import CurrentUser
+from tests.unit.enforcement.enforcement_actions_orchestrator_support import (
+    _QueueDB,
+    _ScalarResult,
+)
 
 
 async def _seed_tenant(db) -> Tenant:
@@ -826,52 +828,6 @@ def test_action_orchestrator_internal_normalizers() -> None:
     assert len(_normalized_idempotency_key("x" * 200) or "") == 128
 
 
-class _ScalarResult:
-    def __init__(self, value) -> None:  # type: ignore[no-untyped-def]
-        self._value = value
-
-    def scalar_one_or_none(self):  # type: ignore[no-untyped-def]
-        return self._value
-
-
-class _ScalarsResult:
-    def __init__(self, values) -> None:  # type: ignore[no-untyped-def]
-        self._values = list(values)
-
-    def all(self):  # type: ignore[no-untyped-def]
-        return list(self._values)
-
-
-class _RowsResult:
-    def __init__(self, values) -> None:  # type: ignore[no-untyped-def]
-        self._values = list(values)
-
-    def scalars(self) -> _ScalarsResult:
-        return _ScalarsResult(self._values)
-
-
-class _RowCountResult:
-    def __init__(self, rowcount: int) -> None:
-        self.rowcount = rowcount
-
-
-class _QueueDB:
-    def __init__(self, execute_results: list[object]) -> None:
-        self._execute_results = list(execute_results)
-        self.rollback = AsyncMock()
-        self.commit = AsyncMock()
-        self.refresh = AsyncMock()
-        self.added: list[object] = []
-
-    async def execute(self, *_args, **_kwargs) -> object:
-        if not self._execute_results:
-            raise AssertionError("No queued execute result available")
-        return self._execute_results.pop(0)
-
-    def add(self, value: object) -> None:
-        self.added.append(value)
-
-
 @pytest.mark.asyncio
 async def test_action_orchestrator_policy_controls_default_and_invalid_paths() -> None:
     missing_policy_db = _QueueDB([_ScalarResult(None)])
@@ -890,179 +846,3 @@ async def test_action_orchestrator_policy_controls_default_and_invalid_paths() -
         60,
         300,
     )
-
-
-@pytest.mark.asyncio
-async def test_action_orchestrator_create_auto_idempotency_and_integrity_dedup_paths() -> None:
-    tenant_id = uuid4()
-    actor_id = uuid4()
-    decision = SimpleNamespace(
-        id=uuid4(),
-        decision=EnforcementDecisionType.ALLOW,
-        approval_required=False,
-    )
-
-    # Auto-generated idempotency path (no key provided).
-    auto_db = _QueueDB([_ScalarResult(None)])
-    auto_orchestrator = EnforcementActionOrchestrator(auto_db)  # type: ignore[arg-type]
-    auto_orchestrator._resolve_decision_and_approval = AsyncMock(return_value=(decision, None))
-    auto_orchestrator._assert_action_request_allowed = AsyncMock(return_value=None)
-    auto_orchestrator._resolve_policy_execution_controls = AsyncMock(return_value=(3, 60, 300))
-
-    auto_action = await auto_orchestrator.create_action_request(
-        tenant_id=tenant_id,
-        actor_id=actor_id,
-        decision_id=decision.id,
-        action_type="terraform.apply.execute",
-        target_reference="module.app.aws_instance.auto-idem",
-        request_payload={"k": "v"},
-        idempotency_key=None,
-    )
-    assert len(auto_action.idempotency_key) == 40
-
-    # IntegrityError dedupe fallback path.
-    deduped = SimpleNamespace(id=uuid4())
-    dedupe_db = _QueueDB([_ScalarResult(None), _ScalarResult(deduped)])
-    dedupe_db.commit = AsyncMock(
-        side_effect=IntegrityError("insert", {"x": 1}, RuntimeError("duplicate"))
-    )
-    dedupe_orchestrator = EnforcementActionOrchestrator(dedupe_db)  # type: ignore[arg-type]
-    dedupe_orchestrator._resolve_decision_and_approval = AsyncMock(return_value=(decision, None))
-    dedupe_orchestrator._assert_action_request_allowed = AsyncMock(return_value=None)
-    dedupe_orchestrator._resolve_policy_execution_controls = AsyncMock(return_value=(3, 60, 300))
-
-    deduped_action = await dedupe_orchestrator.create_action_request(
-        tenant_id=tenant_id,
-        actor_id=actor_id,
-        decision_id=decision.id,
-        action_type="terraform.apply.execute",
-        target_reference="module.app.aws_instance.dedupe",
-        request_payload={"k": "v"},
-        idempotency_key="dedupe-key",
-    )
-    assert deduped_action is deduped
-    dedupe_db.rollback.assert_awaited()
-
-    # IntegrityError fallback with no deduped row should re-raise.
-    no_dedupe_db = _QueueDB([_ScalarResult(None), _ScalarResult(None)])
-    duplicate_error = IntegrityError("insert", {"x": 1}, RuntimeError("duplicate"))
-    no_dedupe_db.commit = AsyncMock(side_effect=duplicate_error)
-    no_dedupe_orchestrator = EnforcementActionOrchestrator(no_dedupe_db)  # type: ignore[arg-type]
-    no_dedupe_orchestrator._resolve_decision_and_approval = AsyncMock(
-        return_value=(decision, None)
-    )
-    no_dedupe_orchestrator._assert_action_request_allowed = AsyncMock(return_value=None)
-    no_dedupe_orchestrator._resolve_policy_execution_controls = AsyncMock(
-        return_value=(3, 60, 300)
-    )
-
-    with pytest.raises(IntegrityError):
-        await no_dedupe_orchestrator.create_action_request(
-            tenant_id=tenant_id,
-            actor_id=actor_id,
-            decision_id=decision.id,
-            action_type="terraform.apply.execute",
-            target_reference="module.app.aws_instance.dedupe-miss",
-            request_payload={"k": "v"},
-            idempotency_key="dedupe-key-miss",
-        )
-    no_dedupe_db.rollback.assert_awaited()
-
-
-@pytest.mark.asyncio
-async def test_action_orchestrator_get_list_lease_and_cancel_missing_branches() -> None:
-    tenant_id = uuid4()
-    decision_id = uuid4()
-    action_id = uuid4()
-
-    # get_action not found branch.
-    not_found_db = _QueueDB([_ScalarResult(None)])
-    not_found_orchestrator = EnforcementActionOrchestrator(not_found_db)  # type: ignore[arg-type]
-    with pytest.raises(EnforcementActionError, match="not found"):
-        await not_found_orchestrator.get_action(tenant_id=tenant_id, action_id=action_id)
-
-    # list_actions status/decision filters + return conversion path.
-    listed_row = SimpleNamespace(id=action_id)
-    list_db = _QueueDB([_RowsResult([listed_row])])
-    list_orchestrator = EnforcementActionOrchestrator(list_db)  # type: ignore[arg-type]
-    listed = await list_orchestrator.list_actions(
-        tenant_id=tenant_id,
-        status=EnforcementActionStatus.QUEUED,
-        decision_id=decision_id,
-        limit=10,
-    )
-    assert listed == [listed_row]
-
-    # status=None branch: list should still return scalars without status filter.
-    no_status_row = SimpleNamespace(id=uuid4())
-    no_status_db = _QueueDB([_RowsResult([no_status_row])])
-    no_status_orchestrator = EnforcementActionOrchestrator(no_status_db)  # type: ignore[arg-type]
-    no_status_listed = await no_status_orchestrator.list_actions(
-        tenant_id=tenant_id,
-        status=None,
-        decision_id=None,
-        limit=10,
-    )
-    assert no_status_listed == [no_status_row]
-
-    # lease_next_action early empty-candidate path.
-    empty_candidate_db = _QueueDB([_ScalarResult(None)])
-    empty_candidate_orchestrator = EnforcementActionOrchestrator(
-        empty_candidate_db
-    )  # type: ignore[arg-type]
-    assert (
-        await empty_candidate_orchestrator.lease_next_action(
-            tenant_id=tenant_id,
-            worker_id=uuid4(),
-            action_type="terraform.apply.execute",
-            now=datetime.now(timezone.utc),
-        )
-        is None
-    )
-
-    # lease_next_action contention path: candidate found but update rowcount=0 repeatedly.
-    candidate = SimpleNamespace(
-        id=uuid4(),
-        lease_ttl_seconds=300,
-        attempt_count=0,
-        started_at=None,
-    )
-    execute_results: list[object] = []
-    for _ in range(5):
-        execute_results.append(_ScalarResult(candidate))
-        execute_results.append(_RowCountResult(0))
-    contention_db = _QueueDB(execute_results)
-    contention_orchestrator = EnforcementActionOrchestrator(contention_db)  # type: ignore[arg-type]
-    leased = await contention_orchestrator.lease_next_action(
-        tenant_id=tenant_id,
-        worker_id=uuid4(),
-        action_type="terraform.apply.execute",
-        now=datetime.now(timezone.utc),
-    )
-    assert leased is None
-    assert contention_db.rollback.await_count == 5
-
-    # cancel_action reason branch.
-    cancel_db = _QueueDB([])
-    cancel_orchestrator = EnforcementActionOrchestrator(cancel_db)  # type: ignore[arg-type]
-    cancellable = SimpleNamespace(
-        status=EnforcementActionStatus.QUEUED,
-        locked_by_worker_id=uuid4(),
-        lease_expires_at=datetime.now(timezone.utc),
-        completed_at=None,
-        next_retry_at=datetime.now(timezone.utc),
-        result_payload=None,
-        result_payload_sha256=None,
-        last_error_code=None,
-        last_error_message=None,
-    )
-    cancel_orchestrator.get_action = AsyncMock(return_value=cancellable)
-    cancelled = await cancel_orchestrator.cancel_action(
-        tenant_id=tenant_id,
-        action_id=uuid4(),
-        actor_id=uuid4(),
-        reason="  operator cancelled request  ",
-    )
-    assert cancelled.last_error_code == "cancelled"
-    assert cancelled.result_payload is not None
-    assert "operator cancelled request" in str(cancelled.result_payload["reason"])

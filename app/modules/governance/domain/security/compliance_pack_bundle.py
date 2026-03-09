@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
-from typing import Any, Callable, Optional, cast
-from uuid import UUID, uuid4
+from typing import Any, Callable, Optional
+from uuid import uuid4
 
 import csv
 import io
@@ -100,9 +100,7 @@ async def export_compliance_pack_bundle(
 
     # Record the export request (SOC2 evidence: export access is auditable).
     try:
-        audit_logger = AuditLogger(
-            db, cast(UUID, actor.tenant_id), correlation_id=run_id
-        )
+        audit_logger = AuditLogger(db, actor.tenant_id, correlation_id=run_id)
         await audit_logger.log(
             event_type=AuditEventType.EXPORT_REQUESTED,
             actor_id=actor.id,
@@ -125,7 +123,7 @@ async def export_compliance_pack_bundle(
 
     # --- Snapshot tenant-scoped settings (secrets/tokens redacted) ---
     notif_snapshot, remediation_snapshot, identity_snapshot = (
-        await collect_settings_snapshots(db=db, tenant_id=cast(UUID, actor.tenant_id))
+        await collect_settings_snapshots(db=db, tenant_id=actor.tenant_id)
     )
 
     # --- Integration acceptance evidence (audit-grade) ---
@@ -138,7 +136,7 @@ async def export_compliance_pack_bundle(
     ]
     integration_evidence = await collect_integration_evidence(
         db=db,
-        tenant_id=cast(UUID, actor.tenant_id),
+        tenant_id=actor.tenant_id,
         event_types=accepted_event_types,
         limit=int(evidence_limit),
     )
@@ -214,7 +212,7 @@ async def export_compliance_pack_bundle(
     )
     payload_evidence = await collect_payload_evidence_map(
         db=db,
-        tenant_id=cast(UUID, actor.tenant_id),
+        tenant_id=actor.tenant_id,
         evidence_limit=int(evidence_limit),
         payload_specs=payload_specs,
         collect_payload_evidence=collect_payload_evidence,

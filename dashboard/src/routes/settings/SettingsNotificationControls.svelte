@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tierAtLeast } from '$lib/tier';
 	import { type PolicyDiagnostics } from './settingsPageSchemas';
 	import SettingsDigestAlertCard from './SettingsDigestAlertCard.svelte';
 	import { INITIAL_NOTIFICATION_SETTINGS } from './settingsPageInitialState';
@@ -47,14 +48,27 @@
 		saving
 	}: Props = $props();
 
-	const isProTier = $derived(['pro', 'enterprise'].includes(data.subscription?.tier ?? ''));
+	const currentTier = $derived(data.subscription?.tier ?? 'free');
+	const hasGrowthTier = $derived(tierAtLeast(currentTier, 'growth'));
+	const hasProTier = $derived(tierAtLeast(currentTier, 'pro'));
 </script>
 
 			<!-- Slack Settings -->
 			<div class="card stagger-enter">
-				<h2 class="text-lg font-semibold mb-5 flex items-center gap-2">
-					<span>💬</span> Slack Notifications
-				</h2>
+				<div class="mb-5 flex flex-wrap items-start justify-between gap-3">
+					<div>
+						<h2 class="text-lg font-semibold flex items-center gap-2">
+							<span>💬</span> Slack Notifications
+						</h2>
+						<p class="mt-2 text-xs text-ink-500">
+							Slack delivery and test routing start on Growth. Jira, Teams, and workflow dispatch
+							stay in the Pro automation lane.
+						</p>
+					</div>
+					{#if !hasGrowthTier}
+						<span class="badge badge-warning text-xs">Growth Plan Required</span>
+					{/if}
+				</div>
 
 				<div class="space-y-4">
 					<label class="flex items-center gap-3 cursor-pointer">
@@ -62,6 +76,7 @@
 							type="checkbox"
 							bind:checked={settings.slack_enabled}
 							class="toggle"
+							disabled={!hasGrowthTier}
 							aria-label="Enable Slack notifications"
 						/>
 						<span>Enable Slack notifications</span>
@@ -74,7 +89,7 @@
 							id="channel"
 							bind:value={settings.slack_channel_override}
 							placeholder="C01234ABCDE"
-							disabled={!settings.slack_enabled}
+							disabled={!settings.slack_enabled || !hasGrowthTier}
 							aria-label="Slack channel ID override"
 						/>
 						<p class="text-xs text-ink-500 mt-1">Leave empty to use the default channel</p>
@@ -84,20 +99,28 @@
 						type="button"
 						class="btn btn-secondary"
 						onclick={testSlack}
-						disabled={!settings.slack_enabled || testing}
+						disabled={!settings.slack_enabled || testing || !hasGrowthTier}
 						aria-label="Send test Slack notification"
 					>
 						{testing ? '⏳ Sending...' : '🧪 Send Test Notification'}
 					</button>
 
 					<div class="pt-4 border-t border-ink-200">
-						<h3 class="text-sm font-semibold mb-3">Jira Incident Routing (Pro+)</h3>
+						<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+							<h3 class="text-sm font-semibold">Jira Incident Routing</h3>
+							{#if !hasProTier}
+								<span class="badge badge-warning text-xs">Pro Plan Required</span>
+							{/if}
+						</div>
+						<p class="mb-3 text-xs text-ink-500">
+							Create Jira issues from policy and remediation events on Pro and Enterprise.
+						</p>
 						<label class="flex items-center gap-3 cursor-pointer mb-3">
 							<input
 								type="checkbox"
 								bind:checked={settings.jira_enabled}
 								class="toggle"
-								disabled={!isProTier}
+								disabled={!hasProTier}
 								aria-label="Enable Jira policy notifications"
 							/>
 							<span>Enable Jira policy notifications</span>
@@ -112,7 +135,7 @@
 									bind:value={settings.jira_base_url}
 									placeholder="https://your-org.atlassian.net"
 									disabled={!settings.jira_enabled ||
-										!isProTier}
+										!hasProTier}
 									aria-label="Jira base URL"
 								/>
 							</div>
@@ -124,7 +147,7 @@
 									bind:value={settings.jira_email}
 									placeholder="jira@company.com"
 									disabled={!settings.jira_enabled ||
-										!isProTier}
+										!hasProTier}
 									aria-label="Jira account email"
 								/>
 							</div>
@@ -136,7 +159,7 @@
 									bind:value={settings.jira_project_key}
 									placeholder="FINOPS"
 									disabled={!settings.jira_enabled ||
-										!isProTier}
+										!hasProTier}
 									aria-label="Jira project key"
 								/>
 							</div>
@@ -148,7 +171,7 @@
 									bind:value={settings.jira_issue_type}
 									placeholder="Task"
 									disabled={!settings.jira_enabled ||
-										!isProTier}
+										!hasProTier}
 									aria-label="Jira issue type"
 								/>
 							</div>
@@ -164,7 +187,7 @@
 									? 'Stored token exists. Enter new token to rotate.'
 									: 'Enter Jira API token'}
 								disabled={!settings.jira_enabled ||
-									!isProTier}
+									!hasProTier}
 								aria-label="Jira API token"
 							/>
 						</div>
@@ -175,7 +198,7 @@
 								class="toggle"
 								disabled={!settings.jira_enabled ||
 									!settings.has_jira_api_token ||
-									!isProTier}
+									!hasProTier}
 								aria-label="Clear stored Jira API token"
 							/>
 							<span>Clear stored Jira token</span>
@@ -186,20 +209,28 @@
 							onclick={testJira}
 							disabled={!settings.jira_enabled ||
 								testingJira ||
-								!isProTier}
+								!hasProTier}
 							aria-label="Send test Jira issue"
 						>
 							{testingJira ? '⏳ Sending...' : '🧪 Send Test Jira Issue'}
 						</button>
 
 						<div class="pt-4 border-t border-ink-200 mt-4">
-							<h3 class="text-sm font-semibold mb-3">Microsoft Teams Incident Routing (Pro+)</h3>
+							<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+								<h3 class="text-sm font-semibold">Microsoft Teams Incident Routing</h3>
+								{#if !hasProTier}
+									<span class="badge badge-warning text-xs">Pro Plan Required</span>
+								{/if}
+							</div>
+							<p class="mb-3 text-xs text-ink-500">
+								Route policy and remediation alerts into Teams on Pro and Enterprise.
+							</p>
 							<label class="flex items-center gap-3 cursor-pointer mb-3">
 								<input
 									type="checkbox"
 									bind:checked={settings.teams_enabled}
 									class="toggle"
-									disabled={!isProTier}
+									disabled={!hasProTier}
 									aria-label="Enable Teams policy notifications"
 								/>
 								<span>Enable Teams policy notifications</span>
@@ -214,7 +245,7 @@
 										? 'Stored webhook exists. Enter new URL to rotate.'
 										: 'https://<tenant>.webhook.office.com/...'}
 									disabled={!settings.teams_enabled ||
-										!isProTier}
+										!hasProTier}
 									aria-label="Teams webhook URL"
 								/>
 								<p class="text-xs text-ink-500 mt-1">
@@ -228,7 +259,7 @@
 									class="toggle"
 									disabled={!settings.teams_enabled ||
 										!settings.has_teams_webhook_url ||
-										!isProTier}
+										!hasProTier}
 									aria-label="Clear stored Teams webhook URL"
 								/>
 								<span>Clear stored Teams webhook URL</span>
@@ -239,7 +270,7 @@
 								onclick={testTeams}
 								disabled={!settings.teams_enabled ||
 									testingTeams ||
-									!isProTier}
+									!hasProTier}
 								aria-label="Send test Teams notification"
 							>
 								{testingTeams ? '⏳ Sending...' : '🧪 Send Test Teams Notification'}
@@ -248,7 +279,7 @@
 
 						<SettingsWorkflowAutomationCard
 							bind:settings={settings}
-							{isProTier}
+							isProTier={hasProTier}
 							{testingWorkflow}
 							{diagnosticsLoading}
 							{policyDiagnostics}

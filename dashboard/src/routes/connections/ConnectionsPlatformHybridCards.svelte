@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 
 	let {
 		loadingPlatform,
@@ -29,6 +30,8 @@
 		verifyCloudPlusConnection,
 		deleteConnection
 	} = $props();
+
+	const proUpgradePrompt = getUpgradePrompt('pro', 'Cloud+ connectors');
 </script>
 
 <!-- Platform -->
@@ -163,10 +166,9 @@
 			workflows.
 		</p>
 		<div class="flex flex-col gap-2">
-			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full"
-				>Upgrade for Platform Connectors</a
-			>
-			<span class="badge badge-warning text-xs w-full justify-center">Pro Tier Required</span>
+			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a>
+			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span>
+			<p class="text-[11px] leading-relaxed text-ink-500">{proUpgradePrompt.body}</p>
 		</div>
 	{/if}
 </div>
@@ -301,10 +303,9 @@
 			reporting.
 		</p>
 		<div class="flex flex-col gap-2">
-			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full"
-				>Upgrade for Hybrid Connectors</a
-			>
-			<span class="badge badge-warning text-xs w-full justify-center">Pro Tier Required</span>
+			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a>
+			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span>
+			<p class="text-[11px] leading-relaxed text-ink-500">{proUpgradePrompt.body}</p>
 		</div>
 	{/if}
 </div>

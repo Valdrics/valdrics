@@ -16,7 +16,7 @@ from app.modules.optimization.adapters.aws.plugins.pricing_evidence import (
 )
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
-from app.modules.reporting.domain.pricing.service import PricingService
+from app.modules.reporting.domain.pricing.service import PricingQuote, PricingService
 
 logger = structlog.get_logger()
 
@@ -39,7 +39,7 @@ class OverprovisionedEc2Plugin(ZombiePlugin):
         return "overprovisioned_ec2_instances"
 
     @staticmethod
-    def _estimate_pricing_quote(instance_type: str, region: str):
+    def _estimate_pricing_quote(instance_type: str, region: str) -> PricingQuote:
         return PricingService.estimate_monthly_waste_quote(
             provider="aws",
             resource_type="instance",
@@ -154,7 +154,6 @@ class OverprovisionedEc2Plugin(ZombiePlugin):
                 region=region,
                 pricing_source=pricing_quote.source,
             )
-            return None
 
         finding = build_rightsizing_finding(
             resource_id=instance_id,

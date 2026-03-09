@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 
 	type ValidationItem = {
 		capability: string;
@@ -53,13 +54,13 @@
 	]);
 </script>
 
-<svelte:head>
-	<title>Technical Validation | Valdrics</title>
-	<meta
-		name="description"
-		content="Public technical validation summary mapping Valdrics capabilities to API surface areas used in buyer and security diligence."
-	/>
-</svelte:head>
+<PublicPageMeta
+	title="Technical Validation"
+	description="Public technical validation summary mapping Valdrics capabilities to API surface areas used in buyer and security diligence."
+	pageType="WebPage"
+	pageSection="Technical Validation"
+	keywords={['technical validation', 'api surface', 'security diligence', 'buyer diligence']}
+/>
 
 <section class="container mx-auto px-6 py-12 space-y-8">
 	<header class="space-y-3">

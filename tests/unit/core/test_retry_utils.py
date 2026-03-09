@@ -26,7 +26,7 @@ async def test_execute_with_retry_succeeds_after_retries():
 
     with (
         patch("app.shared.core.retry.asyncio.sleep", new=AsyncMock()) as mock_sleep,
-        patch("app.shared.core.retry.random.random", return_value=0.5),
+        patch("app.shared.core.retry._JITTER_RNG.random", return_value=0.5),
     ):
         result = await manager.execute_with_retry(flaky)
 
@@ -55,7 +55,7 @@ def test_calculate_backoff_clamped_and_deterministic():
     manager.config["max_wait"] = 0.2
     manager.config["multiplier"] = 2.0
 
-    with patch("app.shared.core.retry.random.random", return_value=0.5):
+    with patch("app.shared.core.retry._JITTER_RNG.random", return_value=0.5):
         assert manager._calculate_backoff(0) == 0.1
         assert manager._calculate_backoff(10) == 0.2
 
@@ -100,7 +100,7 @@ async def test_execute_with_deadlock_retry_retries():
 
     with (
         patch("app.shared.core.retry.asyncio.sleep", new=AsyncMock()) as mock_sleep,
-        patch("app.shared.core.retry.random.uniform", return_value=0.0),
+        patch("app.shared.core.retry._JITTER_RNG.uniform", return_value=0.0),
     ):
         result = await execute_with_deadlock_retry(flaky)
 

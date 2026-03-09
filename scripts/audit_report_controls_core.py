@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import fnmatch
-import subprocess
+import shutil
+import subprocess  # nosec B404 - controlled local git invocation only
 from pathlib import Path
 
 from scripts.verify_exception_governance import collect_exception_sites
@@ -67,13 +68,16 @@ def parse_env(path: Path) -> dict[str, str]:
 
 
 def is_git_tracked(repo_root: Path, path: str) -> bool:
+    git_executable = shutil.which("git")
+    if not git_executable:
+        raise RuntimeError("git executable is required for repository hygiene checks")
     proc = subprocess.run(
-        ["git", "ls-files", "--error-unmatch", path],
+        [git_executable, "ls-files", "--error-unmatch", path],
         cwd=repo_root,
         check=False,
         capture_output=True,
         text=True,
-    )
+    )  # nosec B603 - fixed git subcommand with repo-local path argument
     return proc.returncode == 0
 
 

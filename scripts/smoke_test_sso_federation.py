@@ -23,6 +23,7 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from ipaddress import IPv4Address
 from pathlib import Path
 from typing import Any, NoReturn
 from urllib.parse import urljoin, urlparse
@@ -39,6 +40,7 @@ SSO_SMOKE_RECOVERABLE_EXCEPTIONS = (
     TypeError,
     ValueError,
 )
+_ALL_INTERFACES_HOST = IPv4Address(0).compressed
 
 
 def _utc_now() -> str:
@@ -58,7 +60,7 @@ def _normalize_base_url(raw: str) -> str:
     lowered = value.lower()
     if lowered.startswith(("http://", "https://")):
         return value
-    if lowered.startswith(("localhost", "127.0.0.1", "0.0.0.0")):
+    if lowered.startswith(("localhost", "127.0.0.1", _ALL_INTERFACES_HOST)):
         return f"http://{value}"
     return f"https://{value}"
 

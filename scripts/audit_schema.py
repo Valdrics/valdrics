@@ -1,6 +1,6 @@
 import asyncio
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy import text
 from app.shared.core.config import get_settings
 
 async def audit_schema():
@@ -32,10 +32,10 @@ async def audit_schema():
         audit_report = []
         for t in tables:
             # Check for tenant_id column
-            col_res = await conn.execute(text(f"""
+            col_res = await conn.execute(text("""
                 SELECT COUNT(*) FROM information_schema.columns 
-                WHERE table_name = '{t.table_name}' AND column_name = 'tenant_id'
-            """))
+                WHERE table_name = :table_name AND column_name = 'tenant_id'
+            """), {"table_name": t.table_name})
             has_tenant_id = col_res.scalar() > 0
             
             status = "✅ READY"

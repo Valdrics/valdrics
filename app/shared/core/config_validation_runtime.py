@@ -73,8 +73,18 @@ def _validate_break_glass_window(
     if expires_dt <= now_utc:
         raise ValueError(f"{setting_prefix}_EXPIRES_AT must be in the future.")
 
+    max_duration_candidate = max_duration_hours
+    if isinstance(max_duration_candidate, bool):
+        raise ValueError(f"{setting_prefix}_MAX_DURATION_HOURS must be a positive integer.")
     try:
-        max_hours = int(max_duration_hours)
+        if isinstance(max_duration_candidate, (bytes, bytearray)):
+            max_hours = int(max_duration_candidate.decode().strip())
+        elif isinstance(max_duration_candidate, str):
+            max_hours = int(max_duration_candidate.strip())
+        elif isinstance(max_duration_candidate, int):
+            max_hours = max_duration_candidate
+        else:
+            max_hours = int(str(max_duration_candidate).strip())
     except (TypeError, ValueError) as exc:
         raise ValueError(f"{setting_prefix}_MAX_DURATION_HOURS must be a positive integer.") from exc
     if max_hours < 1:
@@ -138,6 +148,7 @@ def validate_turnstile_config(
         bool(getattr(settings_obj, "TURNSTILE_REQUIRE_PUBLIC_ASSESSMENT", False))
         or bool(getattr(settings_obj, "TURNSTILE_REQUIRE_SSO_DISCOVERY", False))
         or bool(getattr(settings_obj, "TURNSTILE_REQUIRE_ONBOARD", False))
+        or bool(getattr(settings_obj, "TURNSTILE_REQUIRE_PUBLIC_SALES_INTAKE", False))
     )
 
     environment = getattr(settings_obj, "ENVIRONMENT", "")

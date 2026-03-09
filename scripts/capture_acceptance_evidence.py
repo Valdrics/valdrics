@@ -13,6 +13,7 @@ import argparse
 import asyncio
 import os
 from datetime import date, timedelta
+from ipaddress import IPv4Address
 from pathlib import Path
 from typing import Sequence
 from urllib.parse import urlparse
@@ -26,6 +27,8 @@ from scripts.capture_acceptance_runner import (
     capture_acceptance_evidence as _capture_acceptance_evidence,
 )
 
+_ALL_INTERFACES_HOST = IPv4Address(0).compressed
+
 
 def _normalize_base_url(raw: str) -> str:
     """
@@ -33,7 +36,7 @@ def _normalize_base_url(raw: str) -> str:
 
     Operators frequently set VALDRICS_API_URL as `127.0.0.1:8000` without a scheme.
     We accept that and infer a scheme:
-    - localhost/127.0.0.1/0.0.0.0 -> http
+    - localhost/127.0.0.1/all-interfaces -> http
     - everything else -> https
     """
     value = str(raw or "").strip()
@@ -42,7 +45,7 @@ def _normalize_base_url(raw: str) -> str:
     lowered = value.lower()
     if lowered.startswith(("http://", "https://")):
         return value
-    if lowered.startswith(("localhost", "127.0.0.1", "0.0.0.0")):
+    if lowered.startswith(("localhost", "127.0.0.1", _ALL_INTERFACES_HOST)):
         return f"http://{value}"
     return f"https://{value}"
 

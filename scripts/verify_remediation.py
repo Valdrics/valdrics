@@ -27,7 +27,8 @@ async def verify_precision():
         print(f"Total Forecasted Cost: {result['total_forecasted_cost']} (Type: {type(result['total_forecasted_cost'])})")
         
         # Check type
-        assert isinstance(result['total_forecasted_cost'], Decimal), "Error: result is not Decimal"
+        if not isinstance(result["total_forecasted_cost"], Decimal):
+            raise TypeError("Error: result is not Decimal")
         print("✅ SUCCESS: Precision verified.")
         
     except (AssertionError, ImportError, OSError, RuntimeError, TypeError, ValueError) as e:

@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
+import { readable } from 'svelte/store';
 import Page from './+page.svelte';
 
 vi.mock('$app/paths', () => ({
-	base: ''
+	base: '',
+	assets: ''
+}));
+
+vi.mock('$app/stores', () => ({
+	page: readable({ url: new URL('https://example.com/enterprise') })
 }));
 
 describe('enterprise page', () => {
@@ -17,9 +23,9 @@ describe('enterprise page', () => {
 		).toBeTruthy();
 
 		const briefingLink = screen.getByRole('link', { name: /request enterprise briefing/i });
-		const briefingHref = briefingLink.getAttribute('href') || '';
-		expect(briefingHref).toContain('mailto:enterprise@valdrics.com');
-		expect(briefingHref).toContain('cc=sales@valdrics.com');
+		expect(briefingLink.getAttribute('href')).toBe(
+			'/talk-to-sales?intent=enterprise_briefing&entry=enterprise'
+		);
 
 		expect(screen.getByRole('link', { name: /talk to sales/i }).getAttribute('href')).toBe(
 			'/talk-to-sales'
@@ -31,5 +37,8 @@ describe('enterprise page', () => {
 		expect(
 			screen.getByRole('link', { name: /download compliance checklist/i }).getAttribute('href')
 		).toBe('/resources/global-finops-compliance-workbook.md');
+		expect(screen.getByRole('link', { name: /enterprise@valdrics\.com/i }).getAttribute('href')).toContain(
+			'mailto:enterprise@valdrics.com'
+		);
 	});
 });

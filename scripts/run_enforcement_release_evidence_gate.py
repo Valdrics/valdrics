@@ -5,7 +5,8 @@ from __future__ import annotations
 import argparse
 import os
 import shlex
-import subprocess
+import shutil
+import subprocess  # nosec B404 - controlled local gate execution only
 from pathlib import Path
 
 
@@ -33,6 +34,13 @@ def _assert_non_empty_str(value: str, *, field: str) -> str:
     if not normalized:
         raise ValueError(f"{field} must be a non-empty string")
     return normalized
+
+
+def _resolve_uv_executable() -> str:
+    uv_executable = shutil.which("uv")
+    if not uv_executable:
+        raise RuntimeError("uv executable is required to run the enterprise gate")
+    return uv_executable
 
 
 def build_gate_environment(
@@ -238,11 +246,20 @@ def run_release_gate(
         finance_telemetry_snapshot_max_age_hours=finance_telemetry_snapshot_max_age_hours,
     )
 
-    cmd = ["uv", "run", "python3", "scripts/run_enterprise_tdd_gate.py"]
+    cmd = [
+        _resolve_uv_executable(),
+        "run",
+        "python3",
+        "scripts/run_enterprise_tdd_gate.py",
+    ]
     if dry_run:
         cmd.append("--dry-run")
     print(f"[enforcement-release-gate] {' '.join(shlex.quote(part) for part in cmd)}")
-    completed = subprocess.run(cmd, check=False, env=env)
+    completed = subprocess.run(
+        cmd,
+        check=False,
+        env=env,
+    )  # nosec B603 - trusted local release-gate command with validated inputs
     return int(completed.returncode)
 
 

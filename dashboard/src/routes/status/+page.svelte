@@ -22,7 +22,7 @@
 </script>
 
 <svelte:head>
-	<title>Status | Valdrics</title>
+	<title>System Status | Valdrics</title>
 	<meta
 		name="description"
 		content="Current service status for Valdrics core platform dependencies and automated health checks."
@@ -31,7 +31,7 @@
 
 <PublicMarketingPage
 	kicker="Status"
-	title="Current platform status"
+	title="System status"
 	subtitle="Public health summary for core Valdrics services and dependencies."
 	heroVariant="narrow"
 >

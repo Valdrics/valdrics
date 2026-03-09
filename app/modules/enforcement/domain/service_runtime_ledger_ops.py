@@ -87,4 +87,4 @@ def append_decision_ledger_entry(
         created_by_user_id=decision_row.created_by_user_id,
         decision_created_at=decision_row.created_at or _utcnow(),
     )
-    service.db.add(ledger_entry)
+    getattr(service, "db").add(ledger_entry)

@@ -294,7 +294,7 @@ async def main() -> None:
     endpoints = args.endpoints or _build_profile_endpoints(args)
 
     headers: dict[str, str] = {}
-    token = ""
+    token: str | None = None
     raw_token = os.getenv("VALDRICS_TOKEN", "").strip()
     if raw_token:
         try:

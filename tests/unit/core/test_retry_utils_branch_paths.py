@@ -42,7 +42,7 @@ async def test_execute_with_deadlock_retry_logs_on_final_exhaustion() -> None:
 
     with (
         patch("app.shared.core.retry.asyncio.sleep", new=AsyncMock()) as mock_sleep,
-        patch("app.shared.core.retry.random.uniform", return_value=0.0),
+        patch("app.shared.core.retry._JITTER_RNG.uniform", return_value=0.0),
     ):
         with pytest.raises(RuntimeError, match="serialization failure"):
             await execute_with_deadlock_retry(always_deadlock)

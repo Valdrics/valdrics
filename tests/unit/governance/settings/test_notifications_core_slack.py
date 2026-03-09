@@ -7,6 +7,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.models.notification_settings import NotificationSettings
+from app.shared.core.pricing import PricingTier
 from app.shared.core.auth import UserRole
 
 
@@ -17,7 +18,9 @@ async def test_get_notification_settings_creates_default(
     make_current_user,
     override_current_user,
 ) -> None:
-    with override_current_user(app, make_current_user(role=UserRole.ADMIN)):
+    with override_current_user(
+        app, make_current_user(role=UserRole.ADMIN, tier=PricingTier.GROWTH)
+    ):
         response = await async_client.get("/api/v1/settings/notifications")
 
     assert response.status_code == 200
@@ -33,7 +36,7 @@ async def test_update_notification_settings(
     override_current_user,
     build_notification_payload,
 ) -> None:
-    admin = make_current_user(role=UserRole.ADMIN)
+    admin = make_current_user(role=UserRole.ADMIN, tier=PricingTier.GROWTH)
     db.add(
         NotificationSettings(
             tenant_id=admin.tenant_id,
@@ -64,7 +67,11 @@ async def test_update_notification_settings_creates_if_missing(
     override_current_user,
     build_notification_payload,
 ) -> None:
-    admin = make_current_user(role=UserRole.ADMIN, email="creator@valdrics.io")
+    admin = make_current_user(
+        role=UserRole.ADMIN,
+        tier=PricingTier.GROWTH,
+        email="creator@valdrics.io",
+    )
 
     with override_current_user(app, admin):
         response = await async_client.put(
@@ -96,7 +103,9 @@ async def test_test_slack_notification(
     mock_slack.send_alert.return_value = True
 
     with (
-        override_current_user(app, make_current_user(role=UserRole.ADMIN)),
+        override_current_user(
+            app, make_current_user(role=UserRole.ADMIN, tier=PricingTier.GROWTH)
+        ),
         patch(
             "app.modules.notifications.domain.get_tenant_slack_service",
             new=AsyncMock(return_value=mock_slack),
@@ -116,7 +125,9 @@ async def test_test_slack_notification_missing_config(
     override_current_user,
 ) -> None:
     with (
-        override_current_user(app, make_current_user(role=UserRole.ADMIN)),
+        override_current_user(
+            app, make_current_user(role=UserRole.ADMIN, tier=PricingTier.GROWTH)
+        ),
         patch(
             "app.modules.notifications.domain.get_tenant_slack_service",
             new=AsyncMock(return_value=None),
@@ -137,7 +148,11 @@ async def test_test_slack_notification_uses_override(
     override_current_user,
 ) -> None:
     tenant_id = uuid.uuid4()
-    admin = make_current_user(role=UserRole.ADMIN, tenant_id=tenant_id)
+    admin = make_current_user(
+        role=UserRole.ADMIN,
+        tier=PricingTier.GROWTH,
+        tenant_id=tenant_id,
+    )
     db.add(
         NotificationSettings(
             tenant_id=tenant_id,
@@ -176,7 +191,7 @@ async def test_test_slack_notification_failure_and_exception(
     make_current_user,
     override_current_user,
 ) -> None:
-    admin = make_current_user(role=UserRole.ADMIN)
+    admin = make_current_user(role=UserRole.ADMIN, tier=PricingTier.GROWTH)
 
     with override_current_user(app, admin):
         mock_slack = AsyncMock()
@@ -223,6 +238,26 @@ async def test_update_notifications_requires_admin(
 
 
 @pytest.mark.asyncio
+async def test_update_notification_settings_requires_growth_tier_for_slack(
+    async_client: AsyncClient,
+    app,
+    make_current_user,
+    override_current_user,
+    build_notification_payload,
+) -> None:
+    with override_current_user(
+        app, make_current_user(role=UserRole.ADMIN, tier=PricingTier.STARTER)
+    ):
+        response = await async_client.put(
+            "/api/v1/settings/notifications",
+            json=build_notification_payload(slack_enabled=True),
+        )
+
+    assert response.status_code == 403
+    assert "slack_integration" in response.json()["error"]
+
+
+@pytest.mark.asyncio
 async def test_test_slack_notification_requires_admin(
     async_client: AsyncClient,
     app,
@@ -237,13 +272,31 @@ async def test_test_slack_notification_requires_admin(
 
 
 @pytest.mark.asyncio
+async def test_test_slack_notification_requires_growth_tier(
+    async_client: AsyncClient,
+    app,
+    make_current_user,
+    override_current_user,
+) -> None:
+    with override_current_user(
+        app, make_current_user(role=UserRole.ADMIN, tier=PricingTier.STARTER)
+    ):
+        response = await async_client.post("/api/v1/settings/notifications/test-slack")
+
+    assert response.status_code == 403
+    assert "Growth plan or higher" in response.json()["error"]
+
+
+@pytest.mark.asyncio
 async def test_update_notification_settings_validation_failure(
     async_client: AsyncClient,
     app,
     make_current_user,
     override_current_user,
 ) -> None:
-    with override_current_user(app, make_current_user(role=UserRole.ADMIN)):
+    with override_current_user(
+        app, make_current_user(role=UserRole.ADMIN, tier=PricingTier.GROWTH)
+    ):
         response = await async_client.put(
             "/api/v1/settings/notifications",
             json={

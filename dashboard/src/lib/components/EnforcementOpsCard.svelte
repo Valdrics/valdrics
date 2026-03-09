@@ -4,6 +4,7 @@
 	import { api } from '$lib/api';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError } from '$lib/fetchWithTimeout';
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 
 	const ENFORCEMENT_OPS_REQUEST_TIMEOUT_MS = 8000;
 
@@ -83,6 +84,7 @@
 	let success = $state('');
 	let activeReservations = $state<ActiveReservation[]>([]);
 	let driftExceptions = $state<DriftException[]>([]);
+	const upgradePrompt = getUpgradePrompt('pro', 'enforcement reconciliation');
 
 	async function loadActiveReservations() {
 		const headers = await getHeaders();
@@ -225,10 +227,13 @@
 	</div>
 
 	{#if !isProPlus(tier)}
-		<div class="absolute inset-0 z-10 flex items-center justify-center bg-transparent">
-			<a href={`${base}/billing`} class="btn btn-primary shadow-lg pointer-events-auto">
-				Upgrade to Unlock Enforcement Ops Views
-			</a>
+		<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+			<div class="max-w-md space-y-3 pointer-events-auto">
+				<h3 class="text-lg font-semibold text-white">{upgradePrompt.heading}</h3>
+				<p class="text-sm text-ink-300">{upgradePrompt.body}</p>
+				<p class="text-xs text-ink-500">{upgradePrompt.footnote}</p>
+				<a href={`${base}/billing`} class="btn btn-primary shadow-lg">{upgradePrompt.cta}</a>
+			</div>
 		</div>
 	{/if}
 

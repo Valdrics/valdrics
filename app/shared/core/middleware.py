@@ -16,7 +16,9 @@ REQUEST_ID_ALLOWED_CHARS = frozenset(
 REQUEST_ID_MIN_LENGTH = 8
 REQUEST_ID_MAX_LENGTH = 128
 INTERNAL_METRICS_PATH = "/_internal/metrics"
-INTERNAL_METRICS_TOKEN_HEADER = "x-internal-metrics-token"
+INTERNAL_METRICS_TOKEN_HEADER = (
+    "x-internal-metrics-token"  # nosec B105 - header name, not a secret value
+)
 
 
 def _normalize_request_id(value: str | None) -> str:

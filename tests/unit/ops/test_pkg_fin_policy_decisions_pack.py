@@ -5,7 +5,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EVIDENCE_DIR = REPO_ROOT / "docs" / "ops" / "evidence"
-MEMO_PATH = REPO_ROOT / "docs" / "ops" / "pkg_fin_decision_memo_2026-02-27.md"
+CONTRACT_PATH = REPO_ROOT / "docs" / "ops" / "pkg_fin_operating_contract.md"
 
 
 def test_pkg_fin_policy_decisions_artifacts_exist() -> None:
@@ -13,7 +13,7 @@ def test_pkg_fin_policy_decisions_artifacts_exist() -> None:
         EVIDENCE_DIR / "pkg_fin_policy_decisions_TEMPLATE.json",
         EVIDENCE_DIR / "pkg_fin_policy_decisions_2026-02-28.json",
         REPO_ROOT / "scripts" / "verify_pkg_fin_policy_decisions.py",
-        MEMO_PATH,
+        CONTRACT_PATH,
     ]
     for path in required_paths:
         assert path.exists(), str(path)
@@ -21,7 +21,7 @@ def test_pkg_fin_policy_decisions_artifacts_exist() -> None:
 
 def test_pkg_fin_policy_decisions_docs_include_required_contracts() -> None:
     readme_raw = (EVIDENCE_DIR / "README.md").read_text(encoding="utf-8")
-    memo_raw = MEMO_PATH.read_text(encoding="utf-8")
+    contract_raw = CONTRACT_PATH.read_text(encoding="utf-8")
 
     assert "pkg_fin_policy_decisions_YYYY-MM-DD.json" in readme_raw
     assert "scripts/verify_pkg_fin_policy_decisions.py" in readme_raw
@@ -34,6 +34,6 @@ def test_pkg_fin_policy_decisions_docs_include_required_contracts() -> None:
     assert "pkg_fin_gate_launch_blockers_resolved" in readme_raw
     assert "pkg_fin_gate_postlaunch_commitments_scheduled" in readme_raw
 
-    assert "internal telemetry" in memo_raw
-    assert "policy choices" in memo_raw
-    assert "How to resolve the blocker" in memo_raw
+    assert "internal telemetry" in contract_raw
+    assert "policy choices" in contract_raw
+    assert "How to resolve the blocker" in contract_raw

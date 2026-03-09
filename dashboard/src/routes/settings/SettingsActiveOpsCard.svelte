@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
+	import { tierAtLeast } from '$lib/tier';
 	import { INITIAL_ACTIVEOPS_SETTINGS } from './settingsPageInitialState';
 
 	type AsyncAction = () => void | Promise<void>;
@@ -24,34 +26,41 @@
 		saveActiveOpsSettings,
 		savingActiveOps
 	}: Props = $props();
+
+	const hasProAutomationAccess = $derived(tierAtLeast(data.subscription?.tier ?? 'free', 'pro'));
+	const upgradePrompt = getUpgradePrompt('pro', 'ActiveOps automation');
 </script>
 
 <!-- ActiveOps (Remediation) Settings -->
 <div
 	class="card stagger-enter relative"
-	class:opacity-60={!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
-	class:pointer-events-none={!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+	class:opacity-60={!hasProAutomationAccess}
+	class:pointer-events-none={!hasProAutomationAccess}
 >
 	<div class="flex items-center justify-between mb-3">
 		<h2 class="text-lg font-semibold flex items-center gap-2">
 			<span>⚡</span> ActiveOps (Autonomous Remediation)
 		</h2>
 
-		{#if !['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+		{#if !hasProAutomationAccess}
 			<span class="badge badge-warning text-xs">Pro Plan Required</span>
 		{/if}
 	</div>
 
-	{#if !['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
-		<div class="absolute inset-0 z-10 flex items-center justify-center bg-transparent">
-			<a href={`${base}/billing`} class="btn btn-primary shadow-lg pointer-events-auto">
-				Upgrade to Unlock Auto-Pilot
-			</a>
+	{#if !hasProAutomationAccess}
+		<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+			<div class="max-w-md space-y-3 pointer-events-auto">
+				<h3 class="text-lg font-semibold text-white">{upgradePrompt.heading}</h3>
+				<p class="text-sm text-ink-300">{upgradePrompt.body}</p>
+				<p class="text-xs text-ink-500">{upgradePrompt.footnote}</p>
+				<a href={`${base}/billing`} class="btn btn-primary shadow-lg">{upgradePrompt.cta}</a>
+			</div>
 		</div>
 	{/if}
 
 	<p class="text-xs text-ink-400 mb-5">
-		Enable AI to automatically remediate high-confidence zombie resources during weekly sweeps.
+		ActiveOps automation stays on Pro and Enterprise. Slack and Jira switches in this card apply
+		to remediation policy events, not the general notification channel.
 	</p>
 
 	{#if loadingActiveOps}
@@ -72,7 +81,7 @@
 					type="checkbox"
 					bind:checked={activeOpsSettings.auto_pilot_enabled}
 					class="toggle toggle-warning"
-					disabled={!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+					disabled={!hasProAutomationAccess}
 					aria-label="Enable Auto-Pilot for autonomous deletion"
 				/>
 				<span class="font-medium {activeOpsSettings.auto_pilot_enabled ? 'text-white' : 'text-ink-400'}">
@@ -93,7 +102,7 @@
 					step="0.01"
 					class="range"
 					disabled={!activeOpsSettings.auto_pilot_enabled ||
-						!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+						!hasProAutomationAccess}
 					aria-label="Minimum AI confidence threshold for autonomous actions"
 				/>
 				<div class="flex justify-between text-xs text-ink-500 mt-1">
@@ -109,7 +118,7 @@
 						type="checkbox"
 						bind:checked={activeOpsSettings.policy_enabled}
 						class="toggle"
-						disabled={!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+						disabled={!hasProAutomationAccess}
 					/>
 					<span>Enable request-level policy guardrails</span>
 				</label>
@@ -120,7 +129,7 @@
 						bind:checked={activeOpsSettings.policy_block_production_destructive}
 						class="toggle"
 						disabled={!activeOpsSettings.policy_enabled ||
-							!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+							!hasProAutomationAccess}
 					/>
 					<span>Block destructive actions on production-like resources</span>
 				</label>
@@ -131,7 +140,7 @@
 						bind:checked={activeOpsSettings.policy_require_gpu_override}
 						class="toggle"
 						disabled={!activeOpsSettings.policy_enabled ||
-							!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+							!hasProAutomationAccess}
 					/>
 					<span>Require explicit override for GPU-impacting changes</span>
 				</label>
@@ -151,7 +160,7 @@
 						step="0.01"
 						class="range"
 						disabled={!activeOpsSettings.policy_enabled ||
-							!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+							!hasProAutomationAccess}
 					/>
 				</div>
 
@@ -162,7 +171,7 @@
 							bind:checked={activeOpsSettings.policy_violation_notify_slack}
 							class="toggle"
 							disabled={!activeOpsSettings.policy_enabled ||
-								!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+								!hasProAutomationAccess}
 						/>
 						<span>Notify policy violations to Slack</span>
 					</label>
@@ -172,7 +181,7 @@
 							bind:checked={activeOpsSettings.policy_violation_notify_jira}
 							class="toggle"
 							disabled={!activeOpsSettings.policy_enabled ||
-								!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+								!hasProAutomationAccess}
 						/>
 						<span>Notify policy violations to Jira</span>
 					</label>
@@ -184,7 +193,7 @@
 						id="policy_escalation_role"
 						bind:value={activeOpsSettings.policy_escalation_required_role}
 						disabled={!activeOpsSettings.policy_enabled ||
-							!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+							!hasProAutomationAccess}
 					>
 						<option value="owner">Owner</option>
 						<option value="admin">Admin</option>
@@ -199,11 +208,11 @@
 
 				<label class="flex items-center gap-3 cursor-pointer">
 					<input
-						type="checkbox"
-						bind:checked={activeOpsSettings.license_auto_reclaim_enabled}
-						class="toggle toggle-success"
-						disabled={!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
-					/>
+					type="checkbox"
+					bind:checked={activeOpsSettings.license_auto_reclaim_enabled}
+					class="toggle toggle-success"
+					disabled={!hasProAutomationAccess}
+				/>
 					<span>Enable autonomous seat reclamation for inactive users</span>
 				</label>
 
@@ -243,11 +252,11 @@
 
 				<label class="flex items-center gap-3 cursor-pointer">
 					<input
-						type="checkbox"
-						bind:checked={activeOpsSettings.license_downgrade_recommendations_enabled}
-						class="toggle"
-						disabled={!['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
-					/>
+					type="checkbox"
+					bind:checked={activeOpsSettings.license_downgrade_recommendations_enabled}
+					class="toggle"
+					disabled={!hasProAutomationAccess}
+				/>
 					<span>Enable cost-saving tier downgrade recommendations</span>
 				</label>
 			</div>
@@ -256,7 +265,7 @@
 				type="button"
 				class="btn btn-primary"
 				onclick={saveActiveOpsSettings}
-				disabled={savingActiveOps || !['pro', 'enterprise'].includes(data.subscription?.tier ?? '')}
+				disabled={savingActiveOps || !hasProAutomationAccess}
 				aria-label="Save ActiveOps settings"
 			>
 				{savingActiveOps ? '⏳ Saving...' : '💾 Save ActiveOps Settings'}

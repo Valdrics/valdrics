@@ -113,7 +113,8 @@ export const DEFAULT_PRICING_PLANS: PricingPlan[] = [
 			headline: 'Daily review cadence with limited cross-cloud visibility',
 			summary:
 				'Best for a smaller operating scope when one team needs clearer owner routing, stronger alerts, and limited Azure/GCP visibility without jumping straight to a broader governance plan.',
-			note: 'Best fit for a compact cross-cloud operating scope with one core review team.',
+			note:
+				'Priced for the first team that needs daily review cadence and limited cross-cloud visibility without paying for broader governance too early.',
 			bestFor:
 				'One team needs daily review cadence, limited Azure/GCP visibility, and stronger alerting before a broader rollout.',
 			whyUpgrade:
@@ -141,7 +142,7 @@ export const DEFAULT_PRICING_PLANS: PricingPlan[] = [
 			summary:
 				'Best for teams that need broader provider coverage, owner routing, Slack-integrated workflows, SSO rollout, and guided execution across functions.',
 			note:
-				'Built for broader provider coverage, team rollout, and stronger cross-functional governance.',
+				'Priced for the first cross-functional rollout where multi-cloud coverage, owner routing, Slack workflows, and SSO need to land together.',
 			bestFor:
 				'Cross-functional teams need full AWS, Azure, and GCP coverage with owner routing, Slack workflows, and SSO rollout.',
 			whyUpgrade:
@@ -168,7 +169,8 @@ export const DEFAULT_PRICING_PLANS: PricingPlan[] = [
 			headline: 'Finance-grade governance, APIs, and proof',
 			summary:
 				'Best for teams that want higher automation depth, finance close support, cloud-plus connectors, and stronger evidence for leadership, security, and audit review.',
-			note: 'Adds APIs, finance workflow support, and stronger governance evidence.',
+			note:
+				'Priced for finance-grade operations once API access, audit logs, reconciliation, and export-ready evidence become operational requirements.',
 			bestFor:
 				'Finance, platform, and leadership need APIs, audit logs, reconciliation, close workflow, and stronger governance evidence.',
 			whyUpgrade:

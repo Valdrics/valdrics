@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
+import shutil
+import subprocess  # nosec B404 - controlled local git invocation only
 from pathlib import Path
 
 FORBIDDEN_PERSONAL_EMAIL_DOMAINS: frozenset[str] = frozenset(
@@ -50,15 +51,18 @@ def _parse_env_file(path: Path) -> dict[str, str]:
 
 def _tracked_env_files(repo_root: Path) -> tuple[str, ...]:
     candidates = (".env", "dashboard/.env")
+    git_executable = shutil.which("git")
+    if not git_executable:
+        raise RuntimeError("git executable is required for environment hygiene checks")
     tracked: list[str] = []
     for relative_path in candidates:
         proc = subprocess.run(
-            ["git", "ls-files", "--error-unmatch", relative_path],
+            [git_executable, "ls-files", "--error-unmatch", relative_path],
             cwd=repo_root,
             check=False,
             capture_output=True,
             text=True,
-        )
+        )  # nosec B603 - fixed git subcommand with fixed candidate paths
         if proc.returncode == 0:
             tracked.append(relative_path)
     return tuple(tracked)

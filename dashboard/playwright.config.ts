@@ -1,6 +1,7 @@
 import { defineConfig } from '@playwright/test';
 
 const isPublicOnly = process.env.PLAYWRIGHT_PUBLIC_ONLY === '1';
+const skipManagedWebServer = process.env.PLAYWRIGHT_SKIP_WEBSERVER === '1';
 
 const webServer = [
 	{
@@ -24,7 +25,7 @@ export default defineConfig({
 	use: {
 		baseURL: process.env.DASHBOARD_URL || 'http://localhost:4173'
 	},
-	webServer,
+	webServer: skipManagedWebServer ? undefined : webServer,
 	testDir: '.',
 	testMatch: ['tests/e2e/**/*.{test,spec}.ts', 'e2e/**/*.{test,spec}.ts']
 });

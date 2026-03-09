@@ -5,6 +5,15 @@ from app.models.aws_connection import AWSConnection
 from app.shared.core.aws_credentials import map_aws_credentials
 from app.shared.core.config import get_settings
 
+__all__ = [
+    "DEFAULT_BOTO_CONFIG",
+    "get_boto_session",
+    "resolve_aws_region_hint",
+    "get_aws_client",
+    "map_aws_connection_to_credentials",
+    "map_aws_credentials",
+]
+
 # Standardized boto config with timeouts to prevent indefinite hangs
 DEFAULT_BOTO_CONFIG = BotoConfig(
     read_timeout=30, connect_timeout=10, retries={"max_attempts": 3, "mode": "adaptive"}

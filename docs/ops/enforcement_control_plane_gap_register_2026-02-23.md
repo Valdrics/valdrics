@@ -214,19 +214,19 @@ Recent staged closures (2026-02-27, single-sprint hardening pass):
      - `docs/ops/evidence/finance_guardrails_TEMPLATE.json`
      - `docs/ops/evidence/finance_guardrails_2026-02-27.json`
      - `scripts/verify_finance_guardrails_evidence.py`
-     - `docs/ops/pkg_fin_decision_memo_2026-02-27.md`
+     - `docs/ops/pkg_fin_operating_contract.md`
 11. `PKG-020` automation baseline (`DONE`): machine-verifiable pricing benchmark evidence register added with freshness/class-coverage guards.
    - Artifacts:
      - `docs/ops/evidence/pricing_benchmark_register_TEMPLATE.json`
      - `docs/ops/evidence/pricing_benchmark_register_2026-02-27.json`
      - `scripts/verify_pricing_benchmark_register.py`
-     - `docs/ops/pkg_fin_decision_memo_2026-02-27.md`
+     - `docs/ops/pkg_fin_operating_contract.md`
 12. `PKG/FIN` policy-decision automation baseline (`DONE`): machine-verifiable decision artifact added to enforce that pricing/packaging motions carry explicit policy choices and approval sign-offs, backed by at least 2 months of telemetry.
    - Artifacts:
      - `docs/ops/evidence/pkg_fin_policy_decisions_TEMPLATE.json`
      - `docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json`
      - `scripts/verify_pkg_fin_policy_decisions.py`
-     - `docs/ops/pkg_fin_decision_memo_2026-02-27.md`
+     - `docs/ops/pkg_fin_operating_contract.md`
 13. `FIN` live telemetry automation baseline (`DONE`): machine-verifiable telemetry snapshot + monthly committee packet generator + optional gate wiring added for live FIN packet automation.
    - Artifacts:
      - `docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json`

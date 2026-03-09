@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 
 	let {
 		data,
@@ -12,6 +13,8 @@
 		gcpConnections,
 		deleteConnection
 	} = $props();
+
+	const growthUpgradePrompt = getUpgradePrompt('growth', 'Azure and GCP coverage');
 </script>
 
 <!-- AWS -->
@@ -143,15 +146,11 @@
 			Connect via Workload Identity Federation for secret-less security.
 		</p>
 		<div class="flex flex-col gap-2">
-			<a
-				href={['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)
-					? `${base}/onboarding`
-					: `${base}/billing`}
-				class="btn btn-secondary text-xs w-full"
-			>
-				Connect Azure
+			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">
+				{growthUpgradePrompt.cta}
 			</a>
-			<span class="badge badge-warning text-xs w-full justify-center">Growth Tier Required</span>
+			<span class="badge badge-warning text-xs w-full justify-center">{growthUpgradePrompt.badge}</span>
+			<p class="text-[11px] leading-relaxed text-ink-500">{growthUpgradePrompt.body}</p>
 		</div>
 	{/if}
 </div>
@@ -213,15 +212,11 @@
 	{:else if !loadingGCP}
 		<p class="text-xs text-ink-400 mb-6">Seamless integration using GCP Workload Identity pools.</p>
 		<div class="flex flex-col gap-2">
-			<a
-				href={['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)
-					? `${base}/onboarding`
-					: `${base}/billing`}
-				class="btn btn-secondary text-xs w-full"
-			>
-				Connect GCP
+			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">
+				{growthUpgradePrompt.cta}
 			</a>
-			<span class="badge badge-warning text-xs w-full justify-center">Growth Tier Required</span>
+			<span class="badge badge-warning text-xs w-full justify-center">{growthUpgradePrompt.badge}</span>
+			<p class="text-[11px] leading-relaxed text-ink-500">{growthUpgradePrompt.body}</p>
 		</div>
 	{/if}
 </div>

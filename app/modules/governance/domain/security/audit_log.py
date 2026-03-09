@@ -91,11 +91,13 @@ class AuditEventType(str, Enum):
     SCIM_USER_CREATED = "scim.user_created"
     SCIM_USER_UPDATED = "scim.user_updated"
     SCIM_USER_DEPROVISIONED = "scim.user_deprovisioned"
-    SCIM_TOKEN_ROTATED = "scim.token_rotated"
+    SCIM_TOKEN_ROTATED = "scim.token_rotated"  # nosec B105 - audit event identifier
     SCIM_GROUP_CREATED = "scim.group_created"
     SCIM_GROUP_UPDATED = "scim.group_updated"
     SCIM_GROUP_DELETED = "scim.group_deleted"
-    SECURITY_EMERGENCY_TOKEN_ISSUED = "security.emergency_token_issued"
+    SECURITY_EMERGENCY_TOKEN_ISSUED = (
+        "security.emergency_token_issued"  # nosec B105 - audit event identifier
+    )
 
     # Identity (tenant-scoped enforcement primitives)
     IDENTITY_SETTINGS_UPDATED = "identity.settings_updated"

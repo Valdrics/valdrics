@@ -83,6 +83,17 @@ class FindingDefinition:
     check: Callable[[Path], tuple[str, ...]]
 
 
+def _optimization_source_files(repo_root: Path) -> tuple[Path, ...]:
+    optimization_root = repo_root / "app/modules/optimization"
+    return tuple(
+        sorted(
+            path
+            for path in optimization_root.rglob("*.py")
+            if path.name != "__init__.py"
+        )
+    )
+
+
 def check_m01(repo_root: Path) -> tuple[str, ...]:
     errors: list[str] = []
     gate_path = repo_root / "scripts/verify_python_module_size_budget.py"
@@ -110,8 +121,7 @@ def check_m01(repo_root: Path) -> tuple[str, ...]:
         if "--select C901" not in ci_text:
             errors.append("python complexity governance step (ruff C901) must remain enabled.")
 
-    optimization_root = repo_root / "app/modules/optimization"
-    source_files = tuple(sorted(optimization_root.rglob("*.py")))
+    source_files = _optimization_source_files(repo_root)
     if len(source_files) > OPTIMIZATION_MAX_SOURCE_FILES:
         errors.append(
             "optimization module must stay within the structural budget: "

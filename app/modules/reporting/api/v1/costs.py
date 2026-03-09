@@ -100,13 +100,33 @@ from app.shared.llm.analyzer import FinOpsAnalyzer
 from app.shared.llm.factory import LLMFactory
 from app.shared.db.session import get_db
 
-__all__ = ["LARGE_DATASET_THRESHOLD", "UnitEconomicsSettingsUpdate"]
+__all__ = [
+    "CostAggregator",
+    "CostAnomalyDetectionService",
+    "FinOpsAnalyzer",
+    "LARGE_DATASET_THRESHOLD",
+    "LLMFactory",
+    "NotificationDispatcher",
+    "SymbolicForecaster",
+    "UnitEconomicsSettingsUpdate",
+    "analyze_costs_impl",
+    "dispatch_cost_anomaly_alerts",
+    "get_canonical_quality_impl",
+    "get_cost_anomalies_impl",
+    "get_cost_attribution_coverage_impl",
+    "get_cost_attribution_summary_impl",
+    "get_cost_breakdown_impl",
+    "get_cost_forecast_impl",
+    "get_costs_impl",
+    "get_ingestion_sla_impl",
+    "get_settings",
+    "trigger_ingest_impl",
+]
 
 router = APIRouter(tags=["Costs"])
 # Include prebuilt route fragments without applying an additional prefix layer.
 router.routes.extend(_core_router.routes)
 router.routes.extend(_extended_router.routes)
-
 
 @router.get("")
 async def get_costs_root(
@@ -151,17 +171,8 @@ _PATCHABLE_TEST_SEAMS = (
     UnitEconomicsSettingsResponse,
     UnitEconomicsSettingsUpdate,
 )
-SUPPORTED_PROVIDER_FILTERS = {
-    "aws",
-    "azure",
-    "gcp",
-    "saas",
-    "license",
-    "platform",
-    "hybrid",
-}
+SUPPORTED_PROVIDER_FILTERS = {"aws", "azure", "gcp", "saas", "license", "platform", "hybrid"}
 SUPPORTED_ANOMALY_SEVERITIES = {"low", "medium", "high", "critical"}
-
 
 def _require_tenant_id(user: CurrentUser) -> UUID:
     if user.tenant_id is None:
@@ -181,10 +192,7 @@ def _normalize_provider_filter(provider: str | None) -> str | None:
         return None
     if normalized not in SUPPORTED_PROVIDER_FILTERS:
         supported = ", ".join(sorted(SUPPORTED_PROVIDER_FILTERS))
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported provider '{provider}'. Use one of: {supported}",
-        )
+        raise HTTPException(status_code=400, detail=f"Unsupported provider '{provider}'. Use one of: {supported}")
     return normalized
 
 

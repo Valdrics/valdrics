@@ -7,7 +7,8 @@ import argparse
 import asyncio
 import json
 import os
-from datetime import datetime, timedelta, timezone
+import tempfile
+from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -24,6 +25,9 @@ from scripts.verify_finance_telemetry_snapshot import verify_snapshot
 
 
 TRACKED_TIERS: tuple[str, ...] = ("free", "starter", "growth", "pro", "enterprise")
+DEFAULT_DATABASE_PATH = str(
+    Path(tempfile.gettempdir()) / "valdrics_finance_telemetry.sqlite"
+)
 TIER_MATRIX: dict[str, tuple[int, int, Decimal]] = {
     # tier: (tenant_count, active_subscriptions, per_usage_cost_usd)
     "free": (120, 0, Decimal("0.0200")),
@@ -41,7 +45,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="Output snapshot JSON path.")
     parser.add_argument(
         "--database-path",
-        default="/tmp/valdrics_finance_telemetry.sqlite",
+        default=DEFAULT_DATABASE_PATH,
         help="SQLite database path used for live telemetry generation.",
     )
     parser.add_argument(

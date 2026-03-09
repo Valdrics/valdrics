@@ -15,8 +15,9 @@ Valdrics is the economic control plane for cloud and software spend.
 - Week 2: run first controlled remediation cycle with finance + engineering.
 
 ## Commercial Model
-- Free tier for initial workflow validation.
-- Paid tiers for advanced automation, API depth, and enterprise support.
+- Free: permanent workspace for validating the first live workflow.
+- Starter / Growth / Pro: self-serve path as coverage, rollout controls, and governance depth expand.
+- Enterprise: separate buying lane for SCIM, private deployment, procurement, and custom control review.
 
 ## Ideal Buyer Motion
 - Engineering + FinOps + Finance leadership alignment.

@@ -33,11 +33,14 @@ describe('sitemap.xml route', () => {
 		expect(xml).toContain('https://example.com/docs/technical-validation');
 		expect(xml).toContain('https://example.com/blog');
 		expect(xml).toContain('https://example.com/insights');
+		expect(xml).toContain('https://example.com/insights/from-alert-to-approved-action');
 		expect(xml).toContain('https://example.com/resources');
+		expect(xml).toContain('https://example.com/resources/executive-one-pager');
+		expect(xml).toContain('https://example.com/proof/safe-access-model');
 		expect(xml).toContain('https://example.com/enterprise');
 		expect(xml).toContain('https://example.com/talk-to-sales');
 		expect(xml).toContain('https://example.com/status');
-		expect(xml).not.toContain('<lastmod>');
+		expect(xml).toContain('<lastmod>2026-03-09T00:00:00.000Z</lastmod>');
 	});
 
 	it('emits deterministic lastmod when configured', async () => {
@@ -53,6 +56,18 @@ describe('sitemap.xml route', () => {
 		expect(xml).toContain('https://example.com/pricing');
 	});
 
+	it('falls back to per-entry lastmod for dynamic public content pages', async () => {
+		delete process.env.PUBLIC_SITEMAP_LASTMOD;
+		delete process.env.SITEMAP_LASTMOD;
+
+		const response = await GET({
+			url: new URL('https://example.com/sitemap.xml')
+		} as Parameters<typeof GET>[0]);
+
+		const xml = await response.text();
+		expect(xml).toContain('<loc>https://example.com/proof/safe-access-model</loc><lastmod>2026-03-09T00:00:00.000Z</lastmod>');
+	});
+
 	it('ignores invalid configured lastmod values', async () => {
 		process.env.PUBLIC_SITEMAP_LASTMOD = 'not-a-date';
 		delete process.env.SITEMAP_LASTMOD;
@@ -62,6 +77,6 @@ describe('sitemap.xml route', () => {
 		} as Parameters<typeof GET>[0]);
 
 		const xml = await response.text();
-		expect(xml).not.toContain('<lastmod>');
+		expect(xml).toContain('<lastmod>2026-03-09T00:00:00.000Z</lastmod>');
 	});
 });

@@ -142,7 +142,13 @@ describe('LandingHero', () => {
 		expect(screen.getByText(/permanent free workspace for one live savings workflow/i)).toBeTruthy();
 		expect(screen.getByText(/free is best for proving one workflow permanently/i)).toBeTruthy();
 		expect(
-			screen.getByText(/monthly starting price\. best fit for a compact cross-cloud operating scope/i)
+			screen.getByText(/\$49\/mo starting price\. priced for the first team that needs daily review cadence/i)
+		).toBeTruthy();
+		expect(
+			screen.getByText(/\$149\/mo starting price\. priced for the first cross-functional rollout/i)
+		).toBeTruthy();
+		expect(
+			screen.getByText(/\$299\/mo starting price\. priced for finance-grade operations/i)
 		).toBeTruthy();
 		expect(screen.getAllByText(/^Best for$/i).length).toBeGreaterThanOrEqual(4);
 		expect(screen.getAllByText(/^Why teams upgrade$/i).length).toBeGreaterThanOrEqual(4);

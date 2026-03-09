@@ -55,6 +55,7 @@ class PolicyChannelDiagnostics(BaseModel):
 class SlackPolicyDiagnostics(PolicyChannelDiagnostics):
     """Slack-specific policy diagnostics."""
 
+    feature_allowed_by_tier: bool
     has_bot_token: bool
     has_default_channel: bool
     has_channel_override: bool

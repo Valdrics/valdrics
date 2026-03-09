@@ -178,6 +178,8 @@ async def close_account(
     tenant.is_deleted = True
     tenant.deleted_at = now
 
+    users_revoked = int(getattr(user_update, "rowcount", 0) or 0)
+    background_jobs_revoked = int(getattr(job_update, "rowcount", 0) or 0)
     audit = AuditLogger(db=db, tenant_id=tenant_id)
     await audit.log(
         event_type=AuditEventType.TENANT_DELETED,
@@ -187,8 +189,8 @@ async def close_account(
         resource_id=str(tenant_id),
         details={
             "offboarding": {
-                "users_revoked": int(user_update.rowcount or 0),
-                "background_jobs_revoked": int(job_update.rowcount or 0),
+                "users_revoked": users_revoked,
+                "background_jobs_revoked": background_jobs_revoked,
                 "identity_revoked": identity is not None,
                 "closed_at": now.isoformat(),
             }
@@ -203,8 +205,8 @@ async def close_account(
     return AccountClosureResponse(
         status="closed",
         tenant_id=str(tenant_id),
-        users_revoked=int(user_update.rowcount or 0),
-        background_jobs_revoked=int(job_update.rowcount or 0),
+        users_revoked=users_revoked,
+        background_jobs_revoked=background_jobs_revoked,
         identity_revoked=identity is not None,
         closed_at=now.isoformat(),
     )

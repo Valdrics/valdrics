@@ -11,10 +11,18 @@ from app.modules.governance.api.v1.settings.notifications_models import (
 
 def to_notification_response(
     settings: NotificationSettings,
+    *,
+    slack_feature_allowed_by_tier: bool = True,
 ) -> NotificationSettingsResponse:
     return NotificationSettingsResponse(
-        slack_enabled=bool(getattr(settings, "slack_enabled", True)),
-        slack_channel_override=settings.slack_channel_override,
+        slack_enabled=(
+            bool(getattr(settings, "slack_enabled", True))
+            if slack_feature_allowed_by_tier
+            else False
+        ),
+        slack_channel_override=(
+            settings.slack_channel_override if slack_feature_allowed_by_tier else None
+        ),
         jira_enabled=bool(getattr(settings, "jira_enabled", False)),
         jira_base_url=getattr(settings, "jira_base_url", None),
         jira_email=getattr(settings, "jira_email", None),
@@ -71,6 +79,7 @@ def to_slack_policy_diagnostics(
     remediation_settings: RemediationSettings | None,
     notification_settings: NotificationSettings | None,
     *,
+    feature_allowed_by_tier: bool,
     has_bot_token: bool,
     has_default_channel: bool,
 ) -> SlackPolicyDiagnostics:
@@ -99,6 +108,8 @@ def to_slack_policy_diagnostics(
         reasons.append("policy_disabled")
     if not policy_notify_slack:
         reasons.append("policy_slack_notifications_disabled")
+    if not feature_allowed_by_tier:
+        reasons.append("tier_missing_slack_integration_feature")
     if not slack_enabled:
         reasons.append("tenant_slack_disabled")
     if not has_bot_token:
@@ -109,6 +120,7 @@ def to_slack_policy_diagnostics(
     return SlackPolicyDiagnostics(
         enabled_for_policy=policy_notify_slack,
         enabled_in_notifications=slack_enabled,
+        feature_allowed_by_tier=feature_allowed_by_tier,
         ready=len(reasons) == 0,
         reasons=reasons,
         has_bot_token=has_bot_token,

@@ -21,11 +21,13 @@
 		onTrackCta: (action: string, section: string, value: string) => void;
 	} = $props();
 
-	const freePlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'free');
+const freePlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'free');
 
-	if (!freePlan?.story) {
-		throw new Error('Landing plans section requires a free-plan public story.');
-	}
+if (!freePlan?.story) {
+	throw new Error('Landing plans section requires a free-plan public story.');
+}
+
+const freePlanStory = freePlan.story;
 </script>
 
 <section
@@ -41,10 +43,10 @@
 	<div class="landing-free-tier-card glass-panel">
 		<div class="landing-free-tier-head">
 			<div>
-				<p class="landing-free-tier-badge">{freePlan.story.badge}</p>
+				<p class="landing-free-tier-badge">{freePlanStory.badge}</p>
 				<p class="landing-proof-k">Start Free</p>
-				<h3 class="landing-h3">{freePlan.story.headline}</h3>
-				<p class="landing-p">{freePlan.story.summary}</p>
+				<h3 class="landing-h3">{freePlanStory.headline}</h3>
+				<p class="landing-p">{freePlanStory.summary}</p>
 			</div>
 			<div class="landing-free-tier-price">
 				<p class="landing-free-tier-price-k">Entry Price</p>
@@ -59,11 +61,11 @@
 		<dl class="landing-plan-context" aria-label="Free plan fit and upgrade path">
 			<div class="landing-plan-context__row">
 				<dt class="landing-plan-context__label">Best for</dt>
-				<dd class="landing-plan-context__value">{freePlan.story.bestFor}</dd>
+				<dd class="landing-plan-context__value">{freePlanStory.bestFor}</dd>
 			</div>
 			<div class="landing-plan-context__row">
 				<dt class="landing-plan-context__label">Why teams upgrade</dt>
-				<dd class="landing-plan-context__value">{freePlan.story.whyUpgrade}</dd>
+				<dd class="landing-plan-context__value">{freePlanStory.whyUpgrade}</dd>
 			</div>
 		</dl>
 		<p class="landing-free-tier-limit">{FREE_TIER_LIMIT_NOTE}</p>

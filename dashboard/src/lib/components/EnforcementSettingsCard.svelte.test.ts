@@ -57,8 +57,9 @@ describe('EnforcementSettingsCard', () => {
 		expect(screen.getByText('Enforcement Control Plane')).toBeTruthy();
 		expect(screen.getByText('Pro Plan Required')).toBeTruthy();
 		expect(
-			screen.getByRole('link', { name: /Upgrade to Unlock Enforcement Controls/i })
+			screen.getByText(/best for teams that want higher automation depth, finance close support/i)
 		).toBeTruthy();
+		expect(screen.getByRole('link', { name: /View Pro plan/i })).toBeTruthy();
 
 		await waitFor(() => {
 			expect(getMock).not.toHaveBeenCalled();

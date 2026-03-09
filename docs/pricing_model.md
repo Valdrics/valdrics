@@ -1,6 +1,6 @@
 # Pricing Metric Model
 
-Last updated: February 12, 2026
+Last updated: March 9, 2026
 
 ## Default Value Metric
 
@@ -10,7 +10,11 @@ Primary pricing metric for early SaaS packaging:
 - Feature tier access (for example: Cloud+, reconciliation, compliance exports)
 - Plan-level operational limits (retention, backfill, scan frequency)
 
-Reference implementation: `app/shared/core/pricing.py`.
+Reference implementation:
+
+- `app/shared/core/pricing.py`
+- `app/shared/core/pricing_catalog.py`
+- `app/shared/core/pricing_types.py`
 
 ## Plan Baseline
 
@@ -22,6 +26,42 @@ Reference implementation: `app/shared/core/pricing.py`.
 - BYOK is available on all tiers.
 - BYOK does not add a separate platform surcharge.
 - Tier AI usage limits still apply even when BYOK is used.
+
+## Current Packaging Corrections
+
+The current package shape intentionally preserves a simple `Free -> Starter -> Growth -> Pro -> Enterprise` ladder.
+
+- `Free` stays permanent and is used as the proof-of-value entry path.
+- `Starter` is now a real team-visibility tier rather than AWS-only expansion.
+- `Growth` is the first cross-functional rollout lane and now includes:
+  - full AWS/Azure/GCP coverage,
+  - Slack-integrated workflows,
+  - SSO federation + enforcement.
+- `Pro` remains the finance-grade governance tier and keeps:
+  - `audit_logs`
+  - `api_access`
+  - `reconciliation`
+  - `close_workflow`
+  - `compliance_exports`
+  - `savings_proof`
+  - `cloud_plus_connectors`
+  - `policy_configuration`
+  - `incident_integrations`
+- `Enterprise` remains reserved for enterprise differentiators:
+  - SCIM
+  - effectively unlimited scale
+  - private/on-prem deployment
+  - white-label and custom delivery motions
+  - 24/7 support and procurement/security customization
+
+## Upgrade Logic
+
+Current intended upgrade path:
+
+- `Free -> Starter`: more accounts, daily cadence, AI insights, limited cross-cloud visibility, longer retention.
+- `Starter -> Growth`: owner routing, anomalies, remediation, backfill, chargeback, policy preview, Slack workflows, SSO.
+- `Growth -> Pro`: auditability, API access, finance close support, compliance evidence, Cloud+ connectors, incident routing.
+- `Pro -> Enterprise`: SCIM, procurement-ready deployment options, custom controls, and effectively unlimited scale.
 
 ## Billing Event Mapping (Product to Billing)
 
@@ -40,3 +80,4 @@ Reference implementation: `app/shared/core/pricing.py`.
 3. Hard limits should fail with clear guidance, not silent degradation.
 4. Tier checks must be deterministic and test-covered.
 5. BYOK is a control/privacy option, not a discount model.
+6. Collaboration hooks should land before enterprise procurement hooks when that improves acquisition realism.

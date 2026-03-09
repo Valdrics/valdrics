@@ -82,7 +82,8 @@ def init_sentry() -> bool:
         logger.warning("sentry_disabled", reason=error_message)
         return False
 
-    assert sentry_sdk is not None
+    if sentry_sdk is None:
+        raise RuntimeError("Sentry SDK unavailable despite SENTRY_AVAILABLE=True")
 
     environment = str(getattr(settings, "ENVIRONMENT", None) or "development").strip().lower()
     release = str(

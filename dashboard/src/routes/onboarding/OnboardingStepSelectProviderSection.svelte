@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
+	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 
 	let {
 		data,
@@ -28,6 +29,18 @@
 		markDiscoveryCandidateConnected,
 		handleContinueToSetup
 	} = $props();
+
+	const growthUpgradePrompt = getUpgradePrompt('growth', 'Azure and GCP coverage');
+	const proUpgradePrompt = getUpgradePrompt('pro', 'Cloud+ connectors');
+	const idpDeepScanPrompt = getUpgradePrompt('pro', 'IdP deep scan');
+	const selectedProviderUpgradePrompt = $derived(
+		(selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseGrowthFeatures()
+			? growthUpgradePrompt
+			: (selectedProvider === 'saas' || selectedProvider === 'license') &&
+					  !canUseCloudPlusFeatures()
+				? proUpgradePrompt
+				: null
+	);
 </script>
 
 <div class="step-content">
@@ -60,7 +73,7 @@
 				<CloudLogo provider="azure" size={32} />
 			</div>
 			<h3>Microsoft Azure</h3>
-			<span class="badge">Growth Tier+</span>
+			<span class="badge">Growth Plan+</span>
 		</button>
 
 		<button
@@ -73,7 +86,7 @@
 				<CloudLogo provider="gcp" size={32} />
 			</div>
 			<h3>Google Cloud</h3>
-			<span class="badge">Growth Tier+</span>
+			<span class="badge">Growth Plan+</span>
 		</button>
 
 		<button
@@ -86,7 +99,7 @@
 				<CloudLogo provider="saas" size={32} />
 			</div>
 			<h3>SaaS Spend Connector</h3>
-			<span class="badge">Pro Tier+</span>
+			<span class="badge">Pro Plan+</span>
 		</button>
 
 		<button
@@ -99,7 +112,7 @@
 				<CloudLogo provider="license" size={32} />
 			</div>
 			<h3>License / ITAM Connector</h3>
-			<span class="badge">Pro Tier+</span>
+			<span class="badge">Pro Plan+</span>
 		</button>
 	</div>
 
@@ -149,7 +162,7 @@
 					{discoveryLoadingStageB ? '⏳ Running Stage B...' : 'Run Stage B'}
 				</button>
 				{#if !canUseIdpDeepScan()}
-					<span class="text-xs text-ink-500">Pro tier required</span>
+					<span class="text-xs text-ink-500">{idpDeepScanPrompt.badge}</span>
 				{/if}
 			</div>
 		</div>
@@ -222,10 +235,14 @@
 		{/if}
 	</div>
 
-	{#if (selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseGrowthFeatures()}
-		<a href={`${base}/billing`} class="primary-btn mt-8">Upgrade to Growth →</a>
-	{:else if (selectedProvider === 'saas' || selectedProvider === 'license') && !canUseCloudPlusFeatures()}
-		<a href={`${base}/billing`} class="primary-btn mt-8">Upgrade to Pro →</a>
+	{#if selectedProviderUpgradePrompt}
+		<div class="mt-8 rounded-2xl border border-ink-800 bg-ink-950/40 p-5 space-y-3">
+			<span class="badge badge-warning">{selectedProviderUpgradePrompt.badge}</span>
+			<h3 class="text-lg font-semibold text-white">{selectedProviderUpgradePrompt.heading}</h3>
+			<p class="text-sm text-ink-300">{selectedProviderUpgradePrompt.body}</p>
+			<p class="text-xs text-ink-500">{selectedProviderUpgradePrompt.footnote}</p>
+			<a href={`${base}/billing`} class="primary-btn mt-2">{selectedProviderUpgradePrompt.cta}</a>
+		</div>
 	{:else}
 		<button type="button" class="primary-btn mt-8" onclick={handleContinueToSetup}>Continue to Setup →</button>
 	{/if}

@@ -113,4 +113,17 @@ describe('settings page integration wiring (advanced)', () => {
 			);
 		});
 	});
+
+	it('explains that activeops automation stays on the Pro lane', async () => {
+		renderPage('growth');
+		await screen.findByText('ActiveOps (Autonomous Remediation)');
+
+		expect(document.body.textContent || '').toMatch(
+			/best for teams that want higher automation depth, finance close support/i
+		);
+		expect(document.body.textContent || '').toMatch(
+			/ActiveOps automation stays on Pro and Enterprise\.\s+Slack and Jira switches in this card apply\s+to remediation policy events, not the general notification channel\./i
+		);
+		expect(screen.getAllByRole('link', { name: /View Pro plan/i }).length).toBeGreaterThan(0);
+	});
 });

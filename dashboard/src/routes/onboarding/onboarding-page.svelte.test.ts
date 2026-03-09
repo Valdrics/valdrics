@@ -80,11 +80,11 @@ function setupPostMocks() {
 	});
 }
 
-function renderPage() {
+function renderPage(tier: string = 'pro') {
 	const data = {
 		user: { id: 'user-id', tenant_id: 'tenant-id' },
 		session: { access_token: 'token' },
-		subscription: { tier: 'pro', status: 'active' }
+		subscription: { tier, status: 'active' }
 	} as unknown as PageData;
 	return render(Page, {
 		data
@@ -183,5 +183,29 @@ describe('onboarding cloud+ flow', () => {
 		});
 		await fireEvent.click(screen.getByRole('button', { name: /Create & Verify Connector/i }));
 		await screen.findByText('connector_config.instance_url is required for Salesforce.');
+	});
+
+	it('shows growth plan prompt when Azure onboarding is selected below growth', async () => {
+		renderPage('free');
+
+		await fireEvent.click(screen.getByRole('button', { name: /Microsoft Azure/i }));
+
+		expect(screen.getByText('Move to Growth for Azure and GCP coverage')).toBeTruthy();
+		expect(document.body.textContent || '').toMatch(
+			/best for teams that need broader provider coverage, owner routing, slack-integrated workflows, sso rollout/i
+		);
+		expect(screen.getByRole('link', { name: /View Growth plan/i })).toBeTruthy();
+	});
+
+	it('shows pro plan prompt when SaaS onboarding is selected below pro', async () => {
+		renderPage('growth');
+
+		await fireEvent.click(screen.getByRole('button', { name: /SaaS Spend Connector/i }));
+
+		expect(screen.getByText('Move to Pro for Cloud+ connectors')).toBeTruthy();
+		expect(document.body.textContent || '').toMatch(
+			/best for teams that want higher automation depth, finance close support, cloud-plus connectors/i
+		);
+		expect(screen.getByRole('link', { name: /View Pro plan/i })).toBeTruthy();
 	});
 });

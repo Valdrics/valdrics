@@ -7,7 +7,7 @@ import inspect
 import uuid
 import structlog
 from collections.abc import AsyncIterator, Callable
-from typing import Dict, Any, List, Awaitable, cast
+from typing import Dict, Any, List, cast
 from datetime import datetime, timezone, timedelta
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
@@ -56,7 +56,7 @@ REPORTING_ATTRIBUTION_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
 class ReportingService(BaseService):
     def __init__(
         self,
-        db,
+        db: Any,
         *,
         adapter_resolver: Callable[[Any], Any] | None = None,
     ):
@@ -157,7 +157,7 @@ class ReportingService(BaseService):
                 if inspect.isawaitable(cost_stream_or_awaitable):
                     cost_stream = cast(
                         AsyncIterator[Dict[str, Any]],
-                        await cast(Awaitable[Any], cost_stream_or_awaitable),
+                        await cost_stream_or_awaitable,
                     )
                 else:
                     cost_stream = cast(

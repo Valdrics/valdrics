@@ -16,7 +16,7 @@ class GCPStopInstanceAction(BaseGCPAction):
         client = await self._get_instances_client(context)
         operation = client.stop(project=project, zone=zone, instance=instance)
         # Wait for operation
-        operation.result()  # type: ignore[no-untyped-call]
+        operation.result()
 
         return ExecutionResult(
             status=ExecutionStatus.SUCCESS,
@@ -45,7 +45,7 @@ class GCPResizeInstanceAction(BaseGCPAction):
         
         # 1. GCP Resize requires instance to be TERMINATED (stopped)
         stop_op = client.stop(project=project, zone=zone, instance=instance)
-        stop_op.result()  # type: ignore[no-untyped-call]
+        stop_op.result()
         
         # 2. Set machine type
         # machine_type should be the full URI or just the name depending on the SDK version
@@ -61,11 +61,11 @@ class GCPResizeInstanceAction(BaseGCPAction):
             instance=instance, 
             instances_set_machine_type_request_resource=request
         )
-        set_op.result()  # type: ignore[no-untyped-call]
+        set_op.result()
         
         # 3. Start instance
         start_op = client.start(project=project, zone=zone, instance=instance)
-        start_op.result()  # type: ignore[no-untyped-call]
+        start_op.result()
 
         return ExecutionResult(
             status=ExecutionStatus.SUCCESS,

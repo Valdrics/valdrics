@@ -299,6 +299,10 @@ def test_run_release_gate_invokes_enterprise_gate_with_env(
         "scripts.run_enforcement_release_evidence_gate.subprocess.run",
         _fake_run,
     )
+    monkeypatch.setattr(
+        "scripts.run_enforcement_release_evidence_gate._resolve_uv_executable",
+        lambda: "uv",
+    )
 
     exit_code = run_release_gate(
         stress_evidence_path=stress,
@@ -424,6 +428,10 @@ def test_main_dry_run_succeeds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(
         "scripts.run_enforcement_release_evidence_gate.subprocess.run",
         lambda cmd, *, check, env: subprocess.CompletedProcess(args=cmd, returncode=0),
+    )
+    monkeypatch.setattr(
+        "scripts.run_enforcement_release_evidence_gate._resolve_uv_executable",
+        lambda: "uv",
     )
 
     exit_code = main(

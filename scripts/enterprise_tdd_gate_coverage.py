@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import fnmatch
 import re
-import xml.etree.ElementTree as ET
 from collections.abc import Sequence
 from dataclasses import dataclass
+from defusedxml import ElementTree as DefusedET
 from pathlib import Path
 
 
@@ -56,7 +56,7 @@ def compute_coverage_subset_from_xml(
     include_patterns: Sequence[str],
     repo_root: Path,
 ) -> CoverageSubsetTotals:
-    tree = ET.parse(xml_path)
+    tree = DefusedET.parse(xml_path)
     root = tree.getroot()
     source_roots = tuple(
         Path(node.text)

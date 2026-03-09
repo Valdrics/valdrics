@@ -1,7 +1,9 @@
 import pytest
 from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
 from slack_sdk.errors import SlackApiError
-from app.modules.notifications.domain.slack import SlackService
+from app.modules.notifications.domain.slack import SlackService, get_tenant_slack_service
+from app.shared.core.pricing import PricingTier
 
 
 @pytest.fixture
@@ -117,3 +119,44 @@ async def test_notify_zombies(slack_service):
     args = slack_service.send_alert.await_args[1]
     assert "Zombie Resources Detected" in args["title"]
     assert "Ec2 Instances: 1" in args["message"]
+
+
+@pytest.mark.asyncio
+async def test_get_tenant_slack_service_blocks_lower_tiers():
+    db = AsyncMock()
+    db.execute.side_effect = [
+        SimpleNamespace(scalar_one_or_none=lambda: PricingTier.STARTER.value),
+        SimpleNamespace(scalar_one_or_none=lambda: SimpleNamespace(slack_enabled=True)),
+    ]
+
+    with patch("app.shared.core.config.get_settings") as mock_settings:
+        mock_settings.return_value = SimpleNamespace(
+            SLACK_BOT_TOKEN="xoxb-test",
+            SLACK_CHANNEL_ID="C12345",
+        )
+        result = await get_tenant_slack_service(db, "9e96fe38-11f0-4d72-a4ca-4ed886f30f5e")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_get_tenant_slack_service_allows_growth_and_above():
+    db = AsyncMock()
+    db.execute.side_effect = [
+        SimpleNamespace(scalar_one_or_none=lambda: PricingTier.GROWTH.value),
+        SimpleNamespace(
+            scalar_one_or_none=lambda: SimpleNamespace(
+                slack_enabled=True,
+                slack_channel_override="#ops",
+            )
+        ),
+    ]
+
+    with patch("app.shared.core.config.get_settings") as mock_settings:
+        mock_settings.return_value = SimpleNamespace(
+            SLACK_BOT_TOKEN="xoxb-test",
+            SLACK_CHANNEL_ID="C12345",
+        )
+        result = await get_tenant_slack_service(db, "9e96fe38-11f0-4d72-a4ca-4ed886f30f5e")
+
+    assert isinstance(result, SlackService)

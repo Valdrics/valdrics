@@ -1,5 +1,5 @@
 export const INITIAL_NOTIFICATION_SETTINGS = {
-	slack_enabled: true,
+	slack_enabled: false,
 	slack_channel_override: '',
 	jira_enabled: false,
 	jira_base_url: '',

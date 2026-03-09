@@ -4,14 +4,17 @@ Email Notification Service
 Sends carbon budget alerts via email using SMTP.
 """
 
-import smtplib
 import html
-import anyio
+import smtplib
 from datetime import datetime
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import List, Dict, Any
+from typing import Any, Dict, List
+
+import anyio
 import structlog
+
+from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
 EMAIL_DELIVERY_RECOVERABLE_EXCEPTIONS = (
@@ -21,6 +24,31 @@ EMAIL_DELIVERY_RECOVERABLE_EXCEPTIONS = (
     TypeError,
     ValueError,
 )
+SALES_INQUIRY_PRIMARY_RECIPIENT = "enterprise@valdrics.com"
+SALES_INQUIRY_CC_RECIPIENTS = ("sales@valdrics.com",)
+
+
+def get_operational_email_service(settings: object | None = None) -> "EmailService":
+    """Build the SMTP-backed service used for operational notifications."""
+    settings_obj = settings or get_settings()
+    smtp_host = str(getattr(settings_obj, "SMTP_HOST", "") or "").strip()
+    smtp_user = str(getattr(settings_obj, "SMTP_USER", "") or "").strip()
+    smtp_password = str(getattr(settings_obj, "SMTP_PASSWORD", "") or "").strip()
+    from_email = str(
+        getattr(settings_obj, "SMTP_FROM", "alerts@valdrics.ai") or ""
+    ).strip()
+    smtp_port = int(getattr(settings_obj, "SMTP_PORT", 587) or 587)
+    if not smtp_host or not smtp_user or not smtp_password or not from_email:
+        raise RuntimeError("smtp_not_configured_for_operational_email")
+    if smtp_port <= 0:
+        raise RuntimeError("smtp_port_invalid_for_operational_email")
+    return EmailService(
+        smtp_host=smtp_host,
+        smtp_port=smtp_port,
+        smtp_user=smtp_user,
+        smtp_password=smtp_password,
+        from_email=from_email,
+    )
 
 
 def escape_html(text: str) -> str:
@@ -355,4 +383,110 @@ class EmailService:
 
         except EMAIL_DELIVERY_RECOVERABLE_EXCEPTIONS as e:
             logger.error("account_downgraded_email_failed", error=str(e))
+            return False
+
+    async def send_sales_inquiry_notification(
+        self,
+        *,
+        inquiry_id: str,
+        submitted_at: datetime,
+        name: str,
+        email: str,
+        company: str,
+        role: str | None,
+        team_size: str | None,
+        deployment_scope: str | None,
+        timeline: str | None,
+        interest_area: str | None,
+        message: str | None,
+        source: str | None,
+        referrer: str | None,
+        utm_source: str | None,
+        utm_medium: str | None,
+        utm_campaign: str | None,
+    ) -> bool:
+        """Send a durable sales-intake inquiry notification."""
+        recipients = [SALES_INQUIRY_PRIMARY_RECIPIENT, *SALES_INQUIRY_CC_RECIPIENTS]
+
+        try:
+            subject = (
+                f"Valdrics sales inquiry: {company}"
+                + (f" ({interest_area})" if interest_area else "")
+            )
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = _sanitize_header_value(subject)
+            msg["From"] = _sanitize_header_value(self.from_email)
+            msg["To"] = _sanitize_header_value(SALES_INQUIRY_PRIMARY_RECIPIENT)
+            msg["Cc"] = _sanitize_header_value(", ".join(SALES_INQUIRY_CC_RECIPIENTS))
+            msg["Reply-To"] = _sanitize_header_value(email)
+
+            html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f3f7fb; color: #0f172a; }}
+        .container {{ max-width: 680px; margin: 0 auto; padding: 24px; }}
+        .hero {{ background: linear-gradient(145deg, #07121c, #0b1b28); color: #f8fbff; padding: 24px; border-radius: 18px 18px 0 0; }}
+        .hero p {{ color: #b8d5df; }}
+        .content {{ background: #ffffff; border: 1px solid #d8e7ef; border-top: 0; border-radius: 0 0 18px 18px; padding: 24px; }}
+        .grid {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }}
+        .card {{ background: #f8fbfd; border: 1px solid #d7e8ef; border-radius: 12px; padding: 14px; }}
+        .label {{ display: block; margin-bottom: 6px; font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #129ec0; }}
+        .value {{ font-size: 14px; line-height: 1.6; color: #0f172a; }}
+        .message {{ white-space: pre-wrap; }}
+        .foot {{ color: #64748b; font-size: 12px; margin-top: 18px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>New Valdrics sales inquiry</h1>
+            <p>Inquiry ID {escape_html(inquiry_id)} arrived on {escape_html(submitted_at.isoformat())}.</p>
+        </div>
+        <div class="content">
+            <div class="grid">
+                <div class="card"><span class="label">Name</span><div class="value">{escape_html(name)}</div></div>
+                <div class="card"><span class="label">Work email</span><div class="value">{escape_html(email)}</div></div>
+                <div class="card"><span class="label">Company</span><div class="value">{escape_html(company)}</div></div>
+                <div class="card"><span class="label">Role</span><div class="value">{escape_html(role or "Not provided")}</div></div>
+                <div class="card"><span class="label">Team size</span><div class="value">{escape_html(team_size or "Not provided")}</div></div>
+                <div class="card"><span class="label">Timeline</span><div class="value">{escape_html(timeline or "Not provided")}</div></div>
+                <div class="card"><span class="label">Interest area</span><div class="value">{escape_html(interest_area or "Not provided")}</div></div>
+                <div class="card"><span class="label">Scope</span><div class="value">{escape_html(deployment_scope or "Not provided")}</div></div>
+            </div>
+            <div class="card">
+                <span class="label">Message</span>
+                <div class="value message">{escape_html(message or "No additional context provided.")}</div>
+            </div>
+            <div class="grid" style="margin-top: 12px;">
+                <div class="card"><span class="label">Source</span><div class="value">{escape_html(source or "Not provided")}</div></div>
+                <div class="card"><span class="label">Referrer</span><div class="value">{escape_html(referrer or "Not provided")}</div></div>
+                <div class="card"><span class="label">UTM source</span><div class="value">{escape_html(utm_source or "Not provided")}</div></div>
+                <div class="card"><span class="label">UTM medium</span><div class="value">{escape_html(utm_medium or "Not provided")}</div></div>
+                <div class="card"><span class="label">UTM campaign</span><div class="value">{escape_html(utm_campaign or "Not provided")}</div></div>
+            </div>
+            <p class="foot">Reply directly to this email to continue the conversation with the buyer.</p>
+        </div>
+    </div>
+</body>
+</html>
+"""
+
+            msg.attach(MIMEText(html_body, "html"))
+            await self._send_message(msg, recipients)
+
+            logger.info(
+                "sales_inquiry_email_sent",
+                inquiry_id=inquiry_id,
+                recipient_count=len(recipients),
+            )
+            return True
+
+        except EMAIL_DELIVERY_RECOVERABLE_EXCEPTIONS as e:
+            logger.error(
+                "sales_inquiry_email_failed",
+                inquiry_id=inquiry_id,
+                error=str(e),
+            )
             return False

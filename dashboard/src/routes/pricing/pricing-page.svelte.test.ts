@@ -61,6 +61,15 @@ describe('pricing page public messaging', () => {
 			screen.getByText(/one team needs daily review cadence, limited azure\/gcp visibility/i)
 		).toBeTruthy();
 		expect(
+			screen.getByText(/\$49\/mo starting price\. priced for the first team that needs daily review cadence/i)
+		).toBeTruthy();
+		expect(
+			screen.getByText(/\$149\/mo starting price\. priced for the first cross-functional rollout/i)
+		).toBeTruthy();
+		expect(
+			screen.getByText(/\$299\/mo starting price\. priced for finance-grade operations/i)
+		).toBeTruthy();
+		expect(
 			screen.getByText(/teams usually move up when finance close, auditability, cloud\+ connectors/i)
 		).toBeTruthy();
 

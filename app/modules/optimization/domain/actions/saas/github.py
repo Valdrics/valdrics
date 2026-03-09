@@ -34,7 +34,7 @@ class GitHubRevokeSeatAction(BaseSaaSAction):
         credentials = self._build_credentials(context.credentials or {})
         connector_config = credentials.connector_config
         raw_token = credentials.api_key
-        token = ""
+        token: str | None = None
         if raw_token is not None:
             token = (
                 raw_token.get_secret_value()

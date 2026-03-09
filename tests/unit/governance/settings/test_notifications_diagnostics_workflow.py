@@ -36,6 +36,7 @@ async def test_policy_notification_diagnostics_missing_config(
     assert data["has_activeops_settings"] is False
     assert data["has_notification_settings"] is False
     assert data["slack"]["ready"] is False
+    assert data["slack"]["feature_allowed_by_tier"] is True
     assert "missing_slack_bot_token" in data["slack"]["reasons"]
     assert "missing_slack_channel_target" in data["slack"]["reasons"]
     assert data["jira"]["ready"] is False
@@ -91,6 +92,7 @@ async def test_policy_notification_diagnostics_ready(
     data = response.json()
     assert data["policy_enabled"] is True
     assert data["slack"]["ready"] is True
+    assert data["slack"]["feature_allowed_by_tier"] is True
     assert data["slack"]["channel_source"] == "tenant_override"
     assert data["jira"]["ready"] is True
     assert data["jira"]["feature_allowed_by_tier"] is True
@@ -141,9 +143,55 @@ async def test_policy_notification_diagnostics_jira_tier_blocked(
 
     assert response.status_code == 200
     data = response.json()
+    assert data["slack"]["feature_allowed_by_tier"] is True
     assert data["jira"]["ready"] is False
     assert data["jira"]["feature_allowed_by_tier"] is False
     assert "tier_missing_incident_integrations_feature" in data["jira"]["reasons"]
+
+
+@pytest.mark.asyncio
+async def test_policy_notification_diagnostics_slack_tier_blocked(
+    async_client: AsyncClient,
+    db,
+    app,
+    make_current_user,
+    override_current_user,
+) -> None:
+    tenant_id = uuid.uuid4()
+    admin = make_current_user(tier=PricingTier.STARTER, tenant_id=tenant_id)
+    db.add(
+        NotificationSettings(
+            tenant_id=tenant_id,
+            slack_enabled=True,
+            slack_channel_override="#finops-alerts",
+        )
+    )
+    db.add(
+        RemediationSettings(
+            tenant_id=tenant_id,
+            policy_enabled=True,
+            policy_violation_notify_slack=True,
+        )
+    )
+    await db.commit()
+
+    mock_settings = Settings()
+    mock_settings.SLACK_BOT_TOKEN = "xoxb-test"
+    mock_settings.SLACK_CHANNEL_ID = "C12345"
+
+    with (
+        override_current_user(app, admin),
+        patch("app.shared.core.config.get_settings", return_value=mock_settings),
+    ):
+        response = await async_client.get(
+            "/api/v1/settings/notifications/policy-diagnostics"
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["slack"]["feature_allowed_by_tier"] is False
+    assert data["slack"]["ready"] is False
+    assert "tier_missing_slack_integration_feature" in data["slack"]["reasons"]
 
 
 @pytest.mark.asyncio

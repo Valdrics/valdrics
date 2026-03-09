@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
+import subprocess  # nosec B404 - controlled local verifier execution only
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -142,7 +142,7 @@ def _run_probe(
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
-        )
+        )  # nosec B603 - commands come from a static, repo-local runtime probe registry
     except subprocess.TimeoutExpired as exc:
         return False, f"timeout after {timeout_seconds:.1f}s ({exc})"
 

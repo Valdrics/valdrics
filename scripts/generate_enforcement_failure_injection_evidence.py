@@ -5,7 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
+import subprocess  # nosec B404 - controlled local pytest invocation only
+import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -90,8 +91,22 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _validate_selector(selector: str) -> str:
+    candidate = str(selector or "").strip()
+    if not candidate or candidate.startswith("-") or not candidate.startswith("tests/"):
+        raise ValueError(f"Invalid pytest selector: {selector!r}")
+    return candidate
+
+
 def _run_scenario(scenario: FailureScenario, *, cwd: Path) -> tuple[dict[str, object], bool]:
-    command = ["uv", "run", "pytest", "--no-cov", "-q", *scenario.selectors]
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "--no-cov",
+        "-q",
+        *(_validate_selector(selector) for selector in scenario.selectors),
+    ]
     started = time.perf_counter()
     result = subprocess.run(
         command,
@@ -99,7 +114,7 @@ def _run_scenario(scenario: FailureScenario, *, cwd: Path) -> tuple[dict[str, ob
         capture_output=True,
         text=True,
         check=False,
-    )
+    )  # nosec B603 - pytest invocation uses static repo-local selectors
     duration_seconds = round(time.perf_counter() - started, 3)
     passed = result.returncode == 0
     scenario_payload = {

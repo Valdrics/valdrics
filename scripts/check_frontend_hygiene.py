@@ -21,6 +21,7 @@ from pathlib import Path
 
 ALLOWED_PUBLIC_API_URL_FILES = {
     Path("dashboard/src/lib/edgeProxy.ts"),
+    Path("dashboard/src/lib/server/backend-origin.ts"),
     Path("dashboard/src/routes/api/edge/[...path]/+server.ts"),
     Path("dashboard/src/lib/components/IdentitySettingsCard.svelte"),
     Path("dashboard/src/lib/components/IdentitySettingsCardContent.svelte"),

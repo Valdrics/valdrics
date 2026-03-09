@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 
 	const apiGroups = [
 		{
@@ -17,13 +18,13 @@
 	];
 </script>
 
-<svelte:head>
-	<title>API Reference | Valdrics</title>
-	<meta
-		name="description"
-		content="Valdrics API guide for integration teams: endpoint groups, authentication expectations, and practical request examples."
-	/>
-</svelte:head>
+<PublicPageMeta
+	title="API Reference"
+	description="Valdrics API guide for integration teams: endpoint groups, authentication expectations, and practical request examples."
+	pageType="WebPage"
+	pageSection="API Reference"
+	keywords={['api', 'integration', 'auth', 'costs', 'governance']}
+/>
 
 <section class="container mx-auto px-6 py-12 space-y-8">
 	<header class="space-y-3">

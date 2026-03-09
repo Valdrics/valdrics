@@ -98,7 +98,8 @@ async def stress_test_leaderboard(n_users=100, n_remediations=5000):
     duration = time.perf_counter() - start_time
     print(f"📊 Leaderboard query (Top 100) took: {duration:.4f}s")
 
-    assert len(rows) > 0
+    if not rows:
+        raise RuntimeError("Leaderboard query returned no rows")
     print(f"✅ Performance Verification PASSED: {duration:.4f}s (< 0.1s SLA)")
 
 

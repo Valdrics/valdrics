@@ -72,8 +72,8 @@ async def test_zombie_service_field_masking_starter():
             idle_instances = results["idle_instances"]
             assert len(idle_instances) == 2
             for item in idle_instances:
-                assert item["owner"] == "Upgrade to Growth"
-                assert item["is_gpu"] == "Upgrade to Growth"
+                assert item["owner"] == "Growth Plan Required"
+                assert item["is_gpu"] == "Growth Plan Required"
 
 
 @pytest.mark.asyncio

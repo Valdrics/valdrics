@@ -120,7 +120,7 @@ async def load_public_plans(
     except BILLING_PLAN_RECOVERABLE_ERRORS as exc:
         logger.warning("failed_to_fetch_plans_from_db", error=str(exc))
 
-    public_plans: list[dict[str, Any]] = []
+    fallback_public_plans: list[dict[str, Any]] = []
     for tier in (
         PricingTier.FREE,
         PricingTier.STARTER,
@@ -129,9 +129,9 @@ async def load_public_plans(
     ):
         plan = build_catalog_plan(tier)
         if plan is not None:
-            public_plans.append(plan)
+            fallback_public_plans.append(plan)
 
-    return _sort_public_plans(public_plans)
+    return _sort_public_plans(fallback_public_plans)
 
 
 def _usage_item(connected: int, limit_value: Any) -> ConnectionUsageItem:

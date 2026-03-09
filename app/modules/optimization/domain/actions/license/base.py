@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Protocol
 
 import structlog
 
@@ -19,10 +19,19 @@ LICENSE_RECLAMATION_RECOVERABLE_EXCEPTIONS = (
 
 
 class _LicenseAdapterProxy:
-    def __call__(self, *args: object, **kwargs: object) -> object:
+    def __call__(self, credentials: LicenseCredentials) -> "_LicenseAdapterProtocol":
         from app.shared.adapters.license import LicenseAdapter as _LicenseAdapter
 
-        return _LicenseAdapter(*args, **kwargs)
+        return _LicenseAdapter(credentials)
+
+
+class _LicenseAdapterProtocol(Protocol):
+    @property
+    def _vendor(self) -> str: ...
+
+    async def revoke_license(
+        self, resource_id: str, sku_id: str | None = None
+    ) -> bool: ...
 
 
 LicenseAdapter = _LicenseAdapterProxy()

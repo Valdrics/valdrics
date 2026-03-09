@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
+import { readable } from 'svelte/store';
 import Page from './+page.svelte';
 
 vi.mock('$app/paths', () => ({
-	base: ''
+	base: '',
+	assets: ''
+}));
+
+vi.mock('$app/stores', () => ({
+	page: readable({ url: new URL('https://example.com/docs/technical-validation') })
 }));
 
 describe('technical validation page', () => {

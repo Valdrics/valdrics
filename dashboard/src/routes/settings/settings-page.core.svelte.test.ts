@@ -5,6 +5,7 @@ import {
 	endpoint,
 	getMock,
 	invalidateAllMock,
+	jsonResponse,
 	postMock,
 	putMock,
 	renderPage,
@@ -110,5 +111,65 @@ describe('settings page integration wiring (core)', () => {
 			);
 		});
 		await screen.findByText('Failed to save settings');
+	});
+
+	it('shows Growth as the Slack floor while keeping Pro automation integrations separate', async () => {
+		setupApiMocks({
+			getOverrides: {
+				[endpoint('/settings/notifications')]: jsonResponse({
+					slack_enabled: false,
+					slack_channel_override: '',
+					jira_enabled: false,
+					jira_base_url: '',
+					jira_email: '',
+					jira_project_key: '',
+					jira_issue_type: 'Task',
+					has_jira_api_token: false,
+					teams_enabled: false,
+					teams_webhook_url: '',
+					has_teams_webhook_url: false,
+					workflow_github_enabled: false,
+					workflow_github_owner: '',
+					workflow_github_repo: '',
+					workflow_github_workflow_id: '',
+					workflow_github_ref: 'main',
+					workflow_has_github_token: false,
+					workflow_gitlab_enabled: false,
+					workflow_gitlab_base_url: 'https://gitlab.com',
+					workflow_gitlab_project_id: '',
+					workflow_gitlab_ref: 'main',
+					workflow_has_gitlab_trigger_token: false,
+					workflow_webhook_enabled: false,
+					workflow_webhook_url: '',
+					workflow_has_webhook_bearer_token: false,
+					digest_schedule: 'daily',
+					digest_hour: 9,
+					digest_minute: 0,
+					alert_on_budget_warning: true,
+					alert_on_budget_exceeded: true,
+					alert_on_zombie_detected: true
+				})
+			}
+		});
+		renderPage('starter');
+
+		await screen.findByText('Slack Notifications');
+
+		expect(
+			screen.getByText(
+				/Slack delivery and test routing start on Growth\. Jira, Teams, and workflow dispatch stay in the Pro automation lane\./i
+			)
+		).toBeTruthy();
+		expect(screen.getAllByText('Growth Plan Required').length).toBeGreaterThan(0);
+		expect(
+			screen.getByText(/Create Jira issues from policy and remediation events on Pro and Enterprise\./i)
+		).toBeTruthy();
+		expect(
+			screen.getByText(/Route policy and remediation alerts into Teams on Pro and Enterprise\./i)
+		).toBeTruthy();
+		expect((screen.getByLabelText('Enable Slack notifications') as HTMLInputElement).disabled).toBe(true);
+		expect(
+			(screen.getByRole('button', { name: /Send test Slack notification/i }) as HTMLButtonElement).disabled
+		).toBe(true);
 	});
 });
