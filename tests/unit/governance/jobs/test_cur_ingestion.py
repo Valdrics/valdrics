@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,6 +21,7 @@ async def test_run_uses_existing_db():
 @pytest.mark.asyncio
 async def test_run_without_db_uses_session_maker():
     session = MagicMock()
+    session.commit = AsyncMock()
 
     @asynccontextmanager
     async def fake_session_maker():
@@ -33,7 +35,8 @@ async def test_run_without_db_uses_session_maker():
         with patch.object(job, "_execute", new_callable=AsyncMock) as mock_execute:
             await job.run(connection_id="conn-2", tenant_id="tenant-2")
             mock_execute.assert_awaited_once_with("conn-2", "tenant-2")
-            assert job.db is session
+            session.commit.assert_awaited_once()
+            assert job.db is None
 
 
 @pytest.mark.asyncio
@@ -103,33 +106,76 @@ async def test_execute_requires_tenant_scope():
 async def test_ingest_uses_configured_bucket():
     conn = SimpleNamespace(
         id="conn-3",
+        tenant_id="tenant-3",
         aws_account_id="123456789012",
         region="us-east-1",
         cur_bucket_name="custom-cur-bucket",
+        last_ingested_at=None,
     )
-    job = CURIngestionJob()
+    db = MagicMock()
+    db.add = MagicMock()
+    job = CURIngestionJob(db=db)
+    adapter = MagicMock()
 
-    with patch(
-        "app.modules.governance.domain.jobs.cur_ingestion.logger"
-    ) as mock_logger:
+    async def _stream_costs(**kwargs):
+        del kwargs
+        yield {
+            "timestamp": datetime(2026, 3, 1, tzinfo=timezone.utc),
+            "service": "AmazonEC2",
+            "region": "us-east-1",
+            "cost_usd": 12.5,
+            "currency": "USD",
+        }
+
+    adapter.stream_cost_and_usage = _stream_costs
+    persistence = AsyncMock()
+    persistence.save_records_stream = AsyncMock(return_value={"records_saved": 1})
+
+    with (
+        patch.object(job, "_build_cur_adapter", return_value=adapter),
+        patch.object(job, "_build_persistence_service", return_value=persistence),
+        patch("app.modules.governance.domain.jobs.cur_ingestion.logger") as mock_logger,
+    ):
         await job.ingest_for_connection(conn)
 
-        mock_logger.info.assert_called_once_with(
-            "cur_ingestion_simulated_success",
-            connection_id="conn-3",
-            bucket="custom-cur-bucket",
-        )
+    persistence.save_records_stream.assert_awaited_once()
+    assert conn.last_ingested_at is not None
+    mock_logger.info.assert_called_once()
+    assert mock_logger.info.call_args.kwargs["connection_id"] == "conn-3"
+    assert mock_logger.info.call_args.kwargs["bucket"] == "custom-cur-bucket"
+    assert mock_logger.info.call_args.kwargs["records_saved"] == 1
 
 
 @pytest.mark.asyncio
 async def test_ingest_uses_resolved_region_for_bucket_suffix_when_hint_is_global():
     conn = SimpleNamespace(
         id="conn-4",
+        tenant_id="tenant-4",
         aws_account_id="123456789012",
         region="global",
         cur_bucket_name=None,
+        last_ingested_at=None,
     )
-    job = CURIngestionJob()
+    db = MagicMock()
+    db.add = MagicMock()
+    job = CURIngestionJob(db=db)
+    adapter = MagicMock()
+
+    async def _stream_costs(**kwargs):
+        del kwargs
+        if False:
+            yield {}
+
+    adapter.stream_cost_and_usage = _stream_costs
+    persistence = AsyncMock()
+    
+    async def _consume(records, **kwargs):
+        del kwargs
+        async for _ in records:
+            pass
+        return {"records_saved": 0}
+
+    persistence.save_records_stream = AsyncMock(side_effect=_consume)
 
     with (
         patch(
@@ -139,15 +185,61 @@ async def test_ingest_uses_resolved_region_for_bucket_suffix_when_hint_is_global
                 AWS_DEFAULT_REGION="eu-west-1",
             ),
         ),
+        patch.object(job, "_build_cur_adapter", return_value=adapter),
+        patch.object(job, "_build_persistence_service", return_value=persistence),
         patch("app.modules.governance.domain.jobs.cur_ingestion.logger") as mock_logger,
     ):
         await job.ingest_for_connection(conn)
 
-    mock_logger.info.assert_called_once_with(
-        "cur_ingestion_simulated_success",
-        connection_id="conn-4",
-        bucket="valdrics-cur-123456789012-eu-west-1",
+    mock_logger.info.assert_called_once()
+    assert (
+        mock_logger.info.call_args.kwargs["bucket"]
+        == "valdrics-cur-123456789012-eu-west-1"
     )
+
+
+@pytest.mark.asyncio
+async def test_ingest_for_connection_uses_last_ingested_overlap_window():
+    conn = SimpleNamespace(
+        id="conn-6",
+        tenant_id="tenant-6",
+        aws_account_id="123456789012",
+        region="us-east-1",
+        cur_bucket_name="cur-bucket",
+        last_ingested_at=datetime(2026, 3, 5, 12, 0, tzinfo=timezone.utc),
+    )
+    db = MagicMock()
+    db.add = MagicMock()
+    job = CURIngestionJob(db=db)
+    adapter = MagicMock()
+    captured_window: dict[str, datetime] = {}
+
+    async def _stream_costs(**kwargs):
+        captured_window.update(kwargs)
+        if False:
+            yield {}
+
+    adapter.stream_cost_and_usage = _stream_costs
+    persistence = AsyncMock()
+
+    async def _consume(records, **kwargs):
+        del kwargs
+        async for _ in records:
+            pass
+        return {"records_saved": 0}
+
+    persistence.save_records_stream = AsyncMock(side_effect=_consume)
+
+    with (
+        patch.object(job, "_build_cur_adapter", return_value=adapter),
+        patch.object(job, "_build_persistence_service", return_value=persistence),
+    ):
+        await job.ingest_for_connection(conn)
+
+    assert captured_window["start_date"] == datetime(
+        2026, 3, 4, 12, 0, tzinfo=timezone.utc
+    )
+    assert captured_window["granularity"] == "HOURLY"
 
 
 @pytest.mark.asyncio

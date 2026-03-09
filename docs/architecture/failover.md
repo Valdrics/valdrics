@@ -37,8 +37,14 @@ Optional automated failover surface:
 - the root Terraform outputs expose `secondary_eks_cluster_name` and
   `secondary_db_endpoint`
 - `.github/workflows/regional-failover.yml` executes the scripted cutover path
+- `.github/workflows/regional-failover.yml` requires `aws_role_to_assume` and
+  configures AWS credentials through GitHub OIDC before mutation
 - `scripts/run_regional_failover.py` promotes the secondary DB replica, verifies
-  `health/live`, and updates Cloudflare DNS for API cutover
+  both `/health/live` and dependency-aware `/health`, requires healthy
+  background job processing plus Celery worker heartbeat coverage, and only
+  accepts a Cloudflare API response when `success=true`
+- the automated cutover evidence records `aws_execution_identity` so the
+  assumed AWS principal is part of the failover artifact
 - the automated cutover evidence records
   `regional_recovery_mode=automated_secondary_region_failover`
 
@@ -69,8 +75,8 @@ Cross-region recovery has two supported paths:
 2. Automated warm-standby profile when `enable_multi_region_failover=true` is enabled:
 
    1. Keep the secondary region provisioned with standby EKS, cache, and cross-region DB replica resources.
-   2. Execute `scripts/run_regional_failover.py` or `.github/workflows/regional-failover.yml`.
-   3. Promote the secondary DB replica and cut Cloudflare API DNS to the secondary origin.
+   2. Execute `scripts/run_regional_failover.py` or `.github/workflows/regional-failover.yml` with `aws_role_to_assume`.
+   3. Promote the secondary DB replica, verify `/health/live` and `/health`, require healthy worker heartbeat coverage, and cut Cloudflare API DNS to the secondary origin only when the API reports dependency-ready status and Cloudflare returns `success=true`.
 
 ## What This Document Does Not Claim
 

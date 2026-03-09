@@ -8,56 +8,16 @@
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import {
 		FREE_TIER_HIGHLIGHTS,
-		FREE_TIER_LIMIT_NOTE
+		FREE_TIER_LIMIT_NOTE,
+		PLANS_PRICING_EXPLANATION
 	} from '$lib/landing/heroContent.extended';
 	import { normalizeCheckoutUrl } from '$lib/utils';
 	import type { PageData } from './$types';
-	import type { PricingPlan } from './plans';
-	import { DEFAULT_PRICING_PLANS } from './plans';
+	import type { PricingPlan, PricingPlanStory } from './plans';
+	import { DEFAULT_PRICING_PLANS, mergePricingPlans } from './plans';
 	import './pricing-page.css';
 
 	type BillingCycle = 'monthly' | 'annual';
-
-	type PlanPresentation = {
-		badge: string;
-		headline: string;
-		summary: string;
-		note: string;
-	};
-
-	const PLAN_ORDER = ['free', 'starter', 'growth', 'pro'] as const;
-
-	const PLAN_PRESENTATION: Record<string, PlanPresentation> = {
-		free: {
-			badge: 'Start here first',
-			headline: 'Free tier for your first savings workflow',
-			summary:
-				'Start at $0, prove one workflow, and upgrade only when you need more coverage, automation, or governance depth.',
-			note:
-				'Free is best for proving one workflow before you expand into multi-cloud coverage, deeper automation, or expanded governance support.'
-		},
-		starter: {
-			badge: 'Focused operator lane',
-			headline: 'Structured control for one provider scope',
-			summary:
-				'Best for a smaller operating scope when one team needs clearer owner routing, stronger alerts, and more repeatable weekly review.',
-			note: 'Best fit for a single-provider operating scope with one core review team.'
-		},
-		growth: {
-			badge: 'Most popular',
-			headline: 'Multi-cloud execution with approvals attached',
-			summary:
-				'Best for teams that need broader provider coverage, owner routing, approval checkpoints, and guided execution across functions.',
-			note: 'Built for broader provider coverage and stronger cross-functional governance.'
-		},
-		pro: {
-			badge: 'Automation lane',
-			headline: 'Deeper automation, API access, and proof',
-			summary:
-				'Best for teams that want higher automation depth, finance-grade exports, and stronger evidence for leadership, security, and audit review.',
-			note: 'Adds deeper automation, API access, and stronger governance evidence.'
-		}
-	};
 
 	const HERO_META = [
 		{
@@ -70,13 +30,13 @@
 		},
 		{
 			label: 'Upgrade model',
-			value: 'Move up only when you need more coverage, automation, or governance depth'
+			value: 'Move up only when you need broader provider coverage, team rollout controls, or finance-grade governance'
 		}
 	] as const;
 
 	const BUYING_NOTES = [
 		'Prices are shown in USD for easy plan comparison.',
-		'The free tier does not require a checkout session.'
+		'The permanent free tier does not require a checkout session.'
 	] as const;
 
 	let { data }: { data: PageData } = $props();
@@ -85,34 +45,24 @@
 	let upgrading = $state('');
 	let error = $state('');
 
-	function mergePlans(incomingPlans: PricingPlan[]): PricingPlan[] {
-		const byId = new Map(DEFAULT_PRICING_PLANS.map((plan) => [plan.id, plan] as const));
-		for (const plan of incomingPlans) {
-			const existing = byId.get(plan.id);
-			byId.set(plan.id, existing ? { ...existing, ...plan } : plan);
-		}
-
-		const knownPlans = PLAN_ORDER.map((planId) => byId.get(planId)).filter(
-			(plan): plan is PricingPlan => Boolean(plan)
-		);
-		const extras = incomingPlans.filter((plan) => !PLAN_ORDER.includes(plan.id as (typeof PLAN_ORDER)[number]));
-		return [...knownPlans, ...extras];
-	}
-
 	let plans = $derived<PricingPlan[]>(
-		mergePlans(Array.isArray(data.plans) && data.plans.length > 0 ? data.plans : DEFAULT_PRICING_PLANS)
+		mergePricingPlans(
+			Array.isArray(data.plans) && data.plans.length > 0 ? data.plans : DEFAULT_PRICING_PLANS
+		)
 	);
 	let freePlan = $derived(plans.find((plan) => plan.id === 'free') ?? null);
 	let paidPlans = $derived(plans.filter((plan) => plan.id !== 'free'));
 	let currentTier = $derived(String(data.subscription?.tier ?? 'free').trim().toLowerCase());
 
-	function getPlanPresentation(plan: PricingPlan): PlanPresentation {
+	function getPlanStory(plan: PricingPlan): PricingPlanStory {
 		return (
-			PLAN_PRESENTATION[plan.id] ?? {
+			plan.story ?? {
 				badge: plan.popular ? 'Most popular' : 'Plan',
 				headline: plan.name,
 				summary: plan.description,
-				note: plan.description
+				note: plan.description,
+				bestFor: plan.description,
+				whyUpgrade: plan.description
 			}
 		);
 	}
@@ -195,7 +145,7 @@
 	<title>Pricing | Valdrics</title>
 	<meta
 		name="description"
-		content="Simple, transparent Valdrics pricing. Start on the permanent free tier, prove one workflow, and upgrade only when you need more coverage, automation, or governance depth."
+		content="Simple, transparent Valdrics pricing. Start on the permanent free tier, prove one workflow, and upgrade only when you need broader provider coverage, team rollout controls, or finance-grade governance."
 	/>
 	<meta property="og:title" content="Pricing | Valdrics" />
 	<meta
@@ -209,7 +159,7 @@
 	<meta name="twitter:title" content="Pricing | Valdrics" />
 	<meta
 		name="twitter:description"
-		content="Start with the permanent free tier, then move to Starter, Growth, or Pro as coverage and governance needs expand."
+		content="Start with the permanent free tier, then move to Starter, Growth, or Pro as provider coverage, rollout controls, and governance needs expand."
 	/>
 	<meta
 		name="twitter:image"
@@ -220,7 +170,7 @@
 <PublicMarketingPage
 	kicker="Pricing"
 	title="Simple, transparent pricing"
-	subtitle="Start on the permanent free tier, prove one workflow, and upgrade only when you need more provider coverage, automation, or governance depth."
+	subtitle="Start on the permanent free tier, prove one workflow, and upgrade only when you need more provider coverage, team rollout controls, or finance-grade governance."
 >
 	{#snippet heroActions()}
 		<a href={getFreeTierHref()} class="btn btn-primary">Start Free</a>
@@ -251,8 +201,8 @@
 					Choose the plan that matches your control depth
 				</h2>
 				<p class="public-page__section-subtitle">
-					Monthly starting prices are shown as entry points. Switch to annual billing to compare the
-					lower effective monthly rate.
+					{PLANS_PRICING_EXPLANATION} Switch to annual billing to compare the lower effective monthly
+					rate.
 				</p>
 			</div>
 
@@ -281,12 +231,13 @@
 			</div>
 
 			{#if freePlan}
+				{@const freeStory = getPlanStory(freePlan)}
 				<article class="public-page__card public-page__card--accent pricing-entry-card">
 					<div class="pricing-entry-card__head">
 						<div class="pricing-entry-card__copy">
-							<p class="public-page__card-kicker">{getPlanPresentation(freePlan).badge}</p>
-							<h3 class="public-page__card-title">{getPlanPresentation(freePlan).headline}</h3>
-							<p class="public-page__card-copy">{getPlanPresentation(freePlan).summary}</p>
+							<p class="public-page__card-kicker">{freeStory.badge}</p>
+							<h3 class="public-page__card-title">{freeStory.headline}</h3>
+							<p class="public-page__card-copy">{freeStory.summary}</p>
 						</div>
 						<div class="pricing-entry-card__price">
 							<p class="pricing-entry-card__price-label">Entry price</p>
@@ -299,6 +250,17 @@
 							<li>{feature}</li>
 						{/each}
 					</ul>
+
+					<dl class="pricing-plan-context" aria-label="Free plan fit and upgrade path">
+						<div class="pricing-plan-context__row">
+							<dt class="pricing-plan-context__label">Best for</dt>
+							<dd class="pricing-plan-context__value">{freeStory.bestFor}</dd>
+						</div>
+						<div class="pricing-plan-context__row">
+							<dt class="pricing-plan-context__label">Why teams upgrade</dt>
+							<dd class="pricing-plan-context__value">{freeStory.whyUpgrade}</dd>
+						</div>
+					</dl>
 
 					<div class="pricing-entry-card__footer">
 						<p class="public-page__inline-note">{FREE_TIER_LIMIT_NOTE}</p>
@@ -316,13 +278,13 @@
 
 			<div class="pricing-plan-grid">
 				{#each paidPlans as plan (plan.id)}
-					{@const presentation = getPlanPresentation(plan)}
+					{@const story = getPlanStory(plan)}
 					<article
 						class={`public-page__card pricing-plan-card ${plan.popular ? 'public-page__card--featured pricing-plan-card--popular' : ''}`}
 					>
 						<div class="pricing-plan-card__head">
 							<div>
-								<p class="public-page__card-kicker">{presentation.badge}</p>
+								<p class="public-page__card-kicker">{story.badge}</p>
 								<h3 class="public-page__card-title">{plan.name}</h3>
 							</div>
 							{#if isCurrentPlan(plan.id)}
@@ -330,7 +292,7 @@
 							{/if}
 						</div>
 
-						<p class="public-page__card-copy">{presentation.summary}</p>
+						<p class="public-page__card-copy">{story.summary}</p>
 
 						<div class="pricing-plan-price">
 							<span class="pricing-plan-price__currency">$</span>
@@ -343,7 +305,7 @@
 						<p class="pricing-plan-price__note">
 							{billingCycle === 'annual'
 								? `${formatUsd(plan.price_annual)} billed yearly`
-								: `Starting monthly price. ${presentation.note}`}
+								: `Starting monthly price. ${story.note}`}
 						</p>
 
 						<ul class="public-page__list">
@@ -351,6 +313,17 @@
 								<li>{feature}</li>
 							{/each}
 						</ul>
+
+						<dl class="pricing-plan-context" aria-label={`${plan.name} plan fit and upgrade path`}>
+							<div class="pricing-plan-context__row">
+								<dt class="pricing-plan-context__label">Best for</dt>
+								<dd class="pricing-plan-context__value">{story.bestFor}</dd>
+							</div>
+							<div class="pricing-plan-context__row">
+								<dt class="pricing-plan-context__label">Why teams upgrade</dt>
+								<dd class="pricing-plan-context__value">{story.whyUpgrade}</dd>
+							</div>
+						</dl>
 
 						<div class="pricing-plan-card__footer">
 							{#if isCurrentPlan(plan.id)}
@@ -384,7 +357,7 @@
 							<p class="pricing-support-note">
 								{billingCycle === 'annual' && getAnnualSavings(plan) > 0
 									? `Save ${formatUsd(getAnnualSavings(plan))} per year versus monthly billing.`
-									: presentation.note}
+									: story.note}
 							</p>
 						</div>
 					</article>
@@ -400,8 +373,8 @@
 						Use the enterprise lane only when security or procurement needs a separate track
 					</h2>
 					<p class="public-page__section-subtitle">
-						Otherwise, start on Free, Starter, Growth, or Pro. Bring in sales when SSO/SCIM,
-						security review, procurement, or rollout governance needs its own buying path.
+						Otherwise, start on Free, Starter, Growth, or Pro. Bring in sales when SCIM,
+						private deployment, procurement, or custom control requirements need their own buying path.
 					</p>
 				</div>
 				<div class="public-page__actions-row">

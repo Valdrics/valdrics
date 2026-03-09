@@ -155,6 +155,12 @@ def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults()
     assert "OTEL_EXPORTER_OTLP_ENDPOINT" in {
         item["name"] for item in koyeb["definition"]["env"] if "name" in item
     }
+    assert "ENFORCEMENT_APPROVAL_TOKEN_SECRET" in {
+        item["name"] for item in koyeb["definition"]["env"] if "name" in item
+    }
+    assert "ENFORCEMENT_EXPORT_SIGNING_SECRET" in {
+        item["name"] for item in koyeb["definition"]["env"] if "name" in item
+    }
     assert "INTERNAL_METRICS_AUTH_TOKEN" in {
         item["name"] for item in koyeb["definition"]["env"] if "name" in item
     }
@@ -182,6 +188,8 @@ def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults()
     assert "API_URL" in worker_env_names
     assert "FRONTEND_URL" in worker_env_names
     assert "OTEL_EXPORTER_OTLP_ENDPOINT" in worker_env_names
+    assert "ENFORCEMENT_APPROVAL_TOKEN_SECRET" in worker_env_names
+    assert "ENFORCEMENT_EXPORT_SIGNING_SECRET" in worker_env_names
     assert "SENTRY_DSN" in worker_env_names
     assert "REDIS_URL" in worker_env_names
     assert koyeb_worker["definition"]["command"][0:4] == [
@@ -190,6 +198,17 @@ def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults()
         "celery",
         "-A",
     ]
+
+
+def test_regional_failover_workflow_uses_repo_managed_oidc_aws_auth() -> None:
+    workflow_text = (
+        REPO_ROOT / ".github/workflows/regional-failover.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "id-token: write" in workflow_text
+    assert "aws_role_to_assume" in workflow_text
+    assert "configure_github_oidc_aws_credentials.py" in workflow_text
+    assert "FAILOVER_AWS_ROLE_TO_ASSUME" in workflow_text
 
 
 def test_deployment_docs_match_runtime_contracts() -> None:

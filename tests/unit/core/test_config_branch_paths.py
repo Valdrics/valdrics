@@ -412,3 +412,23 @@ def test_config_enforcement_guardrails_rejects_short_approval_token_secret() -> 
         match="ENFORCEMENT_APPROVAL_TOKEN_SECRET must be >= 32 chars",
     ):
         s._validate_enforcement_guardrails()
+
+
+def test_config_enforcement_guardrails_require_signing_keys_in_strict_env() -> None:
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.ENFORCEMENT_APPROVAL_TOKEN_SECRET = None
+    s.ENFORCEMENT_EXPORT_SIGNING_SECRET = None
+
+    with pytest.raises(
+        ValueError,
+        match="ENFORCEMENT_APPROVAL_TOKEN_SECRET must be configured and >= 32 chars",
+    ):
+        s._validate_enforcement_guardrails()
+
+    s.ENFORCEMENT_APPROVAL_TOKEN_SECRET = "p" * 48
+    with pytest.raises(
+        ValueError,
+        match="ENFORCEMENT_EXPORT_SIGNING_SECRET must be configured and >= 32 chars",
+    ):
+        s._validate_enforcement_guardrails()

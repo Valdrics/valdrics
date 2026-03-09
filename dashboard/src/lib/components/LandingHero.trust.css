@@ -51,6 +51,37 @@
 	box-shadow: 0 0 0 3px rgb(16 185 129 / 0.14);
 }
 
+.landing-plan-context {
+	margin: 0;
+	padding: 0.9rem 0.95rem;
+	display: grid;
+	gap: 0.7rem;
+	border: 1px solid rgb(255 255 255 / 0.1);
+	border-radius: var(--radius-lg);
+	background: rgb(8 13 20 / 0.56);
+}
+
+.landing-plan-context__row {
+	display: grid;
+	gap: 0.22rem;
+}
+
+.landing-plan-context__label {
+	margin: 0;
+	font-size: 0.72rem;
+	font-weight: 800;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--color-ink-500);
+}
+
+.landing-plan-context__value {
+	margin: 0;
+	font-size: 0.93rem;
+	line-height: 1.5;
+	color: var(--color-ink-200);
+}
+
 .landing-rollout-section {
 	margin-top: 1rem;
 	display: grid;

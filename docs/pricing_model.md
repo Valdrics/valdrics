@@ -15,7 +15,10 @@ Reference implementation: `app/shared/core/pricing.py`.
 ## Plan Baseline
 
 - `free`: permanent entry tier with strict limits and no credit card requirement.
-- `starter`, `growth`, `pro`, `enterprise`: progressively higher scale and capability.
+- `starter`: small-team operating tier with up to `5 AWS` accounts plus limited non-AWS visibility (`1 Azure` tenant, `1 GCP` project).
+- `growth`: first full team rollout tier with broad multi-cloud coverage, Slack integration, and SSO.
+- `pro`: finance-grade controls including API access, audit logs, Cloud+ connectors, reconciliation, compliance exports, and incident integrations.
+- `enterprise`: SCIM, effectively unbounded scale limits, and enterprise commercial controls such as private deployment and custom support motions.
 - BYOK is available on all tiers.
 - BYOK does not add a separate platform surcharge.
 - Tier AI usage limits still apply even when BYOK is used.

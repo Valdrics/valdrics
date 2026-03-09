@@ -11,7 +11,7 @@ from app.shared.core.auth import create_access_token
 @pytest.mark.asyncio
 async def test_identity_settings_get_creates_default(ac: AsyncClient, db: AsyncSession):
     tenant_id = uuid.uuid4()
-    tenant = Tenant(id=tenant_id, name="Tenant Identity", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Tenant Identity", plan="growth")
     db.add(tenant)
     user = User(
         id=uuid.uuid4(),
@@ -42,7 +42,7 @@ async def test_identity_settings_put_normalizes_domains(
     ac: AsyncClient, db: AsyncSession
 ):
     tenant_id = uuid.uuid4()
-    tenant = Tenant(id=tenant_id, name="Tenant Identity", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Tenant Identity", plan="growth")
     db.add(tenant)
     user = User(
         id=uuid.uuid4(),
@@ -83,7 +83,7 @@ async def test_identity_settings_prevents_self_lockout(
     ac: AsyncClient, db: AsyncSession
 ):
     tenant_id = uuid.uuid4()
-    tenant = Tenant(id=tenant_id, name="Tenant Identity", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Tenant Identity", plan="growth")
     db.add(tenant)
     user = User(
         id=uuid.uuid4(),
@@ -118,7 +118,7 @@ async def test_identity_rotate_scim_token_requires_enterprise(
     ac: AsyncClient, db: AsyncSession
 ):
     tenant_id = uuid.uuid4()
-    tenant = Tenant(id=tenant_id, name="Tenant Identity", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Tenant Identity", plan="growth")
     db.add(tenant)
     user = User(
         id=uuid.uuid4(),
@@ -176,7 +176,7 @@ async def test_identity_diagnostics_endpoint_returns_sso_and_scim_status(
     ac: AsyncClient, db: AsyncSession
 ):
     tenant_id = uuid.uuid4()
-    tenant = Tenant(id=tenant_id, name="Tenant Identity Diagnostics", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Tenant Identity Diagnostics", plan="growth")
     db.add(tenant)
     user = User(
         id=uuid.uuid4(),
@@ -193,7 +193,7 @@ async def test_identity_diagnostics_endpoint_returns_sso_and_scim_status(
     res = await ac.get("/api/v1/settings/identity/diagnostics", headers=headers)
     assert res.status_code == 200
     payload = res.json()
-    assert payload["tier"] == "pro"
+    assert payload["tier"] == "growth"
     assert payload["sso"]["enabled"] is False
     assert payload["sso"]["federation_enabled"] is False
     assert payload["sso"]["federation_mode"] == "domain"
@@ -206,7 +206,7 @@ async def test_identity_sso_validation_endpoint_returns_computed_urls(
     ac: AsyncClient, db: AsyncSession
 ):
     tenant_id = uuid.uuid4()
-    tenant = Tenant(id=tenant_id, name="Tenant Identity SSO Validation", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Tenant Identity SSO Validation", plan="growth")
     db.add(tenant)
     user = User(
         id=uuid.uuid4(),
@@ -223,7 +223,7 @@ async def test_identity_sso_validation_endpoint_returns_computed_urls(
     res = await ac.get("/api/v1/settings/identity/sso/validation", headers=headers)
     assert res.status_code == 200
     payload = res.json()
-    assert payload["tier"] == "pro"
+    assert payload["tier"] == "growth"
     assert payload["frontend_url"].startswith("http")
     assert payload["expected_redirect_url"].endswith("/auth/callback")
     assert payload["discovery_endpoint"].endswith("/api/v1/public/sso/discovery")
@@ -279,7 +279,7 @@ async def test_identity_scim_group_mappings_requires_enterprise(
     ac: AsyncClient, db: AsyncSession
 ):
     tenant_id = uuid.uuid4()
-    tenant = Tenant(id=tenant_id, name="Tenant Identity SCIM Groups", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Tenant Identity SCIM Groups", plan="growth")
     db.add(tenant)
     user = User(
         id=uuid.uuid4(),
@@ -410,7 +410,7 @@ async def test_identity_sso_federation_provider_id_mode_requires_provider_id(
     ac: AsyncClient, db: AsyncSession
 ):
     tenant_id = uuid.uuid4()
-    tenant = Tenant(id=tenant_id, name="Tenant Identity Federation", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Tenant Identity Federation", plan="growth")
     db.add(tenant)
     user = User(
         id=uuid.uuid4(),
@@ -443,7 +443,7 @@ async def test_identity_sso_federation_provider_id_mode_success(
     ac: AsyncClient, db: AsyncSession
 ):
     tenant_id = uuid.uuid4()
-    tenant = Tenant(id=tenant_id, name="Tenant Identity Federation", plan="pro")
+    tenant = Tenant(id=tenant_id, name="Tenant Identity Federation", plan="growth")
     db.add(tenant)
     user = User(
         id=uuid.uuid4(),

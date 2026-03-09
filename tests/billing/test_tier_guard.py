@@ -40,12 +40,18 @@ class TestFeatureAccess:
         """Starter tier should have AI insights."""
         assert is_feature_enabled(PricingTier.STARTER, FeatureFlag.AI_INSIGHTS)
         assert is_feature_enabled(PricingTier.STARTER, FeatureFlag.MULTI_REGION)
+        assert is_feature_enabled(PricingTier.STARTER, FeatureFlag.MULTI_CLOUD)
 
     def test_starter_no_slack(self):
         """Starter tier should NOT have Slack integration."""
         assert not is_feature_enabled(
             PricingTier.STARTER, FeatureFlag.SLACK_INTEGRATION
         )
+
+    def test_growth_tier_has_sso_and_slack(self):
+        """Growth tier should unlock rollout integrations and identity."""
+        assert is_feature_enabled(PricingTier.GROWTH, FeatureFlag.SLACK_INTEGRATION)
+        assert is_feature_enabled(PricingTier.GROWTH, FeatureFlag.SSO)
 
     def test_professional_tier_full_features(self):
         """Professional tier should have Slack, hourly scans, audit logs."""
@@ -74,6 +80,8 @@ class TestTierLimits:
     def test_starter_tier_limits(self):
         """Starter tier should have reasonable limits."""
         assert get_tier_limit(PricingTier.STARTER, "max_aws_accounts") == 5
+        assert get_tier_limit(PricingTier.STARTER, "max_azure_tenants") == 1
+        assert get_tier_limit(PricingTier.STARTER, "max_gcp_projects") == 1
         assert get_tier_limit(PricingTier.STARTER, "ai_insights_per_month") == 10
 
     def test_professional_tier_limits(self):
@@ -202,6 +210,7 @@ class TestTierFeatureMatrix:
         tier_order = [
             PricingTier.FREE,
             PricingTier.STARTER,
+            PricingTier.GROWTH,
             PricingTier.PRO,
             PricingTier.ENTERPRISE,
         ]

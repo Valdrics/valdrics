@@ -44,6 +44,52 @@ class AWSZombieDetector(BaseZombieDetector):
         """Register every available AWS detection plugin from the registry."""
         self.plugins = registry.get_plugins_for_provider("aws")
 
+    @staticmethod
+    def _inventory_scan_metadata(inventory: Any) -> dict[str, Any]:
+        method = str(getattr(inventory, "discovery_method", "") or "").strip()
+        degraded_methods = {
+            "native-api-fallback-partial",
+            "native-api-fallback-degraded",
+        }
+        status = "ok"
+        if method == "native-api-fallback-partial":
+            status = "partial"
+        elif method == "native-api-fallback-degraded":
+            status = "degraded"
+        return {
+            "status": status,
+            "method": method or "unknown",
+            "resource_count": int(getattr(inventory, "total_count", 0) or 0),
+            "coverage_limitations": (
+                "Inventory was derived from native fallback discovery and may not "
+                "cover the full AWS account resource surface."
+                if method in degraded_methods
+                else None
+            ),
+        }
+
+    @classmethod
+    def _apply_inventory_completeness(
+        cls, results: Dict[str, Any], inventory: Any | None
+    ) -> Dict[str, Any]:
+        if inventory is None:
+            return results
+
+        metadata = cls._inventory_scan_metadata(inventory)
+        completeness = results.get("scan_completeness")
+        if not isinstance(completeness, dict):
+            return results
+
+        completeness["inventory_discovery"] = metadata
+        if metadata["status"] == "ok":
+            return results
+
+        completeness["degraded"] = True
+        completeness["error_count"] = int(completeness.get("error_count", 0) or 0) + 1
+        results["partial_results"] = True
+        results["inventory_discovery"] = metadata
+        return results
+
     async def scan_all(
         self, on_category_complete: Optional[Any] = None
     ) -> Dict[str, Any]:
@@ -70,7 +116,8 @@ class AWSZombieDetector(BaseZombieDetector):
         self._inventory = inventory
 
         # 2. Proceed with standard parallel plugin execution
-        return await super().scan_all(on_category_complete=on_category_complete)
+        results = await super().scan_all(on_category_complete=on_category_complete)
+        return self._apply_inventory_completeness(results, inventory)
 
     async def _execute_plugin_scan(self, plugin: ZombiePlugin) -> List[Dict[str, Any]]:
         """

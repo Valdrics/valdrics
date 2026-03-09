@@ -15,7 +15,7 @@ from app.shared.core.security import generate_secret_blind_index
 async def _seed_admin(
     db: AsyncSession,
     *,
-    plan: str = "pro",
+    plan: str = "growth",
     email: str = "admin@example.com",
 ) -> tuple[Tenant, User, dict[str, str]]:
     tenant = Tenant(id=uuid.uuid4(), name=f"Tenant {email}", plan=plan)
@@ -38,7 +38,7 @@ async def test_get_identity_settings_creates_default_record(
     ac,
     db: AsyncSession,
 ) -> None:
-    _tenant, _user, headers = await _seed_admin(db, plan="pro")
+    _tenant, _user, headers = await _seed_admin(db, plan="growth")
 
     response = await ac.get("/api/v1/settings/identity", headers=headers)
     assert response.status_code == 200
@@ -57,7 +57,7 @@ async def test_identity_diagnostics_creates_default_record_when_missing(
     ac,
     db: AsyncSession,
 ) -> None:
-    _tenant, _user, headers = await _seed_admin(db, plan="pro")
+    _tenant, _user, headers = await _seed_admin(db, plan="growth")
 
     response = await ac.get("/api/v1/settings/identity/diagnostics", headers=headers)
     assert response.status_code == 200
@@ -74,7 +74,7 @@ async def test_identity_sso_validation_default_non_federated_path(
     ac,
     db: AsyncSession,
 ) -> None:
-    _tenant, _user, headers = await _seed_admin(db, plan="pro")
+    _tenant, _user, headers = await _seed_admin(db, plan="growth")
 
     response = await ac.get("/api/v1/settings/identity/sso/validation", headers=headers)
     assert response.status_code == 200
@@ -134,7 +134,7 @@ async def test_identity_update_requires_enterprise_for_scim_and_mappings(
     ac,
     db: AsyncSession,
 ) -> None:
-    _tenant, _user, headers = await _seed_admin(db, plan="pro")
+    _tenant, _user, headers = await _seed_admin(db, plan="growth")
 
     scim_response = await ac.put(
         "/api/v1/settings/identity",
@@ -171,7 +171,7 @@ async def test_identity_update_guardrail_blocks_lockout_allowlist(
 ) -> None:
     _tenant, _user, headers = await _seed_admin(
         db,
-        plan="pro",
+        plan="growth",
         email="admin@corp.example",
     )
 
@@ -197,7 +197,7 @@ async def test_identity_update_creates_domain_mappings_for_provider_id_mode(
 ) -> None:
     tenant, _user, headers = await _seed_admin(
         db,
-        plan="pro",
+        plan="growth",
         email="admin@corp.example",
     )
 
@@ -235,7 +235,7 @@ async def test_identity_rotate_scim_token_requires_enterprise(
     ac,
     db: AsyncSession,
 ) -> None:
-    _tenant, _user, headers = await _seed_admin(db, plan="pro")
+    _tenant, _user, headers = await _seed_admin(db, plan="growth")
 
     response = await ac.post("/api/v1/settings/identity/rotate-scim-token", headers=headers)
     assert response.status_code == 403

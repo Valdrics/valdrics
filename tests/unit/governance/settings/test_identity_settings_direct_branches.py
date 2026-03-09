@@ -50,7 +50,7 @@ class _AuditLoggerFailure:
 def _admin_user(
     tenant_id: object,
     *,
-    tier: PricingTier = PricingTier.PRO,
+    tier: PricingTier = PricingTier.GROWTH,
     email: str = "admin@corp.example",
 ) -> CurrentUser:
     return CurrentUser(
@@ -119,7 +119,7 @@ async def test_get_identity_diagnostics_reports_sso_scim_issues() -> None:
     mock_db.execute.return_value = _ScalarOneResult(identity)
 
     response = await identity_api.get_identity_diagnostics(
-        current_user=_admin_user(tenant_id, tier=PricingTier.PRO),
+        current_user=_admin_user(tenant_id, tier=PricingTier.GROWTH),
         db=mock_db,
     )
 
@@ -269,7 +269,7 @@ async def test_update_identity_settings_rejects_non_enterprise_scim() -> None:
     with pytest.raises(HTTPException) as exc:
         await identity_api.update_identity_settings(
             payload=payload,
-            current_user=_admin_user(uuid4(), tier=PricingTier.PRO),
+            current_user=_admin_user(uuid4(), tier=PricingTier.GROWTH),
             db=AsyncMock(),
         )
     assert exc.value.status_code == 403
@@ -289,7 +289,7 @@ async def test_update_identity_settings_rejects_non_enterprise_mappings() -> Non
     with pytest.raises(HTTPException) as exc:
         await identity_api.update_identity_settings(
             payload=payload,
-            current_user=_admin_user(uuid4(), tier=PricingTier.PRO),
+            current_user=_admin_user(uuid4(), tier=PricingTier.GROWTH),
             db=AsyncMock(),
         )
     assert exc.value.status_code == 403
@@ -397,7 +397,7 @@ async def test_update_identity_settings_tolerates_audit_failure_and_refresh_fail
 async def test_rotate_scim_token_rejects_non_enterprise_direct() -> None:
     with pytest.raises(HTTPException) as exc:
         await identity_api.rotate_scim_token(
-            current_user=_admin_user(uuid4(), tier=PricingTier.PRO),
+            current_user=_admin_user(uuid4(), tier=PricingTier.GROWTH),
             db=AsyncMock(),
         )
     assert exc.value.status_code == 403

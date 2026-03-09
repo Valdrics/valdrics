@@ -8,7 +8,7 @@
 	import IdentityScimSection from '$lib/components/identity/IdentityScimSection.svelte';
 	import IdentitySsoSection from '$lib/components/identity/IdentitySsoSection.svelte';
 	import {
-		isProPlus,
+		isGrowthPlus,
 		parseDomains,
 		scimBaseUrlFromPublicApiUrl
 	} from '$lib/components/identity/identitySettingsHelpers';
@@ -81,7 +81,7 @@
 				settings = null;
 				return;
 			}
-			if (!isProPlus(tier)) {
+			if (!isGrowthPlus(tier)) {
 				settings = null;
 				return;
 			}
@@ -121,7 +121,7 @@
 				diagnostics = null;
 				return;
 			}
-			if (!isProPlus(tier)) {
+			if (!isGrowthPlus(tier)) {
 				diagnostics = null;
 				return;
 			}
@@ -304,20 +304,20 @@
 
 <div
 	class="card stagger-enter relative"
-	class:opacity-60={!isProPlus(tier)}
-	class:pointer-events-none={!isProPlus(tier)}
+	class:opacity-60={!isGrowthPlus(tier)}
+	class:pointer-events-none={!isGrowthPlus(tier)}
 >
 	<div class="flex items-center justify-between mb-5">
 		<h2 class="text-lg font-semibold flex items-center gap-2">
 			<span>🔐</span> Identity (SSO/SCIM)
 		</h2>
 
-		{#if !isProPlus(tier)}
-			<span class="badge badge-warning text-xs">Pro Plan Required</span>
+		{#if !isGrowthPlus(tier)}
+			<span class="badge badge-warning text-xs">Growth Plan Required</span>
 		{/if}
 	</div>
 
-	{#if !isProPlus(tier)}
+	{#if !isGrowthPlus(tier)}
 		<div class="absolute inset-0 z-10 flex items-center justify-center bg-transparent">
 			<a href={`${base}/billing`} class="btn btn-primary shadow-lg pointer-events-auto">
 				Upgrade to Unlock Identity Controls
@@ -343,8 +343,8 @@
 		<div class="skeleton h-4 w-3/4"></div>
 	{:else if !settings}
 		<p class="text-sm text-ink-400">
-			Identity controls are available to tenant admins on Pro/Enterprise. If you expected access,
-			confirm your account role and subscription tier.
+			Identity controls are available to tenant admins on Growth, Pro, and Enterprise. If you
+			expected access, confirm your account role and subscription tier.
 		</p>
 	{:else}
 		<div class="space-y-4">

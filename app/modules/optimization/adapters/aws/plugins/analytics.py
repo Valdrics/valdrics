@@ -2,6 +2,9 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from botocore.exceptions import ClientError
 import structlog
+from app.modules.optimization.adapters.aws.plugins.pricing_evidence import (
+    serialize_pricing_quote,
+)
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 from app.modules.reporting.domain.pricing.service import PricingService
@@ -96,14 +99,20 @@ class IdleSageMakerPlugin(ZombiePlugin):
                                     for d in metrics.get("Datapoints", [])
                                 )
                                 if total_invocations == 0:
+                                    pricing_quote = PricingService.estimate_monthly_waste_quote(
+                                        provider="aws",
+                                        resource_type="sagemaker",
+                                        region=region,
+                                    )
                                     zombies.append(
                                         {
                                             "resource_id": name,
                                             "resource_type": "SageMaker Endpoint",
-                                            "monthly_cost": PricingService.estimate_monthly_waste(
-                                                provider="aws",
-                                                resource_type="sagemaker",
-                                                region=region,
+                                            "monthly_cost": round(
+                                                pricing_quote.monthly_cost_usd, 2
+                                            ),
+                                            "pricing_evidence": serialize_pricing_quote(
+                                                pricing_quote
                                             ),
                                             "recommendation": "Delete idle endpoint",
                                             "action": "delete_sagemaker_endpoint",

@@ -171,14 +171,14 @@ async def test_discover_sso_federation_single_row_invalid_mode_falls_back_to_dom
                 [
                     (
                         SimpleNamespace(federation_mode="invalid-mode", provider_id=None),
-                        "pro",
+                        "growth",
                     )
                 ]
             )
         )
     )
 
-    with patch.object(public, "normalize_tier", return_value=PricingTier.PRO):
+    with patch.object(public, "normalize_tier", return_value=PricingTier.GROWTH):
         response = await endpoint(
             request=SimpleNamespace(),
             payload=SimpleNamespace(email="user@example.com"),
@@ -197,13 +197,13 @@ async def test_discover_sso_federation_uses_feature_gate_not_hardcoded_tiers() -
     db = SimpleNamespace(
         execute=AsyncMock(
             return_value=_RowsResult(
-                [(SimpleNamespace(federation_mode="domain", provider_id=None), "pro")]
+                [(SimpleNamespace(federation_mode="domain", provider_id=None), "growth")]
             )
         )
     )
 
     with (
-        patch.object(public, "normalize_tier", return_value=PricingTier.PRO),
+        patch.object(public, "normalize_tier", return_value=PricingTier.GROWTH),
         patch.object(public, "is_feature_enabled", return_value=False) as feature_gate,
     ):
         response = await endpoint(
@@ -215,11 +215,11 @@ async def test_discover_sso_federation_uses_feature_gate_not_hardcoded_tiers() -
 
     assert response.available is False
     assert response.reason == "tier_not_eligible_for_sso_federation"
-    feature_gate.assert_called_once_with(PricingTier.PRO, FeatureFlag.SSO)
+    feature_gate.assert_called_once_with(PricingTier.GROWTH, FeatureFlag.SSO)
 
 
 @pytest.mark.asyncio
-async def test_discover_sso_federation_can_allow_non_pro_when_feature_enabled() -> None:
+async def test_discover_sso_federation_can_allow_starter_when_feature_enabled() -> None:
     endpoint = _unwrap_discovery()
     db = SimpleNamespace(
         execute=AsyncMock(

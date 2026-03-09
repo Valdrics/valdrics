@@ -10,13 +10,21 @@ from app.modules.enforcement.domain.action_errors import EnforcementDomainError
 HttpExceptionHandler = Callable[[Request, HTTPException], Awaitable[JSONResponse]]
 
 
+def build_http_exception(exc: EnforcementDomainError) -> HTTPException:
+    return HTTPException(
+        status_code=exc.status_code,
+        detail=exc.detail,
+        headers=exc.headers,
+    )
+
+
 async def enforcement_domain_exception_handler(
     request: Request,
     exc: EnforcementDomainError,
     http_handler: HttpExceptionHandler,
 ) -> JSONResponse:
     """Translate enforcement domain failures into the shared HTTP boundary."""
-    return await http_handler(request, exc.to_http_exception())
+    return await http_handler(request, build_http_exception(exc))
 
 
 def register_enforcement_domain_exception_handler(

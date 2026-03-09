@@ -8,6 +8,13 @@ import pytest
 from app.modules.reporting.domain.service import ReportingService
 
 
+def _service_with_adapter(mock_db, mock_adapter: AsyncMock) -> ReportingService:
+    return ReportingService(
+        mock_db,
+        adapter_resolver=MagicMock(return_value=mock_adapter),
+    )
+
+
 @pytest.mark.asyncio
 async def test_ingest_costs_single_connection(
     mock_db,
@@ -18,17 +25,15 @@ async def test_ingest_costs_single_connection(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine") as mock_attribution,
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(mock_adapter, {"cost_usd": "10.0"}, {"cost_usd": "20.0"})
 
         mock_persistence_instance = make_persistence_stub(records_saved=2)
@@ -60,17 +65,15 @@ async def test_ingest_costs_multiple_connections(
         aws=[mock_aws_connection],
         azure=[mock_azure_connection],
     )
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine"),
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(mock_adapter, {"cost_usd": "100.0"})
 
         mock_persistence_instance = make_persistence_stub(records_saved=1)
@@ -108,17 +111,15 @@ async def test_ingest_costs_cloud_plus_connections(
         platform=[mock_platform_connection],
         hybrid=[mock_hybrid_connection],
     )
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine"),
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(mock_adapter, {"cost_usd": "15.0"})
 
         mock_persistence_instance = make_persistence_stub(records_saved=1)
@@ -140,12 +141,12 @@ async def test_ingest_costs_connection_failure(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    service = ReportingService(
+        mock_db,
+        adapter_resolver=MagicMock(side_effect=RuntimeError("Connection failed")),
+    )
 
-    with patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory:
-        mock_factory.get_adapter.side_effect = RuntimeError("Connection failed")
-
-        result = await service.ingest_costs_for_tenant(tenant_id)
+    result = await service.ingest_costs_for_tenant(tenant_id)
 
     assert result["status"] == "completed"
     assert any(detail.get("status") == "failed" for detail in result["details"])
@@ -161,17 +162,15 @@ async def test_ingest_costs_missing_cur_data_yields_zero_records(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
 
     with (
-        patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory,
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
         patch("app.modules.reporting.domain.service.AttributionEngine"),
     ):
-        mock_adapter = AsyncMock()
-        mock_factory.get_adapter.return_value = mock_adapter
         attach_stream(mock_adapter)
 
         mock_persistence_instance = make_persistence_stub(records_saved=0)
@@ -192,14 +191,14 @@ async def test_ingest_costs_invalid_tenant_config_marks_connection_failed(
 ) -> None:
     tenant_id = mock_aws_connection.tenant_id
     configure_connection_queries(aws=[mock_aws_connection])
-    service = ReportingService(mock_db)
+    service = ReportingService(
+        mock_db,
+        adapter_resolver=MagicMock(
+            side_effect=ValueError("Invalid tenant config: missing CUR bucket")
+        ),
+    )
 
-    with patch("app.modules.reporting.domain.service.AdapterFactory") as mock_factory:
-        mock_factory.get_adapter.side_effect = ValueError(
-            "Invalid tenant config: missing CUR bucket"
-        )
-
-        result = await service.ingest_costs_for_tenant(tenant_id)
+    result = await service.ingest_costs_for_tenant(tenant_id)
 
     assert result["status"] == "completed"
     assert result["details"][0]["status"] == "failed"

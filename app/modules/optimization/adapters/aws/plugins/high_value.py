@@ -11,6 +11,9 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from botocore.exceptions import ClientError
 import structlog
+from app.modules.optimization.adapters.aws.plugins.pricing_evidence import (
+    build_pricing_fields,
+)
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 from app.modules.reporting.domain.pricing.service import PricingService
@@ -232,8 +235,8 @@ class IdleElastiCachePlugin(ZombiePlugin):
                                 )
 
                                 if avg_cpu < 5.0:  # Less than 5% CPU
-                                    monthly_cost = (
-                                        PricingService.estimate_monthly_waste(
+                                    pricing_quote = (
+                                        PricingService.estimate_monthly_waste_quote(
                                             provider="aws",
                                             resource_type="elasticache",
                                             resource_size=node_type,
@@ -247,12 +250,12 @@ class IdleElastiCachePlugin(ZombiePlugin):
                                             "node_type": node_type,
                                             "engine": engine,
                                             "avg_cpu": round(avg_cpu, 2),
-                                            "monthly_cost": round(monthly_cost, 2),
                                             "recommendation": "Cache cluster shows minimal activity. Consider deleting.",
                                             "action": "delete_elasticache_cluster",
                                             "confidence_score": 0.90,
                                             "explainability_notes": f"ElastiCache cluster has avg CPU of {avg_cpu:.1f}% over {days} days.",
                                             "detection_method": "cloudwatch-metrics",
+                                            **build_pricing_fields(pricing_quote),
                                         }
                                     )
                             except ClientError as e:
@@ -349,8 +352,8 @@ class IdleSageMakerNotebooksPlugin(ZombiePlugin):
                                 ).days
 
                                 if days_since_modified > days_idle_threshold:
-                                    monthly_cost = (
-                                        PricingService.estimate_monthly_waste(
+                                    pricing_quote = (
+                                        PricingService.estimate_monthly_waste_quote(
                                             provider="aws",
                                             resource_type="sagemaker_notebook",
                                             resource_size=instance_type,
@@ -363,12 +366,12 @@ class IdleSageMakerNotebooksPlugin(ZombiePlugin):
                                             "resource_type": "SageMaker Notebook",
                                             "instance_type": instance_type,
                                             "days_since_modified": days_since_modified,
-                                            "monthly_cost": round(monthly_cost, 2),
                                             "recommendation": f"Notebook not modified in {days_since_modified} days. Consider stopping.",
                                             "action": "stop_sagemaker_notebook",
                                             "confidence_score": 0.92,
                                             "explainability_notes": f"SageMaker notebook '{name}' has been running but not modified for {days_since_modified} days.",
                                             "detection_method": "api-scan",
+                                            **build_pricing_fields(pricing_quote),
                                         }
                                     )
                         except ClientError as e:

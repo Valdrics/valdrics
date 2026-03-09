@@ -10,6 +10,9 @@ on:
       secondary_db_instance_id:
         description: "Secondary-region RDS read replica identifier"
         required: true
+      aws_role_to_assume:
+        description: "AWS role ARN assumed through GitHub OIDC for regional failover"
+        required: true
       secondary_api_origin:
         description: "Direct origin URL for the secondary API stack"
         required: true
@@ -30,6 +33,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 env:
   PYTHON_VERSION: "3.12"
@@ -58,9 +62,17 @@ jobs:
       - name: Install Dependencies
         run: uv sync --locked --dev
 
+      - name: Configure AWS Credentials via GitHub OIDC
+        run: >-
+          uv run python scripts/configure_github_oidc_aws_credentials.py
+          --role-arn "${{ inputs.aws_role_to_assume }}"
+          --region "${{ inputs.secondary_region }}"
+          --session-name "regional-failover-${{ github.run_id }}"
+
       - name: Execute Regional Failover Script
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          FAILOVER_AWS_ROLE_TO_ASSUME: ${{ inputs.aws_role_to_assume }}
         run: >-
           uv run python scripts/run_regional_failover.py
           --secondary-region "${{ inputs.secondary_region }}"

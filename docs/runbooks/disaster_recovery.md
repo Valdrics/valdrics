@@ -23,6 +23,10 @@ present in the repository.
   `.github/workflows/regional-failover.yml` / `scripts/run_regional_failover.py`.
 - The automated cutover path records
   `regional_recovery_mode=automated_secondary_region_failover`.
+- The automated workflow requires `aws_role_to_assume` and configures AWS
+  credentials through GitHub OIDC before promotion and DNS mutation.
+- The automated cutover path records `aws_execution_identity` so the assumed
+  AWS principal is preserved in failover evidence.
 - Managed-platform preview manifests are excluded from the production DR contract unless an operator adds immutable release and regional recovery controls outside this repository.
 
 ## 1. AWS RDS Database Failure
@@ -67,11 +71,12 @@ Use this path only when the secondary-region Terraform profile is already
 provisioned.
 
 1. Confirm Terraform outputs expose `secondary_eks_cluster_name` and `secondary_db_endpoint`.
-2. Execute `.github/workflows/regional-failover.yml` or run `scripts/run_regional_failover.py`.
+2. Execute `.github/workflows/regional-failover.yml` or run `scripts/run_regional_failover.py` with `aws_role_to_assume`.
 3. Promote the secondary-region DB replica.
 4. Verify `https://<secondary-origin>/health/live` before cutover.
-5. Update Cloudflare API DNS to the secondary origin through the scripted cutover.
-6. Re-run `/health`, worker-consumption checks, and tenant-scoped API validation after cutover.
+5. Verify dependency-aware `https://<secondary-origin>/health` and require healthy background job processing state plus live worker heartbeat coverage before cutover.
+6. Update Cloudflare API DNS to the secondary origin through the scripted cutover only when the Cloudflare response reports `success=true`.
+7. Re-run `/health`, worker-consumption checks, and tenant-scoped API validation after cutover.
 
 ## 3. Reference Managed-Platform Failure
 

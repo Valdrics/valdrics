@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -185,6 +186,27 @@ async def test_execute_does_not_swallow_fatal_connection_ingest_exceptions() -> 
     ):
         with pytest.raises(_FatalTestSignal):
             await job._execute(tenant_id="tenant-1")
+
+
+@pytest.mark.asyncio
+async def test_run_without_db_commits_standalone_session() -> None:
+    session = MagicMock()
+    session.commit = AsyncMock()
+
+    @asynccontextmanager
+    async def fake_session_maker():
+        yield session
+
+    with patch(
+        "app.modules.governance.domain.jobs.cur_ingestion.async_session_maker",
+        fake_session_maker,
+    ):
+        job = CURIngestionJob()
+        with patch.object(job, "_execute", new_callable=AsyncMock) as mock_execute:
+            await job.run(connection_id="conn-2", tenant_id="tenant-2")
+
+    mock_execute.assert_awaited_once_with("conn-2", "tenant-2")
+    session.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio

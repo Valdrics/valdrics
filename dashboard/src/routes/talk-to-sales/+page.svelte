@@ -12,7 +12,7 @@
 		},
 		{
 			label: 'Security review',
-			value: 'Walk through access, approvals, SSO/SCIM, and evidence expectations'
+			value: 'Walk through identity rollout, SCIM, approvals, and evidence expectations'
 		},
 		{
 			label: 'Commercial diligence',
@@ -76,8 +76,8 @@
 					<p class="public-page__card-kicker">Security and Controls</p>
 					<h2 class="public-page__card-title">Security and governance review</h2>
 					<p class="public-page__card-copy">
-						Walk through SSO, SCIM, role-based approvals, retention controls, and evidence requirements
-						with your security and platform stakeholders.
+						Walk through identity rollout, SCIM, role-based approvals, retention controls, and
+						evidence requirements with your security and platform stakeholders.
 					</p>
 				</article>
 

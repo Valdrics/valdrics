@@ -129,13 +129,23 @@ async def test_check_background_jobs_stuck_jobs():
     db = AsyncMock()
     mock_result = MagicMock()
     mock_result.scalar.return_value = 2
-    db.execute.return_value = mock_result
+    stats = SimpleNamespace(total=2, pending=2, running=0, failed=0)
+    stats_result = MagicMock()
+    stats_result.first.return_value = stats
+    db.execute.side_effect = [mock_result, stats_result]
 
     service = HealthService(db=db)
-    result = await service._check_background_jobs()
+    with patch(
+        "app.shared.core.health_check_ops._probe_worker_health",
+        new=AsyncMock(
+            return_value={"status": "healthy", "worker_count": 1, "workers": ["worker@a"]}
+        ),
+    ):
+        result = await service._check_background_jobs()
 
     assert result["status"] == "degraded"
     assert result["stuck_jobs"] == 2
+    assert result["worker_health"]["status"] == "healthy"
 
 
 @pytest.mark.asyncio
@@ -151,11 +161,18 @@ async def test_check_background_jobs_queue_stats():
     db.execute.side_effect = [res_stuck, res_stats]
 
     service = HealthService(db=db)
-    result = await service._check_background_jobs()
+    with patch(
+        "app.shared.core.health_check_ops._probe_worker_health",
+        new=AsyncMock(
+            return_value={"status": "healthy", "worker_count": 1, "workers": ["worker@a"]}
+        ),
+    ):
+        result = await service._check_background_jobs()
 
     assert result["status"] == "healthy"
     assert result["queue_stats"]["total_jobs"] == 5
     assert result["queue_stats"]["pending_jobs"] == 2
+    assert result["worker_health"]["worker_count"] == 1
 
 
 @pytest.mark.asyncio
@@ -168,6 +185,34 @@ async def test_check_background_jobs_exception():
 
     assert result["status"] == "unknown"
     assert "db fail" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_check_background_jobs_degrades_when_workers_are_not_responding():
+    db = AsyncMock()
+    stuck_result = MagicMock()
+    stuck_result.scalar.return_value = 0
+    stats = SimpleNamespace(total=1, pending=0, running=0, failed=0)
+    stats_result = MagicMock()
+    stats_result.first.return_value = stats
+    db.execute.side_effect = [stuck_result, stats_result]
+
+    service = HealthService(db=db)
+    with patch(
+        "app.shared.core.health_check_ops._probe_worker_health",
+        new=AsyncMock(
+            return_value={
+                "status": "degraded",
+                "message": "No Celery workers responded to the heartbeat probe",
+                "worker_count": 0,
+                "workers": [],
+            }
+        ),
+    ):
+        result = await service._check_background_jobs()
+
+    assert result["status"] == "degraded"
+    assert result["worker_health"]["worker_count"] == 0
 
 
 def test_calculate_overall_health_unknown():

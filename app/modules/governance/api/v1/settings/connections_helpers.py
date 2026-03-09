@@ -28,33 +28,38 @@ def _require_tenant_id(user: CurrentUser) -> UUID:
     return user.tenant_id
 
 
-def _enforce_growth_tier(current_plan: PricingTier, user: CurrentUser) -> None:
-    allowed_plans = {PricingTier.GROWTH, PricingTier.PRO, PricingTier.ENTERPRISE}
+def _enforce_multi_cloud_tier(current_plan: PricingTier, user: CurrentUser) -> None:
+    allowed_plans = {
+        PricingTier.STARTER,
+        PricingTier.GROWTH,
+        PricingTier.PRO,
+        PricingTier.ENTERPRISE,
+    }
 
     if current_plan not in allowed_plans:
         logger.warning(
             "tier_gate_denied",
             tenant_id=str(user.tenant_id),
             plan=current_plan.value,
-            required="growth",
+            required="starter",
         )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                "Multi-cloud support requires 'Growth' plan or higher. "
+                "Multi-cloud support requires 'Starter' plan or higher. "
                 f"Current plan: {current_plan.value}"
             ),
         )
 
 
-def check_growth_tier(user: CurrentUser) -> PricingTier:
+def check_multi_cloud_tier(user: CurrentUser) -> PricingTier:
     """
-    Ensure tenant is on growth/pro/enterprise plan.
+    Ensure tenant is on starter or higher for Azure/GCP connectivity.
 
     Uses request-bound `CurrentUser.tier` to avoid additional DB/cache staleness.
     """
     current_plan = normalize_tier(getattr(user, "tier", PricingTier.FREE))
-    _enforce_growth_tier(current_plan, user)
+    _enforce_multi_cloud_tier(current_plan, user)
     return current_plan
 
 

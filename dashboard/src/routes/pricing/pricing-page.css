@@ -173,6 +173,37 @@
 	gap: 0.85rem;
 }
 
+.pricing-plan-context {
+	display: grid;
+	gap: 0.7rem;
+	margin: 0;
+	padding: 0.95rem 1rem;
+	border: 1px solid rgb(8 126 164 / 0.12);
+	border-radius: 1rem;
+	background: rgb(255 255 255 / 0.64);
+}
+
+.pricing-plan-context__row {
+	display: grid;
+	gap: 0.22rem;
+}
+
+.pricing-plan-context__label {
+	margin: 0;
+	font-size: 0.74rem;
+	font-weight: 800;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--color-ink-600);
+}
+
+.pricing-plan-context__value {
+	margin: 0;
+	font-size: 0.94rem;
+	line-height: 1.55;
+	color: var(--color-ink-800);
+}
+
 .pricing-plan-grid {
 	display: grid;
 	grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -108,7 +108,7 @@ Operational guidance:
 - Enable group sync after role/persona mappings are configured in Valdrics.
 - Rotate SCIM token after onboarding and store it in your secret manager.
 
-## SSO Federation + Enforcement (Pro+)
+## SSO Federation + Enforcement (Growth+)
 
 Valdrics supports:
 - federated login bootstrap (`domain` or `provider_id` mode via Supabase SSO),

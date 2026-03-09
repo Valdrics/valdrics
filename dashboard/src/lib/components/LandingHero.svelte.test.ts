@@ -139,10 +139,18 @@ describe('LandingHero', () => {
 			screen.getByText(/monthly starting prices shown here are entry points/i)
 		).toBeTruthy();
 		expect(screen.getByText(/start here first/i)).toBeTruthy();
-		expect(screen.getByText(/one owner-routed savings workflow on the free tier/i)).toBeTruthy();
-		expect(screen.getByText(/free is best for proving one workflow/i)).toBeTruthy();
+		expect(screen.getByText(/permanent free workspace for one live savings workflow/i)).toBeTruthy();
+		expect(screen.getByText(/free is best for proving one workflow permanently/i)).toBeTruthy();
 		expect(
-			screen.getByText(/monthly starting price\. best fit for a single-provider operating scope/i)
+			screen.getByText(/monthly starting price\. best fit for a compact cross-cloud operating scope/i)
+		).toBeTruthy();
+		expect(screen.getAllByText(/^Best for$/i).length).toBeGreaterThanOrEqual(4);
+		expect(screen.getAllByText(/^Why teams upgrade$/i).length).toBeGreaterThanOrEqual(4);
+		expect(
+			screen.getByText(/cross-functional teams need full aws, azure, and gcp coverage with owner routing/i)
+		).toBeTruthy();
+		expect(
+			screen.getByText(/move to the enterprise lane only when scim, private deployment, procurement review/i)
 		).toBeTruthy();
 
 		const trustSection = document.querySelector('#trust');

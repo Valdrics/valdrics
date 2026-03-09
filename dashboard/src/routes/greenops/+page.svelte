@@ -15,11 +15,18 @@
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
 	import AuthGate from '$lib/components/AuthGate.svelte';
-	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
 	import GreenOpsTierPreview from './GreenOpsTierPreview.svelte';
 	import GreenOpsMetricsGrid from './GreenOpsMetricsGrid.svelte';
 	import GreenOpsRecommendationsSchedule from './GreenOpsRecommendationsSchedule.svelte';
+	import {
+		GREENOPS_DEFAULT_REGION,
+		buildCarbonBudgetPath,
+		buildCarbonFootprintPath,
+		buildCarbonIntensityPath,
+		buildGravitonPath,
+		buildGreenSchedulePath
+	} from './greenopsApiPaths';
 	import type {
 		BudgetData,
 		CarbonData,
@@ -35,7 +42,7 @@
 	let gravitonData = $state<GravitonData | null>(null);
 	let budgetData = $state<BudgetData | null>(null);
 	let intensityData = $state<IntensityData | null>(null);
-	let selectedRegion = $derived(data.selectedRegion || 'us-east-1');
+	let selectedRegion = $derived(data.selectedRegion || GREENOPS_DEFAULT_REGION);
 	let error = $state('');
 	let loading = $state(false);
 	let workloadDuration = $state(1);
@@ -73,33 +80,23 @@
 			const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 			const startDate = thirtyDaysAgo.toISOString().split('T')[0];
 			const endDate = today.toISOString().split('T')[0];
-			const headers = { Authorization: `Bearer ${accessToken}` };
+				const headers = { Authorization: `Bearer ${accessToken}` };
 
-			const [carbonRes, gravitonRes, budgetRes, intensityRes] = await Promise.all([
-				fetchWithTimeout(
-					fetch,
-					edgeApiPath(`/carbon?start_date=${startDate}&end_date=${endDate}&region=${region}`),
-					{ headers },
-					GREENOPS_TIMEOUT_MS
-				),
-				fetchWithTimeout(
-					fetch,
-					edgeApiPath(`/carbon/graviton?region=${region}`),
-					{ headers },
-					GREENOPS_TIMEOUT_MS
-				),
-				fetchWithTimeout(
-					fetch,
-					edgeApiPath(`/carbon/budget?region=${region}`),
-					{ headers },
-					GREENOPS_TIMEOUT_MS
-				),
-				fetchWithTimeout(
-					fetch,
-					edgeApiPath(`/carbon/intensity?region=${region}&hours=24`),
-					{ headers },
-					GREENOPS_TIMEOUT_MS
-				)
+				const [carbonRes, gravitonRes, budgetRes, intensityRes] = await Promise.all([
+					fetchWithTimeout(
+						fetch,
+						buildCarbonFootprintPath({ startDate, endDate, region }),
+						{ headers },
+						GREENOPS_TIMEOUT_MS
+					),
+					fetchWithTimeout(fetch, buildGravitonPath(region), { headers }, GREENOPS_TIMEOUT_MS),
+					fetchWithTimeout(fetch, buildCarbonBudgetPath({ region }), { headers }, GREENOPS_TIMEOUT_MS),
+					fetchWithTimeout(
+						fetch,
+						buildCarbonIntensityPath(region, 24),
+						{ headers },
+						GREENOPS_TIMEOUT_MS
+					)
 			]);
 
 			if (requestId !== greenopsRequestId) return;
@@ -134,9 +131,7 @@
 	}
 
 	async function getOptimalSchedule() {
-		const res = await api.get(
-			edgeApiPath(`/carbon/schedule?region=${selectedRegion}&duration_hours=${workloadDuration}`)
-		);
+		const res = await api.get(buildGreenSchedulePath(selectedRegion, workloadDuration));
 		if (res.ok) {
 			scheduleResult = await res.json();
 		}
@@ -165,11 +160,13 @@
 </svelte:head>
 
 <div class="space-y-6">
-	<div class="flex items-center justify-between">
-		<div>
-			<h1 class="text-2xl font-bold text-white">🌱 GreenOps Dashboard</h1>
-			<p class="text-ink-400 mt-1">Monitor your cloud carbon footprint and sustainability</p>
-		</div>
+		<div class="flex items-center justify-between">
+			<div>
+				<h1 class="text-2xl font-bold text-white">🌱 GreenOps Dashboard</h1>
+				<p class="text-ink-400 mt-1">
+					Monitor AWS carbon footprint, workload intensity, and sustainability decisions
+				</p>
+			</div>
 
 		<select
 			value={selectedRegion}

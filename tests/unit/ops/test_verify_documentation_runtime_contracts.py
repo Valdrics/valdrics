@@ -36,11 +36,11 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     )
     _write(
         tmp_path / "docs/architecture/failover.md",
-        "Cloudflare\nRDS\ndisaster-recovery-drill.yml\nregional-failover.yml\nscripts/run_regional_failover.py\nenable_multi_region_failover=true\nsecondary_db_endpoint\nregional_recovery_mode=automated_secondary_region_failover\n1200 seconds\nduration_seconds\nregional_recovery_mode=manual_restore_redeploy_reroute\nregional_recovery_rto_seconds=1200\nregional_recovery_rpo_contract=provider_backup_restore_external_to_repository\n",
+        "Cloudflare\nRDS\ndisaster-recovery-drill.yml\nregional-failover.yml\nscripts/run_regional_failover.py\nenable_multi_region_failover=true\nsecondary_db_endpoint\naws_role_to_assume\nGitHub OIDC\n/health\nsuccess=true\nregional_recovery_mode=automated_secondary_region_failover\n1200 seconds\nduration_seconds\nregional_recovery_mode=manual_restore_redeploy_reroute\nregional_recovery_rto_seconds=1200\nregional_recovery_rpo_contract=provider_backup_restore_external_to_repository\n",
     )
     _write(
         tmp_path / "docs/runbooks/disaster_recovery.md",
-        "AWS RDS\nCloudflare\ndisaster-recovery-drill.yml\nregional-failover.yml\nscripts/run_regional_failover.py\nenable_multi_region_failover=true\nsecondary_db_endpoint\nregional_recovery_mode=automated_secondary_region_failover\nkoyeb-worker.yaml\n1200 seconds\nduration_seconds\nregional_recovery_mode=manual_restore_redeploy_reroute\nregional_recovery_rto_seconds=1200\nregional_recovery_rpo_contract=provider_backup_restore_external_to_repository\n",
+        "AWS RDS\nCloudflare\ndisaster-recovery-drill.yml\nregional-failover.yml\nscripts/run_regional_failover.py\nenable_multi_region_failover=true\nsecondary_db_endpoint\naws_role_to_assume\nGitHub OIDC\n/health\nsuccess=true\nregional_recovery_mode=automated_secondary_region_failover\nkoyeb-worker.yaml\n1200 seconds\nduration_seconds\nregional_recovery_mode=manual_restore_redeploy_reroute\nregional_recovery_rto_seconds=1200\nregional_recovery_rpo_contract=provider_backup_restore_external_to_repository\n",
     )
     _write(
         tmp_path / "docs/runbooks/incident_response.md",

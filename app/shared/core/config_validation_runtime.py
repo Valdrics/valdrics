@@ -357,6 +357,13 @@ def validate_enforcement_guardrails(settings_obj: object) -> None:
     approval_token_secret = str(
         getattr(settings_obj, "ENFORCEMENT_APPROVAL_TOKEN_SECRET", "") or ""
     ).strip()
+    environment = _normalize_environment(getattr(settings_obj, "ENVIRONMENT", ""))
+    strict_env = environment in {"production", "staging"}
+    if strict_env and len(approval_token_secret) < 32:
+        raise ValueError(
+            "ENFORCEMENT_APPROVAL_TOKEN_SECRET must be configured and >= 32 chars "
+            "in staging/production."
+        )
     if approval_token_secret and len(approval_token_secret) < 32:
         raise ValueError(
             "ENFORCEMENT_APPROVAL_TOKEN_SECRET must be >= 32 chars when provided."
@@ -365,6 +372,11 @@ def validate_enforcement_guardrails(settings_obj: object) -> None:
     export_signing_secret = str(
         getattr(settings_obj, "ENFORCEMENT_EXPORT_SIGNING_SECRET", "") or ""
     ).strip()
+    if strict_env and len(export_signing_secret) < 32:
+        raise ValueError(
+            "ENFORCEMENT_EXPORT_SIGNING_SECRET must be configured and >= 32 chars "
+            "in staging/production."
+        )
     if export_signing_secret and len(export_signing_secret) < 32:
         raise ValueError(
             "ENFORCEMENT_EXPORT_SIGNING_SECRET must be >= 32 chars when provided."

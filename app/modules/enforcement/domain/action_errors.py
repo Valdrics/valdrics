@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import HTTPException
-
 
 class EnforcementDomainError(Exception):
     """Domain-owned enforcement error boundary decoupled from HTTP transport."""
@@ -28,14 +26,6 @@ class EnforcementDomainError(Exception):
             if isinstance(message, str) and message.strip():
                 return message
         return "Enforcement domain error"
-
-    def to_http_exception(self) -> HTTPException:
-        return HTTPException(
-            status_code=self.status_code,
-            detail=self.detail,
-            headers=self.headers,
-        )
-
 
 class EnforcementActionError(EnforcementDomainError):
     """Action-specific alias kept for the orchestrator surface."""

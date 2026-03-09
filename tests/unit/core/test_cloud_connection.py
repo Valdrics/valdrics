@@ -201,14 +201,16 @@ def test_get_aws_setup_templates():
     result = CloudConnectionService.get_aws_setup_templates("ext-123")
     assert "ext-123" in result["magic_link"]
     assert "ext-123" in result["terraform_snippet"]
+    assert "githubusercontent.com" in result["cfn_template"]
 
 
 def test_get_aws_setup_templates_uses_configured_console_region():
     with patch(
-        "app.shared.core.cloud_connection.get_settings",
+        "app.shared.connections.aws.get_settings",
         return_value=MagicMock(
             AWS_DEFAULT_REGION="eu-west-2",
             AWS_SUPPORTED_REGIONS=["us-east-1", "eu-west-2"],
+            CLOUDFORMATION_TEMPLATE_URL="https://templates.example.com/aws-role.yaml",
         ),
     ):
         result = CloudConnectionService.get_aws_setup_templates("ext-123")

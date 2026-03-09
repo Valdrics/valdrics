@@ -32,7 +32,6 @@ PUBLIC_ROUTE_ALLOWLIST: set[tuple[str, str]] = {
     ("GET", "/.well-known/openid-configuration"),
     ("GET", "/api/v1/billing/plans"),
     ("POST", "/api/v1/billing/webhook"),
-    ("POST", "/api/v1/settings/connections/aws/setup"),
     ("GET", "/scim/v2/ServiceProviderConfig"),
     ("GET", "/scim/v2/Schemas"),
     ("GET", "/scim/v2/Schemas/{schema_id:path}"),

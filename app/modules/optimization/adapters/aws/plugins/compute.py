@@ -2,6 +2,9 @@ from typing import List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from botocore.exceptions import ClientError
 import structlog
+from app.modules.optimization.adapters.aws.plugins.pricing_evidence import (
+    build_pricing_fields,
+)
 from app.modules.optimization.domain.plugin import ZombiePlugin
 from app.modules.optimization.domain.registry import registry
 from app.shared.adapters.rate_limiter import RateLimiter
@@ -83,6 +86,11 @@ class UnusedElasticIpsPlugin(ZombiePlugin):
                         )
 
                         if is_zombie:
+                            pricing_quote = PricingService.estimate_monthly_waste_quote(
+                                provider="aws",
+                                resource_type="ip",
+                                region=region,
+                            )
                             zombies.append(
                                 {
                                     "resource_id": addr.get(
@@ -90,15 +98,13 @@ class UnusedElasticIpsPlugin(ZombiePlugin):
                                     ),
                                     "resource_type": "Elastic IP",
                                     "public_ip": addr.get("PublicIp"),
-                                    "monthly_cost": PricingService.estimate_monthly_waste(
-                                        provider="aws", resource_type="ip", region=region
-                                    ),
                                     "backup_cost_monthly": 0,
                                     "recommendation": "Release if not needed",
                                     "action": "release_elastic_ip",
                                     "supports_backup": False,
                                     "explainability_notes": "Static IP address is not associated with any running instance, network interface, or association ID.",
                                     "confidence_score": 0.99,
+                                    **build_pricing_fields(pricing_quote),
                                 }
                             )
         except ClientError as e:
@@ -382,11 +388,13 @@ class IdleInstancesPlugin(ZombiePlugin):
                                 )
 
                                 if avg_cpu < threshold:
-                                    monthly_cost = PricingService.estimate_monthly_waste(
+                                    pricing_quote = (
+                                        PricingService.estimate_monthly_waste_quote(
                                         provider="aws",
                                         resource_type="instance",
                                         resource_size=inst["type"],
                                         region=region,
+                                        )
                                     )
 
                                     # Governance: Get Attribution (Reusing CloudTrail client)
@@ -400,7 +408,6 @@ class IdleInstancesPlugin(ZombiePlugin):
                                             "is_gpu": inst["is_gpu"],
                                             "owner": owner,
                                             "avg_cpu_percent": round(avg_cpu, 2),
-                                            "monthly_cost": round(monthly_cost, 2),
                                             "launch_time": inst["launch_time"].isoformat()
                                             if inst["launch_time"]
                                             else "",
@@ -411,6 +418,7 @@ class IdleInstancesPlugin(ZombiePlugin):
                                             "confidence_score": 0.99
                                             if inst["is_gpu"]
                                             else 0.98,
+                                            **build_pricing_fields(pricing_quote),
                                         }
                                     )
 
