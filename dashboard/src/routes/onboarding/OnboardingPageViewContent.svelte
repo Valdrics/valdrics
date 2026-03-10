@@ -178,7 +178,6 @@
 		const updated = await updateDiscoveryCandidateStatus(candidate, 'connected');
 		if (updated) discoveryInfo = `${updated.provider} marked as connected.`;
 	};
-
 	async function connectDiscoveryCandidate(candidate: DiscoveryCandidate): Promise<void> {
 		try {
 			const info = await connectDiscoveryCandidateFlow({
@@ -202,7 +201,6 @@
 			discoveryError = err.message;
 		}
 	}
-
 	const getSelectedNativeConnector = (): NativeConnectorMeta | null =>
 		getSelectedNativeConnectorHelper(cloudPlusVendor, cloudPlusNativeConnectors);
 	const getAvailableCloudPlusAuthMethods = (): CloudPlusAuthMethod[] =>
@@ -244,7 +242,6 @@
 	const getRequiredConfigFieldValue = (field: string): string =>
 		cloudPlusRequiredConfigValues[field] ?? '';
 	const getAccessToken = async (): Promise<string | null> => data.session?.access_token ?? null;
-
 	async function ensureOnboarded() {
 		const token = await getAccessToken();
 		if (!token) {
@@ -264,7 +261,6 @@
 		}
 		return true;
 	}
-
 	async function fetchSetupData() {
 		isLoading = true;
 		error = '';
@@ -301,7 +297,6 @@
 			isLoading = false;
 		}
 	}
-
 	async function handleContinueToSetup() {
 		const accessError = getOnboardingSetupAccessError({
 			selectedProvider,
@@ -324,7 +319,6 @@
 		currentStep = 1;
 		await fetchSetupData();
 	}
-
 	async function copyTemplate() {
 		const { template } = getCloudPlusTemplateForTab({
 			selectedTab,
@@ -344,7 +338,6 @@
 		});
 		downloadOnboardingTemplate(template, filename);
 	}
-
 	const parseCloudPlusFeed = (): Array<Record<string, unknown>> =>
 		parseOnboardingCloudPlusFeed(cloudPlusFeedInput);
 	const parseCloudPlusConnectorConfig = (): Record<string, unknown> =>
@@ -354,7 +347,6 @@
 			isNativeAuthMethod: isCloudPlusNativeAuthMethod(),
 			requiredConfigValues: cloudPlusRequiredConfigValues
 		});
-
 	async function proceedToVerify() {
 		error = '';
 		isVerifying = true;
@@ -395,11 +387,9 @@
 			isVerifying = false;
 		}
 	}
-
 	async function verifyConnection() {
 		isVerifying = true;
 		error = '';
-
 		try {
 			await verifyAwsConnectionFlow({
 				getAccessToken,
@@ -426,7 +416,6 @@
 			isVerifying = false;
 		}
 	}
-
 	const bodyProps = $derived({
 		data,
 		error,
@@ -476,11 +465,9 @@
 		verifyConnection
 	});
 </script>
-
 <svelte:head>
 	<title>Onboarding | Valdrics</title>
 </svelte:head>
-
 <OnboardingPageViewBody
 	{...bodyProps}
 	bind:currentStep

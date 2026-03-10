@@ -31,22 +31,42 @@ ENV PUBLIC_API_URL=$PUBLIC_API_URL
 RUN pnpm run build
 
 # ============================================================
+# STAGE 1B: Install runtime-only dependencies
+# ============================================================
+FROM ${NODE_BASE_IMAGE} AS prod-deps
+
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
+
+WORKDIR /app
+
+COPY dashboard/package.json dashboard/pnpm-lock.yaml ./
+RUN pnpm install --prod --frozen-lockfile --ignore-scripts
+
+# ============================================================
 # STAGE 2: Runtime
 # ============================================================
 FROM ${NODE_BASE_IMAGE} AS runtime
 
 WORKDIR /app
 
-# Enable corepack for pnpm
-RUN corepack enable && corepack prepare pnpm@9.15.9 --activate
-
-# Copy build output and necessary files from builder
+# Copy build output and runtime dependencies from builder
 COPY --from=builder /app/.svelte-kit/output ./build
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/pnpm-lock.yaml ./pnpm-lock.yaml
+COPY --from=builder /app/server.node.mjs ./server.node.mjs
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/package.json ./package.json
 
-# Install only production dependencies
-RUN pnpm install --prod --frozen-lockfile
+# The runtime image only needs Node itself. Remove package-manager toolchains
+# so the shipped container surface matches the production execution path.
+RUN rm -rf /usr/local/lib/node_modules/npm \
+    /usr/local/lib/node_modules/corepack \
+    /opt/yarn-v1.22.22 \
+    /usr/local/bin/yarn \
+    /usr/local/bin/yarnpkg \
+    /usr/local/bin/npm \
+    /usr/local/bin/npx \
+    /usr/local/bin/corepack \
+    /usr/local/bin/pnpm \
+    /usr/local/bin/pnpx
 
 # Expose SvelteKit port
 EXPOSE 3000
@@ -64,4 +84,4 @@ RUN addgroup --system appgroup \
 USER appuser
 
 # Run the app
-CMD ["node", "build/server/index.js"]
+CMD ["node", "server.node.mjs"]

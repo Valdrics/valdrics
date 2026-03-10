@@ -13,15 +13,10 @@ WORKDIR /app
 
 ARG UV_VERSION=0.9.21
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 # Install uv for fast dependency management
 ENV UV_LINK_MODE=copy \
-    UV_PROJECT_ENVIRONMENT=/opt/venv
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_HTTP_TIMEOUT=120
 RUN pip install --no-cache-dir "uv==${UV_VERSION}"
 
 # Copy dependency files
@@ -40,12 +35,6 @@ RUN uv sync --frozen --no-dev --no-editable
 FROM python:3.12-slim@sha256:f3fa41d74a768c2fce8016b98c191ae8c1bacd8f1152870a3f9f87d350920b7c AS runtime
 
 WORKDIR /app
-
-# Runtime healthchecks use curl-based liveness probes.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
 
 # Security: Run as non-root user
 RUN useradd --create-home --shell /bin/bash appuser && \
@@ -67,7 +56,7 @@ USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl --fail --silent --show-error http://127.0.0.1:8000/health/live || exit 1
+    CMD python -c "import sys, urllib.request; r = urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=5); sys.exit(0 if 200 <= r.status < 400 else 1)"
 
 EXPOSE 8000
 

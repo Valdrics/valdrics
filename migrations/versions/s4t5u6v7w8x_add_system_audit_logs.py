@@ -72,11 +72,13 @@ def upgrade() -> None:
     )
     op.execute("ALTER TABLE system_audit_logs ENABLE ROW LEVEL SECURITY")
     op.execute(
+        "DROP POLICY IF EXISTS system_audit_logs_system_context_policy ON system_audit_logs"
+    )
+    op.execute(
         """
-        DROP POLICY IF EXISTS system_audit_logs_system_context_policy ON system_audit_logs;
         CREATE POLICY system_audit_logs_system_context_policy ON system_audit_logs
         USING (current_setting('app.is_system_context', TRUE) = 'true')
-        WITH CHECK (current_setting('app.is_system_context', TRUE) = 'true');
+        WITH CHECK (current_setting('app.is_system_context', TRUE) = 'true')
         """
     )
 
