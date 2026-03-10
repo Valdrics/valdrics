@@ -59,7 +59,9 @@ export function mergeLoadedNotificationSettings(
 	};
 }
 
-export function buildNotificationSavePayload(settings: NotificationSettingsState): NotificationSavePayload {
+export function buildNotificationSavePayload(
+	settings: NotificationSettingsState
+): NotificationSavePayload {
 	return {
 		...settings,
 		slack_channel_override: settings.slack_channel_override || undefined,

@@ -71,11 +71,7 @@ function presentState(state: NormalizedState): { label: string; tone: StatusTone
 	}
 }
 
-function buildComponent(
-	name: string,
-	state: NormalizedState,
-	detail: string
-): StatusComponent {
+function buildComponent(name: string, state: NormalizedState, detail: string): StatusComponent {
 	const presentation = presentState(state);
 	return {
 		name,
@@ -85,10 +81,9 @@ function buildComponent(
 	};
 }
 
-function summarizeOverallStatus(status: string | undefined): Pick<
-	StatusSnapshot,
-	'summaryLabel' | 'summaryTone' | 'summaryDetail'
-> {
+function summarizeOverallStatus(
+	status: string | undefined
+): Pick<StatusSnapshot, 'summaryLabel' | 'summaryTone' | 'summaryDetail'> {
 	switch (normalizeState(status)) {
 		case 'operational':
 			return {
@@ -100,24 +95,30 @@ function summarizeOverallStatus(status: string | undefined): Pick<
 			return {
 				summaryLabel: 'Degraded',
 				summaryTone: 'warning',
-				summaryDetail: 'Core health checks responded, but at least one dependency reported degradation.'
+				summaryDetail:
+					'Core health checks responded, but at least one dependency reported degradation.'
 			};
 		case 'unavailable':
 			return {
 				summaryLabel: 'Incident detected',
 				summaryTone: 'danger',
-				summaryDetail: 'The health endpoint responded with an unhealthy state. Review the affected components below.'
+				summaryDetail:
+					'The health endpoint responded with an unhealthy state. Review the affected components below.'
 			};
 		default:
 			return {
 				summaryLabel: 'Status unavailable',
 				summaryTone: 'neutral',
-				summaryDetail: 'A trusted automated health summary was not available at the time of this check.'
+				summaryDetail:
+					'A trusted automated health summary was not available at the time of this check.'
 			};
 	}
 }
 
-function statusDetail(component: BackendStatusComponent | undefined, defaults: Record<NormalizedState, string>) {
+function statusDetail(
+	component: BackendStatusComponent | undefined,
+	defaults: Record<NormalizedState, string>
+) {
 	const state = normalizeState(component?.status);
 	const problem = component?.message || component?.error;
 	if (problem && state !== 'operational') {

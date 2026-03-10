@@ -24,10 +24,12 @@ describe('proof page', () => {
 		expect(screen.getByText(/decision history and export integrity/i)).toBeTruthy();
 		expect(screen.getByText(/validation scope and operational hardening/i)).toBeTruthy();
 
-			expect(screen.getAllByRole('link', { name: /Documentation/i })[0]?.getAttribute('href')).toBe('/docs');
-			expect(screen.getAllByRole('link', { name: /API Reference/i })[0]?.getAttribute('href')).toBe(
-				'/docs/api'
-			);
+		expect(screen.getAllByRole('link', { name: /Documentation/i })[0]?.getAttribute('href')).toBe(
+			'/docs'
+		);
+		expect(screen.getAllByRole('link', { name: /API Reference/i })[0]?.getAttribute('href')).toBe(
+			'/docs/api'
+		);
 		expect(screen.getAllByRole('link', { name: /open proof page/i })[0]?.getAttribute('href')).toBe(
 			'/proof/safe-access-model'
 		);

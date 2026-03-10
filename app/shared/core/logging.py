@@ -202,7 +202,7 @@ async def audit_log_async(
                 SystemAuditLogger,
             )
 
-            entry = await SystemAuditLogger(
+            system_entry = await SystemAuditLogger(
                 session,
                 correlation_id=correlation_id,
             ).log(
@@ -218,12 +218,12 @@ async def audit_log_async(
                 request_method=request_method,
                 request_path=request_path,
             )
-            audit_log(event, user_id or "system", "system", details)
-            return entry
+            audit_log(event, str(user_id or "system"), "system", details)
+            return system_entry
 
         from app.modules.governance.domain.security.audit_log import AuditLogger
 
-        entry = await AuditLogger(
+        tenant_entry = await AuditLogger(
             session,
             tenant_id=tenant_id,
             correlation_id=correlation_id,
@@ -240,8 +240,8 @@ async def audit_log_async(
             request_method=request_method,
             request_path=request_path,
         )
-        audit_log(event, user_id or "system", tenant_id, details)
-        return entry
+        audit_log(event, str(user_id or "system"), str(tenant_id), details)
+        return tenant_entry
 
     if isolated and db is not None and not isinstance(db, AsyncSession):
         entry = await _write(db)

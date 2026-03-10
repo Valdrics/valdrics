@@ -44,8 +44,12 @@
 		linkDiscoveredAccount
 	}: Props = $props();
 
-	const growthTier = $derived(['growth', 'pro', 'enterprise'].includes(data.subscription?.tier ?? ''));
-	const linkedCount = $derived(discoveredAccounts.filter((account) => account.status === 'linked').length);
+	const growthTier = $derived(
+		['growth', 'pro', 'enterprise'].includes(data.subscription?.tier ?? '')
+	);
+	const linkedCount = $derived(
+		discoveredAccounts.filter((account) => account.status === 'linked').length
+	);
 	const pendingCount = $derived(
 		discoveredAccounts.filter((account) => account.status === 'discovered').length
 	);
@@ -190,7 +194,9 @@
 						</table>
 					</div>
 				{:else}
-					<div class="py-16 text-center border-2 border-dashed border-ink-800 rounded-3xl bg-ink-900/20">
+					<div
+						class="py-16 text-center border-2 border-dashed border-ink-800 rounded-3xl bg-ink-900/20"
+					>
 						<div class="text-5xl mb-4">🔍</div>
 						<h3 class="text-xl font-bold mb-2">No Member Accounts Found</h3>
 						<p class="text-ink-500 max-w-sm mx-auto mb-6">

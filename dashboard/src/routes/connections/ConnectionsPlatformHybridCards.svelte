@@ -162,12 +162,14 @@
 		</details>
 	{:else if !loadingPlatform}
 		<p class="text-xs text-ink-400 mb-4">
-			Connect internal platform spend feeds to include shared services in allocation and reconciliation
-			workflows.
+			Connect internal platform spend feeds to include shared services in allocation and
+			reconciliation workflows.
 		</p>
 		<div class="flex flex-col gap-2">
-			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a>
-			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span>
+			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a
+			>
+			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span
+			>
 			<p class="text-[11px] leading-relaxed text-ink-500">{proUpgradePrompt.body}</p>
 		</div>
 	{/if}
@@ -303,8 +305,10 @@
 			reporting.
 		</p>
 		<div class="flex flex-col gap-2">
-			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a>
-			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span>
+			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a
+			>
+			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span
+			>
 			<p class="text-[11px] leading-relaxed text-ink-500">{proUpgradePrompt.body}</p>
 		</div>
 	{/if}

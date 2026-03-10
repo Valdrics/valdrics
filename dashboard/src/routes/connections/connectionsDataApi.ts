@@ -103,7 +103,11 @@ export async function loadAwsDiscoveredAccounts(
 	accessToken: string | undefined,
 	timeoutMs: number
 ): Promise<DiscoveredAccount[]> {
-	const response = await getWithTimeout('/settings/connections/aws/discovered', accessToken, timeoutMs);
+	const response = await getWithTimeout(
+		'/settings/connections/aws/discovered',
+		accessToken,
+		timeoutMs
+	);
 	if (!response.ok) {
 		return [];
 	}

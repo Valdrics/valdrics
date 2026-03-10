@@ -259,5 +259,4 @@ describe('ops page unit economics interactions', () => {
 		});
 		expect(await screen.findByText(/Last run run-acce/i)).toBeTruthy();
 	});
-
 });

@@ -159,7 +159,9 @@ describe('ops page close workflow and defaults interactions', () => {
 
 		await waitFor(() => {
 			expect(
-				postMock.mock.calls.some((call) => String(call[0]).includes('/costs/reconciliation/invoices'))
+				postMock.mock.calls.some((call) =>
+					String(call[0]).includes('/costs/reconciliation/invoices')
+				)
 			).toBe(true);
 		});
 		const [url, body] = postMock.mock.calls.find((call) =>

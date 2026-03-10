@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
+import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 import Page from './+page.svelte';
 import type { PageData } from './$types';
 import { TimeoutError } from '$lib/fetchWithTimeout';
@@ -239,24 +240,22 @@ describe('connections page API wiring', () => {
 	});
 
 	it('shows growth plan prompts for cross-cloud expansion on lower tiers', async () => {
+		const growthUpgradePrompt = getUpgradePrompt('growth', 'Azure and GCP coverage');
 		render(Page, { data: pageData('free') });
 		await screen.findByText('Cloud Accounts');
 		await screen.findAllByRole('link', { name: /View Growth plan/i });
 
-		expect(document.body.textContent || '').toMatch(
-			/best for teams that need broader provider coverage, owner routing, slack-integrated workflows, sso rollout/i
-		);
+		expect(document.body.textContent || '').toContain(growthUpgradePrompt.body);
 		expect(screen.getAllByRole('link', { name: /View Growth plan/i }).length).toBeGreaterThan(0);
 	});
 
 	it('shows pro plan prompts for cloud-plus connectors before pro', async () => {
+		const proUpgradePrompt = getUpgradePrompt('pro', 'Cloud+ connectors');
 		render(Page, { data: pageData('growth') });
 		await screen.findByText('Cloud Accounts');
 		await screen.findAllByRole('link', { name: /View Pro plan/i });
 
-		expect(document.body.textContent || '').toMatch(
-			/best for teams that want higher automation depth, finance close support, cloud-plus connectors/i
-		);
+		expect(document.body.textContent || '').toContain(proUpgradePrompt.body);
 		expect(screen.getAllByRole('link', { name: /View Pro plan/i }).length).toBeGreaterThan(0);
 	});
 });

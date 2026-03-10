@@ -165,7 +165,9 @@
 					onclick={onApprove}
 					disabled={remediationSubmitting ||
 						policyPreviewLoading ||
-						!(selectedRequest.status === 'pending' || selectedRequest.status === 'pending_approval')}
+						!(
+							selectedRequest.status === 'pending' || selectedRequest.status === 'pending_approval'
+						)}
 				>
 					{remediationSubmitting && actingId === selectedRequest.id ? 'Approving...' : 'Approve'}
 				</button>

@@ -120,7 +120,9 @@
 <div class="info-box mb-6">
 	<h4 class="text-sm font-bold mb-2">📘 Setup Snippet</h4>
 	<p class="text-xs text-ink-400 mb-3">Use this as your setup guide and feed template.</p>
-	<div class="bg-black/50 p-3 rounded font-mono text-xs whitespace-pre-wrap break-all text-accent-300">
+	<div
+		class="bg-black/50 p-3 rounded font-mono text-xs whitespace-pre-wrap break-all text-accent-300"
+	>
 		{cloudShellSnippet || '# Cloud+ setup snippet is loading...'}
 	</div>
 </div>
@@ -128,8 +130,7 @@
 <div class="info-box mb-6">
 	<h4 class="text-sm font-bold mb-2">🧩 Connector Config JSON (Optional)</h4>
 	<p class="text-xs text-ink-400 mb-3">
-		Add non-secret vendor options to <code>connector_config</code> (required fields above are merged
-		automatically).
+		Add non-secret vendor options to <code>connector_config</code> (required fields above are merged automatically).
 	</p>
 	{#if getSelectedNativeConnector()?.optional_connector_config_fields?.length}
 		<p class="text-xs text-ink-500 mb-3">

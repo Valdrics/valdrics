@@ -1,5 +1,9 @@
 <script lang="ts">
-	import type { AcceptanceKpiCaptureResponse, AcceptanceKpiEvidenceItem, AcceptanceKpisResponse } from './opsTypes';
+	import type {
+		AcceptanceKpiCaptureResponse,
+		AcceptanceKpiEvidenceItem,
+		AcceptanceKpisResponse
+	} from './opsTypes';
 
 	type AsyncAction = () => void | Promise<void>;
 
@@ -136,9 +140,7 @@
 		</div>
 		<div class="space-y-2">
 			<div class="flex flex-wrap items-center justify-between gap-2">
-				<p class="text-xs text-ink-400">
-					Captured snapshots (audit-grade). Latest shown first.
-				</p>
+				<p class="text-xs text-ink-400">Captured snapshots (audit-grade). Latest shown first.</p>
 				{#if lastAcceptanceKpiCapture}
 					<p class="text-xs text-ink-500">
 						Last captured: {formatDate(lastAcceptanceKpiCapture.captured_at)}
@@ -159,7 +161,9 @@
 									{item.acceptance_kpis.all_targets_met ? 'All Targets Met' : 'Gaps Open'}
 								</span>
 							</div>
-							<span class="text-ink-500">Run {item.run_id ? item.run_id.slice(0, 8) : 'unknown'}</span>
+							<span class="text-ink-500"
+								>Run {item.run_id ? item.run_id.slice(0, 8) : 'unknown'}</span
+							>
 						</div>
 					{/each}
 				</div>

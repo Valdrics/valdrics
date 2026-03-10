@@ -65,7 +65,9 @@ describe('sitemap.xml route', () => {
 		} as Parameters<typeof GET>[0]);
 
 		const xml = await response.text();
-		expect(xml).toContain('<loc>https://example.com/proof/safe-access-model</loc><lastmod>2026-03-09T00:00:00.000Z</lastmod>');
+		expect(xml).toContain(
+			'<loc>https://example.com/proof/safe-access-model</loc><lastmod>2026-03-09T00:00:00.000Z</lastmod>'
+		);
 	});
 
 	it('ignores invalid configured lastmod values', async () => {

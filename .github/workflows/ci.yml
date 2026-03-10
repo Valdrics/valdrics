@@ -90,7 +90,7 @@ jobs:
           SLACK_CHANNEL_ID: ""
           JIRA_BASE_URL: ""
           GITHUB_ACTIONS_TOKEN: ""
-          CORS_ORIGINS: "[\"https://dashboard.example.com\"]"
+          CORS_ORIGINS: "[\"https://app.validation.example.com\"]"
           SENTRY_DSN: "https://example@sentry.io/1"
           OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
           FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK: "true"

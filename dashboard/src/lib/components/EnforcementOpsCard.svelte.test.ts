@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 import EnforcementOpsCard from './EnforcementOpsCard.svelte';
 
 const { getMock, postMock } = vi.hoisted(() => ({
@@ -49,17 +50,16 @@ describe('EnforcementOpsCard', () => {
 	});
 
 	it('renders upgrade overlay and skips API calls for lower tiers', async () => {
+		const upgradePrompt = getUpgradePrompt('pro', 'enforcement reconciliation');
 		render(EnforcementOpsCard, {
 			accessToken: 'token',
 			tier: 'starter'
 		});
 
 		expect(screen.getByText('Enforcement Ops Reconciliation')).toBeTruthy();
-		expect(screen.getByText('Pro Plan Required')).toBeTruthy();
-		expect(
-			screen.getByText(/best for teams that want higher automation depth, finance close support/i)
-		).toBeTruthy();
-		expect(screen.getByRole('link', { name: /View Pro plan/i })).toBeTruthy();
+		expect(screen.getByText(upgradePrompt.badge)).toBeTruthy();
+		expect(screen.getByText(upgradePrompt.body)).toBeTruthy();
+		expect(screen.getByRole('link', { name: upgradePrompt.cta })).toBeTruthy();
 
 		await waitFor(() => {
 			expect(getMock).not.toHaveBeenCalled();

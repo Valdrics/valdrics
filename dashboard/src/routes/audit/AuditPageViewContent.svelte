@@ -83,11 +83,17 @@
 	<div class="flex items-center justify-between">
 		<div>
 			<h1 class="text-2xl font-bold mb-1">Audit Logs</h1>
-			<p class="text-ink-400 text-sm">Security and governance event trail for compliance workflows.</p>
+			<p class="text-ink-400 text-sm">
+				Security and governance event trail for compliance workflows.
+			</p>
 		</div>
 	</div>
 
-	<AuthGate authenticated={!!data.user} action="access audit logs" className="card text-center py-10">
+	<AuthGate
+		authenticated={!!data.user}
+		action="access audit logs"
+		className="card text-center py-10"
+	>
 		{#if error}
 			<div class="card border-danger-500/50 bg-danger-500/10">
 				<p class="text-danger-400">{error}</p>
@@ -102,7 +108,9 @@
 		<div class="card">
 			<div class="flex flex-wrap gap-3 items-end">
 				<div class="flex flex-col gap-1">
-					<label class="text-xs text-ink-400 uppercase tracking-wide" for="event-type">Event Type</label>
+					<label class="text-xs text-ink-400 uppercase tracking-wide" for="event-type"
+						>Event Type</label
+					>
 					<select id="event-type" bind:value={selectedEventType} class="select-input">
 						<option value="">All events</option>
 						{#each eventTypes as type (type)}
@@ -119,8 +127,12 @@
 					</select>
 				</div>
 				<div class="flex gap-2">
-					<button type="button" class="btn btn-secondary text-xs" onclick={applyFilters}>Apply</button>
-					<button type="button" class="btn btn-secondary text-xs" onclick={previousPage}>Prev</button>
+					<button type="button" class="btn btn-secondary text-xs" onclick={applyFilters}
+						>Apply</button
+					>
+					<button type="button" class="btn btn-secondary text-xs" onclick={previousPage}
+						>Prev</button
+					>
 					<button type="button" class="btn btn-secondary text-xs" onclick={nextPage}>Next</button>
 					<button
 						type="button"
@@ -149,7 +161,8 @@
 			</p>
 			<div class="flex flex-wrap gap-3 items-end">
 				<div class="flex flex-col gap-1">
-					<label class="text-xs text-ink-400 uppercase tracking-wide" for="focus-start">Start</label>
+					<label class="text-xs text-ink-400 uppercase tracking-wide" for="focus-start">Start</label
+					>
 					<input id="focus-start" type="date" class="select-input" bind:value={focusStartDate} />
 				</div>
 				<div class="flex flex-col gap-1">
@@ -157,7 +170,9 @@
 					<input id="focus-end" type="date" class="select-input" bind:value={focusEndDate} />
 				</div>
 				<div class="flex flex-col gap-1">
-					<label class="text-xs text-ink-400 uppercase tracking-wide" for="focus-provider">Provider</label>
+					<label class="text-xs text-ink-400 uppercase tracking-wide" for="focus-provider"
+						>Provider</label
+					>
 					<select id="focus-provider" bind:value={focusProvider} class="select-input">
 						<option value="">All providers</option>
 						<option value="aws">AWS</option>
@@ -194,11 +209,19 @@
 						<span>Include FOCUS CSV</span>
 					</label>
 					<label class="flex items-center gap-2 text-xs text-ink-300">
-						<input type="checkbox" class="accent-accent-500" bind:checked={packIncludeSavingsProof} />
+						<input
+							type="checkbox"
+							class="accent-accent-500"
+							bind:checked={packIncludeSavingsProof}
+						/>
 						<span>Include Savings Proof</span>
 					</label>
 					<label class="flex items-center gap-2 text-xs text-ink-300">
-						<input type="checkbox" class="accent-accent-500" bind:checked={packIncludeClosePackage} />
+						<input
+							type="checkbox"
+							class="accent-accent-500"
+							bind:checked={packIncludeClosePackage}
+						/>
 						<span>Include Close Package</span>
 					</label>
 					{#if packIncludeClosePackage}

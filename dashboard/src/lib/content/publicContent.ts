@@ -93,7 +93,10 @@ export function getPublicContentEntry(
 	return byKey.get(`${kind}:${slug}`);
 }
 
-export function mustGetPublicContentEntry(kind: PublicContentKind, slug: string): PublicContentEntry {
+export function mustGetPublicContentEntry(
+	kind: PublicContentKind,
+	slug: string
+): PublicContentEntry {
 	const entry = getPublicContentEntry(kind, slug);
 	if (!entry) {
 		throw error(404, `Unknown public content entry: ${kind}/${slug}`);

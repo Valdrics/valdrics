@@ -47,7 +47,8 @@ export function createOpsOperationalCloseActions(input: CloseActionsInput) {
 		const data = getData();
 		if (!hasSessionToken(data)) return;
 		if (hasInvalidUnitWindow(state.closeStartDate, state.closeEndDate)) {
-			state.error = 'Close package date range is invalid: start date must be on or before end date.';
+			state.error =
+				'Close package date range is invalid: start date must be on or before end date.';
 			return;
 		}
 
@@ -119,7 +120,9 @@ export function createOpsOperationalCloseActions(input: CloseActionsInput) {
 				status: state.invoiceForm.status.trim() || undefined,
 				notes: state.invoiceForm.notes.trim() || undefined
 			};
-			const res = await api.post(edgeApiPath('/costs/reconciliation/invoices'), payload, { headers });
+			const res = await api.post(edgeApiPath('/costs/reconciliation/invoices'), payload, {
+				headers
+			});
 			if (!res.ok) {
 				throw new Error(await parseErrorMessage(res, 'Failed to save provider invoice.'));
 			}
@@ -264,12 +267,7 @@ export function createOpsOperationalCloseActions(input: CloseActionsInput) {
 			const headers = buildHeaders(data);
 			const res = await api.get(
 				edgeApiPath(
-					buildRestatementUrl(
-						state.closeStartDate,
-						state.closeEndDate,
-						state.closeProvider,
-						'csv'
-					)
+					buildRestatementUrl(state.closeStartDate, state.closeEndDate, state.closeProvider, 'csv')
 				),
 				{ headers }
 			);

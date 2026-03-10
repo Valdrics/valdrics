@@ -227,7 +227,9 @@
 	</div>
 
 	{#if !isProPlus(tier)}
-		<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+		<div
+			class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center"
+		>
 			<div class="max-w-md space-y-3 pointer-events-auto">
 				<h3 class="text-lg font-semibold text-white">{upgradePrompt.heading}</h3>
 				<p class="text-sm text-ink-300">{upgradePrompt.body}</p>

@@ -23,7 +23,10 @@
 		ScimTokenTestResponseSchema,
 		uniqueScimMappingsOrThrow
 	} from '$lib/components/identity/identitySettingsModel';
-	import type { IdentityDiagnostics, IdentitySettings } from '$lib/components/identity/identitySettingsTypes';
+	import type {
+		IdentityDiagnostics,
+		IdentitySettings
+	} from '$lib/components/identity/identitySettingsTypes';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError } from '$lib/fetchWithTimeout';
 	import { clientLogger } from '$lib/logging/client';
@@ -321,7 +324,9 @@
 	</div>
 
 	{#if !isGrowthPlus(tier)}
-		<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+		<div
+			class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center"
+		>
 			<div class="max-w-md space-y-3 pointer-events-auto">
 				<h3 class="text-lg font-semibold text-white">{upgradePrompt.heading}</h3>
 				<p class="text-sm text-ink-300">{upgradePrompt.body}</p>

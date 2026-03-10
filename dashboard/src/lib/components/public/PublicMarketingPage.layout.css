@@ -2,7 +2,12 @@
 	position: relative;
 	background:
 		radial-gradient(960px 320px at 50% -5%, rgb(18 158 192 / 0.08), transparent 62%),
-		linear-gradient(180deg, rgb(247 250 252 / 0.98), rgb(241 246 249 / 0.96) 28%, rgb(247 250 252 / 0.98));
+		linear-gradient(
+			180deg,
+			rgb(247 250 252 / 0.98),
+			rgb(241 246 249 / 0.96) 28%,
+			rgb(247 250 252 / 0.98)
+		);
 	padding-bottom: 4rem;
 }
 .public-page__hero {
@@ -172,7 +177,12 @@
 	right: 1.35rem;
 	top: 0;
 	height: 1px;
-	background: linear-gradient(90deg, rgb(18 158 192 / 0.08), rgb(18 158 192 / 0.32), rgb(18 158 192 / 0.08));
+	background: linear-gradient(
+		90deg,
+		rgb(18 158 192 / 0.08),
+		rgb(18 158 192 / 0.32),
+		rgb(18 158 192 / 0.08)
+	);
 	pointer-events: none;
 }
 .public-page__card:hover {
@@ -198,7 +208,12 @@
 	box-shadow: 0 24px 56px rgb(4 11 17 / 0.22);
 }
 .public-page__card--dark::before {
-	background: linear-gradient(90deg, rgb(18 158 192 / 0.14), rgb(18 158 192 / 0.56), rgb(18 158 192 / 0.14));
+	background: linear-gradient(
+		90deg,
+		rgb(18 158 192 / 0.14),
+		rgb(18 158 192 / 0.56),
+		rgb(18 158 192 / 0.14)
+	);
 }
 .public-page__card--dark .public-page__card-title,
 .public-page__card--dark .public-page__card-kicker {

@@ -6,6 +6,7 @@
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import { api } from '$lib/api';
+	import { resolveSessionTenantId } from '$lib/auth/sessionTenant';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { trackProductFunnelStage } from '$lib/funnel/productFunnelTelemetry';
 	import {
@@ -28,6 +29,7 @@
 	let upgrading = $state('');
 	let error = $state('');
 	let pricingViewTracked = $state(false);
+	let tenantId = $derived(resolveSessionTenantId({ session: data.session, user: data.user }));
 
 	let plans = $derived<PricingPlan[]>(
 		mergePricingPlans(
@@ -36,7 +38,11 @@
 	);
 	let freePlan = $derived(plans.find((plan) => plan.id === 'free') ?? null);
 	let paidPlans = $derived(plans.filter((plan) => plan.id !== 'free'));
-	let currentTier = $derived(String(data.subscription?.tier ?? 'free').trim().toLowerCase());
+	let currentTier = $derived(
+		String(data.subscription?.tier ?? 'free')
+			.trim()
+			.toLowerCase()
+	);
 
 	$effect(() => {
 		if (pricingViewTracked || !data.user || !data.session?.access_token) {
@@ -46,7 +52,7 @@
 		void trackProductFunnelStage({
 			accessToken: data.session.access_token,
 			stage: 'pricing_viewed',
-			tenantId: data.user?.tenant_id,
+			tenantId,
 			url: $page.url,
 			currentTier,
 			persona: String(data.profile?.persona ?? ''),
@@ -135,7 +141,7 @@
 			await trackProductFunnelStage({
 				accessToken: session.access_token,
 				stage: 'checkout_started',
-				tenantId: data.user?.tenant_id,
+				tenantId,
 				url: $page.url,
 				currentTier,
 				persona: String(data.profile?.persona ?? ''),
@@ -200,7 +206,9 @@
 			<div class="pricing-cycle">
 				<div class="pricing-cycle__copy">
 					<p class="pricing-cycle__kicker">Billing cycle</p>
-					<p class="pricing-cycle__note">Annual billing lowers the effective monthly price on paid plans.</p>
+					<p class="pricing-cycle__note">
+						Annual billing lowers the effective monthly price on paid plans.
+					</p>
 				</div>
 				<div class="pricing-cycle__toggle" role="group" aria-label="Billing cycle">
 					<span class:active={billingCycle === 'monthly'}>Monthly</span>
@@ -364,8 +372,8 @@
 						Use the enterprise lane only when security or procurement needs a separate track
 					</h2>
 					<p class="public-page__section-subtitle">
-						Otherwise, start on Free, Starter, Growth, or Pro. Bring in sales when SCIM,
-						private deployment, procurement, or custom control requirements need their own buying path.
+						Otherwise, start on Free, Starter, Growth, or Pro. Bring in sales when SCIM, private
+						deployment, procurement, or custom control requirements need their own buying path.
 					</p>
 				</div>
 				<div class="public-page__actions-row">

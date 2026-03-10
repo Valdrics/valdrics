@@ -17,7 +17,9 @@ describe('enterprise page', () => {
 		render(Page);
 
 		expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
-		expect(screen.getByRole('heading', { name: /enterprise-critical control pillars/i })).toBeTruthy();
+		expect(
+			screen.getByRole('heading', { name: /enterprise-critical control pillars/i })
+		).toBeTruthy();
 		expect(
 			screen.getByRole('heading', { name: /formal diligence and procurement workflows/i })
 		).toBeTruthy();
@@ -37,8 +39,8 @@ describe('enterprise page', () => {
 		expect(
 			screen.getByRole('link', { name: /download compliance checklist/i }).getAttribute('href')
 		).toBe('/resources/global-finops-compliance-workbook.md');
-		expect(screen.getByRole('link', { name: /enterprise@valdrics\.com/i }).getAttribute('href')).toContain(
-			'mailto:enterprise@valdrics.com'
-		);
+		expect(
+			screen.getByRole('link', { name: /enterprise@valdrics\.com/i }).getAttribute('href')
+		).toContain('mailto:enterprise@valdrics.com');
 	});
 });

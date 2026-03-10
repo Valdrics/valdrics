@@ -1,6 +1,7 @@
 import { buildLandingSalesHref, buildLandingSignupHref } from '$lib/landing/landingHeroLinks';
 import type { LandingExperimentAssignments } from '$lib/landing/landingExperiment';
-import type { LandingAttribution } from '$lib/landing/landingFunnel';
+import type { FunnelStage, LandingAttribution } from '$lib/landing/landingFunnel';
+import type { LandingTelemetryContext } from '$lib/landing/landingTelemetry';
 
 type HeroSignupArgs = {
 	basePath: string;
@@ -31,9 +32,9 @@ type LandingSelectionArgs = {
 		action: string,
 		section: string,
 		value: string | undefined,
-		context: Record<string, unknown>
+		context: LandingTelemetryContext
 	) => void;
-	buildTelemetryContext: (funnelStage?: string) => Record<string, unknown>;
+	buildTelemetryContext: (funnelStage?: FunnelStage) => LandingTelemetryContext;
 };
 
 export function buildLandingHeroSignupPath(args: HeroSignupArgs): string {

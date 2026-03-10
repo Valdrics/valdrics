@@ -190,5 +190,4 @@ describe('ops page unit economics interactions', () => {
 		const executeButton = within(dialog).getByRole('button', { name: 'Awaiting Approval' });
 		expect(executeButton.hasAttribute('disabled')).toBe(true);
 	});
-
 });

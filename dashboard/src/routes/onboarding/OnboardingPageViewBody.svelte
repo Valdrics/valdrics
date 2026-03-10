@@ -167,7 +167,9 @@
 		verifyConnection
 	}: Props = $props();
 
-	const growthTier = $derived(['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier ?? ''));
+	const growthTier = $derived(
+		['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier ?? '')
+	);
 </script>
 
 <AuthGate authenticated={!!data.user} action="connect providers">
@@ -175,9 +177,15 @@
 		<h1>🔗 Connect Cloud & Cloud+ Providers</h1>
 
 		<div class="progress-steps">
-			<div class="step" class:active={currentStep === 0} class:complete={currentStep > 0}>1. Choose Cloud</div>
-			<div class="step" class:active={currentStep === 1} class:complete={currentStep > 1}>2. Configure</div>
-			<div class="step" class:active={currentStep === 2} class:complete={currentStep > 2}>3. Verify</div>
+			<div class="step" class:active={currentStep === 0} class:complete={currentStep > 0}>
+				1. Choose Cloud
+			</div>
+			<div class="step" class:active={currentStep === 1} class:complete={currentStep > 1}>
+				2. Configure
+			</div>
+			<div class="step" class:active={currentStep === 2} class:complete={currentStep > 2}>
+				3. Verify
+			</div>
 			<div class="step" class:active={currentStep === 3}>4. Done!</div>
 		</div>
 

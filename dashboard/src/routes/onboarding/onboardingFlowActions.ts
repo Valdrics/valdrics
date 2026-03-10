@@ -7,11 +7,14 @@ import {
 	runDiscoveryStageBRequest,
 	updateDiscoveryCandidateStatusRequest
 } from './onboardingApi';
-import { extractDomainFromEmail, type DiscoveryCandidate, type IdpProvider, type OnboardingProvider } from './onboardingTypesUtils';
+import {
+	extractDomainFromEmail,
+	type DiscoveryCandidate,
+	type IdpProvider,
+	type OnboardingProvider
+} from './onboardingTypesUtils';
 
-async function requireAccessToken(
-	getAccessToken: () => Promise<string | null>
-): Promise<string> {
+async function requireAccessToken(getAccessToken: () => Promise<string | null>): Promise<string> {
 	const token = await getAccessToken();
 	if (!token) {
 		throw new Error('Please log in first');

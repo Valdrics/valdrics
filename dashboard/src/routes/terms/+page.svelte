@@ -112,9 +112,8 @@
 			For legal or commercial terms questions, contact <a
 				class="underline"
 				href="mailto:hello@valdrics.com">hello@valdrics.com</a
-			>. For billing questions, contact <a class="underline" href="mailto:billing@valdrics.com"
-				>billing@valdrics.com</a
-			>.
+			>. For billing questions, contact
+			<a class="underline" href="mailto:billing@valdrics.com">billing@valdrics.com</a>.
 		</p>
 	</section>
 </article>

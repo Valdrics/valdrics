@@ -48,9 +48,24 @@ describe('HealthDashboardPanel', () => {
 						inactive_connections: 1,
 						errored_connections: 0,
 						providers: {
-							aws: { total_connections: 3, active_connections: 3, inactive_connections: 0, errored_connections: 0 },
-							azure: { total_connections: 2, active_connections: 1, inactive_connections: 1, errored_connections: 0 },
-							gcp: { total_connections: 1, active_connections: 1, inactive_connections: 0, errored_connections: 0 }
+							aws: {
+								total_connections: 3,
+								active_connections: 3,
+								inactive_connections: 0,
+								errored_connections: 0
+							},
+							azure: {
+								total_connections: 2,
+								active_connections: 1,
+								inactive_connections: 1,
+								errored_connections: 0
+							},
+							gcp: {
+								total_connections: 1,
+								active_connections: 1,
+								inactive_connections: 0,
+								errored_connections: 0
+							}
 						}
 					},
 					cloud_plus_connections: {
@@ -59,10 +74,30 @@ describe('HealthDashboardPanel', () => {
 						inactive_connections: 1,
 						errored_connections: 1,
 						providers: {
-							saas: { total_connections: 1, active_connections: 1, inactive_connections: 0, errored_connections: 0 },
-							license: { total_connections: 1, active_connections: 1, inactive_connections: 0, errored_connections: 0 },
-							platform: { total_connections: 1, active_connections: 0, inactive_connections: 1, errored_connections: 1 },
-							hybrid: { total_connections: 1, active_connections: 1, inactive_connections: 0, errored_connections: 0 }
+							saas: {
+								total_connections: 1,
+								active_connections: 1,
+								inactive_connections: 0,
+								errored_connections: 0
+							},
+							license: {
+								total_connections: 1,
+								active_connections: 1,
+								inactive_connections: 0,
+								errored_connections: 0
+							},
+							platform: {
+								total_connections: 1,
+								active_connections: 0,
+								inactive_connections: 1,
+								errored_connections: 1
+							},
+							hybrid: {
+								total_connections: 1,
+								active_connections: 1,
+								inactive_connections: 0,
+								errored_connections: 0
+							}
 						}
 					},
 					license_governance: {

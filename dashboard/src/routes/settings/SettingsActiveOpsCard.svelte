@@ -48,7 +48,9 @@
 	</div>
 
 	{#if !hasProAutomationAccess}
-		<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+		<div
+			class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center"
+		>
 			<div class="max-w-md space-y-3 pointer-events-auto">
 				<h3 class="text-lg font-semibold text-white">{upgradePrompt.heading}</h3>
 				<p class="text-sm text-ink-300">{upgradePrompt.body}</p>
@@ -59,8 +61,8 @@
 	{/if}
 
 	<p class="text-xs text-ink-400 mb-5">
-		ActiveOps automation stays on Pro and Enterprise. Slack and Jira switches in this card apply
-		to remediation policy events, not the general notification channel.
+		ActiveOps automation stays on Pro and Enterprise. Slack and Jira switches in this card apply to
+		remediation policy events, not the general notification channel.
 	</p>
 
 	{#if loadingActiveOps}
@@ -84,14 +86,18 @@
 					disabled={!hasProAutomationAccess}
 					aria-label="Enable Auto-Pilot for autonomous deletion"
 				/>
-				<span class="font-medium {activeOpsSettings.auto_pilot_enabled ? 'text-white' : 'text-ink-400'}">
+				<span
+					class="font-medium {activeOpsSettings.auto_pilot_enabled ? 'text-white' : 'text-ink-400'}"
+				>
 					Enable Auto-Pilot (Weekly Autonomous Deletion)
 				</span>
 			</label>
 
 			<div class="form-group">
 				<label for="confidence_threshold"
-					>Min Confidence Threshold: {Math.round(activeOpsSettings.min_confidence_threshold * 100)}%</label
+					>Min Confidence Threshold: {Math.round(
+						activeOpsSettings.min_confidence_threshold * 100
+					)}%</label
 				>
 				<input
 					type="range"
@@ -101,8 +107,7 @@
 					max="1.0"
 					step="0.01"
 					class="range"
-					disabled={!activeOpsSettings.auto_pilot_enabled ||
-						!hasProAutomationAccess}
+					disabled={!activeOpsSettings.auto_pilot_enabled || !hasProAutomationAccess}
 					aria-label="Minimum AI confidence threshold for autonomous actions"
 				/>
 				<div class="flex justify-between text-xs text-ink-500 mt-1">
@@ -128,8 +133,7 @@
 						type="checkbox"
 						bind:checked={activeOpsSettings.policy_block_production_destructive}
 						class="toggle"
-						disabled={!activeOpsSettings.policy_enabled ||
-							!hasProAutomationAccess}
+						disabled={!activeOpsSettings.policy_enabled || !hasProAutomationAccess}
 					/>
 					<span>Block destructive actions on production-like resources</span>
 				</label>
@@ -139,8 +143,7 @@
 						type="checkbox"
 						bind:checked={activeOpsSettings.policy_require_gpu_override}
 						class="toggle"
-						disabled={!activeOpsSettings.policy_enabled ||
-							!hasProAutomationAccess}
+						disabled={!activeOpsSettings.policy_enabled || !hasProAutomationAccess}
 					/>
 					<span>Require explicit override for GPU-impacting changes</span>
 				</label>
@@ -159,8 +162,7 @@
 						max="1.0"
 						step="0.01"
 						class="range"
-						disabled={!activeOpsSettings.policy_enabled ||
-							!hasProAutomationAccess}
+						disabled={!activeOpsSettings.policy_enabled || !hasProAutomationAccess}
 					/>
 				</div>
 
@@ -170,8 +172,7 @@
 							type="checkbox"
 							bind:checked={activeOpsSettings.policy_violation_notify_slack}
 							class="toggle"
-							disabled={!activeOpsSettings.policy_enabled ||
-								!hasProAutomationAccess}
+							disabled={!activeOpsSettings.policy_enabled || !hasProAutomationAccess}
 						/>
 						<span>Notify policy violations to Slack</span>
 					</label>
@@ -180,8 +181,7 @@
 							type="checkbox"
 							bind:checked={activeOpsSettings.policy_violation_notify_jira}
 							class="toggle"
-							disabled={!activeOpsSettings.policy_enabled ||
-								!hasProAutomationAccess}
+							disabled={!activeOpsSettings.policy_enabled || !hasProAutomationAccess}
 						/>
 						<span>Notify policy violations to Jira</span>
 					</label>
@@ -192,8 +192,7 @@
 					<select
 						id="policy_escalation_role"
 						bind:value={activeOpsSettings.policy_escalation_required_role}
-						disabled={!activeOpsSettings.policy_enabled ||
-							!hasProAutomationAccess}
+						disabled={!activeOpsSettings.policy_enabled || !hasProAutomationAccess}
 					>
 						<option value="owner">Owner</option>
 						<option value="admin">Admin</option>
@@ -208,11 +207,11 @@
 
 				<label class="flex items-center gap-3 cursor-pointer">
 					<input
-					type="checkbox"
-					bind:checked={activeOpsSettings.license_auto_reclaim_enabled}
-					class="toggle toggle-success"
-					disabled={!hasProAutomationAccess}
-				/>
+						type="checkbox"
+						bind:checked={activeOpsSettings.license_auto_reclaim_enabled}
+						class="toggle toggle-success"
+						disabled={!hasProAutomationAccess}
+					/>
 					<span>Enable autonomous seat reclamation for inactive users</span>
 				</label>
 
@@ -252,11 +251,11 @@
 
 				<label class="flex items-center gap-3 cursor-pointer">
 					<input
-					type="checkbox"
-					bind:checked={activeOpsSettings.license_downgrade_recommendations_enabled}
-					class="toggle"
-					disabled={!hasProAutomationAccess}
-				/>
+						type="checkbox"
+						bind:checked={activeOpsSettings.license_downgrade_recommendations_enabled}
+						class="toggle"
+						disabled={!hasProAutomationAccess}
+					/>
 					<span>Enable cost-saving tier downgrade recommendations</span>
 				</label>
 			</div>

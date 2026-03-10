@@ -17,10 +17,16 @@ const PUBLIC_ROUTES: readonly PublicRoute[] = [
 	{ path: '/resources', mainHeading: /resources/i },
 	{ path: '/resources/executive-one-pager', mainHeading: /executive one-pager/i },
 	{ path: '/insights', mainHeading: /insights/i },
-	{ path: '/insights/from-alert-to-approved-action', mainHeading: /from alert to approved action/i },
+	{
+		path: '/insights/from-alert-to-approved-action',
+		mainHeading: /from alert to approved action/i
+	},
 	{ path: '/proof', mainHeading: /executive and technical proof for buyer diligence/i },
 	{ path: '/proof/safe-access-model', mainHeading: /safe access model/i },
-	{ path: '/enterprise', mainHeading: /control cloud and software economics with procurement-grade confidence/i },
+	{
+		path: '/enterprise',
+		mainHeading: /control cloud and software economics with procurement-grade confidence/i
+	},
 	{ path: '/talk-to-sales', mainHeading: /talk to sales/i },
 	{ path: '/auth/login' },
 	{ path: '/privacy' },

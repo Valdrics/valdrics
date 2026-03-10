@@ -39,7 +39,9 @@
 	{#if awsConnections.length > 0}
 		<div class="space-y-4 mb-6">
 			{#each awsConnections as conn (conn.id)}
-				<div class="p-3 rounded-xl bg-ink-900/50 border border-ink-800 group relative overflow-hidden">
+				<div
+					class="p-3 rounded-xl bg-ink-900/50 border border-ink-800 group relative overflow-hidden"
+				>
 					<div class="flex justify-between items-start mb-2">
 						<div>
 							<div class="flex items-center gap-2 mb-1">
@@ -109,12 +111,16 @@
 	{#if azureConnections.length > 0}
 		<div class="space-y-4 mb-6">
 			{#each azureConnections as conn (conn.id)}
-				<div class="p-3 rounded-xl bg-ink-900/50 border border-ink-800 group relative overflow-hidden">
+				<div
+					class="p-3 rounded-xl bg-ink-900/50 border border-ink-800 group relative overflow-hidden"
+				>
 					<div class="flex justify-between items-start mb-2">
 						<div>
 							<div class="flex items-center gap-2 mb-1">
 								<span class="text-xs text-ink-500 font-mono"
-									>Sub ID: {conn.subscription_id ? `${conn.subscription_id.slice(0, 8)}...` : 'N/A'}</span
+									>Sub ID: {conn.subscription_id
+										? `${conn.subscription_id.slice(0, 8)}...`
+										: 'N/A'}</span
 								>
 							</div>
 						</div>
@@ -149,7 +155,9 @@
 			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">
 				{growthUpgradePrompt.cta}
 			</a>
-			<span class="badge badge-warning text-xs w-full justify-center">{growthUpgradePrompt.badge}</span>
+			<span class="badge badge-warning text-xs w-full justify-center"
+				>{growthUpgradePrompt.badge}</span
+			>
 			<p class="text-[11px] leading-relaxed text-ink-500">{growthUpgradePrompt.body}</p>
 		</div>
 	{/if}
@@ -177,7 +185,9 @@
 	{#if gcpConnections.length > 0}
 		<div class="space-y-4 mb-6">
 			{#each gcpConnections as conn (conn.id)}
-				<div class="p-3 rounded-xl bg-ink-900/50 border border-ink-800 group relative overflow-hidden">
+				<div
+					class="p-3 rounded-xl bg-ink-900/50 border border-ink-800 group relative overflow-hidden"
+				>
 					<div class="flex justify-between items-start mb-2">
 						<div>
 							<div class="flex items-center gap-2 mb-1">
@@ -215,7 +225,9 @@
 			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">
 				{growthUpgradePrompt.cta}
 			</a>
-			<span class="badge badge-warning text-xs w-full justify-center">{growthUpgradePrompt.badge}</span>
+			<span class="badge badge-warning text-xs w-full justify-center"
+				>{growthUpgradePrompt.badge}</span
+			>
 			<p class="text-[11px] leading-relaxed text-ink-500">{growthUpgradePrompt.body}</p>
 		</div>
 	{/if}

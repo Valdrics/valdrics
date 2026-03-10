@@ -29,7 +29,12 @@ describe('talk-to-sales proxy route', () => {
 	it('accepts valid inquiry payloads and forwards turnstile tokens', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(
 			new Response(
-				JSON.stringify({ ok: true, accepted: true, inquiryId: 'inquiry-1', emailHash: 'a'.repeat(64) }),
+				JSON.stringify({
+					ok: true,
+					accepted: true,
+					inquiryId: 'inquiry-1',
+					emailHash: 'a'.repeat(64)
+				}),
 				{
 					status: 202,
 					headers: { 'content-type': 'application/json' }

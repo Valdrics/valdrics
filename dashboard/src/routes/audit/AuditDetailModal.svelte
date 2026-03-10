@@ -9,13 +9,7 @@
 		formatDate: (value: string) => string;
 	}
 
-	let {
-		selectedLogId,
-		selectedDetail,
-		loadingDetail,
-		closeDetail,
-		formatDate
-	}: Props = $props();
+	let { selectedLogId, selectedDetail, loadingDetail, closeDetail, formatDate }: Props = $props();
 </script>
 
 {#if selectedLogId}

@@ -1,9 +1,6 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import {
-		listRelatedPublicContent,
-		type PublicContentEntry
-	} from '$lib/content/publicContent';
+	import { listRelatedPublicContent, type PublicContentEntry } from '$lib/content/publicContent';
 	import PublicPageMeta from './PublicPageMeta.svelte';
 	import './PublicMarketingPage.css';
 
@@ -51,7 +48,9 @@
 				<h1 class="public-page__title public-page__title--article">{entry.title}</h1>
 				<p class="public-page__subtitle public-page__subtitle--article">{entry.summary}</p>
 				<div class="public-page__actions">
-					<a href={resolveHref(entry.primaryCta.href)} class="btn btn-primary">{entry.primaryCta.label}</a>
+					<a href={resolveHref(entry.primaryCta.href)} class="btn btn-primary"
+						>{entry.primaryCta.label}</a
+					>
 					{#if entry.secondaryCta}
 						<a href={resolveHref(entry.secondaryCta.href)} class="btn btn-secondary">
 							{entry.secondaryCta.label}

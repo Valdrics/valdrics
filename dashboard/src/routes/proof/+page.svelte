@@ -54,7 +54,9 @@
 		<section class="public-page__section" aria-labelledby="proof-categories-title">
 			<div class="public-page__section-head">
 				<p class="public-page__eyebrow">Proof categories</p>
-				<h2 id="proof-categories-title" class="public-page__section-title">Review the evidence surface by buying concern</h2>
+				<h2 id="proof-categories-title" class="public-page__section-title">
+					Review the evidence surface by buying concern
+				</h2>
 				<p class="public-page__section-subtitle">
 					Each card below groups the public proof surface by the question buyers usually ask.
 				</p>
@@ -86,13 +88,15 @@
 		</section>
 
 		<section class="public-page__section">
-				<div class="public-page__band public-page__band--dark">
+			<div class="public-page__band public-page__band--dark">
 				<div class="public-page__band-copy">
 					<p class="public-page__eyebrow">Next validation surfaces</p>
-					<h2 class="public-page__section-title">Use the next layer of documentation only when you need it</h2>
+					<h2 class="public-page__section-title">
+						Use the next layer of documentation only when you need it
+					</h2>
 					<p class="public-page__section-subtitle">
-						Move from proof categories into product and API detail only when the buyer asks for deeper
-						validation.
+						Move from proof categories into product and API detail only when the buyer asks for
+						deeper validation.
 					</p>
 				</div>
 				<div class="public-page__actions-row">

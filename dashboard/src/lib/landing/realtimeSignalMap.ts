@@ -145,7 +145,8 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 		label: 'Snapshot B',
 		capturedAt: '2026-02-28T06:30:00Z',
 		headline: 'Owner and approval routing stay aligned before any change moves.',
-		decisionSummary: 'Engineering, finance, and security review one chain instead of parallel threads.',
+		decisionSummary:
+			'Engineering, finance, and security review one chain instead of parallel threads.',
 		lanes: {
 			economic_visibility: {
 				status: 'Stable',

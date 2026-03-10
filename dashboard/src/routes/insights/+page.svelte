@@ -54,7 +54,9 @@
 		<section class="public-page__section" aria-labelledby="insights-library-title">
 			<div class="public-page__section-head">
 				<p class="public-page__eyebrow">Library</p>
-				<h2 id="insights-library-title" class="public-page__section-title">Start with the operating question your buyer is asking</h2>
+				<h2 id="insights-library-title" class="public-page__section-title">
+					Start with the operating question your buyer is asking
+				</h2>
 				<p class="public-page__section-subtitle">
 					These guides translate Valdrics into weekly review, GreenOps, and procurement language.
 				</p>
@@ -75,7 +77,8 @@
 						<h2 class="public-page__card-title">{insight.title}</h2>
 						<p class="public-page__card-copy">{insight.summary}</p>
 						<div class="public-page__actions-row">
-							<a href={`${base}/insights/${insight.slug}`} class="btn btn-secondary">Open Insight</a>
+							<a href={`${base}/insights/${insight.slug}`} class="btn btn-secondary">Open Insight</a
+							>
 						</div>
 					</article>
 				{/each}

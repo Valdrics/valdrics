@@ -90,7 +90,12 @@
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-lg font-semibold">Background Jobs</h2>
 		<div class="flex gap-2">
-			<button type="button" class="btn btn-secondary text-xs" disabled={processingJobs} onclick={onLoadOpsData}>
+			<button
+				type="button"
+				class="btn btn-secondary text-xs"
+				disabled={processingJobs}
+				onclick={onLoadOpsData}
+			>
 				Refresh
 			</button>
 			<button
@@ -139,7 +144,9 @@
 	<div class="flex items-center justify-between mb-4">
 		<h2 class="text-lg font-semibold">RI/SP Strategy Recommendations</h2>
 		<div class="flex gap-2">
-			<button type="button" class="btn btn-secondary text-xs" onclick={onLoadOpsData}>Refresh</button>
+			<button type="button" class="btn btn-secondary text-xs" onclick={onLoadOpsData}
+				>Refresh</button
+			>
 			<button
 				type="button"
 				class="btn btn-primary text-xs"
@@ -166,7 +173,9 @@
 			<tbody>
 				{#if recommendations.length === 0}
 					<tr>
-						<td colspan="7" class="text-ink-400 text-center py-4">No open strategy recommendations.</td>
+						<td colspan="7" class="text-ink-400 text-center py-4"
+							>No open strategy recommendations.</td
+						>
 					</tr>
 				{:else}
 					{#each recommendations as rec (rec.id)}
@@ -175,7 +184,9 @@
 							<td class="text-sm">{rec.region}</td>
 							<td class="text-sm">{rec.term}</td>
 							<td class="text-sm">{rec.payment_option}</td>
-							<td class="text-success-400 font-semibold">{formatUsd(rec.estimated_monthly_savings)}</td>
+							<td class="text-success-400 font-semibold"
+								>{formatUsd(rec.estimated_monthly_savings)}</td
+							>
 							<td>{rec.roi_percentage.toFixed(1)}%</td>
 							<td>
 								<button

@@ -16,7 +16,12 @@
 	position: absolute;
 	inset: 0 0 auto 0;
 	height: 2px;
-	background: linear-gradient(90deg, rgb(18 158 192 / 0.12), rgb(18 158 192 / 0.68), rgb(16 185 129 / 0.4));
+	background: linear-gradient(
+		90deg,
+		rgb(18 158 192 / 0.12),
+		rgb(18 158 192 / 0.68),
+		rgb(16 185 129 / 0.4)
+	);
 }
 
 .landing-free-tier-head {

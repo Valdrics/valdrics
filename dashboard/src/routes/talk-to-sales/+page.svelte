@@ -63,7 +63,9 @@
 				},
 				body: JSON.stringify(payload)
 			});
-			const body = (await response.json().catch(() => ({ ok: false, error: 'delivery_failed' }))) as {
+			const body = (await response
+				.json()
+				.catch(() => ({ ok: false, error: 'delivery_failed' }))) as {
 				ok?: boolean;
 				error?: string;
 				inquiryId?: string;
@@ -107,7 +109,10 @@
 	{#snippet heroActions()}
 		<a href="#sales-inquiry-form" class="btn btn-primary">Start sales inquiry</a>
 		<a href={`${base}/enterprise`} class="btn btn-secondary">Explore Enterprise Overview</a>
-		<a href={`${base}/auth/login?intent=talk_to_sales&entry=talk_to_sales`} class="btn btn-secondary">
+		<a
+			href={`${base}/auth/login?intent=talk_to_sales&entry=talk_to_sales`}
+			class="btn btn-secondary"
+		>
 			Start Free Instead
 		</a>
 	{/snippet}
@@ -125,10 +130,12 @@
 		<section class="public-page__section sales-page__section" aria-labelledby="sales-inquiry-title">
 			<div class="public-page__section-head">
 				<p class="public-page__eyebrow">Primary path</p>
-				<h2 id="sales-inquiry-title" class="public-page__section-title">Send one inquiry, get the right path</h2>
+				<h2 id="sales-inquiry-title" class="public-page__section-title">
+					Send one inquiry, get the right path
+				</h2>
 				<p class="public-page__section-subtitle">
-					Use the form when you want plan-fit guidance, rollout clarity, security review support, or a
-					procurement-ready conversation.
+					Use the form when you want plan-fit guidance, rollout clarity, security review support, or
+					a procurement-ready conversation.
 				</p>
 			</div>
 
@@ -245,7 +252,13 @@
 							</label>
 							<label class="sales-page__field sales-page__field--honeypot" aria-hidden="true">
 								<span>Leave this field blank</span>
-								<input type="text" name="companyWebsite" tabindex="-1" autocomplete="off" bind:value={form.honey} />
+								<input
+									type="text"
+									name="companyWebsite"
+									tabindex="-1"
+									autocomplete="off"
+									bind:value={form.honey}
+								/>
 							</label>
 						</div>
 
@@ -264,7 +277,11 @@
 								{/if}
 							</div>
 							<div class="sales-page__actions">
-								<button type="submit" class="btn btn-primary" disabled={submitState === 'submitting'}>
+								<button
+									type="submit"
+									class="btn btn-primary"
+									disabled={submitState === 'submitting'}
+								>
 									{submitState === 'submitting' ? 'Sending inquiry…' : 'Send inquiry'}
 								</button>
 								<a href={salesMailHref} class="btn btn-secondary">Email instead</a>
@@ -276,7 +293,9 @@
 				<aside class="sales-page__sidebar" aria-label="Sales page guidance">
 					<div class="sales-page__rail-card sales-page__rail-card--dark">
 						<p class="public-page__card-kicker">What happens next</p>
-						<h3 class="public-page__card-title">We route the review correctly from the first reply</h3>
+						<h3 class="public-page__card-title">
+							We route the review correctly from the first reply
+						</h3>
 						<ul class="public-page__list">
 							{#each responseChecklist as item (item)}
 								<li>{item}</li>
@@ -304,8 +323,8 @@
 					<p class="public-page__eyebrow">Review shortcuts</p>
 					<h2 class="public-page__section-title">Need to verify before you book time?</h2>
 					<p class="public-page__section-subtitle">
-						Use the enterprise overview, proof pack, and resources library to answer the first round of
-						questions before the live conversation.
+						Use the enterprise overview, proof pack, and resources library to answer the first round
+						of questions before the live conversation.
 					</p>
 				</div>
 				<div class="public-page__actions-row">

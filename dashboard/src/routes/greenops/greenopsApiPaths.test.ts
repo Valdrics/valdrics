@@ -39,6 +39,8 @@ describe('greenops API path helpers', () => {
 		expect(buildGreenSchedulePath('ap-northeast-1', 6)).toContain(
 			'/api/edge/api/v1/carbon/schedule?region=ap-northeast-1&duration_hours=6'
 		);
-		expect(buildGravitonPath('us-east-1')).toContain('/api/edge/api/v1/carbon/graviton?region=us-east-1');
+		expect(buildGravitonPath('us-east-1')).toContain(
+			'/api/edge/api/v1/carbon/graviton?region=us-east-1'
+		);
 	});
 });

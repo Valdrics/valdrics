@@ -62,12 +62,16 @@
 	</p>
 
 	{#if safetyError}
-		<div class="mb-4 rounded-lg border border-danger-500/50 bg-danger-500/10 p-3 text-sm text-danger-400">
+		<div
+			class="mb-4 rounded-lg border border-danger-500/50 bg-danger-500/10 p-3 text-sm text-danger-400"
+		>
 			{safetyError}
 		</div>
 	{/if}
 	{#if safetySuccess}
-		<div class="mb-4 rounded-lg border border-success-500/50 bg-success-500/10 p-3 text-sm text-success-400">
+		<div
+			class="mb-4 rounded-lg border border-success-500/50 bg-success-500/10 p-3 text-sm text-success-400"
+		>
 			{safetySuccess}
 		</div>
 	{/if}
@@ -111,7 +115,9 @@
 				<div class="flex items-center justify-between text-xs text-ink-400 mb-2">
 					<span>Daily Savings Guardrail</span>
 					<span>
-						${safetyStatus.daily_savings_used.toFixed(2)} / ${safetyStatus.daily_savings_limit.toFixed(2)}
+						${safetyStatus.daily_savings_used.toFixed(2)} / ${safetyStatus.daily_savings_limit.toFixed(
+							2
+						)}
 					</span>
 				</div>
 				<div class="h-2 w-full bg-ink-800 rounded-full overflow-hidden">
@@ -124,7 +130,9 @@
 						style="width: {safetyUsagePercent(safetyStatus)}%"
 					></div>
 				</div>
-				<p class="mt-1 text-right text-xs text-ink-500">{safetyUsagePercent(safetyStatus).toFixed(1)}% used</p>
+				<p class="mt-1 text-right text-xs text-ink-500">
+					{safetyUsagePercent(safetyStatus).toFixed(1)}% used
+				</p>
 			</div>
 		</div>
 	{/if}

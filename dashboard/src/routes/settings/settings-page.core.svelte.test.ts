@@ -162,14 +162,19 @@ describe('settings page integration wiring (core)', () => {
 		).toBeTruthy();
 		expect(screen.getAllByText('Growth Plan Required').length).toBeGreaterThan(0);
 		expect(
-			screen.getByText(/Create Jira issues from policy and remediation events on Growth and above\./i)
+			screen.getByText(
+				/Create Jira issues from policy and remediation events on Growth and above\./i
+			)
 		).toBeTruthy();
 		expect(
 			screen.getByText(/Route policy and remediation alerts into Teams on Pro and Enterprise\./i)
 		).toBeTruthy();
-		expect((screen.getByLabelText('Enable Slack notifications') as HTMLInputElement).disabled).toBe(true);
+		expect((screen.getByLabelText('Enable Slack notifications') as HTMLInputElement).disabled).toBe(
+			true
+		);
 		expect(
-			(screen.getByRole('button', { name: /Send test Slack notification/i }) as HTMLButtonElement).disabled
+			(screen.getByRole('button', { name: /Send test Slack notification/i }) as HTMLButtonElement)
+				.disabled
 		).toBe(true);
 	});
 });

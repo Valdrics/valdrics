@@ -38,8 +38,7 @@ export const GET: RequestHandler = () => {
 	return new Response(WORKBOOK, {
 		headers: {
 			'Content-Type': 'text/markdown; charset=utf-8',
-			'Content-Disposition':
-				'attachment; filename="global-finops-compliance-workbook.md"',
+			'Content-Disposition': 'attachment; filename="global-finops-compliance-workbook.md"',
 			'Cache-Control': 'public, max-age=3600'
 		}
 	});

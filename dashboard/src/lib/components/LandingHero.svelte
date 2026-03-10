@@ -55,7 +55,8 @@
 	const SUBSCRIBE_API_PATH = `${base}/api/marketing/subscribe`,
 		TALK_TO_SALES_PATH = `${base}/talk-to-sales`,
 		ENTERPRISE_PATH = `${base}/enterprise`;
-	if (!DEFAULT_SIGNAL_SNAPSHOT) throw new Error('Realtime signal map requires at least one snapshot.');
+	if (!DEFAULT_SIGNAL_SNAPSHOT)
+		throw new Error('Realtime signal map requires at least one snapshot.');
 	let signalMapElement: HTMLDivElement | null = null;
 	let signalMapInView = $state(true),
 		documentVisible = $state(true),
@@ -89,10 +90,14 @@
 		telemetryInitialized = $state(false),
 		cookieBannerVisible = $state(false),
 		roiCurrencyCode = $state('USD');
-	let activeSnapshot = $derived(REALTIME_SIGNAL_SNAPSHOTS[snapshotIndex] ?? DEFAULT_SIGNAL_SNAPSHOT);
+	let activeSnapshot = $derived(
+		REALTIME_SIGNAL_SNAPSHOTS[snapshotIndex] ?? DEFAULT_SIGNAL_SNAPSHOT
+	);
 	let activeHookState = $derived(CLOUD_HOOK_STATES[hookStateIndex] ?? CLOUD_HOOK_STATES[0]);
 	let activeBuyerRole = $derived(BUYER_ROLE_VIEWS[buyerRoleIndex] ?? BUYER_ROLE_VIEWS[0]);
-	let activeSignalLane = $derived(activeSnapshot.lanes.find((lane) => lane.id === activeLaneId) ?? activeSnapshot.lanes[0]);
+	let activeSignalLane = $derived(
+		activeSnapshot.lanes.find((lane) => lane.id === activeLaneId) ?? activeSnapshot.lanes[0]
+	);
 	let heroContext = $derived(HERO_ROLE_CONTEXT[activeBuyerRole.id] ?? HERO_ROLE_CONTEXT.finops);
 	let heroTitle = $derived(
 		experiments.heroVariant === 'from_metrics_to_control'
@@ -259,22 +264,25 @@
 			extraParams
 		});
 	}
-	const buildPlanCtaHref = (planId: string) =>
-		buildSignupHref('start_plan', { plan: planId, source: 'plans' });
-	const buildTalkToSalesHref = (source: string) =>
-		buildLandingHeroSalesPath({
+	function buildPlanCtaHref(planId: string): string {
+		return buildSignupHref('start_plan', { plan: planId, source: 'plans' });
+	}
+	function buildTalkToSalesHref(source: string): string {
+		return buildLandingHeroSalesPath({
 			path: TALK_TO_SALES_PATH,
 			source,
 			persona: activeBuyerRole.id,
 			utm: attribution.utm
 		});
-	const buildEnterpriseReviewHref = (source: string) =>
-		buildLandingHeroSalesPath({
+	}
+	function buildEnterpriseReviewHref(source: string): string {
+		return buildLandingHeroSalesPath({
 			path: ENTERPRISE_PATH,
 			source,
 			persona: activeBuyerRole.id,
 			utm: attribution.utm
 		});
+	}
 	const selectSnapshot = (index: number) =>
 		trackIndexedLandingSelection({
 			index,
@@ -316,7 +324,8 @@
 		markEngaged();
 		emitLandingTelemetrySafe('lane_focus', 'signal_map', laneId, buildTelemetryContext('engaged'));
 	};
-	const handleSignalMapElementChange = (element: HTMLDivElement | null) => (signalMapElement = element);
+	const handleSignalMapElementChange = (element: HTMLDivElement | null) =>
+		(signalMapElement = element);
 	const handleScenarioWasteWithoutChange = (value: number) => (scenarioWasteWithoutPct = value);
 	const handleScenarioWasteWithChange = (value: number) => (scenarioWasteWithPct = value);
 	const handleScenarioWindowChange = (value: number) => (scenarioWindowMonths = value);

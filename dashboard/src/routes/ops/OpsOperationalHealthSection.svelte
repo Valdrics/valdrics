@@ -7,9 +7,7 @@
 	import OpsIntegrationAcceptanceSection from './OpsIntegrationAcceptanceSection.svelte';
 	import OpsJobSloSection from './OpsJobSloSection.svelte';
 	import OpsUnitEconomicsSection from './OpsUnitEconomicsSection.svelte';
-	import {
-		buildOpsOperationalInitialState
-	} from './opsOperationalState';
+	import { buildOpsOperationalInitialState } from './opsOperationalState';
 	import { createOpsOperationalCoreActions } from './opsOperationalCoreActions';
 	import { createOpsOperationalAcceptanceActions } from './opsOperationalAcceptanceActions';
 	import { createOpsOperationalCloseActions } from './opsOperationalCloseActions';
@@ -24,10 +22,7 @@
 		jobSloBadgeClass,
 		jobSloMetricBadgeClass
 	} from './opsUtils';
-	import {
-		formatDelta,
-		unitDeltaClass
-	} from './unitEconomics';
+	import { formatDelta, unitDeltaClass } from './unitEconomics';
 
 	const OPS_REQUEST_TIMEOUT_MS = 10000;
 
@@ -53,9 +48,11 @@
 	const formatUsdSafe = (value: number | null | undefined): string => formatUsd(Number(value ?? 0));
 	const formatNumberSafe = (value: number | null | undefined, digits?: number): string =>
 		formatNumber(Number(value ?? 0), digits);
-	const formatDurationSafe = (value: number | null | undefined): string => formatDuration(value ?? null);
+	const formatDurationSafe = (value: number | null | undefined): string =>
+		formatDuration(value ?? null);
 	const formatDateSafe = (value: string | null | undefined): string => formatDate(value ?? null);
-	const formatDeltaSafe = (value: number | null | undefined): string => formatDelta(Number(value ?? 0));
+	const formatDeltaSafe = (value: number | null | undefined): string =>
+		formatDelta(Number(value ?? 0));
 	const closeStatusBadgeClassSafe = (value: string | null | undefined): string =>
 		closeStatusBadgeClass(value ?? undefined);
 

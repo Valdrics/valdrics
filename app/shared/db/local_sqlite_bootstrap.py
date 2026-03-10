@@ -4,6 +4,7 @@ import asyncio
 from contextlib import contextmanager
 from functools import lru_cache
 from pathlib import Path
+from types import ModuleType
 from typing import Any, Iterator
 
 import structlog
@@ -21,10 +22,14 @@ logger = structlog.get_logger()
 _STRICT_ENVIRONMENTS = frozenset({"production", "staging"})
 _bootstrap_lock = asyncio.Lock()
 
+fcntl: ModuleType | None
+
 try:  # pragma: no cover - exercised on Linux; guarded for portability.
-    import fcntl
+    import fcntl as _fcntl
 except ImportError:  # pragma: no cover
     fcntl = None
+else:  # pragma: no cover - exercised on Linux; guarded for portability.
+    fcntl = _fcntl
 
 
 def should_bootstrap_local_sqlite(settings_obj: Any, effective_url: str) -> bool:

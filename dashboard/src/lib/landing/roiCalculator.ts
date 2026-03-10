@@ -79,7 +79,9 @@ function currencyFromRegion(region: string | null): string | null {
 	return null;
 }
 
-export function detectCurrencyFromCountryCode(countryCode: string | null | undefined): string | null {
+export function detectCurrencyFromCountryCode(
+	countryCode: string | null | undefined
+): string | null {
 	if (!countryCode) return null;
 	const normalizedCountryCode = countryCode.trim().toUpperCase();
 	if (!normalizedCountryCode || normalizedCountryCode === 'XX') return null;

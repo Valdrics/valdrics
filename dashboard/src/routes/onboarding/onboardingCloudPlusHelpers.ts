@@ -12,10 +12,9 @@ export function applyDiscoveryCandidateLocally<T extends { id: string }>(
 	return candidates.map((candidate) => (candidate.id === updated.id ? updated : candidate));
 }
 
-export function upsertDiscoveryCandidates<T extends { id: string; confidence_score: number; provider: string }>(
-	existing: T[],
-	candidates: T[]
-): T[] {
+export function upsertDiscoveryCandidates<
+	T extends { id: string; confidence_score: number; provider: string }
+>(existing: T[], candidates: T[]): T[] {
 	const merged = [...existing];
 	for (const candidate of candidates) {
 		const existingIndex = merged.findIndex((item) => item.id === candidate.id);

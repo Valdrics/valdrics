@@ -73,7 +73,9 @@
 	<div class="flex items-center justify-between">
 		<div>
 			<h1 class="text-3xl font-bold mb-2">Cloud Accounts</h1>
-			<p class="text-ink-400">Manage your multi-cloud connectivity and enterprise organization discovery.</p>
+			<p class="text-ink-400">
+				Manage your multi-cloud connectivity and enterprise organization discovery.
+			</p>
 		</div>
 		<a href={`${base}/onboarding`} class="btn btn-primary !w-auto">
 			<span>➕</span> Connect New Provider

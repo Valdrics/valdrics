@@ -3,10 +3,12 @@ export const RAW_PUBLIC_CONTENT_PROOF = [
 		kind: 'proof',
 		slug: 'safe-access-model',
 		title: 'Safe Access Model',
-		summary: 'Understand how Valdrics approaches buyer-safe access posture, early trust, and rollout proof without overclaiming prelaunch validation.',
+		summary:
+			'Understand how Valdrics approaches buyer-safe access posture, early trust, and rollout proof without overclaiming prelaunch validation.',
 		kicker: 'Proof Pack',
 		seoTitle: 'Safe Access Model',
-		seoDescription: 'Review the safe-access model for Valdrics, including read-only posture where supported and rollout-safe access review.',
+		seoDescription:
+			'Review the safe-access model for Valdrics, including read-only posture where supported and rollout-safe access review.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'validate',
 		readingMinutes: 5,
@@ -48,10 +50,12 @@ export const RAW_PUBLIC_CONTENT_PROOF = [
 		kind: 'proof',
 		slug: 'identity-and-approval-controls',
 		title: 'Identity and Approval Controls',
-		summary: 'See how identity expectations, approval gates, and owner-routed execution fit together in the decision path.',
+		summary:
+			'See how identity expectations, approval gates, and owner-routed execution fit together in the decision path.',
 		kicker: 'Proof Pack',
 		seoTitle: 'Identity and Approval Controls',
-		seoDescription: 'Review identity and approval controls in the Valdrics decision path, including owner routing and guarded action flow.',
+		seoDescription:
+			'Review identity and approval controls in the Valdrics decision path, including owner routing and guarded action flow.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'validate',
 		readingMinutes: 5,
@@ -93,16 +97,21 @@ export const RAW_PUBLIC_CONTENT_PROOF = [
 		kind: 'proof',
 		slug: 'decision-history-and-export-integrity',
 		title: 'Decision History and Export Integrity',
-		summary: 'Review how Valdrics preserves the decision chain so the result can survive leadership, finance, and procurement review.',
+		summary:
+			'Review how Valdrics preserves the decision chain so the result can survive leadership, finance, and procurement review.',
 		kicker: 'Proof Pack',
 		seoTitle: 'Decision History and Export Integrity',
-		seoDescription: 'Understand how Valdrics preserves decision history and export-ready records for later buyer and operator review.',
+		seoDescription:
+			'Understand how Valdrics preserves decision history and export-ready records for later buyer and operator review.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'validate',
 		readingMinutes: 6,
 		audiences: ['finance', 'executive', 'procurement'],
 		primaryCta: { label: 'Open Documentation', href: '/docs' },
-		secondaryCta: { label: 'Download Workbook', href: '/resources/global-finops-compliance-workbook.md' },
+		secondaryCta: {
+			label: 'Download Workbook',
+			href: '/resources/global-finops-compliance-workbook.md'
+		},
 		sections: [
 			{
 				title: 'The record is part of the product',
@@ -138,16 +147,21 @@ export const RAW_PUBLIC_CONTENT_PROOF = [
 		kind: 'proof',
 		slug: 'validation-scope-and-operational-hardening',
 		title: 'Validation Scope and Operational Hardening',
-		summary: 'Understand what the current public validation materials are meant to prove and where they fit in a prelaunch diligence cycle.',
+		summary:
+			'Understand what the current public validation materials are meant to prove and where they fit in a prelaunch diligence cycle.',
 		kicker: 'Proof Pack',
 		seoTitle: 'Validation Scope and Operational Hardening',
-		seoDescription: 'Review the public validation scope and operational hardening story for Valdrics.',
+		seoDescription:
+			'Review the public validation scope and operational hardening story for Valdrics.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'validate',
 		readingMinutes: 5,
 		audiences: ['executive', 'security', 'procurement'],
 		primaryCta: { label: 'Open Technical Validation', href: '/docs/technical-validation' },
-		secondaryCta: { label: 'Download Executive One-Pager', href: '/resources/valdrics-enterprise-one-pager.md' },
+		secondaryCta: {
+			label: 'Download Executive One-Pager',
+			href: '/resources/valdrics-enterprise-one-pager.md'
+		},
 		sections: [
 			{
 				title: 'What public validation should do',

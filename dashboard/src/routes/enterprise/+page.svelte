@@ -79,7 +79,9 @@
 			and a formal enterprise diligence lane for security, risk, procurement, and executive review.
 		</p>
 		<div class="enterprise-hero-cta">
-			<a href={enterpriseIntakeHref} class="btn btn-primary pulse-glow">Request Enterprise Briefing</a>
+			<a href={enterpriseIntakeHref} class="btn btn-primary pulse-glow"
+				>Request Enterprise Briefing</a
+			>
 			<a href={`${base}/talk-to-sales`} class="btn btn-secondary">Talk to Sales</a>
 			<a href={`${base}/auth/login?intent=enterprise_preview`} class="btn btn-secondary"
 				>Start Free Workspace</a
@@ -136,7 +138,10 @@
 			<h3>Formal diligence and procurement workflows</h3>
 			<ul>
 				<li>Coordinate security, legal, procurement, and finance sign-off.</li>
-				<li>Review governance artifacts, SCIM, and deployment controls before full production activation.</li>
+				<li>
+					Review governance artifacts, SCIM, and deployment controls before full production
+					activation.
+				</li>
 				<li>Operate a staged rollout with explicit control checkpoints.</li>
 			</ul>
 			<a href={enterpriseIntakeHref} class="btn btn-primary">Open Enterprise Intake</a>
@@ -148,8 +153,8 @@
 			<p class="enterprise-kicker">Procurement Readiness Pack</p>
 			<h2>Use externally framed diligence artifacts</h2>
 			<p>
-				Package your internal review quickly with buyer-facing artifacts covering governance controls,
-				access posture, rollout risk, and commercial readiness assumptions.
+				Package your internal review quickly with buyer-facing artifacts covering governance
+				controls, access posture, rollout risk, and commercial readiness assumptions.
 			</p>
 		</div>
 		<div class="enterprise-proof-actions">

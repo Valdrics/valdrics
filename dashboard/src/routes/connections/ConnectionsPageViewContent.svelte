@@ -22,11 +22,21 @@
 	import './ConnectionsPageViewContent.css';
 
 	let { data } = $props();
-	let loadingAWS = $state(true), loadingAzure = $state(true), loadingGCP = $state(true);
-	let loadingSaaS = $state(true), loadingLicense = $state(true), loadingPlatform = $state(true), loadingHybrid = $state(true);
+	let loadingAWS = $state(true),
+		loadingAzure = $state(true),
+		loadingGCP = $state(true);
+	let loadingSaaS = $state(true),
+		loadingLicense = $state(true),
+		loadingPlatform = $state(true),
+		loadingHybrid = $state(true);
 	let awsConnection = $state<CloudConnection | null>(null);
-	let awsConnections = $state<CloudConnection[]>([]), azureConnections = $state<CloudConnection[]>([]), gcpConnections = $state<CloudConnection[]>([]);
-	let saasConnections = $state<CloudConnection[]>([]), licenseConnections = $state<CloudConnection[]>([]), platformConnections = $state<CloudConnection[]>([]), hybridConnections = $state<CloudConnection[]>([]);
+	let awsConnections = $state<CloudConnection[]>([]),
+		azureConnections = $state<CloudConnection[]>([]),
+		gcpConnections = $state<CloudConnection[]>([]);
+	let saasConnections = $state<CloudConnection[]>([]),
+		licenseConnections = $state<CloudConnection[]>([]),
+		platformConnections = $state<CloudConnection[]>([]),
+		hybridConnections = $state<CloudConnection[]>([]);
 	let discoveredAccounts = $state<DiscoveredAccount[]>([]);
 	let loadingDiscovered = $state(false);
 	let syncingOrg = $state(false);
@@ -38,21 +48,39 @@
 
 	const cloudPlusTierAllowed = ['pro', 'enterprise'];
 	let verifyingCloudPlus = $state<Record<string, boolean>>({});
-	let creatingSaaS = $state(false), creatingLicense = $state(false), creatingPlatform = $state(false), creatingHybrid = $state(false);
-	let saasName = $state(''), saasVendor = $state('stripe');
+	let creatingSaaS = $state(false),
+		creatingLicense = $state(false),
+		creatingPlatform = $state(false),
+		creatingHybrid = $state(false);
+	let saasName = $state(''),
+		saasVendor = $state('stripe');
 	let saasAuthMethod = $state<'manual' | 'api_key' | 'oauth' | 'csv'>('api_key');
-	let saasApiKey = $state(''), saasConnectorConfig = $state('{}'), saasFeedInput = $state('[]');
-	let licenseName = $state(''), licenseVendor = $state('microsoft_365');
+	let saasApiKey = $state(''),
+		saasConnectorConfig = $state('{}'),
+		saasFeedInput = $state('[]');
+	let licenseName = $state(''),
+		licenseVendor = $state('microsoft_365');
 	let licenseAuthMethod = $state<'manual' | 'api_key' | 'oauth' | 'csv'>('oauth');
-	let licenseApiKey = $state(''), licenseConnectorConfig = $state('{"default_seat_price_usd": 36}'), licenseFeedInput = $state('[]');
-	let platformName = $state(''), platformVendor = $state('internal_platform');
+	let licenseApiKey = $state(''),
+		licenseConnectorConfig = $state('{"default_seat_price_usd": 36}'),
+		licenseFeedInput = $state('[]');
+	let platformName = $state(''),
+		platformVendor = $state('internal_platform');
 	let platformAuthMethod = $state<'manual' | 'csv' | 'api_key'>('manual');
-	let platformApiKey = $state(''), platformApiSecret = $state(''), platformConnectorConfig = $state('{}'), platformFeedInput = $state('[]');
-	let hybridName = $state(''), hybridVendor = $state('datacenter');
+	let platformApiKey = $state(''),
+		platformApiSecret = $state(''),
+		platformConnectorConfig = $state('{}'),
+		platformFeedInput = $state('[]');
+	let hybridName = $state(''),
+		hybridVendor = $state('datacenter');
 	let hybridAuthMethod = $state<'manual' | 'csv' | 'api_key'>('manual');
-	let hybridApiKey = $state(''), hybridApiSecret = $state(''), hybridConnectorConfig = $state('{}'), hybridFeedInput = $state('[]');
+	let hybridApiKey = $state(''),
+		hybridApiSecret = $state(''),
+		hybridConnectorConfig = $state('{}'),
+		hybridFeedInput = $state('[]');
 
-	const canUseCloudPlusFeatures = (): boolean => cloudPlusTierAllowed.includes(data.subscription?.tier);
+	const canUseCloudPlusFeatures = (): boolean =>
+		cloudPlusTierAllowed.includes(data.subscription?.tier);
 
 	function isCreatingCloudPlus(provider: CloudPlusProvider): boolean {
 		if (provider === 'saas') return creatingSaaS;

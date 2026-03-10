@@ -82,7 +82,9 @@
 		{#if rotatedToken}
 			<div class="rounded-lg border border-ink-800/60 bg-ink-950/40 p-3">
 				<p class="text-xs text-ink-500 mb-2">
-					New token (store now; it will not be shown again){rotatedAt ? ` • rotated ${rotatedAt}` : ''}:
+					New token (store now; it will not be shown again){rotatedAt
+						? ` • rotated ${rotatedAt}`
+						: ''}:
 				</p>
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 					<input class="font-mono text-xs" readonly value={rotatedToken} aria-label="SCIM token" />
@@ -142,7 +144,11 @@
 							<div class="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
 								<div class="md:col-span-2">
 									<label for={`scim-group-${index}`}>Group name</label>
-									<input id={`scim-group-${index}`} placeholder="finops-admins" bind:value={mapping.group} />
+									<input
+										id={`scim-group-${index}`}
+										placeholder="finops-admins"
+										bind:value={mapping.group}
+									/>
 								</div>
 								<div>
 									<label for={`scim-role-${index}`}>Role</label>

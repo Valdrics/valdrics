@@ -27,7 +27,9 @@ describe('PublicPageMeta', () => {
 			keywords: ['talk to sales', 'sales']
 		});
 
-		const structuredDataScripts = document.head.querySelectorAll('script[type="application/ld+json"]');
+		const structuredDataScripts = document.head.querySelectorAll(
+			'script[type="application/ld+json"]'
+		);
 		expect(structuredDataScripts).toHaveLength(1);
 		expect(structuredDataScripts[0]?.textContent).toContain('"@type":"ContactPage"');
 		expect(structuredDataScripts[0]?.textContent).toContain('\\u003c/script>');

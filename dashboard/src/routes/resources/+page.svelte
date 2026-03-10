@@ -60,7 +60,9 @@
 		<section class="public-page__section" aria-labelledby="resources-library-title">
 			<div class="public-page__section-head">
 				<p class="public-page__eyebrow">Library</p>
-				<h2 id="resources-library-title" class="public-page__section-title">Use the right asset for the buying moment</h2>
+				<h2 id="resources-library-title" class="public-page__section-title">
+					Use the right asset for the buying moment
+				</h2>
 				<p class="public-page__section-subtitle">
 					Each asset is tuned for a specific stage: self-serve evaluation, team rollout alignment,
 					or formal diligence.
@@ -69,22 +71,24 @@
 
 			<div class="public-page__grid public-page__grid--3">
 				{#each resources as resource (resource.slug)}
-						<article
-							class={`public-page__card ${
-								resource.slug === 'enterprise-governance-overview'
-									? 'public-page__card--accent public-page__card--featured'
-									: resource.slug === 'greenops-decision-framework'
-										? 'public-page__card--dark'
-										: resource.slug === 'executive-one-pager'
-											? 'public-page__card--featured'
-											: ''
-							}`}
-						>
+					<article
+						class={`public-page__card ${
+							resource.slug === 'enterprise-governance-overview'
+								? 'public-page__card--accent public-page__card--featured'
+								: resource.slug === 'greenops-decision-framework'
+									? 'public-page__card--dark'
+									: resource.slug === 'executive-one-pager'
+										? 'public-page__card--featured'
+										: ''
+						}`}
+					>
 						<p class="public-page__card-kicker">{resource.kicker}</p>
 						<h2 class="public-page__card-title">{resource.title}</h2>
 						<p class="public-page__card-copy">{resource.summary}</p>
 						<div class="public-page__actions-row">
-							<a href={`${base}/resources/${resource.slug}`} class="btn btn-secondary">Open Resource</a>
+							<a href={`${base}/resources/${resource.slug}`} class="btn btn-secondary"
+								>Open Resource</a
+							>
 						</div>
 					</article>
 				{/each}
@@ -92,7 +96,7 @@
 		</section>
 
 		<section class="public-page__section" aria-labelledby="resources-contact-title">
-				<div class="public-page__band public-page__band--dark">
+			<div class="public-page__band public-page__band--dark">
 				<div class="public-page__band-copy">
 					<p class="public-page__eyebrow">Contact Directory</p>
 					<h2 id="resources-contact-title" class="public-page__section-title">Contact Directory</h2>
