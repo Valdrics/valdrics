@@ -11,6 +11,8 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.shared.core.async_utils import maybe_await
+
 
 async def check_and_reserve_budget(
     *,
@@ -444,15 +446,19 @@ async def check_budget_and_alert(
     )
 
     if usage_percent >= threshold_percent and not already_sent:
-        manager_module.audit_log(
-            event="llm_budget_alert",
-            user_id="system",
-            tenant_id=str(tenant_id),
-            details={
-                "usage_usd": float(current_usage),
-                "limit_usd": float(limit),
-                "percent": float(usage_percent),
-            },
+        await maybe_await(
+            manager_module.audit_log(
+                event="llm_budget_alert",
+                user_id="system",
+                tenant_id=str(tenant_id),
+                details={
+                    "usage_usd": float(current_usage),
+                    "limit_usd": float(limit),
+                    "percent": float(usage_percent),
+                },
+                db=db,
+                isolated=True,
+            )
         )
 
         try:

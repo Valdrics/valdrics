@@ -107,7 +107,7 @@ async def test_policy_notification_diagnostics_jira_tier_blocked(
     override_current_user,
 ) -> None:
     tenant_id = uuid.uuid4()
-    admin = make_current_user(tier=PricingTier.GROWTH, tenant_id=tenant_id)
+    admin = make_current_user(tier=PricingTier.STARTER, tenant_id=tenant_id)
     db.add(
         NotificationSettings(
             tenant_id=tenant_id,
@@ -143,10 +143,10 @@ async def test_policy_notification_diagnostics_jira_tier_blocked(
 
     assert response.status_code == 200
     data = response.json()
-    assert data["slack"]["feature_allowed_by_tier"] is True
+    assert data["slack"]["feature_allowed_by_tier"] is False
     assert data["jira"]["ready"] is False
     assert data["jira"]["feature_allowed_by_tier"] is False
-    assert "tier_missing_incident_integrations_feature" in data["jira"]["reasons"]
+    assert "tier_missing_jira_integration_feature" in data["jira"]["reasons"]
 
 
 @pytest.mark.asyncio

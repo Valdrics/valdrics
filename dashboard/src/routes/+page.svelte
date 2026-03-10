@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
+	import { trackProductFunnelStage } from '$lib/funnel/productFunnelTelemetry';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 	import ProviderSelector from '$lib/components/ProviderSelector.svelte';
 	import AllocationBreakdown from '$lib/components/AllocationBreakdown.svelte';
@@ -21,6 +22,7 @@
 	import ZombieTable from '$lib/components/ZombieTable.svelte';
 	import RemediationModal from '$lib/components/RemediationModal.svelte';
 	import { countZombieFindings, type ZombieCollections } from '$lib/zombieCollections';
+	import { getDashboardPersonaContent, PUBLIC_HOME_META } from './homeDashboardContent';
 
 	type RemediationFinding = {
 		resource_id: string;
@@ -53,42 +55,12 @@
 	let provider = $derived(data.provider || ''); // Default to empty (All)
 	let persona = $derived(String(data.profile?.persona ?? 'engineering').toLowerCase());
 	let tier = $derived(data.subscription?.tier ?? 'free');
-
-	let personaTitle = $derived(
-		(() => {
-			switch (persona) {
-				case 'finance':
-					return 'Finance';
-				case 'platform':
-					return 'Platform';
-				case 'leadership':
-					return 'Leadership';
-				case 'engineering':
-				default:
-					return 'Engineering';
-			}
-		})()
-	);
-
-	let personaSubtitle = $derived(
-		(() => {
-			switch (persona) {
-				case 'finance':
-					return 'Allocation coverage, unit economics, and spend drivers.';
-				case 'platform':
-					return 'Reliability, guardrails, and connector health.';
-				case 'leadership':
-					return 'Top drivers, carbon, and savings proof.';
-				case 'engineering':
-				default:
-					return 'Waste signals, findings, and safe remediation.';
-			}
-		})()
-	);
+	let personaContent = $derived(getDashboardPersonaContent(persona));
 	// Remediation state
 	let remediationCandidate = $state<RemediationFinding | null>(null);
 	let remediationModalOpen = $state(false);
 	let pendingNavigationTimeout = $state<ReturnType<typeof setTimeout> | null>(null);
+	let firstValueTracked = $state(false);
 
 	const DASHBOARD_NAV_DEBOUNCE_MS = 300;
 
@@ -152,6 +124,35 @@
 
 	let analysisText = $derived(analysis?.analysis ?? '');
 
+	const hasFirstValueSignal = $derived(
+		Boolean(
+			!error &&
+				data.user &&
+				(costs !== null ||
+					carbon !== null ||
+					zombies !== null ||
+					allocation !== null ||
+					unitEconomics !== null ||
+					freshness !== null)
+		)
+	);
+
+	$effect(() => {
+		if (firstValueTracked || !hasFirstValueSignal || !data.session?.access_token) {
+			return;
+		}
+		firstValueTracked = true;
+		void trackProductFunnelStage({
+			accessToken: data.session.access_token,
+			stage: 'first_value_activated',
+			tenantId: data.user?.tenant_id,
+			url: $page.url,
+			currentTier: data.subscription?.tier,
+			persona: String(data.profile?.persona ?? ''),
+			source: 'dashboard_first_value'
+		});
+	});
+
 	// Calculate period label from dates
 	let periodLabel = $derived(
 		(() => {
@@ -171,23 +172,11 @@
 	{#if data.user}
 		<title>Dashboard | Valdrics</title>
 	{:else}
-		<title>Valdrics | Economic Control Plane for Cloud and Software Spend</title>
-		<meta
-			name="description"
-			content="Valdrics is a cloud cost optimization and software spend management platform that helps finance and engineering reduce waste, assign ownership, and recover margin faster."
-		/>
-		<meta
-			name="keywords"
-			content="cloud cost optimization, SaaS spend management, GreenOps platform, carbon cost optimization, FinOps platform, ITAM license optimization, cloud cost control"
-		/>
-		<meta
-			property="og:title"
-			content="Valdrics | Economic Control Plane for Cloud and Software Spend"
-		/>
-		<meta
-			property="og:description"
-			content="Control cloud and software spend with owner-assigned actions, safe approvals, and measurable savings."
-		/>
+		<title>{PUBLIC_HOME_META.title}</title>
+		<meta name="description" content={PUBLIC_HOME_META.description} />
+		<meta name="keywords" content={PUBLIC_HOME_META.keywords} />
+		<meta property="og:title" content={PUBLIC_HOME_META.title} />
+		<meta property="og:description" content={PUBLIC_HOME_META.ogDescription} />
 		<meta property="og:type" content="website" />
 		<meta property="og:url" content={new URL($page.url.pathname, $page.url.origin).toString()} />
 		<meta
@@ -195,14 +184,8 @@
 			content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()}
 		/>
 		<meta name="twitter:card" content="summary_large_image" />
-		<meta
-			name="twitter:title"
-			content="Valdrics | Economic Control Plane for Cloud and Software Spend"
-		/>
-		<meta
-			name="twitter:description"
-			content="Control cloud and software spend with owner-assigned actions, safe approvals, and measurable savings."
-		/>
+		<meta name="twitter:title" content={PUBLIC_HOME_META.title} />
+		<meta name="twitter:description" content={PUBLIC_HOME_META.ogDescription} />
 		<meta
 			name="twitter:image"
 			content={new URL(`${assets}/og-image.png`, $page.url.origin).toString()}
@@ -219,8 +202,8 @@
 		<div class="flex flex-col gap-4">
 			<div class="flex items-center justify-between">
 				<div>
-					<h1 class="text-2xl font-bold mb-1">{personaTitle} Dashboard</h1>
-					<p class="text-ink-400 text-sm">{personaSubtitle}</p>
+					<h1 class="text-2xl font-bold mb-1">{personaContent.title} Dashboard</h1>
+					<p class="text-ink-400 text-sm">{personaContent.subtitle}</p>
 				</div>
 
 				<!-- Provider Selector -->
@@ -240,33 +223,17 @@
 				<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
 					<div>
 						<h2 class="text-sm font-semibold text-ink-200">Next actions</h2>
-						<p class="text-xs text-ink-400 mt-1">
-							{#if persona === 'finance'}
-								Review allocation coverage, unit economics anomalies, and savings proof.
-							{:else if persona === 'platform'}
-								Check job reliability, policy guardrails, and connector health.
-							{:else if persona === 'leadership'}
-								Validate savings impact and monitor high-level cost drivers.
-							{:else}
-								Triage findings and run policy-previewed remediation safely.
-							{/if}
-						</p>
+						<p class="text-xs text-ink-400 mt-1">{personaContent.nextActionsCopy}</p>
 					</div>
 
 					<div class="flex flex-wrap items-center gap-2">
-						{#if persona === 'finance'}
-							<a href={`${base}/leaderboards`} class="btn btn-secondary text-sm">Leaderboards</a>
-							<a href={`${base}/savings`} class="btn btn-primary text-sm">Savings Proof</a>
-						{:else if persona === 'platform'}
-							<a href={`${base}/ops`} class="btn btn-primary text-sm">Ops Center</a>
-							<a href={`${base}/settings`} class="btn btn-secondary text-sm">Guardrails</a>
-						{:else if persona === 'leadership'}
-							<a href={`${base}/savings`} class="btn btn-primary text-sm">Savings Proof</a>
-							<a href={`${base}/leaderboards`} class="btn btn-secondary text-sm">Leaderboards</a>
-						{:else}
-							<a href={`${base}/ops`} class="btn btn-primary text-sm">Review Findings</a>
-							<a href={`${base}/connections`} class="btn btn-secondary text-sm">Add Connection</a>
-						{/if}
+						{#each personaContent.actions as action (action.href)}
+							<a
+								href={`${base}${action.href}`}
+								class={`btn ${action.variant === 'primary' ? 'btn-primary' : 'btn-secondary'} text-sm`}
+								>{action.label}</a
+							>
+						{/each}
 					</div>
 				</div>
 			</div>

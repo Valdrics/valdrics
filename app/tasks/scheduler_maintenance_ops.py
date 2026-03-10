@@ -156,9 +156,9 @@ async def maintenance_sweep_logic(
 
                 from app.modules.governance.domain.security.audit_log import (
                     AuditEventType,
-                    AuditLogger,
                 )
                 from app.shared.core.config import get_settings
+                from app.shared.core.logging import audit_log_async
                 from app.shared.core.ops_metrics import record_cost_retention_purge
 
                 settings = get_settings()
@@ -189,20 +189,11 @@ async def maintenance_sweep_logic(
                         tenant_id = tenant_report.get("tenant_id")
                         if not tenant_id:
                             continue
-                        audit = AuditLogger(
-                            db=db,
-                            tenant_id=tenant_id,
-                            correlation_id=retention_run_id,
-                        )
-                        await audit.log(
-                            event_type=AuditEventType.SYSTEM_MAINTENANCE,
-                            actor_id=None,
-                            actor_email=None,
-                            resource_type="cost_records_retention",
-                            resource_id=str(
-                                tenant_report.get("tenant_tier") or "unknown"
-                            ),
-                            details={
+                        await audit_log_async(
+                            AuditEventType.SYSTEM_MAINTENANCE.value,
+                            None,
+                            str(tenant_id),
+                            {
                                 "run_id": retention_run_id,
                                 "captured_at": datetime_cls.now(
                                     timezone_obj.utc
@@ -216,14 +207,17 @@ async def maintenance_sweep_logic(
                                     "as_of_date": retention_summary["as_of_date"],
                                 },
                             },
+                            db=db,
+                            resource_type="cost_records_retention",
+                            resource_id=str(
+                                tenant_report.get("tenant_tier") or "unknown"
+                            ),
                             success=True,
+                            correlation_id=retention_run_id,
                             request_method="SCHEDULER",
                             request_path="/scheduler/maintenance_sweep/cost_records_retention",
+                            isolated=True,
                         )
-
-                    retention_commit_result = db.commit()
-                    if inspect_module.isawaitable(retention_commit_result):
-                        await retention_commit_result
 
                 for tier_name, deleted_count in retention_summary["tiers"].items():
                     record_cost_retention_purge(
@@ -294,79 +288,215 @@ async def maintenance_sweep_logic(
                 from app.modules.governance.domain.security.audit_log import (
                     AuditEventType,
                     AuditLog,
-                    AuditLogger,
+                    SystemAuditLog,
                 )
                 from app.shared.core.config import get_settings
+                from app.shared.core.logging import audit_log_async
                 from app.shared.core.ops_metrics import (
+                    record_audit_log_retention_failure,
                     record_audit_log_retention_purge,
+                )
+                from app.shared.db.session import (
+                    allow_audit_log_retention_purge,
+                    allow_system_audit_log_retention_purge,
                 )
                 from app.tasks.scheduler_audit_log_retention_ops import (
                     purge_expired_audit_logs,
                 )
 
-                audit_retention_summary = await purge_expired_audit_logs(
-                    db=db,
-                    sa=sa,
-                    logger=logger,
-                    audit_log_model=AuditLog,
-                    datetime_cls=datetime_cls,
-                    timezone_obj=timezone_obj,
-                    timedelta_cls=timedelta_cls,
-                    get_settings_fn=get_settings,
-                )
-                if audit_retention_summary["total_deleted"] > 0:
-                    retention_run_id = str(uuid4())
-                    for tenant_report in audit_retention_summary["tenant_reports"]:
-                        tenant_id = tenant_report.get("tenant_id")
-                        if not tenant_id:
-                            continue
-                        audit = AuditLogger(
-                            db=db,
-                            tenant_id=tenant_id,
-                            correlation_id=retention_run_id,
-                        )
-                        await audit.log(
-                            event_type=AuditEventType.SYSTEM_MAINTENANCE,
-                            actor_id=None,
-                            actor_email=None,
-                            resource_type="audit_logs_retention",
-                            resource_id=str(
-                                audit_retention_summary["retention_days"]
-                            ),
-                            details={
+                tenant_audit_retention_summary: dict[str, Any] = {
+                    "total_deleted": 0,
+                    "retention_days": None,
+                    "batch_size": None,
+                    "max_batches": None,
+                    "cutoff": None,
+                    "tenant_reports": [],
+                }
+                system_audit_retention_summary: dict[str, Any] = {
+                    "total_deleted": 0,
+                    "retention_days": None,
+                    "batch_size": None,
+                    "max_batches": None,
+                    "cutoff": None,
+                    "tenant_reports": [],
+                }
+                audit_retention_failures: list[str] = []
+
+                try:
+                    tenant_audit_retention_summary = await purge_expired_audit_logs(
+                        db=db,
+                        sa=sa,
+                        logger=logger,
+                        audit_log_model=AuditLog,
+                        datetime_cls=datetime_cls,
+                        timezone_obj=timezone_obj,
+                        timedelta_cls=timedelta_cls,
+                        get_settings_fn=get_settings,
+                        set_audit_retention_purge_flag_fn=allow_audit_log_retention_purge,
+                    )
+                    if tenant_audit_retention_summary["total_deleted"] > 0:
+                        retention_commit_result = db.commit()
+                        if inspect_module.isawaitable(retention_commit_result):
+                            await retention_commit_result
+                        retention_run_id = str(uuid4())
+                        for tenant_report in tenant_audit_retention_summary[
+                            "tenant_reports"
+                        ]:
+                            tenant_id = tenant_report.get("tenant_id")
+                            if not tenant_id:
+                                continue
+                            await audit_log_async(
+                                AuditEventType.SYSTEM_MAINTENANCE.value,
+                                None,
+                                str(tenant_id),
+                                {
+                                    "run_id": retention_run_id,
+                                    "captured_at": datetime_cls.now(
+                                        timezone_obj.utc
+                                    ).isoformat(),
+                                    "retention_days": tenant_audit_retention_summary[
+                                        "retention_days"
+                                    ],
+                                    "batch_size": tenant_audit_retention_summary[
+                                        "batch_size"
+                                    ],
+                                    "max_batches": tenant_audit_retention_summary[
+                                        "max_batches"
+                                    ],
+                                    "cutoff": tenant_audit_retention_summary["cutoff"],
+                                    "tenant_deleted_count": tenant_report.get(
+                                        "deleted_count", 0
+                                    ),
+                                    "total_deleted": tenant_audit_retention_summary[
+                                        "total_deleted"
+                                    ],
+                                },
+                                db=db,
+                                resource_type="audit_logs_retention",
+                                resource_id=str(
+                                    tenant_audit_retention_summary["retention_days"]
+                                ),
+                                success=True,
+                                correlation_id=retention_run_id,
+                                request_method="SCHEDULER",
+                                request_path="/scheduler/maintenance_sweep/audit_logs_retention",
+                                isolated=True,
+                            )
+                    logger.info(
+                        "maintenance_tenant_audit_logs_retention_success",
+                        **tenant_audit_retention_summary,
+                    )
+                except recoverable_errors as exc:
+                    retention_rollback_result = db.rollback()
+                    if inspect_module.isawaitable(retention_rollback_result):
+                        await retention_rollback_result
+                    audit_retention_failures.append("audit_logs_retention")
+                    record_audit_log_retention_failure("audit_logs_retention")
+                    logger.warning(
+                        "maintenance_audit_logs_retention_failed", error=str(exc)
+                    )
+
+                try:
+                    system_audit_retention_summary = await purge_expired_audit_logs(
+                        db=db,
+                        sa=sa,
+                        logger=logger,
+                        audit_log_model=SystemAuditLog,
+                        datetime_cls=datetime_cls,
+                        timezone_obj=timezone_obj,
+                        timedelta_cls=timedelta_cls,
+                        get_settings_fn=get_settings,
+                        set_audit_retention_purge_flag_fn=allow_system_audit_log_retention_purge,
+                    )
+                    if system_audit_retention_summary["total_deleted"] > 0:
+                        retention_commit_result = db.commit()
+                        if inspect_module.isawaitable(retention_commit_result):
+                            await retention_commit_result
+                        retention_run_id = str(uuid4())
+                        await audit_log_async(
+                            AuditEventType.SYSTEM_MAINTENANCE.value,
+                            None,
+                            None,
+                            {
                                 "run_id": retention_run_id,
                                 "captured_at": datetime_cls.now(
                                     timezone_obj.utc
                                 ).isoformat(),
-                                "retention_days": audit_retention_summary[
+                                "retention_days": system_audit_retention_summary[
                                     "retention_days"
                                 ],
-                                "batch_size": audit_retention_summary["batch_size"],
-                                "max_batches": audit_retention_summary["max_batches"],
-                                "cutoff": audit_retention_summary["cutoff"],
-                                "tenant_deleted_count": tenant_report.get(
-                                    "deleted_count", 0
-                                ),
-                                "total_deleted": audit_retention_summary[
+                                "batch_size": system_audit_retention_summary[
+                                    "batch_size"
+                                ],
+                                "max_batches": system_audit_retention_summary[
+                                    "max_batches"
+                                ],
+                                "cutoff": system_audit_retention_summary["cutoff"],
+                                "total_deleted": system_audit_retention_summary[
                                     "total_deleted"
                                 ],
                             },
+                            db=db,
+                            resource_type="system_audit_logs_retention",
+                            resource_id=str(
+                                system_audit_retention_summary["retention_days"]
+                            ),
                             success=True,
+                            correlation_id=retention_run_id,
                             request_method="SCHEDULER",
-                            request_path="/scheduler/maintenance_sweep/audit_logs_retention",
+                            request_path="/scheduler/maintenance_sweep/system_audit_logs_retention",
+                            isolated=True,
                         )
-                    retention_commit_result = db.commit()
-                    if inspect_module.isawaitable(retention_commit_result):
-                        await retention_commit_result
-                record_audit_log_retention_purge(
-                    int(audit_retention_summary["total_deleted"] or 0)
+                    logger.info(
+                        "maintenance_system_audit_logs_retention_success",
+                        **system_audit_retention_summary,
+                    )
+                except recoverable_errors as exc:
+                    retention_rollback_result = db.rollback()
+                    if inspect_module.isawaitable(retention_rollback_result):
+                        await retention_rollback_result
+                    audit_retention_failures.append("system_audit_logs_retention")
+                    record_audit_log_retention_failure("system_audit_logs_retention")
+                    logger.warning(
+                        "maintenance_system_audit_logs_retention_failed",
+                        error=str(exc),
+                    )
+
+                total_deleted = int(
+                    tenant_audit_retention_summary["total_deleted"] or 0
+                ) + int(system_audit_retention_summary["total_deleted"] or 0)
+                record_audit_log_retention_purge(total_deleted)
+                summary_event = (
+                    "maintenance_audit_logs_retention_success"
+                    if not audit_retention_failures
+                    else "maintenance_audit_logs_retention_partial_failure"
                 )
-                logger.info(
-                    "maintenance_audit_logs_retention_success",
-                    **audit_retention_summary,
+                log_method = logger.info if not audit_retention_failures else logger.warning
+                log_method(
+                    summary_event,
+                    total_deleted=total_deleted,
+                    tenant_total_deleted=int(
+                        tenant_audit_retention_summary["total_deleted"] or 0
+                    ),
+                    system_total_deleted=int(
+                        system_audit_retention_summary["total_deleted"] or 0
+                    ),
+                    retention_days=tenant_audit_retention_summary["retention_days"]
+                    or system_audit_retention_summary["retention_days"],
+                    batch_size=tenant_audit_retention_summary["batch_size"]
+                    or system_audit_retention_summary["batch_size"],
+                    max_batches=tenant_audit_retention_summary["max_batches"]
+                    or system_audit_retention_summary["max_batches"],
+                    cutoff=tenant_audit_retention_summary["cutoff"]
+                    or system_audit_retention_summary["cutoff"],
+                    failed_operations=audit_retention_failures,
                 )
             except recoverable_errors as exc:
                 retention_rollback_result = db.rollback()
                 if inspect_module.isawaitable(retention_rollback_result):
                     await retention_rollback_result
-                logger.warning("maintenance_audit_logs_retention_failed", error=str(exc))
+                record_audit_log_retention_failure("audit_logs_retention_orchestration")
+                logger.warning(
+                    "maintenance_audit_logs_retention_orchestration_failed",
+                    error=str(exc),
+                )

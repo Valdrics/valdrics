@@ -52,6 +52,11 @@
 	display: grid;
 	gap: 0.72rem;
 }
+
+.landing-coverage-mobile-summary {
+	display: none;
+}
+
 .landing-coverage-surface-side {
 	display: grid;
 	gap: 0.72rem;
@@ -116,6 +121,15 @@
 	gap: 0.35rem;
 	text-align: left;
 }
+
+.landing-coverage-grid-note {
+	display: none;
+	margin: 0;
+	font-size: 0.84rem;
+	line-height: 1.42;
+	color: var(--color-ink-500);
+}
+
 .landing-ledger-surface {
 	margin-bottom: 1rem;
 }
@@ -173,6 +187,115 @@
 	font-size: 0.88rem;
 	line-height: 1.45;
 	color: var(--color-ink-500);
+}
+
+@media (max-width: 767px) {
+	.landing-coverage-surface {
+		gap: 0.72rem;
+		margin-bottom: 0.8rem;
+	}
+
+	.landing-coverage-surface-copy {
+		gap: 0.52rem;
+	}
+
+	.landing-coverage-full-copy {
+		display: none;
+	}
+
+	.landing-coverage-mobile-summary {
+		display: block;
+	}
+
+	.landing-coverage-summary {
+		display: flex;
+		gap: 0.5rem;
+		overflow-x: auto;
+		padding-bottom: 0.1rem;
+		scroll-snap-type: x proximity;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.landing-coverage-summary::-webkit-scrollbar {
+		height: 0.35rem;
+	}
+
+	.landing-coverage-summary::-webkit-scrollbar-thumb {
+		background: rgb(8 126 164 / 0.24);
+		border-radius: 999px;
+	}
+
+	.landing-coverage-summary-item {
+		flex: 0 0 min(11rem, 68vw);
+		scroll-snap-align: start;
+		padding: 0.58rem 0.64rem;
+	}
+
+	.landing-coverage-summary-k {
+		font-size: 0.66rem;
+	}
+
+	.landing-coverage-summary-v {
+		font-size: 0.88rem;
+		line-height: 1.32;
+	}
+
+	.landing-coverage-surface-side {
+		gap: 0.55rem;
+		padding-top: 0;
+	}
+
+	.landing-coverage-badges {
+		gap: 0.38rem;
+	}
+
+	.landing-coverage-badge {
+		padding: 0.28rem 0.52rem;
+		font-size: 0.78rem;
+	}
+
+	.landing-coverage-grid-head {
+		margin-bottom: 0.55rem;
+	}
+
+	.landing-coverage-grid-note {
+		display: block;
+	}
+
+	.landing-decision-ledger {
+		display: flex;
+		gap: 0.85rem;
+		overflow-x: auto;
+		scroll-snap-type: x mandatory;
+		scroll-padding-left: 0.15rem;
+		padding: 0 0.15rem 0.2rem 0;
+		-webkit-overflow-scrolling: touch;
+	}
+
+	.landing-decision-ledger::-webkit-scrollbar {
+		height: 0.45rem;
+	}
+
+	.landing-decision-ledger::-webkit-scrollbar-thumb {
+		background: rgb(8 126 164 / 0.26);
+		border-radius: 999px;
+	}
+
+	.landing-decision-card {
+		flex: 0 0 min(85vw, 22rem);
+		scroll-snap-align: start;
+		padding-left: 1rem;
+	}
+
+	.landing-decision-card .landing-p {
+		font-size: 0.96rem;
+		line-height: 1.48;
+	}
+
+	.landing-decision-card::before {
+		top: 0.85rem;
+		bottom: 0.85rem;
+	}
 }
 .landing-coverage-outcome-head {
 	margin-top: 1rem;

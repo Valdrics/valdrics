@@ -203,6 +203,7 @@ async def test_acceptance_handler_quarterly_and_close_skip_with_tier_gated_integ
         feature_flags={
             FeatureFlag.COMPLIANCE_EXPORTS: False,
             FeatureFlag.CLOSE_WORKFLOW: False,
+            FeatureFlag.JIRA_INTEGRATION: False,
             FeatureFlag.INCIDENT_INTEGRATIONS: False,
         },
         jira_service=jira,
@@ -252,6 +253,7 @@ async def test_acceptance_handler_quarterly_success_and_close_error_with_bad_max
         feature_flags={
             FeatureFlag.COMPLIANCE_EXPORTS: True,
             FeatureFlag.CLOSE_WORKFLOW: True,
+            FeatureFlag.JIRA_INTEGRATION: False,
             FeatureFlag.INCIDENT_INTEGRATIONS: False,
         },
         quarterly_payload=quarterly_payload,
@@ -299,6 +301,7 @@ async def test_acceptance_handler_clamps_negative_close_restatements_and_records
         feature_flags={
             FeatureFlag.COMPLIANCE_EXPORTS: True,
             FeatureFlag.CLOSE_WORKFLOW: True,
+            FeatureFlag.JIRA_INTEGRATION: True,
             FeatureFlag.INCIDENT_INTEGRATIONS: True,
         },
         slack_service=slack,
@@ -344,6 +347,7 @@ async def test_acceptance_handler_records_leadership_and_quarterly_capture_excep
         feature_flags={
             FeatureFlag.COMPLIANCE_EXPORTS: True,
             FeatureFlag.CLOSE_WORKFLOW: False,
+            FeatureFlag.JIRA_INTEGRATION: False,
             FeatureFlag.INCIDENT_INTEGRATIONS: False,
         },
         quarterly_side_effect=RuntimeError("quarterly capture blew up"),
@@ -390,6 +394,7 @@ async def test_acceptance_handler_records_kpi_capture_exception() -> None:
         feature_flags={
             FeatureFlag.COMPLIANCE_EXPORTS: False,
             FeatureFlag.CLOSE_WORKFLOW: False,
+            FeatureFlag.JIRA_INTEGRATION: False,
             FeatureFlag.INCIDENT_INTEGRATIONS: False,
         },
         kpi_side_effect=RuntimeError("acceptance kpi blew up"),
@@ -426,6 +431,7 @@ async def test_acceptance_handler_staging_tenancy_passive_check_fails_when_evide
             feature_flags={
                 FeatureFlag.COMPLIANCE_EXPORTS: False,
                 FeatureFlag.CLOSE_WORKFLOW: False,
+                FeatureFlag.JIRA_INTEGRATION: False,
                 FeatureFlag.INCIDENT_INTEGRATIONS: False,
             },
         ) as patched,
@@ -478,6 +484,7 @@ async def test_acceptance_handler_staging_tenancy_passive_check_succeeds_with_fr
             feature_flags={
                 FeatureFlag.COMPLIANCE_EXPORTS: False,
                 FeatureFlag.CLOSE_WORKFLOW: False,
+                FeatureFlag.JIRA_INTEGRATION: False,
                 FeatureFlag.INCIDENT_INTEGRATIONS: False,
             },
         ) as patched,

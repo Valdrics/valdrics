@@ -4,6 +4,32 @@
 **Scope:** Entire repository (every directory, every file type, all source code)  
 **Method:** Full enumeration, pattern sweeps, linter run, and structured per-area review.
 
+This remains an active governance artifact in the repository. It is still
+referenced by documentation/runtime contracts and control mapping, so it is not
+treated as archive-only historical material.
+
+### Follow-up Verification — 2026-03-10
+
+A repo-wide follow-up sweep was completed on 2026-03-10 against the active audit
+controls and verification scripts. Current follow-up status:
+
+- `scripts/verify_frontend_module_size_budget.py`: passing, with no frontend
+  modules above the hard or preferred thresholds
+- `scripts/check_frontend_hygiene.py`: passing
+- `scripts/verify_repo_root_hygiene.py`: passing
+- `scripts/verify_documentation_runtime_contracts.py`: passing
+- `scripts/verify_exception_governance.py`: passing
+- `scripts/verify_enterprise_placeholder_guards.py`: passing
+- `scripts/verify_python_module_size_budget.py`: passing
+- `scripts/verify_python_module_preferred_budget_baseline.py`: passing
+- `scripts/verify_test_module_size_budget.py`: passing
+- `scripts/verify_test_to_production_ratio.py`: passing
+- `pytest --collect-only` with coverage disabled: `5358 tests collected`
+
+This follow-up did not replace the original audit scope; it confirms that the
+current repository state clears the active audit and hygiene gates tied to this
+document.
+
 ---
 
 ## 1. Codebase Enumeration
@@ -107,7 +133,7 @@ Alembic revisions under `migrations/versions/` (merge heads, add tables/columns,
 |------|--------|
 | **app/** | No stray `print()` in app. |
 | **tests/** | Debug `print()` removed in prior audit from listed test files. |
-| **dashboard** | One `console.log('[Jobs SSE] Connected')` in `dashboard/src/lib/stores/jobs.svelte.ts` (line 52). Consider removing or gating behind dev flag. |
+| **dashboard** | No stray `console.log()` remains in `dashboard/src`; frontend hygiene verification passes. |
 
 ### 2.4 Exception handling
 
@@ -148,7 +174,7 @@ Alembic revisions under `migrations/versions/` (merge heads, add tables/columns,
 
 - **Entry:** SvelteKit app with +layout.server.ts, +layout.svelte, hooks.server.ts, api.ts.
 - **Routes:** Home, auth, onboarding, settings, connections, billing, pricing, audit, greenops, leaderboards, llm, ops, savings, admin/health; load and browser tests.
-- **Findings:** One console.log in jobs store (see above). TypeScript/Svelte files use modern patterns; no broad `any` abuse detected in spot check.
+- **Findings:** TypeScript/Svelte files use modern patterns; no stray `console.log()` remains in live frontend source, and no broad `any` abuse was detected in spot checks.
 
 ### 3.7 scripts/
 
@@ -189,17 +215,16 @@ Alembic revisions under `migrations/versions/` (merge heads, add tables/columns,
 | **Lines** | ~59k app, ~77k tests, ~21.7k dashboard, ~2.5k scripts, ~2.5k migrations (~158k total). |
 | **Security (eval, exec, secrets, SQL, shell)** | Clean in app; scripts use ast.literal_eval; test secrets only in tests. |
 | **Bugs (bare except, mutable defaults)** | None. |
-| **Debt (TODO, unbounded cache, silent pass)** | Addressed in prior audit; one console.log in dashboard removed. **Ruff:** 12 issues (unused imports, E402/E701/F841) were present and have been fixed. |
+| **Debt (TODO, unbounded cache, silent pass)** | Addressed in prior audit. **Ruff:** 12 issues (unused imports, E402/E701/F841) were present and have been fixed. Remaining preferred Python module-size debt is now tracked through `docs/ops/evidence/python_module_size_preferred_baseline.json`. |
 | **Exception handling** | Documented broad catch; debug logging where pass was removed. |
 
 ---
 
 ## 7. Recommendations
 
-1. **Dashboard:** Remove or guard `console.log('[Jobs SSE] Connected')` in `dashboard/src/lib/stores/jobs.svelte.ts` (e.g. dev-only or remove).
-2. **CI:** Ensure ruff (or pyflakes) runs on `app tests scripts`; run pytest smoke suite.
-3. **Unused code:** Periodically run ruff F401 or pyflakes on app/ and remove only clearly unused imports.
-4. **Large modules:** Consider splitting very large modules (e.g. audit, costs, scim) by sub-feature when touching them.
-5. **Migrations:** No-op merge migrations are fine; optional: add one-line comment "No-op merge" in each for clarity.
+1. **CI:** Keep `ruff` and the existing verification scripts active for `app`, `tests`, and `scripts`; keep a smoke `pytest` slice in the enforcement path.
+2. **Unused code:** Periodically run `ruff --select F401` or equivalent targeted unused-import checks on `app/`.
+3. **Large Python modules:** Continue driving preferred-size debt down from the checked-in baseline in `docs/ops/evidence/python_module_size_preferred_baseline.json`.
+4. **Migrations:** No-op merge migrations are acceptable; keep them explicitly commented for clarity.
 
 This audit is **thorough and full-codebase in scope**: every directory and file type was enumerated, line counts and structure documented, and pattern sweeps run across all Python and dashboard source. Not every single line was read manually (that would require hundreds of thousands of line reads); the combination of full enumeration, systematic pattern checks, and per-area review gives a complete picture of the codebase for bugs, issues, debt, and dead code.

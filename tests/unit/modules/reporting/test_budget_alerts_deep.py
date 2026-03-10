@@ -146,7 +146,7 @@ class TestCarbonBudgetService:
         # Mock dependencies
         with (
             patch("app.shared.core.config.get_settings") as mock_get_settings,
-            patch("app.shared.core.logging.audit_log") as mock_audit,
+            patch("app.shared.core.logging.audit_log_async") as mock_audit,
             patch(
                 "app.modules.notifications.domain.get_tenant_slack_service",
                 new_callable=AsyncMock,
@@ -209,7 +209,7 @@ class TestCarbonBudgetService:
 
         with (
             patch("app.shared.core.config.get_settings") as mock_get_settings,
-            patch("app.shared.core.logging.audit_log"),
+            patch("app.shared.core.logging.audit_log_async"),
             patch(
                 "app.modules.notifications.domain.get_tenant_slack_service",
                 new_callable=AsyncMock,
@@ -274,7 +274,7 @@ class TestCarbonBudgetService:
                 alert_service, "should_send_alert", new=AsyncMock(return_value=True)
             ),
             patch("app.shared.core.config.get_settings"),
-            patch("app.shared.core.logging.audit_log"),
+            patch("app.shared.core.logging.audit_log_async"),
             patch(
                 "app.modules.notifications.domain.get_tenant_slack_service",
                 new=AsyncMock(side_effect=KeyboardInterrupt("stop")),
@@ -312,7 +312,7 @@ class TestCarbonBudgetService:
             patch.object(
                 alert_service, "should_send_alert", new=AsyncMock(return_value=True)
             ),
-            patch("app.shared.core.logging.audit_log"),
+            patch("app.shared.core.logging.audit_log_async"),
             patch("app.shared.core.config.get_settings") as mock_get_settings,
             patch(
                 "app.modules.notifications.domain.get_tenant_slack_service",

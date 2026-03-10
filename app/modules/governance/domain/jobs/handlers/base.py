@@ -14,6 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob, JobStatus
 from app.shared.core.exceptions import ValdricsException
+from app.shared.core.ops_metrics import record_background_job_dead_letter
 
 logger = structlog.get_logger()
 JOB_HANDLER_UNEXPECTED_RECOVERABLE_EXCEPTIONS = (
@@ -159,7 +160,10 @@ class BaseJobHandler(ABC):
         except JobTimeoutError:
             # Timeouts are fatal - move to DLQ
             await self._transition_to_dead_letter(
-                job, f"Job exceeded {self.timeout_seconds}s timeout", db
+                job,
+                f"Job exceeded {self.timeout_seconds}s timeout",
+                db,
+                reason="timeout",
             )
             raise
 
@@ -180,7 +184,10 @@ class BaseJobHandler(ABC):
             )
 
             await self._transition_to_dead_letter(
-                job, f"Unexpected error: {type(e).__name__}: {str(e)[:500]}", db
+                job,
+                f"Unexpected error: {type(e).__name__}: {str(e)[:500]}",
+                db,
+                reason="unexpected_error",
             )
             raise
 
@@ -214,7 +221,12 @@ class BaseJobHandler(ABC):
         )
 
     async def _transition_to_dead_letter(
-        self, job: BackgroundJob, error_message: str, db: AsyncSession
+        self,
+        job: BackgroundJob,
+        error_message: str,
+        db: AsyncSession,
+        *,
+        reason: str = "handler_dead_letter",
     ) -> None:
         """Move job to dead letter queue after max retries exceeded."""
         job.status = JobStatus.DEAD_LETTER
@@ -222,6 +234,7 @@ class BaseJobHandler(ABC):
         job.completed_at = datetime.now(timezone.utc)
         db.add(job)
         await db.commit()
+        record_background_job_dead_letter(str(job.job_type), reason=reason)
 
         logger.error(
             "job_moved_to_dlq",
@@ -276,6 +289,9 @@ class BaseJobHandler(ABC):
         else:
             # Max retries exceeded - move to DLQ
             await self._transition_to_dead_letter(
-                job, f"Exceeded {self.max_retries} retries: {exc.message}", db
+                job,
+                f"Exceeded {self.max_retries} retries: {exc.message}",
+                db,
+                reason="max_retries_exceeded",
             )
             raise exc

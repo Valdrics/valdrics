@@ -113,6 +113,7 @@ async def run_passive_integration_checks(
             else "Slack passive health check failed.",
         )
 
+    jira_allowed = is_feature_enabled_fn(tier, FeatureFlag.JIRA_INTEGRATION)
     incident_integrations_allowed = is_feature_enabled_fn(
         tier, FeatureFlag.INCIDENT_INTEGRATIONS
     )
@@ -126,16 +127,17 @@ async def run_passive_integration_checks(
             message="Jira not configured for this tenant (skipped).",
             details={"skipped": True, "reason": "not_configured"},
         )
-    elif not incident_integrations_allowed:
+    elif not jira_allowed:
         await record_integration(
             channel="jira",
             success=True,
             status_code=204,
-            message="Jira configured but incident integrations are not enabled for this tier (skipped).",
+            message="Jira configured but Jira integration is not enabled for this tier (skipped).",
             details={
                 "skipped": True,
                 "reason": "tier_not_allowed",
                 "tier": tier.value,
+                "feature": FeatureFlag.JIRA_INTEGRATION.value,
             },
         )
     else:
@@ -169,6 +171,7 @@ async def run_passive_integration_checks(
                 "skipped": True,
                 "reason": "tier_not_allowed",
                 "tier": tier.value,
+                "feature": FeatureFlag.INCIDENT_INTEGRATIONS.value,
             },
         )
     else:
@@ -204,6 +207,7 @@ async def run_passive_integration_checks(
                 "reason": "tier_not_allowed",
                 "tier": tier.value,
                 "providers": providers,
+                "feature": FeatureFlag.INCIDENT_INTEGRATIONS.value,
             },
         )
     else:

@@ -68,7 +68,7 @@ def test_build_connect_args_verified_ssl_modes(mode: str) -> None:
         is_production=False,
     )
     ssl_ctx = MagicMock()
-    with patch("app.shared.db.session.ssl.create_default_context", return_value=ssl_ctx) as mock_create:
+    with patch("app.shared.db.connect_args.ssl.create_default_context", return_value=ssl_ctx) as mock_create:
         args = session_mod._build_connect_args(settings, "postgresql+asyncpg://h/db")
     mock_create.assert_called_once_with(cafile="/tmp/ca.pem")
     assert args["ssl"] is ssl_ctx
@@ -81,9 +81,10 @@ def test_build_connect_args_verified_mode_non_postgres_skips_ssl_attach() -> Non
         DB_SSL_CA_CERT_PATH="/tmp/ca.pem",
         is_production=False,
     )
-    with patch("app.shared.db.session.ssl.create_default_context", return_value=MagicMock()):
+    with patch("app.shared.db.connect_args.ssl.create_default_context", return_value=MagicMock()):
         args = session_mod._build_connect_args(settings, "sqlite+aiosqlite:///:memory:")
     assert "ssl" not in args
+    assert "statement_cache_size" not in args
 
 
 def test_build_connect_args_require_branches_with_and_without_ca() -> None:
@@ -93,7 +94,7 @@ def test_build_connect_args_require_branches_with_and_without_ca() -> None:
         DB_SSL_CA_CERT_PATH="/tmp/ca.pem",
         is_production=False,
     )
-    with patch("app.shared.db.session.ssl.create_default_context", return_value=ssl_ctx):
+    with patch("app.shared.db.connect_args.ssl.create_default_context", return_value=ssl_ctx):
         args = session_mod._build_connect_args(settings_ca, "postgresql+asyncpg://h/db")
     assert args["ssl"] is ssl_ctx
     ssl_ctx.load_verify_locations.assert_called_once_with(cafile="/tmp/ca.pem")
@@ -106,18 +107,19 @@ def test_build_connect_args_require_branches_with_and_without_ca() -> None:
         DB_SSL_CA_CERT_PATH=None,
         is_production=False,
     )
-    with patch("app.shared.db.session.ssl.create_default_context", return_value=ssl_ctx2):
+    with patch("app.shared.db.connect_args.ssl.create_default_context", return_value=ssl_ctx2):
         args2 = session_mod._build_connect_args(settings_insecure, "postgresql+asyncpg://h/db")
     assert args2["ssl"] is ssl_ctx2
     ssl_ctx2.load_verify_locations.assert_not_called()
     assert ssl_ctx2.check_hostname is True
     assert ssl_ctx2.verify_mode == session_mod.ssl.CERT_REQUIRED
 
-    with patch("app.shared.db.session.ssl.create_default_context", return_value=MagicMock()):
+    with patch("app.shared.db.connect_args.ssl.create_default_context", return_value=MagicMock()):
         args3 = session_mod._build_connect_args(
             settings_insecure, "sqlite+aiosqlite:///:memory:"
         )
     assert "ssl" not in args3
+    assert "statement_cache_size" not in args3
 
 
 def test_build_pool_config_null_pool_and_testing_override() -> None:
@@ -155,11 +157,17 @@ def test_register_engine_event_listeners_real_target() -> None:
     with patch("app.shared.db.session.event.listen") as mock_listen:
         session_mod._register_engine_event_listeners(engine)  # type: ignore[arg-type]
 
-    assert mock_listen.call_count == 3
+    assert mock_listen.call_count == 4
     mock_listen.assert_any_call(
         engine.sync_engine,
         "before_cursor_execute",
         session_mod.check_rls_policy,
+        retval=True,
+    )
+    mock_listen.assert_any_call(
+        engine.sync_engine,
+        "before_cursor_execute",
+        session_mod.enforce_audit_log_immutability,
         retval=True,
     )
     mock_listen.assert_any_call(
@@ -394,16 +402,31 @@ async def test_get_system_db_impl_and_wrapper() -> None:
     mock_session.info = {}
     conn = MagicMock(info={})
     mock_session.connection = AsyncMock(return_value=conn)
+    mock_session.execute = AsyncMock(return_value=None)
     mock_session.close = AsyncMock()
 
-    with patch("app.shared.db.session.async_session_maker", return_value=_DummyAsyncCM(mock_session)):
+    with (
+        patch(
+            "app.shared.db.session.async_session_maker",
+            return_value=_DummyAsyncCM(mock_session),
+        ),
+        patch(
+            "app.shared.db.session._resolve_session_backend",
+            return_value=("postgresql", "bind"),
+        ),
+    ):
         agen = session_mod._get_system_db_impl()
         yielded = await agen.__anext__()
         assert yielded is mock_session
         assert mock_session.info["rls_context_set"] is None
         assert mock_session.info["rls_system_context"] is True
+        assert mock_session.info["tenant_id"] is None
         assert conn.info["rls_context_set"] is None
         assert conn.info["rls_system_context"] is True
+        assert conn.info["tenant_id"] is None
+        sql_texts = [str(call.args[0]) for call in mock_session.execute.await_args_list]
+        assert any("set_config('app.current_tenant_id', '', true)" in text for text in sql_texts)
+        assert any("set_config('app.is_system_context', 'true', true)" in text for text in sql_texts)
         with pytest.raises(StopAsyncIteration):
             await agen.__anext__()
 
@@ -471,9 +494,10 @@ async def test_clear_session_tenant_context_postgres_fails_closed() -> None:
     assert conn.info["tenant_id"] is None
     assert conn.info["rls_context_set"] is False
     assert conn.info["rls_system_context"] is False
-    session.execute.assert_awaited_once()
-    sql_text = str(session.execute.await_args.args[0])
-    assert "set_config('app.current_tenant_id', '', true)" in sql_text
+    assert session.execute.await_count == 2
+    sql_texts = [str(call.args[0]) for call in session.execute.await_args_list]
+    assert any("set_config('app.current_tenant_id', '', true)" in text for text in sql_texts)
+    assert any("set_config('app.is_system_context', 'false', true)" in text for text in sql_texts)
 
 
 @pytest.mark.asyncio
@@ -552,6 +576,70 @@ def test_check_rls_policy_additional_branch_paths() -> None:
             conn_system, None, "SELECT * FROM exchange_rates", {}, None, False
         )
         assert stmt_system == "SELECT * FROM exchange_rates"
+
+
+def test_enforce_audit_log_immutability_blocks_update_and_delete_without_flag() -> None:
+    conn = MagicMock()
+    conn.info = {}
+
+    with pytest.raises(ValdricsException, match="immutable"):
+        session_mod.enforce_audit_log_immutability(
+            conn, None, "UPDATE audit_logs SET success = true", {}, None, False
+        )
+
+    with pytest.raises(ValdricsException, match="retention purge path"):
+        session_mod.enforce_audit_log_immutability(
+            conn, None, "DELETE FROM audit_logs WHERE success = false", {}, None, False
+        )
+
+    with pytest.raises(ValdricsException, match="system_audit_logs entries are immutable"):
+        session_mod.enforce_audit_log_immutability(
+            conn,
+            None,
+            "UPDATE system_audit_logs SET success = true",
+            {},
+            None,
+            False,
+        )
+
+    with pytest.raises(ValdricsException, match="retention purge path"):
+        session_mod.enforce_audit_log_immutability(
+            conn,
+            None,
+            "DELETE FROM system_audit_logs WHERE success = false",
+            {},
+            None,
+            False,
+        )
+
+
+def test_enforce_audit_log_immutability_allows_flagged_retention_delete() -> None:
+    conn = MagicMock()
+    conn.info = {session_mod._AUDIT_LOG_RETENTION_DELETE_FLAG: True}
+
+    stmt, params = session_mod.enforce_audit_log_immutability(
+        conn, None, "DELETE FROM audit_logs WHERE success = false", {"x": 1}, None, False
+    )
+
+    assert stmt == "DELETE FROM audit_logs WHERE success = false"
+    assert params == {"x": 1}
+
+
+def test_enforce_audit_log_immutability_allows_flagged_system_retention_delete() -> None:
+    conn = MagicMock()
+    conn.info = {session_mod._SYSTEM_AUDIT_LOG_RETENTION_DELETE_FLAG: True}
+
+    stmt, params = session_mod.enforce_audit_log_immutability(
+        conn,
+        None,
+        "DELETE FROM system_audit_logs WHERE success = false",
+        {"x": 1},
+        None,
+        False,
+    )
+
+    assert stmt == "DELETE FROM system_audit_logs WHERE success = false"
+    assert params == {"x": 1}
 
 
 @pytest.mark.asyncio

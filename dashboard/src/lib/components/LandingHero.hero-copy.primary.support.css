@@ -123,6 +123,34 @@
 	color: var(--color-ink-200);
 }
 @media (max-width: 640px) {
+	.landing-hero-support-grid {
+		margin-top: 1.05rem;
+		gap: 0.7rem;
+	}
+
+	.landing-hero-mini-visual,
+	.landing-hero-proof-card {
+		padding: 0.82rem 0.88rem;
+	}
+
+	.landing-hero-flow {
+		margin-top: 0.42rem;
+		gap: 0.42rem;
+	}
+
+	.landing-hero-flow-step {
+		padding: 0.48rem 0.52rem;
+	}
+
+	.landing-hero-flow-step-v {
+		font-size: 0.82rem;
+	}
+
+	.landing-free-strip {
+		margin-top: 0.5rem;
+		font-size: 0.84rem;
+	}
+
 	.landing-cta-note,
 	.landing-cta-link {
 		text-align: center;

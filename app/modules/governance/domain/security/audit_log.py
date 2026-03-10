@@ -7,7 +7,7 @@ Implements comprehensive audit logging for compliance with:
 - ISO 27001 (Information Security Management)
 
 Key Features:
-1. Immutable audit trail (append-only)
+1. Write-once audit trail with controlled retention purge
 2. Structured events with correlation IDs
 3. User action tracking with context
 4. Sensitive data masking
@@ -19,21 +19,18 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional, Union, cast
-from sqlalchemy import String, ForeignKey, Text, Index, JSON, Uuid, DateTime
+from sqlalchemy import String, ForeignKey, Text, Index, JSON, Uuid, DateTime, event
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 import structlog
 
+from app.models._encryption import get_encryption_key
 from app.shared.db.base import Base, get_partition_args
 from sqlalchemy_utils import StringEncryptedType
 from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
-from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
-
-settings = get_settings()
-_encryption_key = settings.ENCRYPTION_KEY
 
 
 class AuditEventType(str, Enum):
@@ -155,10 +152,11 @@ class AuditEventType(str, Enum):
 
 class AuditLog(Base):
     """
-    Immutable audit log entry for SOC2 compliance.
+    Write-once audit log entry for SOC2 compliance.
 
     Design Principles:
-    - No UPDATE or DELETE operations allowed (append-only)
+    - UPDATE is always forbidden
+    - DELETE is reserved for the controlled retention purge path
     - Sensitive data masked before storage
     - Correlation ID links related events
     - Indexed for efficient querying by auditors
@@ -191,7 +189,7 @@ class AuditLog(Base):
         index=True,
     )
     actor_email: Mapped[Optional[str]] = mapped_column(
-        StringEncryptedType(String(255), _encryption_key, AesEngine, "pkcs5"),
+        StringEncryptedType(String(255), get_encryption_key, AesEngine, "pkcs5"),
         nullable=True,
     )
     actor_ip: Mapped[Optional[str]] = mapped_column(
@@ -230,7 +228,112 @@ class AuditLog(Base):
     )
 
 
-class AuditLogger:
+class SystemAuditLog(Base):
+    """
+    Immutable system-scope audit log for events that cannot be attributed to a tenant.
+
+    Design Principles:
+    - Write-only via explicit system DB context
+    - No tenant foreign key to avoid fabricating tenant ownership
+    - Same masking and correlation semantics as tenant audit logs
+    """
+
+    __tablename__ = "system_audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
+    event_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    event_timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=False),
+        default=lambda: datetime.now(timezone.utc).replace(tzinfo=None),
+        nullable=False,
+        index=True,
+    )
+    actor_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        Uuid(),
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+    )
+    actor_email: Mapped[Optional[str]] = mapped_column(
+        StringEncryptedType(String(255), get_encryption_key, AesEngine, "pkcs5"),
+        nullable=True,
+    )
+    actor_ip: Mapped[Optional[str]] = mapped_column(String(45), nullable=True)
+    correlation_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    request_method: Mapped[Optional[str]] = mapped_column(String(10), nullable=True)
+    request_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    resource_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    resource_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    details: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    success: Mapped[bool] = mapped_column(default=True, nullable=False)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    actor = relationship("User")
+
+    __table_args__ = (
+        Index(
+            "ix_system_audit_type_time",
+            "event_type",
+            "event_timestamp",
+        ),
+    )
+
+
+def _coerce_actor_id(actor_id: uuid.UUID | str | None) -> uuid.UUID | None:
+    if isinstance(actor_id, uuid.UUID):
+        return actor_id
+    if isinstance(actor_id, (str, bytes)):
+        try:
+            return uuid.UUID(str(actor_id))
+        except ValueError:
+            return None
+    return None
+
+
+class _AuditLoggerBase:
+    # Fields to mask in details
+    SENSITIVE_FIELDS = {
+        "password",
+        "token",
+        "secret",
+        "api_key",
+        "access_key",
+        "external_id",
+        "session_token",
+        "credit_card",
+    }
+
+    @classmethod
+    def _mask_sensitive(cls, data: Any) -> Any:
+        """
+        Recursively mask sensitive fields in dicts and lists.
+        Item 17: Extended to handle nested JSONB and list structures.
+        """
+        if isinstance(data, list):
+            return [cls._mask_sensitive(item) for item in data]
+
+        if not isinstance(data, dict):
+            return data
+
+        masked = {}
+        for key, value in data.items():
+            if any(
+                sensitive in str(key).lower() for sensitive in cls.SENSITIVE_FIELDS
+            ):
+                masked[key] = "***REDACTED***"
+            elif isinstance(value, (dict, list)):
+                masked[key] = cls._mask_sensitive(value)
+            else:
+                masked[key] = value
+
+        return masked
+
+
+class AuditLogger(_AuditLoggerBase):
     """
     High-level audit logging service.
 
@@ -244,18 +347,6 @@ class AuditLogger:
             details={"action": "delete", "savings": 50.00}
         )
     """
-
-    # Fields to mask in details
-    SENSITIVE_FIELDS = {
-        "password",
-        "token",
-        "secret",
-        "api_key",
-        "access_key",
-        "external_id",
-        "session_token",
-        "credit_card",
-    }
 
     def __init__(
         self,
@@ -274,7 +365,7 @@ class AuditLogger:
 
     async def log(
         self,
-        event_type: AuditEventType,
+        event_type: AuditEventType | str,
         actor_id: uuid.UUID | str | None = None,
         actor_email: str | None = None,
         actor_ip: str | None = None,
@@ -290,20 +381,13 @@ class AuditLogger:
 
         # Mask sensitive data
         masked_details = self._mask_sensitive(details) if details else None
-        parsed_actor_id: uuid.UUID | None
-        if isinstance(actor_id, uuid.UUID):
-            parsed_actor_id = actor_id
-        elif isinstance(actor_id, (str, bytes)):
-            try:
-                parsed_actor_id = uuid.UUID(str(actor_id))
-            except ValueError:
-                parsed_actor_id = None
-        else:
-            parsed_actor_id = None
+        parsed_actor_id = _coerce_actor_id(actor_id)
 
         entry = AuditLog(
             tenant_id=self.tenant_id,
-            event_type=event_type.value,
+            event_type=(
+                event_type.value if isinstance(event_type, AuditEventType) else str(event_type)
+            ),
             actor_id=parsed_actor_id,
             actor_email=actor_email,
             actor_ip=actor_ip,
@@ -326,7 +410,9 @@ class AuditLogger:
         # Also log to structured logger for real-time monitoring
         logger.info(
             "audit_event",
-            event_type=event_type.value,
+            event_type=(
+                event_type.value if isinstance(event_type, AuditEventType) else str(event_type)
+            ),
             tenant_id=str(self.tenant_id),
             correlation_id=self.correlation_id,
             resource_type=resource_type,
@@ -336,27 +422,88 @@ class AuditLogger:
 
         return entry
 
-    def _mask_sensitive(self, data: Any) -> Any:
-        """
-        Recursively mask sensitive fields in dicts and lists.
-        Item 17: Extended to handle nested JSONB and list structures.
-        """
-        if isinstance(data, list):
-            return [self._mask_sensitive(item) for item in data]
 
-        if not isinstance(data, dict):
-            return data
+class SystemAuditLogger(_AuditLoggerBase):
+    """High-level audit logging service for system-scope events."""
 
-        masked = {}
-        for key, value in data.items():
-            # Check for sensitive keywords in the key name
-            if any(
-                sensitive in str(key).lower() for sensitive in self.SENSITIVE_FIELDS
-            ):
-                masked[key] = "***REDACTED***"
-            elif isinstance(value, (dict, list)):
-                masked[key] = self._mask_sensitive(value)
-            else:
-                masked[key] = value
+    def __init__(
+        self,
+        db: AsyncSession,
+        correlation_id: str | None = None,
+    ) -> None:
+        self.db = db
+        self.correlation_id = correlation_id or str(uuid.uuid4())
 
-        return masked
+    async def log(
+        self,
+        event_type: AuditEventType | str,
+        actor_id: uuid.UUID | str | None = None,
+        actor_email: str | None = None,
+        actor_ip: str | None = None,
+        resource_type: str | None = None,
+        resource_id: str | None = None,
+        details: dict[str, Any] | None = None,
+        success: bool = True,
+        error_message: str | None = None,
+        request_method: str | None = None,
+        request_path: str | None = None,
+    ) -> SystemAuditLog:
+        masked_details = self._mask_sensitive(details) if details else None
+        parsed_actor_id = _coerce_actor_id(actor_id)
+
+        entry = SystemAuditLog(
+            event_type=(
+                event_type.value if isinstance(event_type, AuditEventType) else str(event_type)
+            ),
+            actor_id=parsed_actor_id,
+            actor_email=actor_email,
+            actor_ip=actor_ip,
+            correlation_id=self.correlation_id,
+            request_method=request_method,
+            request_path=request_path,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details=masked_details,
+            success=success,
+            error_message=error_message,
+        )
+
+        add_result = cast(Any, self.db).add(entry)
+        if inspect.isawaitable(add_result):
+            await add_result
+        await self.db.flush()
+
+        logger.info(
+            "system_audit_event",
+            event_type=(
+                event_type.value if isinstance(event_type, AuditEventType) else str(event_type)
+            ),
+            correlation_id=self.correlation_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            success=success,
+        )
+
+        return entry
+
+
+@event.listens_for(AuditLog, "before_update")
+def _audit_log_prevent_update(*_: object) -> None:
+    raise ValueError("AuditLog entries are immutable once written.")
+
+
+@event.listens_for(AuditLog, "before_delete")
+def _audit_log_prevent_delete(*_: object) -> None:
+    raise ValueError(
+        "AuditLog entries can only be deleted by the controlled retention purge path."
+    )
+
+
+@event.listens_for(SystemAuditLog, "before_update")
+def _system_audit_log_prevent_update(*_: object) -> None:
+    raise ValueError("SystemAuditLog entries are immutable once written.")
+
+
+@event.listens_for(SystemAuditLog, "before_delete")
+def _system_audit_log_prevent_delete(*_: object) -> None:
+    raise ValueError("SystemAuditLog entries cannot be deleted directly.")

@@ -119,10 +119,10 @@ describe('landingFunnel', () => {
 		expect(weekly[0]?.counts.cta).toBe(1);
 	});
 
-	it('aggregates CTA value telemetry with normalized enterprise labels', () => {
+	it('aggregates CTA value telemetry with normalized public labels', () => {
 		const storage = new MemoryStorage();
 		incrementLandingCtaValue('start_free', storage);
-		incrementLandingCtaValue('enterprise_review', storage);
+		incrementLandingCtaValue('see_pricing', storage);
 		incrementLandingCtaValue('start_free', storage);
 		incrementLandingCtaValue('request_validation_briefing', storage);
 		incrementLandingCtaValue('request validation briefing', storage);
@@ -134,8 +134,8 @@ describe('landingFunnel', () => {
 			label: 'Start Free',
 			count: 2
 		});
-		const enterpriseReview = report.find((entry) => entry.value === 'enterprise_review');
-		expect(enterpriseReview?.label).toBe('Enterprise Review');
+		const seePricing = report.find((entry) => entry.value === 'see_pricing');
+		expect(seePricing?.label).toBe('See Pricing');
 		const validationBriefing = report.find(
 			(entry) => entry.value === 'request_validation_briefing'
 		);

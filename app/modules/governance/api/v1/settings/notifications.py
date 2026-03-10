@@ -24,6 +24,7 @@ from app.modules.governance.api.v1.settings.notification_settings_ops import (
     build_notification_settings_audit_payload as _build_notification_settings_audit_payload_impl,
     build_notification_settings_create_kwargs as _build_notification_settings_create_kwargs_impl,
     enforce_incident_integrations_access as _enforce_incident_integrations_access_impl,
+    enforce_jira_integration_access as _enforce_jira_integration_access_impl,
     enforce_slack_integration_access as _enforce_slack_integration_access_impl,
     validate_notification_settings_requirements as _validate_notification_settings_requirements_impl,
 )
@@ -52,7 +53,8 @@ from app.shared.core.auth import (
     get_current_user_with_db_context,
     requires_role_with_db_context,
 )
-from app.shared.core.logging import audit_log
+from app.shared.core.async_utils import maybe_await
+from app.shared.core.logging import audit_log_async as audit_log
 from app.shared.core.pricing import FeatureFlag, is_feature_enabled, normalize_tier
 from app.shared.db.session import get_db
 
@@ -185,6 +187,14 @@ async def update_notification_settings(
         slack_integration_feature=FeatureFlag.SLACK_INTEGRATION,
         raise_http_exception_fn=_raise_http_exception,
     )
+    _enforce_jira_integration_access_impl(
+        data=data,
+        current_tier=current_user.tier,
+        normalize_tier_fn=normalize_tier,
+        is_feature_enabled_fn=is_feature_enabled,
+        jira_integration_feature=FeatureFlag.JIRA_INTEGRATION,
+        raise_http_exception_fn=_raise_http_exception,
+    )
     _enforce_incident_integrations_access_impl(
         data=data,
         current_tier=current_user.tier,
@@ -213,6 +223,19 @@ async def update_notification_settings(
         raise_http_exception_fn=_raise_http_exception,
     )
 
+    await maybe_await(
+        audit_log(
+            "settings.notifications_updated",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            _build_notification_settings_audit_payload_impl(settings),
+            db=db,
+            resource_type="notification_settings",
+            resource_id=str(current_user.tenant_id),
+            request_method="PUT",
+            request_path="/api/v1/settings/notifications",
+        )
+    )
     await db.commit()
     await db.refresh(settings)
 
@@ -220,13 +243,6 @@ async def update_notification_settings(
         "notification_settings_updated",
         tenant_id=str(current_user.tenant_id),
         digest_schedule=settings.digest_schedule,
-    )
-
-    audit_log(
-        "settings.notifications_updated",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        _build_notification_settings_audit_payload_impl(settings),
     )
 
     return _to_notification_response_impl(
@@ -262,8 +278,8 @@ async def get_policy_notification_diagnostics(
     slack_feature_allowed_by_tier = is_feature_enabled(
         tier, FeatureFlag.SLACK_INTEGRATION
     )
-    feature_allowed_by_tier = is_feature_enabled(
-        tier, FeatureFlag.INCIDENT_INTEGRATIONS
+    jira_feature_allowed_by_tier = is_feature_enabled(
+        tier, FeatureFlag.JIRA_INTEGRATION
     )
 
     app_settings = get_settings()
@@ -277,7 +293,7 @@ async def get_policy_notification_diagnostics(
     jira = _to_jira_policy_diagnostics_impl(
         remediation_settings,
         notification_settings,
-        feature_allowed_by_tier=feature_allowed_by_tier,
+        feature_allowed_by_tier=jira_feature_allowed_by_tier,
     )
 
     return PolicyNotificationDiagnosticsResponse(

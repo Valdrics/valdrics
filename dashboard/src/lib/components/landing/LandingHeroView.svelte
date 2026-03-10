@@ -27,6 +27,7 @@
 		secondaryCtaLabel,
 		secondaryCtaHref,
 		primaryCtaHref,
+		secondaryCtaTelemetryValue,
 		ctaVariant,
 		sectionOrderVariant,
 		cloudHookStates,
@@ -65,6 +66,8 @@
 		freeTierCtaHref,
 		buildPlanCtaHref,
 		plansTalkToSalesHref,
+		plansEnterpriseHref,
+		trustEnterpriseHref,
 		requestValidationBriefingHref,
 		onePagerHref,
 		subscribeApiPath,
@@ -86,6 +89,7 @@
 		secondaryCtaLabel: string;
 		secondaryCtaHref: string;
 		primaryCtaHref: string;
+		secondaryCtaTelemetryValue: string;
 		ctaVariant: LandingExperimentAssignments['ctaVariant'];
 		sectionOrderVariant: LandingExperimentAssignments['sectionOrderVariant'];
 		cloudHookStates: readonly {
@@ -138,6 +142,8 @@
 		freeTierCtaHref: string;
 		buildPlanCtaHref: (planId: string) => string;
 		plansTalkToSalesHref: string;
+		plansEnterpriseHref: string;
+		trustEnterpriseHref: string;
 		requestValidationBriefingHref: string;
 		onePagerHref: string;
 		subscribeApiPath: string;
@@ -164,7 +170,7 @@
 	<meta itemprop="applicationCategory" content="BusinessApplication" />
 	<meta
 		itemprop="description"
-		content="Valdrics helps teams reduce cloud and software spend by turning live spend signals into owner-assigned actions, approvals, and measurable savings."
+		content="Valdrics turns cloud, SaaS, and software spend signals into owner-routed approvals, remediation, workflow execution, and exportable proof."
 	/>
 	<meta itemprop="url" content={canonicalUrl} />
 	<meta itemprop="image" content={imageUrl} />
@@ -191,7 +197,7 @@
 				{secondaryCtaHref}
 				{primaryCtaHref}
 				onPrimaryCta={() => onTrackCta('cta_click', 'hero', ctaVariant)}
-				onSecondaryCta={() => onTrackCta('cta_click', 'hero', 'enterprise_review')}
+				onSecondaryCta={() => onTrackCta('cta_click', 'hero', secondaryCtaTelemetryValue)}
 			/>
 		</div>
 	</section>
@@ -200,7 +206,7 @@
 		{cloudHookStates}
 		{activeHookState}
 		{hookStateIndex}
-		onSelectHookState={onSelectHookState}
+		{onSelectHookState}
 	/>
 
 	<div class="landing-story-band">
@@ -222,10 +228,10 @@
 					{signalMapInView}
 					{snapshotIndex}
 					{demoStepIndex}
-					onSelectSignalLane={onSelectSignalLane}
-					onSelectDemoStep={onSelectDemoStep}
-					onSelectSnapshot={onSelectSnapshot}
-					onSignalMapElementChange={onSignalMapElementChange}
+					{onSelectSignalLane}
+					{onSelectDemoStep}
+					{onSelectSnapshot}
+					{onSignalMapElementChange}
 				/>
 			</section>
 
@@ -254,10 +260,10 @@
 					{signalMapInView}
 					{snapshotIndex}
 					{demoStepIndex}
-					onSelectSignalLane={onSelectSignalLane}
-					onSelectDemoStep={onSelectDemoStep}
-					onSelectSnapshot={onSelectSnapshot}
-					onSignalMapElementChange={onSignalMapElementChange}
+					{onSelectSignalLane}
+					{onSelectDemoStep}
+					{onSelectSnapshot}
+					{onSignalMapElementChange}
 				/>
 			</section>
 		{/if}
@@ -279,10 +285,10 @@
 			{formatUsd}
 			{currencyCode}
 			plannerHref={roiPlannerHref}
-			onTrackScenarioAdjust={onTrackScenarioAdjust}
-			onScenarioWasteWithoutChange={onScenarioWasteWithoutChange}
-			onScenarioWasteWithChange={onScenarioWasteWithChange}
-			onScenarioWindowChange={onScenarioWindowChange}
+			{onTrackScenarioAdjust}
+			{onScenarioWasteWithoutChange}
+			{onScenarioWasteWithChange}
+			{onScenarioWindowChange}
 			onTrackPlannerCta={() => onTrackCta('cta_click', 'simulator', 'start_roi_assessment')}
 		/>
 
@@ -290,11 +296,13 @@
 			buildFreeTierCtaHref={() => freeTierCtaHref}
 			{buildPlanCtaHref}
 			talkToSalesHref={plansTalkToSalesHref}
-			onTrackCta={onTrackCta}
+			enterprisePathHref={plansEnterpriseHref}
+			{onTrackCta}
 		/>
 
 		<LandingTrustSection
 			onTrackCta={(value) => onTrackCta('cta_click', 'trust', value)}
+			enterprisePathHref={trustEnterpriseHref}
 			{requestValidationBriefingHref}
 			{onePagerHref}
 		/>
@@ -335,17 +343,13 @@
 	/>
 
 	{#if !cookieBannerVisible}
-		<button
-			type="button"
-			class="landing-cookie-settings"
-			onclick={onOpenCookieSettings}
-		>
+		<button type="button" class="landing-cookie-settings" onclick={onOpenCookieSettings}>
 			Cookie Settings
 		</button>
 	{/if}
 
 	<LandingExitIntentPrompt
-		startFreeHref={primaryCtaHref}
+		selfServeHref={freeTierCtaHref}
 		{resourcesHref}
 		{subscribeApiPath}
 		{onTrackCta}

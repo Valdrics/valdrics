@@ -2,6 +2,11 @@ import type { PricingPlan } from '../pricing/plans';
 import { PLAN_ORDER, mergePricingPlans } from '../pricing/plans';
 
 export type BillingCycle = 'monthly' | 'annual';
+export type BillingSubscription = {
+	tier?: string;
+	status?: string;
+	next_payment_date?: string | null;
+};
 
 export type ConnectionUsageItem = {
 	connected: number;
@@ -65,4 +70,30 @@ export function getVisibleBillingPlans(plans: PricingPlan[], currentTier: string
 export function canSelfServeCheckout(planId: string, currentTier: string): boolean {
 	if (planId === 'free') return false;
 	return getPlanRank(planId) > getPlanRank(currentTier);
+}
+
+export function formatBillingUsd(value: number): string {
+	return new Intl.NumberFormat('en-US', {
+		style: 'currency',
+		currency: 'USD',
+		maximumFractionDigits: 0
+	}).format(value);
+}
+
+export function formatBillingDate(timestamp: string): string {
+	return new Intl.DateTimeFormat('en-US', {
+		dateStyle: 'medium',
+		timeStyle: 'short'
+	}).format(new Date(timestamp));
+}
+
+export function getDisplayedMonthlyPlanPrice(
+	plan: PricingPlan,
+	billingCycle: BillingCycle
+): number {
+	return billingCycle === 'monthly' ? plan.price_monthly : Math.round(plan.price_annual / 12);
+}
+
+export function getAnnualPlanSavings(plan: PricingPlan): number {
+	return Math.max(plan.price_monthly * 12 - plan.price_annual, 0);
 }

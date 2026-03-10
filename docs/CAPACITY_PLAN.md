@@ -2,6 +2,9 @@
 
 This plan outlines the infrastructure targets for scaling the platform.
 
+This remains an active planning and documentation-contract artifact. Keep it
+aligned with the supported deployment model and current runtime assumptions.
+
 It assumes the repository-managed `Helm + Terraform (AWS/EKS)` profile as the
 sole supported production scale path. The `Cloudflare Pages + Koyeb` manifests
 remain a managed-platform preview/reference surface only and are excluded from

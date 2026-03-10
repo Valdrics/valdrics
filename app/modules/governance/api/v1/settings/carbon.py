@@ -23,7 +23,8 @@ from app.shared.core.auth import (
     get_current_user_with_db_context,
     requires_role_with_db_context,
 )
-from app.shared.core.logging import audit_log
+from app.shared.core.async_utils import maybe_await
+from app.shared.core.logging import audit_log_async as audit_log
 from app.shared.db.session import get_db
 from app.models.carbon_settings import CarbonSettings
 
@@ -161,6 +162,22 @@ async def update_carbon_settings(
         settings.email_enabled = updates["email_enabled"]
         settings.email_recipients = updates["email_recipients"]
 
+    await maybe_await(
+        audit_log(
+            "settings.carbon_updated",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {
+                "budget_kg": float(settings.carbon_budget_kg),
+                "region": settings.default_region,
+            },
+            db=db,
+            resource_type="carbon_settings",
+            resource_id=str(current_user.tenant_id),
+            request_method="PUT",
+            request_path="/api/v1/settings/carbon",
+        )
+    )
     await db.commit()
     await db.refresh(settings)
 
@@ -169,16 +186,6 @@ async def update_carbon_settings(
         tenant_id=str(current_user.tenant_id),
         budget_kg=settings.carbon_budget_kg,
         threshold=settings.alert_threshold_percent,
-    )
-
-    audit_log(
-        "settings.carbon_updated",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {
-            "budget_kg": float(settings.carbon_budget_kg),
-            "region": settings.default_region,
-        },
     )
 
     return CarbonSettingsResponse(

@@ -9,6 +9,7 @@ from app.modules.governance.api.v1.settings.notification_diagnostics_ops import 
     to_slack_policy_diagnostics,
 )
 from app.modules.governance.api.v1.settings.notification_settings_ops import (
+    enforce_jira_integration_access,
     enforce_slack_integration_access,
 )
 
@@ -47,6 +48,33 @@ def test_enforce_slack_integration_access_allows_growth_when_enabled() -> None:
         normalize_tier_fn=lambda tier: tier,
         is_feature_enabled_fn=lambda tier, feature: True,
         slack_integration_feature=SimpleNamespace(value="slack_integration"),
+        raise_http_exception_fn=_raise_http_error,
+    )
+
+
+def test_enforce_jira_integration_access_requires_growth_or_higher() -> None:
+    with pytest.raises(_CapturedHttpError) as exc_info:
+        enforce_jira_integration_access(
+            data=SimpleNamespace(jira_enabled=True),
+            current_tier=SimpleNamespace(value="starter"),
+            normalize_tier_fn=lambda tier: tier,
+            is_feature_enabled_fn=lambda tier, feature: False,
+            jira_integration_feature=SimpleNamespace(value="jira_integration"),
+            raise_http_exception_fn=_raise_http_error,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert "jira_integration" in exc_info.value.detail
+    assert "starter" in exc_info.value.detail
+
+
+def test_enforce_jira_integration_access_allows_growth_when_enabled() -> None:
+    enforce_jira_integration_access(
+        data=SimpleNamespace(jira_enabled=True),
+        current_tier=SimpleNamespace(value="growth"),
+        normalize_tier_fn=lambda tier: tier,
+        is_feature_enabled_fn=lambda tier, feature: True,
+        jira_integration_feature=SimpleNamespace(value="jira_integration"),
         raise_http_exception_fn=_raise_http_error,
     )
 

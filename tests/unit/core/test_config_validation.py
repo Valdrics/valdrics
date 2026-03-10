@@ -35,6 +35,23 @@ class TestSettingsValidation:
                 Settings(_env_file=None)
             assert "CSRF_SECRET_KEY must be set" in str(exc.value)
 
+    def test_settings_rejects_noncanonical_app_name(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    APP_NAME="Valdrics AI",
+                    DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    DB_SSL_MODE="disable",
+                    _env_file=None,
+                )
+            assert "APP_NAME must be set to the canonical product name 'Valdrics'." in str(
+                exc.value
+            )
+
     def test_settings_rejects_weak_blind_index_kdf_iterations(self):
         with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ValidationError) as exc:
@@ -167,6 +184,61 @@ class TestSettingsValidation:
 
             assert settings.DB_SSL_MODE == "disable"
             assert settings.is_production is False
+
+    def test_settings_accepts_local_sqlite_bootstrap_in_local_runtime(self):
+        with patch.dict("os.environ", {}, clear=True):
+            settings = Settings(
+                ENVIRONMENT="local",
+                DATABASE_URL="sqlite+aiosqlite:///./valdrics_local_dev.sqlite3",
+                SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                KDF_SALT=FAKE_KDF_SALT,
+                TESTING=False,
+                LOCAL_SQLITE_BOOTSTRAP=True,
+                DB_SSL_MODE="disable",
+                _env_file=None,
+            )
+
+            assert settings.LOCAL_SQLITE_BOOTSTRAP is True
+
+    def test_settings_rejects_local_sqlite_bootstrap_in_testing(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    ENVIRONMENT="local",
+                    DATABASE_URL="sqlite+aiosqlite:///./valdrics_local_dev.sqlite3",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    TESTING=True,
+                    LOCAL_SQLITE_BOOTSTRAP=True,
+                    DB_SSL_MODE="disable",
+                    _env_file=None,
+                )
+
+            assert "LOCAL_SQLITE_BOOTSTRAP requires TESTING=false" in str(exc.value)
+
+    def test_settings_rejects_local_sqlite_bootstrap_for_non_sqlite_database(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    ENVIRONMENT="local",
+                    DATABASE_URL="postgresql+asyncpg://test",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    TESTING=False,
+                    LOCAL_SQLITE_BOOTSTRAP=True,
+                    DB_SSL_MODE="disable",
+                    _env_file=None,
+                )
+
+            assert "LOCAL_SQLITE_BOOTSTRAP requires DATABASE_URL to use sqlite" in str(
+                exc.value
+            )
 
     def test_settings_admin_api_key_validation(self):
         """Test admin API key validation in production."""

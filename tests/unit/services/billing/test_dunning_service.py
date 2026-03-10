@@ -69,6 +69,12 @@ async def test_process_failed_payment_first_attempt(mock_db, mock_subscription):
             assert mock_subscription.dunning_attempts == 1
             assert mock_subscription.status == SubscriptionStatus.ATTENTION.value
             mock_enqueue.assert_called_once()
+            _, kwargs = mock_enqueue.call_args
+            assert kwargs["auto_commit"] is False
+            assert kwargs["deduplication_key"] == (
+                f"dunning:{mock_subscription.id}:attempt:2"
+            )
+            assert kwargs["payload"]["charge_reference"].startswith("valdrics-dunning-2-")
 
 
 @pytest.mark.asyncio
@@ -255,7 +261,7 @@ async def test_retry_payment_uses_injected_billing_service_factory(
 
     assert result["status"] == "success"
     factory.assert_called_once_with(mock_db)
-    mock_success.assert_awaited_once_with(mock_subscription)
+    mock_success.assert_awaited_once_with(mock_subscription, commit=True)
 
 
 @pytest.mark.asyncio

@@ -43,19 +43,24 @@ class TestFeatureAccess:
         assert is_feature_enabled(PricingTier.STARTER, FeatureFlag.MULTI_CLOUD)
 
     def test_starter_no_slack(self):
-        """Starter tier should NOT have Slack integration."""
+        """Starter tier should NOT have Slack or Jira integrations."""
         assert not is_feature_enabled(
             PricingTier.STARTER, FeatureFlag.SLACK_INTEGRATION
+        )
+        assert not is_feature_enabled(
+            PricingTier.STARTER, FeatureFlag.JIRA_INTEGRATION
         )
 
     def test_growth_tier_has_sso_and_slack(self):
         """Growth tier should unlock rollout integrations and identity."""
         assert is_feature_enabled(PricingTier.GROWTH, FeatureFlag.SLACK_INTEGRATION)
+        assert is_feature_enabled(PricingTier.GROWTH, FeatureFlag.JIRA_INTEGRATION)
         assert is_feature_enabled(PricingTier.GROWTH, FeatureFlag.SSO)
 
     def test_professional_tier_full_features(self):
         """Professional tier should have Slack, hourly scans, audit logs."""
         assert is_feature_enabled(PricingTier.PRO, FeatureFlag.SLACK_INTEGRATION)
+        assert is_feature_enabled(PricingTier.PRO, FeatureFlag.JIRA_INTEGRATION)
         assert is_feature_enabled(PricingTier.PRO, FeatureFlag.HOURLY_SCANS)
         assert is_feature_enabled(PricingTier.PRO, FeatureFlag.AUDIT_LOGS)
         assert is_feature_enabled(PricingTier.PRO, FeatureFlag.AI_ANALYSIS_DETAILED)

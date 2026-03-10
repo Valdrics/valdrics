@@ -2,10 +2,12 @@
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import { api } from '$lib/api';
 	import { edgeApiPath } from '$lib/edgeProxy';
+	import { trackProductFunnelStage } from '$lib/funnel/productFunnelTelemetry';
 	import {
 		FREE_TIER_HIGHLIGHTS,
 		FREE_TIER_LIMIT_NOTE,
@@ -15,35 +17,17 @@
 	import type { PageData } from './$types';
 	import type { PricingPlan, PricingPlanStory } from './plans';
 	import { DEFAULT_PRICING_PLANS, mergePricingPlans } from './plans';
+	import { PRICING_BUYING_NOTES, PRICING_HERO_META } from './pricingPageContent';
 	import './pricing-page.css';
 
 	type BillingCycle = 'monthly' | 'annual';
-
-	const HERO_META = [
-		{
-			label: 'Entry path',
-			value: '$0 free tier for the first owner-routed workflow'
-		},
-		{
-			label: 'Rollout speed',
-			value: 'First workflow typically live in 3-10 business days'
-		},
-		{
-			label: 'Upgrade model',
-			value: 'Move up only when you need broader provider coverage, team rollout controls, or finance-grade governance'
-		}
-	] as const;
-
-	const BUYING_NOTES = [
-		'Prices are shown in USD for easy plan comparison.',
-		'The permanent free tier does not require a checkout session.'
-	] as const;
 
 	let { data }: { data: PageData } = $props();
 
 	let billingCycle = $state<BillingCycle>('monthly');
 	let upgrading = $state('');
 	let error = $state('');
+	let pricingViewTracked = $state(false);
 
 	let plans = $derived<PricingPlan[]>(
 		mergePricingPlans(
@@ -54,10 +38,26 @@
 	let paidPlans = $derived(plans.filter((plan) => plan.id !== 'free'));
 	let currentTier = $derived(String(data.subscription?.tier ?? 'free').trim().toLowerCase());
 
+	$effect(() => {
+		if (pricingViewTracked || !data.user || !data.session?.access_token) {
+			return;
+		}
+		pricingViewTracked = true;
+		void trackProductFunnelStage({
+			accessToken: data.session.access_token,
+			stage: 'pricing_viewed',
+			tenantId: data.user?.tenant_id,
+			url: $page.url,
+			currentTier,
+			persona: String(data.profile?.persona ?? ''),
+			source: 'pricing_page'
+		});
+	});
+
 	function getPlanStory(plan: PricingPlan): PricingPlanStory {
 		return (
 			plan.story ?? {
-				badge: plan.popular ? 'Most popular' : 'Plan',
+				badge: plan.popular ? 'Recommended paid plan' : 'Plan',
 				headline: plan.name,
 				summary: plan.description,
 				note: plan.description,
@@ -132,6 +132,15 @@
 			}
 
 			const { checkout_url } = await res.json();
+			await trackProductFunnelStage({
+				accessToken: session.access_token,
+				stage: 'checkout_started',
+				tenantId: data.user?.tenant_id,
+				url: $page.url,
+				currentTier,
+				persona: String(data.profile?.persona ?? ''),
+				source: `pricing_${billingCycle}`
+			}).catch(() => false);
 			window.location.assign(normalizeCheckoutUrl(checkout_url, window.location.origin));
 		} catch (e) {
 			const err = e as Error;
@@ -143,7 +152,7 @@
 
 <PublicPageMeta
 	title="Pricing"
-	description="Simple, transparent Valdrics pricing. Start on the permanent free tier, prove one workflow, and upgrade only when you need broader provider coverage, team rollout controls, or finance-grade governance."
+	description="Simple, transparent Valdrics pricing. Start on the permanent free tier, prove one governed workflow, and upgrade only when you need broader provider coverage, stronger owner routing, or finance-grade governance."
 	pageType="WebPage"
 	pageSection="Pricing"
 	keywords={['pricing', 'free tier', 'starter', 'growth', 'pro', 'enterprise']}
@@ -152,7 +161,7 @@
 <PublicMarketingPage
 	kicker="Pricing"
 	title="Simple, transparent pricing"
-	subtitle="Start on the permanent free tier, prove one workflow, and upgrade only when you need more provider coverage, team rollout controls, or finance-grade governance."
+	subtitle="Start on the permanent free tier, prove one governed workflow, and upgrade only when you need broader provider coverage, stronger owner routing, or finance-grade governance."
 >
 	{#snippet heroActions()}
 		<a href={getFreeTierHref()} class="btn btn-primary">Start Free</a>
@@ -160,7 +169,7 @@
 	{/snippet}
 
 	{#snippet heroMeta()}
-		{#each HERO_META as item (item.label)}
+		{#each PRICING_HERO_META as item (item.label)}
 			<article class="public-page__meta-item">
 				<strong>{item.label}</strong>
 				<span>{item.value}</span>
@@ -364,7 +373,7 @@
 					<a href={`${base}/enterprise`} class="btn btn-secondary">View Enterprise Overview</a>
 				</div>
 				<div class="public-page__badge-cloud pricing-buying-notes">
-					{#each BUYING_NOTES as item (item)}
+					{#each PRICING_BUYING_NOTES as item (item)}
 						<span class="public-page__badge">{item}</span>
 					{/each}
 				</div>

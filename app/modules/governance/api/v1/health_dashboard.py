@@ -1,4 +1,4 @@
-"""Investor health dashboard API for due-diligence operational metrics."""
+"""Internal health dashboard API for operational metrics."""
 
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
@@ -25,6 +25,7 @@ from app.modules.governance.api.v1.health_dashboard_models import (
     LLMFairUseThresholds,
     LLMUsageMetrics,
     LicenseGovernanceHealth,
+    LandingFunnelHealth,
     SystemHealth,
     TenantMetrics,
 )
@@ -36,6 +37,9 @@ from app.modules.governance.api.v1.health_dashboard_ops import (
     get_llm_usage_metrics as _get_llm_usage_metrics_impl,
     get_tenant_metrics as _get_tenant_metrics_impl,
 )
+from app.modules.governance.api.v1.landing_funnel_health_ops import (
+    get_landing_funnel_health as _get_landing_funnel_health_impl,
+)
 from app.shared.core.auth import CurrentUser, requires_role
 from app.shared.core.cache import get_cache_service
 from app.shared.core.config import get_settings
@@ -44,7 +48,7 @@ from app.shared.core.pricing import PricingTier, get_tenant_tier
 from app.shared.db.session import get_db
 
 logger = structlog.get_logger()
-router = APIRouter(tags=["Investor Health"])
+router = APIRouter(tags=["Internal Health"])
 HEALTH_DASHBOARD_CACHE_RECOVERABLE_EXCEPTIONS = (
     ValidationError,
     RuntimeError,
@@ -70,7 +74,7 @@ async def get_investor_health_dashboard(
     db: AsyncSession = Depends(get_db),
 ) -> InvestorHealthDashboard:
     """
-    Get comprehensive health dashboard for investor due diligence.
+    Get comprehensive internal health dashboard for operations visibility.
 
     Shows:
     - System uptime and availability
@@ -104,6 +108,7 @@ async def get_investor_health_dashboard(
     cloud_connections = await _get_cloud_connection_health(db)
     cloud_plus_connections = await _get_cloud_plus_connection_health(db)
     license_governance = await _get_license_governance_health(db, now)
+    landing_funnel = await _get_landing_funnel_health(db, now=now)
 
     payload = InvestorHealthDashboard(
         generated_at=now.isoformat(),
@@ -114,6 +119,7 @@ async def get_investor_health_dashboard(
         cloud_connections=cloud_connections,
         cloud_plus_connections=cloud_plus_connections,
         license_governance=license_governance,
+        landing_funnel=landing_funnel,
     )
     if cache.enabled:
         await cache.set(
@@ -296,3 +302,10 @@ async def _get_license_governance_health(
         now,
         window_hours=window_hours,
     )
+
+
+async def _get_landing_funnel_health(
+    db: AsyncSession,
+    now: datetime,
+) -> LandingFunnelHealth:
+    return await _get_landing_funnel_health_impl(db, now=now)

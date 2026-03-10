@@ -25,6 +25,7 @@ def _request(scheme: str = "https", forwarded_proto: str | None = None) -> Reque
         "query_string": b"",
         "headers": headers,
         "server": ("testserver", 443 if scheme == "https" else 80),
+        "client": ("127.0.0.1", 12345),
         "scheme": scheme,
     }
     return Request(scope)
@@ -158,7 +159,12 @@ async def test_onboard_cloud_platform_paths(
     db = _db()
     req = OnboardRequest(tenant_name=f"{platform}-tenant", cloud_config=cloud_config)
     user = _current_user()
-    mock_settings = SimpleNamespace(ENVIRONMENT="production")
+    mock_settings = SimpleNamespace(
+        ENVIRONMENT="production",
+        TRUST_PROXY_HEADERS=True,
+        TRUSTED_PROXY_CIDRS=["127.0.0.1/32"],
+        TRUSTED_PROXY_HOPS=2,
+    )
     mock_adapter = AsyncMock()
     mock_adapter.verify_connection.return_value = True
 
@@ -171,7 +177,10 @@ async def test_onboard_cloud_platform_paths(
             "app.shared.adapters.factory.AdapterFactory.get_adapter",
             return_value=mock_adapter,
         ) as get_adapter,
-        patch("app.modules.governance.api.v1.settings.onboard.audit_log"),
+        patch(
+            "app.modules.governance.api.v1.settings.onboard.durable_audit_log",
+            new_callable=AsyncMock,
+        ),
     ):
         response = await onboard(
             _request(scheme="http", forwarded_proto="https, http"),
@@ -218,7 +227,10 @@ async def test_onboard_aws_uses_configured_default_region_when_missing() -> None
             "app.shared.adapters.factory.AdapterFactory.get_adapter",
             side_effect=_capture_adapter,
         ),
-        patch("app.modules.governance.api.v1.settings.onboard.audit_log"),
+        patch(
+            "app.modules.governance.api.v1.settings.onboard.durable_audit_log",
+            new_callable=AsyncMock,
+        ),
     ):
         response = await onboard(_request(), req, user, db)
 
@@ -260,7 +272,10 @@ async def test_onboard_aws_falls_back_to_multitenant_verifier_when_cur_missing()
             "app.shared.adapters.aws_multitenant.MultiTenantAWSAdapter",
             return_value=mock_mt_adapter,
         ) as mock_mt_class,
-        patch("app.modules.governance.api.v1.settings.onboard.audit_log"),
+        patch(
+            "app.modules.governance.api.v1.settings.onboard.durable_audit_log",
+            new_callable=AsyncMock,
+        ),
     ):
         response = await onboard(_request(), req, user, db)
 
@@ -291,7 +306,10 @@ async def test_onboard_unexpected_adapter_error_is_translated() -> None:
             "app.shared.adapters.factory.AdapterFactory.get_adapter",
             side_effect=RuntimeError("adapter exploded"),
         ),
-        patch("app.modules.governance.api.v1.settings.onboard.audit_log"),
+        patch(
+            "app.modules.governance.api.v1.settings.onboard.durable_audit_log",
+            new_callable=AsyncMock,
+        ),
     ):
         with pytest.raises(HTTPException) as exc:
             await onboard(_request(), req, user, db)
@@ -308,10 +326,70 @@ async def test_onboard_integrity_error_maps_to_already_onboarded() -> None:
     req = OnboardRequest(tenant_name="race-tenant")
     user = _current_user()
 
-    with patch("app.modules.governance.api.v1.settings.onboard.audit_log"):
+    with patch(
+        "app.modules.governance.api.v1.settings.onboard.durable_audit_log",
+        new_callable=AsyncMock,
+    ):
         with pytest.raises(HTTPException) as exc:
             await onboard(_request(), req, user, db)
 
     assert exc.value.status_code == 400
     assert exc.value.detail == "Already onboarded"
     db.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_onboard_records_growth_funnel_attribution_context() -> None:
+    db = _db()
+    user = _current_user()
+    req = OnboardRequest.model_validate(
+        {
+            "tenant_name": "growth-funnel-tenant",
+            "acquisition_context": {
+                "persona": "Finance",
+                "intent": "ROI_Assessment",
+                "page_path": "/onboarding?utm_source=google&utm_medium=cpc",
+                "first_touch_at": "2026-03-08T10:00:00Z",
+                "last_touch_at": "2026-03-09T11:30:00Z",
+                "utm": {
+                    "source": "Google",
+                    "medium": "CPC",
+                    "campaign": "Launch",
+                    "term": "finops",
+                    "content": "hero",
+                },
+            },
+        }
+    )
+
+    with (
+        patch(
+            "app.modules.governance.api.v1.settings.onboard.record_tenant_growth_funnel_stage",
+            new_callable=AsyncMock,
+        ) as record_stage,
+        patch(
+            "app.modules.governance.api.v1.settings.onboard.durable_audit_log",
+            new_callable=AsyncMock,
+        ),
+    ):
+        response = await onboard(_request(), req, user, db)
+
+    assert response.status == "onboarded"
+    record_stage.assert_awaited_once()
+    kwargs = record_stage.await_args.kwargs
+    assert kwargs["stage"] == "tenant_onboarded"
+    assert kwargs["current_tier"].value == "free"
+    assert kwargs["source"] == "settings_onboard"
+    attribution = kwargs["attribution"]
+    assert attribution.utm_source == "google"
+    assert attribution.utm_medium == "cpc"
+    assert attribution.utm_campaign == "launch"
+    assert attribution.utm_term == "finops"
+    assert attribution.utm_content == "hero"
+    assert attribution.persona == "finance"
+    assert attribution.intent == "roi_assessment"
+    assert attribution.page_path == "/onboarding?utm_source=google&utm_medium=cpc"
+    assert attribution.first_touch_at is not None
+    assert attribution.first_touch_at.isoformat() == "2026-03-08T10:00:00+00:00"
+    assert attribution.last_touch_at is not None
+    assert attribution.last_touch_at.isoformat() == "2026-03-09T11:30:00+00:00"

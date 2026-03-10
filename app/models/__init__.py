@@ -45,9 +45,11 @@ from app.models import (  # noqa: F401
     security,
     sso_domain_mapping,
     tenant,
+    tenant_growth_funnel_snapshot,
     tenant_identity_settings,
     unit_economics_settings,
 )
+from app.modules.governance.domain.security import audit_log as governance_audit_log  # noqa: F401
 
 
 def _apply_relationship_loader_policy() -> None:

@@ -114,6 +114,9 @@ def _register_models():
     from app.models.invoice import ProviderInvoice  # noqa: F401
     from app.models.public_sales_inquiry import PublicSalesInquiry  # noqa: F401
     from app.models.realized_savings import RealizedSavingsEvent  # noqa: F401
+    from app.models.tenant_growth_funnel_snapshot import (  # noqa: F401
+        TenantGrowthFunnelSnapshot,
+    )
     from app.models.enforcement import (  # noqa: F401
         EnforcementApprovalRequest,
         EnforcementBudgetAllocation,

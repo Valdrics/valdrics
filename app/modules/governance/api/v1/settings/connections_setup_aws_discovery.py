@@ -40,7 +40,8 @@ from app.modules.governance.api.v1.settings.connections_setup_snippets import (
     router as setup_snippets_router,
 )
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
-from app.shared.core.logging import audit_log
+from app.shared.core.async_utils import maybe_await
+from app.shared.core.logging import audit_log_async as audit_log
 from app.shared.core.pricing import PricingTier, normalize_tier
 from app.shared.core.rate_limit import rate_limit, standard_limit
 from app.shared.db.session import get_db
@@ -116,15 +117,22 @@ async def create_aws_connection(
     )
 
     db.add(connection)
+    await maybe_await(db.flush())
+    await maybe_await(
+        audit_log(
+            "aws_connection_created",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"aws_account_id": data.aws_account_id},
+            db=db,
+            resource_type="aws_connection",
+            resource_id=str(connection.id),
+            request_method="POST",
+            request_path="/api/v1/settings/aws",
+        )
+    )
     await db.commit()
     await db.refresh(connection)
-
-    audit_log(
-        "aws_connection_created",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"aws_account_id": data.aws_account_id},
-    )
 
     return connection
 
@@ -171,13 +179,20 @@ async def delete_aws_connection(
         raise HTTPException(404, "Connection not found")
 
     await db.delete(connection)
-    await db.commit()
-    audit_log(
-        "aws_connection_deleted",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"id": str(connection_id)},
+    await maybe_await(
+        audit_log(
+            "aws_connection_deleted",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"id": str(connection_id)},
+            db=db,
+            resource_type="aws_connection",
+            resource_id=str(connection_id),
+            request_method="DELETE",
+            request_path="/api/v1/settings/aws/{connection_id}",
+        )
     )
+    await db.commit()
 
 
 @router.post("/aws/{connection_id}/sync-org")
@@ -313,14 +328,22 @@ async def discovery_stage_a(
             detail=str(exc),
         ) from exc
 
-    audit_log(
-        "discovery_stage_a_completed",
-        str(current_user.id),
-        str(tenant_id),
-        {
-            "domain": domain,
-            "candidate_count": len(candidates),
-        },
+    await maybe_await(
+        audit_log(
+            "discovery_stage_a_completed",
+            str(current_user.id),
+            str(tenant_id),
+            {
+                "domain": domain,
+                "candidate_count": len(candidates),
+            },
+            db=db,
+            resource_type="discovery_stage",
+            resource_id=domain,
+            request_method="POST",
+            request_path="/api/v1/settings/discovery/stage-a",
+            commit=True,
+        )
     )
     return DiscoveryStageResponse(
         domain=domain,
@@ -355,15 +378,23 @@ async def discovery_deep_scan(
             detail=str(exc),
         ) from exc
 
-    audit_log(
-        "discovery_stage_b_completed",
-        str(current_user.id),
-        str(tenant_id),
-        {
-            "domain": domain,
-            "idp_provider": data.idp_provider,
-            "candidate_count": len(candidates),
-        },
+    await maybe_await(
+        audit_log(
+            "discovery_stage_b_completed",
+            str(current_user.id),
+            str(tenant_id),
+            {
+                "domain": domain,
+                "idp_provider": data.idp_provider,
+                "candidate_count": len(candidates),
+            },
+            db=db,
+            resource_type="discovery_stage",
+            resource_id=domain,
+            request_method="POST",
+            request_path="/api/v1/settings/discovery/deep-scan",
+            commit=True,
+        )
     )
     return DiscoveryStageResponse(
         domain=domain,
@@ -419,15 +450,22 @@ async def _update_discovery_candidate_status(
             detail=str(exc),
         ) from exc
 
-    audit_log(
-        audit_event,
-        str(current_user.id),
-        str(tenant_id),
-        {
-            "candidate_id": str(candidate_id),
-            "provider": candidate.provider,
-            "category": candidate.category,
-        },
+    await maybe_await(
+        audit_log(
+            audit_event,
+            str(current_user.id),
+            str(tenant_id),
+            {
+                "candidate_id": str(candidate_id),
+                "provider": candidate.provider,
+                "category": candidate.category,
+            },
+            db=db,
+            resource_type="discovery_candidate",
+            resource_id=str(candidate_id),
+            request_method="POST",
+            commit=True,
+        )
     )
     return candidate
 

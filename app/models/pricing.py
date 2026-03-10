@@ -82,7 +82,13 @@ class TenantSubscription(Base):
     """
 
     __tablename__ = "tenant_subscriptions"
-    __table_args__ = {"extend_existing": True}
+    __table_args__ = (
+        UniqueConstraint(
+            "last_charge_reference",
+            name="uq_tenant_subscriptions_last_charge_reference",
+        ),
+        {"extend_existing": True},
+    )
 
     id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
     tenant_id: Mapped[UUID] = mapped_column(

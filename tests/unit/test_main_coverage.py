@@ -40,11 +40,15 @@ async def test_lifespan_flow(mock_lifespan_deps):
     """Test app lifespan setup and teardown."""
     from app.main import lifespan, app
 
-    async with lifespan(app):
-        mock_lifespan_deps["makedirs"].assert_called_with(
-            "/tmp/valdrics",
-            exist_ok=True,
-        )
+    with (
+        patch("app.main.should_bootstrap_local_sqlite", return_value=False),
+        patch("app.main.reset_db_runtime"),
+    ):
+        async with lifespan(app):
+            mock_lifespan_deps["makedirs"].assert_called_with(
+                "/tmp/valdrics",
+                exist_ok=True,
+            )
 
     mock_lifespan_deps["dispose"].assert_called_once()
 
@@ -61,10 +65,29 @@ async def test_lifespan_skips_scheduler_when_disabled(mock_lifespan_deps):
         live_settings.REDIS_URL = "redis://localhost:6379/0"
         live_settings.ENABLE_SCHEDULER = False
 
+        with (
+            patch("app.main.should_bootstrap_local_sqlite", return_value=False),
+            patch("app.main.reset_db_runtime"),
+        ):
+            async with lifespan(app):
+                pass
+
+    mock_lifespan_deps["scheduler"].start.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_lifespan_bootstraps_local_sqlite_when_enabled(mock_lifespan_deps):
+    from app.main import app, lifespan
+
+    with (
+        patch("app.main.should_bootstrap_local_sqlite", return_value=True),
+        patch("app.main.bootstrap_local_sqlite_schema", new_callable=AsyncMock) as bootstrap,
+        patch("app.main.reset_db_runtime"),
+    ):
         async with lifespan(app):
             pass
 
-    mock_lifespan_deps["scheduler"].start.assert_not_called()
+    bootstrap.assert_awaited_once()
 
 
 def test_root_endpoint(client):

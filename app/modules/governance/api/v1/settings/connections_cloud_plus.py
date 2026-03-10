@@ -32,7 +32,8 @@ from app.shared.connections.license import LicenseConnectionService
 from app.shared.connections.platform import PlatformConnectionService
 from app.shared.connections.saas import SaaSConnectionService
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
-from app.shared.core.logging import audit_log
+from app.shared.core.async_utils import maybe_await
+from app.shared.core.logging import audit_log_async as audit_log
 from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
 
@@ -84,15 +85,22 @@ async def create_saas_connection(
         is_active=False,
     )
     db.add(connection)
+    await maybe_await(db.flush())
+    await maybe_await(
+        audit_log(
+            "saas_connection_created",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"vendor": data.vendor, "name": data.name},
+            db=db,
+            resource_type="saas_connection",
+            resource_id=str(connection.id),
+            request_method="POST",
+            request_path="/api/v1/settings/saas",
+        )
+    )
     await db.commit()
     await db.refresh(connection)
-
-    audit_log(
-        "saas_connection_created",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"vendor": data.vendor, "name": data.name},
-    )
     return connection
 
 
@@ -138,13 +146,20 @@ async def delete_saas_connection(
         raise HTTPException(404, "Connection not found")
 
     await db.delete(connection)
-    await db.commit()
-    audit_log(
-        "saas_connection_deleted",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"id": str(connection_id)},
+    await maybe_await(
+        audit_log(
+            "saas_connection_deleted",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"id": str(connection_id)},
+            db=db,
+            resource_type="saas_connection",
+            resource_id=str(connection_id),
+            request_method="DELETE",
+            request_path="/api/v1/settings/saas/{connection_id}",
+        )
     )
+    await db.commit()
 
 
 @router.post(
@@ -194,15 +209,22 @@ async def create_license_connection(
         is_active=False,
     )
     db.add(connection)
+    await maybe_await(db.flush())
+    await maybe_await(
+        audit_log(
+            "license_connection_created",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"vendor": data.vendor, "name": data.name},
+            db=db,
+            resource_type="license_connection",
+            resource_id=str(connection.id),
+            request_method="POST",
+            request_path="/api/v1/settings/license",
+        )
+    )
     await db.commit()
     await db.refresh(connection)
-
-    audit_log(
-        "license_connection_created",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"vendor": data.vendor, "name": data.name},
-    )
     return connection
 
 
@@ -248,13 +270,20 @@ async def delete_license_connection(
         raise HTTPException(404, "Connection not found")
 
     await db.delete(connection)
-    await db.commit()
-    audit_log(
-        "license_connection_deleted",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"id": str(connection_id)},
+    await maybe_await(
+        audit_log(
+            "license_connection_deleted",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"id": str(connection_id)},
+            db=db,
+            resource_type="license_connection",
+            resource_id=str(connection_id),
+            request_method="DELETE",
+            request_path="/api/v1/settings/license/{connection_id}",
+        )
     )
+    await db.commit()
 
 
 @router.post(
@@ -305,15 +334,22 @@ async def create_platform_connection(
         is_active=False,
     )
     db.add(connection)
+    await maybe_await(db.flush())
+    await maybe_await(
+        audit_log(
+            "platform_connection_created",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"vendor": data.vendor, "name": data.name},
+            db=db,
+            resource_type="platform_connection",
+            resource_id=str(connection.id),
+            request_method="POST",
+            request_path="/api/v1/settings/platform",
+        )
+    )
     await db.commit()
     await db.refresh(connection)
-
-    audit_log(
-        "platform_connection_created",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"vendor": data.vendor, "name": data.name},
-    )
     return connection
 
 
@@ -359,13 +395,20 @@ async def delete_platform_connection(
         raise HTTPException(404, "Connection not found")
 
     await db.delete(connection)
-    await db.commit()
-    audit_log(
-        "platform_connection_deleted",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"id": str(connection_id)},
+    await maybe_await(
+        audit_log(
+            "platform_connection_deleted",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"id": str(connection_id)},
+            db=db,
+            resource_type="platform_connection",
+            resource_id=str(connection_id),
+            request_method="DELETE",
+            request_path="/api/v1/settings/platform/{connection_id}",
+        )
     )
+    await db.commit()
 
 
 @router.post(
@@ -416,15 +459,22 @@ async def create_hybrid_connection(
         is_active=False,
     )
     db.add(connection)
+    await maybe_await(db.flush())
+    await maybe_await(
+        audit_log(
+            "hybrid_connection_created",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"vendor": data.vendor, "name": data.name},
+            db=db,
+            resource_type="hybrid_connection",
+            resource_id=str(connection.id),
+            request_method="POST",
+            request_path="/api/v1/settings/hybrid",
+        )
+    )
     await db.commit()
     await db.refresh(connection)
-
-    audit_log(
-        "hybrid_connection_created",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"vendor": data.vendor, "name": data.name},
-    )
     return connection
 
 
@@ -470,10 +520,17 @@ async def delete_hybrid_connection(
         raise HTTPException(404, "Connection not found")
 
     await db.delete(connection)
-    await db.commit()
-    audit_log(
-        "hybrid_connection_deleted",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"id": str(connection_id)},
+    await maybe_await(
+        audit_log(
+            "hybrid_connection_deleted",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"id": str(connection_id)},
+            db=db,
+            resource_type="hybrid_connection",
+            resource_id=str(connection_id),
+            request_method="DELETE",
+            request_path="/api/v1/settings/hybrid/{connection_id}",
+        )
     )
+    await db.commit()

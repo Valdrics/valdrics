@@ -33,6 +33,10 @@ vi.mock('$app/stores', () => {
 
 describe('pricing page public messaging', () => {
 	it('shows the free tier entry path plus self-serve paid plans and enterprise lane', () => {
+		const starterPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'starter');
+		const growthPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'growth');
+		const proPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'pro');
+
 		render(Page, {
 			props: {
 				data: {
@@ -54,24 +58,20 @@ describe('pricing page public messaging', () => {
 		expect(screen.getByRole('heading', { name: /^starter$/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /^growth$/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /^pro$/i })).toBeTruthy();
-		expect(screen.getAllByText(/one live savings workflow|one workflow/i).length).toBeGreaterThan(0);
+		expect(
+			screen.getAllByText(/one governed savings workflow|one governed workflow/i).length
+		).toBeGreaterThan(0);
 		expect(screen.getAllByText(/^Best for$/i).length).toBeGreaterThanOrEqual(4);
 		expect(screen.getAllByText(/^Why teams upgrade$/i).length).toBeGreaterThanOrEqual(4);
 		expect(
-			screen.getByText(/one team needs daily review cadence, limited azure\/gcp visibility/i)
+			screen.getByText(/one team needs daily review cadence, initial azure\/gcp visibility, and stronger owner routing/i)
 		).toBeTruthy();
-		expect(
-			screen.getByText(/\$49\/mo starting price\. priced for the first team that needs daily review cadence/i)
-		).toBeTruthy();
-		expect(
-			screen.getByText(/\$149\/mo starting price\. priced for the first cross-functional rollout/i)
-		).toBeTruthy();
-		expect(
-			screen.getByText(/\$299\/mo starting price\. priced for finance-grade operations/i)
-		).toBeTruthy();
-		expect(
-			screen.getByText(/teams usually move up when finance close, auditability, cloud\+ connectors/i)
-		).toBeTruthy();
+		expect((document.body.textContent || '').includes(`$49/mo starting price. ${starterPlan?.story?.note}`)).toBe(true);
+		expect((document.body.textContent || '').includes(`$149/mo starting price. ${growthPlan?.story?.note}`)).toBe(true);
+		expect((document.body.textContent || '').includes(`$299/mo starting price. ${proPlan?.story?.note}`)).toBe(true);
+		expect(screen.getByText(growthPlan?.story?.whyUpgrade ?? '')).toBeTruthy();
+		const growthPlanCard = screen.getByRole('heading', { name: /^growth$/i }).closest('article');
+		expect(growthPlanCard?.className).toContain('pricing-plan-card--popular');
 
 		expect(
 			screen.getByRole('heading', {

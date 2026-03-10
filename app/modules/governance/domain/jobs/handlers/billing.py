@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
+from app.modules.governance.domain.jobs.errors import PermanentJobError
 
 
 class RecurringBillingHandler(BaseJobHandler):
@@ -21,6 +22,7 @@ class RecurringBillingHandler(BaseJobHandler):
 
         payload = job.payload or {}
         sub_id = payload.get("subscription_id")
+        charge_reference = payload.get("charge_reference")
 
         if not sub_id:
             raise ValueError("subscription_id required for recurring_billing")
@@ -30,12 +32,12 @@ class RecurringBillingHandler(BaseJobHandler):
             select(TenantSubscription).where(
                 TenantSubscription.id == UUID(sub_id),
                 TenantSubscription.tenant_id == job.tenant_id,
-            )
+            ).with_for_update()
         )
         subscription = result.scalar_one_or_none()
 
         if not subscription:
-            return {"status": "failed", "reason": "subscription_not_found"}
+            raise PermanentJobError("Recurring billing subscription not found")
 
         if subscription.status != "active":
             return {
@@ -45,7 +47,11 @@ class RecurringBillingHandler(BaseJobHandler):
 
         # Execute charge
         billing_service = BillingService(db)
-        success = await billing_service.charge_renewal(subscription)
+        success = await billing_service.charge_renewal(
+            subscription,
+            reference=str(charge_reference) if charge_reference else None,
+            commit=False,
+        )
 
         if success:
             # Fetch actual price for result reporting

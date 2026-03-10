@@ -25,6 +25,14 @@ def test_prometheus_alerts_reference_current_exported_metrics() -> None:
     assert "valdrics_ops_zombies_detected_total" in combined
     assert "valdrics_ops_scan_failure_total" in combined
     assert "valdrics_ops_runtime_carbon_emissions_kg_total" in combined
+    assert "valdrics_ops_background_jobs_stale_running_recovered_total" in combined
+    assert "valdrics_ops_background_jobs_dead_lettered_total" in combined
+    assert "valdrics_ops_background_jobs_overdue_pending_count" in combined
+    assert "valdrics_ops_audit_log_retention_failures_total" in combined
+    assert "valdrics_scheduler_inline_fallback_total" in combined
+    assert "valdrics_ops_landing_funnel_weekly_conversion_rate" in combined
+    assert "valdrics_ops_landing_funnel_weekly_delta_rate" in combined
+    assert "valdrics_ops_landing_funnel_last_evaluated_unixtime" in combined
     assert "http_request_duration_highr_seconds_bucket" in combined
     assert "valdrics_llm_cost_usd" not in combined
     assert "valdrics_scan_errors_total" not in combined
@@ -50,6 +58,11 @@ def test_finops_dashboard_references_current_metrics() -> None:
     assert "valdrics_ops_runtime_carbon_emissions_kg_total" in combined
     assert "valdrics_ops_scan_success_total" in combined
     assert "valdrics_ops_llm_spend_usd_total" in combined
+    assert "valdrics_ops_background_jobs_overdue_pending_count" in combined
+    assert "valdrics_ops_background_jobs_dead_lettered_total" in combined
+    assert "valdrics_ops_background_jobs_stale_running_recovered_total" in combined
+    assert "valdrics_ops_audit_log_retention_failures_total" in combined
+    assert "valdrics_scheduler_inline_fallback_total" in combined
     assert "valdrics_zombie_potential_savings_usd" not in combined
     assert "valdrics_scans_completed_total" not in combined
     assert "valdrics_llm_cost_usd" not in combined

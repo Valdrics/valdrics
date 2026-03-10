@@ -8,7 +8,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, model_validator
 from app.shared.core.constants import AWS_SUPPORTED_REGIONS
 from app.shared.core.config_validation import (
-    normalize_branding as _normalize_branding_impl,
     validate_all_config as _validate_all_config_impl,
     validate_billing_config as _validate_billing_config_impl,
     validate_core_secrets as _validate_core_secrets_impl,
@@ -135,10 +134,6 @@ class Settings(BaseSettings):
         )
         return self
 
-    def _normalize_branding(self) -> None:
-        """Normalize branding aliases to canonical public product name."""
-        _normalize_branding_impl(self)
-
     def _validate_core_secrets(self) -> None:
         """Validate critical security primitives (SEC-01/SEC-02/SEC-06)."""
         _validate_core_secrets_impl(self)
@@ -260,8 +255,13 @@ class Settings(BaseSettings):
     # Bound system-scope sweeps to reduce blast radius during incident conditions.
     SCHEDULER_SYSTEM_SWEEP_MAX_TENANTS: int = 5000
     SCHEDULER_SYSTEM_SWEEP_MAX_CONNECTIONS: int = 5000
+    BACKGROUND_JOB_PROCESS_BATCH_SIZE: int = 25
+    BACKGROUND_JOB_PROCESS_MAX_BATCHES_PER_TICK: int = 8
+    BACKGROUND_JOB_PENDING_OVERDUE_ALERT_MINUTES: int = 60
+    BACKGROUND_JOB_RUNNING_TIMEOUT_MINUTES: int = 30
     # Background job retention (terminal states) enforced by maintenance sweep.
     BACKGROUND_JOB_COMPLETED_RETENTION_DAYS: int = 7
+    BACKGROUND_JOB_FAILED_RETENTION_DAYS: int = 30
     BACKGROUND_JOB_DEAD_LETTER_RETENTION_DAYS: int = 30
     BACKGROUND_JOB_RETENTION_PURGE_BATCH_SIZE: int = 1000
     BACKGROUND_JOB_RETENTION_PURGE_MAX_BATCHES: int = 20
@@ -296,6 +296,9 @@ class Settings(BaseSettings):
     # is explicitly used and double-pooling is undesirable.
     DB_USE_NULL_POOL: bool = False
     DB_EXTERNAL_POOLER: bool = False
+    # Local-only escape from replaying the historical Postgres Alembic graph on sqlite.
+    # When enabled, the app bootstraps current ORM metadata and stamps the current head.
+    LOCAL_SQLITE_BOOTSTRAP: bool = False
     # Tests default to in-memory sqlite to avoid accidental side-effects on real databases.
     # Set true to allow tests to use DATABASE_URL (e.g., integration tests against Postgres).
     ALLOW_TEST_DATABASE_URL: bool = False

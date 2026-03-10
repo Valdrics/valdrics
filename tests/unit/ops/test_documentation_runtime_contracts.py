@@ -163,6 +163,12 @@ def test_incident_and_production_runbooks_match_strict_saas_observability_contra
     assert "FRONTEND_URL=https://" in production
     assert "INTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>" in production
     assert "EXPOSE_API_DOCUMENTATION_PUBLICLY=false" in production
+    assert "generate_managed_runtime_env.py" in production
+    assert "generate_managed_migration_env.py" in production
+    assert "generate_managed_deployment_artifacts.py" in production
+    assert "--env-file .runtime/production.env" in production
+    assert "--env-file .runtime/production.migrate.env" in production
+    assert "set -a && source .runtime/production.migrate.env && uv run alembic upgrade head" in production
     assert "Optional but recommended: `SENTRY_DSN" not in production
     assert "env channel routing (`SLACK_CHANNEL_ID`) is blocked" in workflow
     assert "self-host or break-glass-only paths" in workflow

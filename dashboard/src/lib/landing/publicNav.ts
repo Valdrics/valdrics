@@ -52,23 +52,23 @@ export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze([
 ]);
 
 export const PUBLIC_SIGNAL_STRIP: readonly string[] = Object.freeze([
-	'Catch waste before invoice shock',
-	'Align finance and engineering fast',
-	'Act with confidence, not fire drills'
+	'Turn alerts into governed action',
+	'Give every issue an owner',
+	'Keep proof ready for leadership'
 ]);
 
 export const PUBLIC_FOOTER_BADGES: readonly string[] = Object.freeze([
-	'Start Free at $0',
-	'Owner-assigned actions',
-	'Safe approvals',
-	'Enterprise-ready security'
+	'Cloud + SaaS + software',
+	'Owner-routed actions',
+	'Approval-ready workflows',
+	'Exportable decision proof'
 ]);
 
 export const PUBLIC_FOOTER_SUBTITLE =
-	'The spend control platform for cloud and software teams that need clear ownership, faster action, and measurable savings.';
+	'The governed operating layer for cloud, SaaS, and software spend. Valdrics turns signals into approved action and exportable proof.';
 
 export const PUBLIC_FOOTER_CAPTION =
-	'Built for finance, engineering, and operations teams that want less waste and faster decisions.';
+	'Built for finance, engineering, and platform teams that need one system for ownership, approvals, remediation, and savings proof.';
 
 export const PUBLIC_CONTACT_CHANNELS: readonly PublicContactChannel[] = Object.freeze([
 	{ label: 'Sales', email: 'sales@valdrics.com', href: 'mailto:sales@valdrics.com' },

@@ -17,9 +17,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.pricing import TenantSubscription
 from app.modules.billing.domain.billing.entitlement_policy import sync_tenant_plan
+from app.modules.reporting.domain.tenant_growth_funnel import (
+    record_tenant_growth_funnel_stage,
+)
 from app.shared.core.pricing import PricingTier
 
 from . import paystack_shared as shared
+from .webhook_retry import WebhookPermanentError, WebhookRetryableError
 
 
 PAYSTACK_WEBHOOK_AUDIT_RECOVERABLE_EXCEPTIONS = (
@@ -37,6 +41,12 @@ class WebhookHandler:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def _persist_changes(self, *, commit: bool) -> None:
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
 
     async def handle(
         self, request: Request, payload: bytes, signature: str
@@ -126,7 +136,12 @@ class WebhookHandler:
             return None
         return normalized.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
 
-    async def _handle_subscription_create(self, data: dict[str, Any]) -> None:
+    async def _handle_subscription_create(
+        self,
+        data: dict[str, Any],
+        *,
+        commit: bool = True,
+    ) -> None:
         """Handle new subscription - update subscription codes and next payment date."""
         customer_code = data.get("customer", {}).get("customer_code")
         subscription_code = data.get("subscription_code")
@@ -135,7 +150,7 @@ class WebhookHandler:
 
         if not customer_code:
             shared.logger.warning("subscription_create_missing_customer_code", data=data)
-            return
+            raise WebhookPermanentError("subscription.create missing customer_code")
 
         result = await self.db.execute(
             select(TenantSubscription).where(
@@ -150,7 +165,9 @@ class WebhookHandler:
                 customer_code=customer_code,
                 msg="No matching tenant - subscription may have been created before charge.success",
             )
-            return
+            raise WebhookRetryableError(
+                "subscription.create could not find tenant subscription"
+            )
 
         if subscription_code:
             sub.paystack_subscription_code = subscription_code
@@ -196,7 +213,7 @@ class WebhookHandler:
                 error=str(exc),
             )
 
-        await self.db.commit()
+        await self._persist_changes(commit=commit)
 
         shared.logger.info(
             "subscription_create_processed",
@@ -204,7 +221,12 @@ class WebhookHandler:
             customer_code=customer_code,
         )
 
-    async def _handle_charge_success(self, data: dict[str, Any]) -> None:
+    async def _handle_charge_success(
+        self,
+        data: dict[str, Any],
+        *,
+        commit: bool = True,
+    ) -> None:
         """Handle successful charge - primary activation point."""
         metadata = data.get("metadata", {})
         if isinstance(metadata, str):
@@ -263,7 +285,9 @@ class WebhookHandler:
                 "webhook_tenant_lookup_failed_no_identifier",
                 reference=data.get("reference"),
             )
-            return
+            if customer_email:
+                raise WebhookRetryableError("charge.success could not resolve tenant")
+            raise WebhookPermanentError("charge.success missing tenant identifiers")
 
         if tenant_id:
             resolved_tier: PricingTier | None = None
@@ -289,6 +313,18 @@ class WebhookHandler:
 
                 sub = TenantSubscription(id=uuid.uuid4(), tenant_id=tenant_id)
                 self.db.add(sub)
+
+            if (
+                charge_reference
+                and isinstance(sub.last_charge_reference, str)
+                and sub.last_charge_reference == str(charge_reference)
+            ):
+                shared.logger.info(
+                    "paystack_charge_success_duplicate_ignored",
+                    tenant_id=str(tenant_id),
+                    reference=str(charge_reference),
+                )
+                return
 
             sub.paystack_customer_code = customer_code
 
@@ -341,6 +377,15 @@ class WebhookHandler:
                     tier=resolved_tier,
                     source="paystack_charge_success",
                 )
+            await record_tenant_growth_funnel_stage(
+                self.db,
+                tenant_id=tenant_id,
+                stage="paid_activated",
+                occurred_at=sub.last_charge_at,
+                current_tier=resolved_tier or sub.tier,
+                source="paystack_charge_success",
+                commit=False,
+            )
 
             try:
                 from app.modules.governance.domain.security.audit_log import (
@@ -376,24 +421,39 @@ class WebhookHandler:
                     error=str(exc),
                 )
 
-            await self.db.commit()
+            await self._persist_changes(commit=commit)
             shared.logger.info("paystack_subscription_activated", tenant_id=str(tenant_id))
 
-    async def _handle_subscription_disable(self, data: dict[str, Any]) -> None:
+    async def _handle_subscription_disable(
+        self,
+        data: dict[str, Any],
+        *,
+        commit: bool = True,
+    ) -> None:
         code = data.get("subscription_code")
-        if code:
-            result = await self.db.execute(
-                select(TenantSubscription).where(
-                    TenantSubscription.paystack_subscription_code == code
-                )
-            )
-            sub = result.scalar_one_or_none()
-            if sub:
-                sub.status = shared.SubscriptionStatus.CANCELLED.value
-                sub.canceled_at = datetime.now(timezone.utc)
-                await self.db.commit()
+        if not code:
+            raise WebhookPermanentError("subscription.disable missing subscription_code")
 
-    async def _handle_invoice_failed(self, data: dict[str, Any]) -> None:
+        result = await self.db.execute(
+            select(TenantSubscription).where(
+                TenantSubscription.paystack_subscription_code == code
+            )
+        )
+        sub = result.scalar_one_or_none()
+        if not sub:
+            raise WebhookRetryableError(
+                "subscription.disable could not find subscription"
+            )
+        sub.status = shared.SubscriptionStatus.CANCELLED.value
+        sub.canceled_at = datetime.now(timezone.utc)
+        await self._persist_changes(commit=commit)
+
+    async def _handle_invoice_failed(
+        self,
+        data: dict[str, Any],
+        *,
+        commit: bool = True,
+    ) -> None:
         """Handle failed payment - trigger dunning workflow."""
         invoice_code = data.get("invoice_code")
         subscription_code = data.get("subscription_code")
@@ -407,6 +467,12 @@ class WebhookHandler:
             msg="Payment failed - initiating dunning workflow",
         )
 
+        if not subscription_code and not customer_code:
+            raise WebhookPermanentError(
+                "invoice.payment_failed missing subscription and customer identifiers"
+            )
+
+        sub = None
         if subscription_code:
             result = await self.db.execute(
                 select(TenantSubscription).where(
@@ -414,49 +480,60 @@ class WebhookHandler:
                 )
             )
             sub = result.scalar_one_or_none()
-
-            if sub:
-                from app.modules.billing.domain.billing.dunning_service import DunningService
-
-                dunning = DunningService(self.db)
-                await dunning.process_failed_payment(sub.id, is_webhook=True)
-
-                try:
-                    from app.modules.governance.domain.security.audit_log import (
-                        AuditEventType,
-                        AuditLogger,
-                    )
-
-                    audit = AuditLogger(
-                        db=self.db,
-                        tenant_id=sub.tenant_id,
-                        correlation_id=str(invoice_code or subscription_code or ""),
-                    )
-                    await audit.log(
-                        event_type=AuditEventType.BILLING_PAYMENT_FAILED,
-                        resource_type="tenant_subscription",
-                        resource_id=str(sub.id),
-                        details={
-                            "provider": "paystack",
-                            "event": "invoice.payment_failed",
-                            "invoice_code": invoice_code,
-                            "subscription_code": subscription_code,
-                            "customer_code": customer_code,
-                        },
-                        success=False,
-                        error_message="invoice.payment_failed",
-                    )
-                    await self.db.commit()
-                except PAYSTACK_WEBHOOK_AUDIT_RECOVERABLE_EXCEPTIONS as exc:
-                    shared.logger.warning(
-                        "billing_audit_log_failed",
-                        tenant_id=str(sub.tenant_id),
-                        paystack_event="invoice.payment_failed",
-                        error=str(exc),
-                    )
-
-                shared.logger.info(
-                    "dunning_workflow_initiated",
-                    tenant_id=str(sub.tenant_id),
-                    subscription_code=subscription_code,
+        if sub is None and customer_code:
+            result = await self.db.execute(
+                select(TenantSubscription).where(
+                    TenantSubscription.paystack_customer_code == customer_code
                 )
+            )
+            sub = result.scalar_one_or_none()
+
+        if sub is None:
+            raise WebhookRetryableError(
+                "invoice.payment_failed could not find subscription"
+            )
+
+        from app.modules.billing.domain.billing.dunning_service import DunningService
+
+        dunning = DunningService(self.db)
+        await dunning.process_failed_payment(sub.id, is_webhook=True, commit=False)
+
+        try:
+            from app.modules.governance.domain.security.audit_log import (
+                AuditEventType,
+                AuditLogger,
+            )
+
+            audit = AuditLogger(
+                db=self.db,
+                tenant_id=sub.tenant_id,
+                correlation_id=str(invoice_code or subscription_code or ""),
+            )
+            await audit.log(
+                event_type=AuditEventType.BILLING_PAYMENT_FAILED,
+                resource_type="tenant_subscription",
+                resource_id=str(sub.id),
+                details={
+                    "provider": "paystack",
+                    "event": "invoice.payment_failed",
+                    "invoice_code": invoice_code,
+                    "subscription_code": subscription_code,
+                    "customer_code": customer_code,
+                },
+                success=False,
+                error_message="invoice.payment_failed",
+            )
+            await self._persist_changes(commit=commit)
+        except PAYSTACK_WEBHOOK_AUDIT_RECOVERABLE_EXCEPTIONS as exc:
+            shared.logger.warning(
+                "billing_audit_log_failed",
+                tenant_id=str(sub.tenant_id),
+                paystack_event="invoice.payment_failed",
+                error=str(exc),
+            )
+
+        shared.logger.info(
+            "dunning_workflow_initiated",
+            tenant_id=str(sub.tenant_id),
+            subscription_code=subscription_code,
+        )

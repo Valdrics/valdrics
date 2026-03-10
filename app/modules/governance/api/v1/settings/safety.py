@@ -10,9 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
 from app.shared.core.auth import CurrentUser, get_current_user, requires_role
+from app.shared.core.async_utils import maybe_await
 from app.shared.db.session import get_db
 from app.shared.core.rate_limit import rate_limit
-from app.shared.core.logging import audit_log
+from app.shared.core.logging import audit_log_async as audit_log
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Safety"])
@@ -123,11 +124,19 @@ async def reset_circuit_breaker(
             by_user=str(current_user.id),
         )
 
-        audit_log(
-            "remediation.safety_reset",
-            str(current_user.id),
-            str(current_user.tenant_id),
-            {"action": "manual_circuit_reset", "status": "closed"},
+        await maybe_await(
+            audit_log(
+                "remediation.safety_reset",
+                str(current_user.id),
+                str(current_user.tenant_id),
+                {"action": "manual_circuit_reset", "status": "closed"},
+                db=_db,
+                resource_type="circuit_breaker",
+                resource_id=str(current_user.tenant_id),
+                request_method="POST",
+                request_path="/api/v1/settings/safety/reset",
+                commit=True,
+            )
         )
 
         return {"status": "reset", "message": "Circuit breaker reset to closed state"}

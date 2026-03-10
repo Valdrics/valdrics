@@ -1,8 +1,9 @@
 import asyncio
-import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from datetime import datetime, timezone
+
+import pytest
 from app.modules.governance.domain.jobs.processor import (
     JobProcessor,
     JobStatus,
@@ -196,6 +197,35 @@ async def test_process_single_job_retry(job_processor, mock_db_session):
 
 
 @pytest.mark.asyncio
+async def test_process_single_job_failed_result_transitions_to_retry(
+    job_processor, mock_db_session
+):
+    job = BackgroundJob(
+        id=uuid4(),
+        job_type="test_job",
+        attempts=0,
+        max_attempts=3,
+        status=JobStatus.PENDING.value,
+    )
+
+    with patch(
+        "app.modules.governance.domain.jobs.processor.get_handler_factory"
+    ) as mock_factory:
+        mock_handler = AsyncMock()
+        mock_handler.execute.return_value = {
+            "status": "failed",
+            "reason": "downstream refused",
+        }
+        mock_factory.return_value.return_value = mock_handler
+
+        await job_processor._process_single_job(job)
+
+    assert job.status == JobStatus.PENDING.value
+    assert "downstream refused" in (job.error_message or "")
+    assert job.attempts == 1
+
+
+@pytest.mark.asyncio
 async def test_process_single_job_dead_letter(job_processor, mock_db_session):
     """Test job exhaustion to dead letter."""
     job = BackgroundJob(id=uuid4(), job_type="test_job", attempts=2, max_attempts=3)
@@ -214,6 +244,71 @@ async def test_process_single_job_dead_letter(job_processor, mock_db_session):
         assert job.status == JobStatus.DEAD_LETTER.value
         assert job.attempts == 3
         mock_db_session.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_recover_stale_running_jobs_records_requeue_metric(
+    job_processor, mock_db_session
+):
+    stale_job = BackgroundJob(
+        id=uuid4(),
+        job_type="webhook_retry",
+        attempts=1,
+        max_attempts=3,
+        status=JobStatus.RUNNING.value,
+        started_at=datetime.now(timezone.utc),
+    )
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [stale_job]
+    mock_db_session.execute.return_value = result
+
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    stale_job.started_at = now - timedelta(minutes=31)
+
+    with patch(
+        "app.modules.governance.domain.jobs.processor.record_background_job_stale_running_recovery"
+    ) as record_recovery:
+        recovered = await job_processor._recover_stale_running_jobs(now=now)
+
+    assert recovered == 1
+    assert stale_job.status == JobStatus.PENDING.value
+    record_recovery.assert_called_once_with("webhook_retry", outcome="requeued")
+
+
+@pytest.mark.asyncio
+async def test_recover_stale_running_jobs_records_dead_letter_metric_outcome(
+    job_processor, mock_db_session
+):
+    stale_job = BackgroundJob(
+        id=uuid4(),
+        job_type="webhook_retry",
+        attempts=3,
+        max_attempts=3,
+        status=JobStatus.RUNNING.value,
+    )
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    stale_job.started_at = now - timedelta(minutes=31)
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [stale_job]
+    mock_db_session.execute.return_value = result
+
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.processor.record_background_job_stale_running_recovery"
+        ) as record_recovery,
+        patch(
+            "app.modules.governance.domain.jobs.processor.record_background_job_dead_letter"
+        ) as record_dead_letter,
+    ):
+        recovered = await job_processor._recover_stale_running_jobs(now=now)
+
+    assert recovered == 1
+    assert stale_job.status == JobStatus.DEAD_LETTER.value
+    record_recovery.assert_called_once_with("webhook_retry", outcome="dead_lettered")
+    record_dead_letter.assert_called_once_with(
+        "webhook_retry",
+        reason="max_attempts_exhausted",
+    )
 
 
 @pytest.mark.asyncio

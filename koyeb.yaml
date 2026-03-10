@@ -94,6 +94,8 @@ definition:
       secret: valdrics-csrf-secret
     - name: ADMIN_API_KEY
       secret: valdrics-admin-api-key
+    - name: INTERNAL_JOB_SECRET
+      secret: valdrics-internal-job-secret
     - name: GROQ_API_KEY
       secret: valdrics-groq-key
     - name: PAYSTACK_SECRET_KEY

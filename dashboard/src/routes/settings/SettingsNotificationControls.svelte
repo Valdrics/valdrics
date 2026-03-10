@@ -61,8 +61,8 @@
 							<span>💬</span> Slack Notifications
 						</h2>
 						<p class="mt-2 text-xs text-ink-500">
-							Slack delivery and test routing start on Growth. Jira, Teams, and workflow dispatch
-							stay in the Pro automation lane.
+							Slack delivery and Jira routing start on Growth. Teams and workflow dispatch stay
+							in the Pro automation lane.
 						</p>
 					</div>
 					{#if !hasGrowthTier}
@@ -105,22 +105,22 @@
 						{testing ? '⏳ Sending...' : '🧪 Send Test Notification'}
 					</button>
 
-					<div class="pt-4 border-t border-ink-200">
-						<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-							<h3 class="text-sm font-semibold">Jira Incident Routing</h3>
-							{#if !hasProTier}
-								<span class="badge badge-warning text-xs">Pro Plan Required</span>
-							{/if}
-						</div>
+						<div class="pt-4 border-t border-ink-200">
+							<div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+								<h3 class="text-sm font-semibold">Jira Incident Routing</h3>
+								{#if !hasGrowthTier}
+									<span class="badge badge-warning text-xs">Growth Plan Required</span>
+								{/if}
+							</div>
 						<p class="mb-3 text-xs text-ink-500">
-							Create Jira issues from policy and remediation events on Pro and Enterprise.
+							Create Jira issues from policy and remediation events on Growth and above.
 						</p>
 						<label class="flex items-center gap-3 cursor-pointer mb-3">
 							<input
 								type="checkbox"
 								bind:checked={settings.jira_enabled}
 								class="toggle"
-								disabled={!hasProTier}
+								disabled={!hasGrowthTier}
 								aria-label="Enable Jira policy notifications"
 							/>
 							<span>Enable Jira policy notifications</span>
@@ -135,7 +135,7 @@
 									bind:value={settings.jira_base_url}
 									placeholder="https://your-org.atlassian.net"
 									disabled={!settings.jira_enabled ||
-										!hasProTier}
+										!hasGrowthTier}
 									aria-label="Jira base URL"
 								/>
 							</div>
@@ -147,7 +147,7 @@
 									bind:value={settings.jira_email}
 									placeholder="jira@company.com"
 									disabled={!settings.jira_enabled ||
-										!hasProTier}
+										!hasGrowthTier}
 									aria-label="Jira account email"
 								/>
 							</div>
@@ -159,7 +159,7 @@
 									bind:value={settings.jira_project_key}
 									placeholder="FINOPS"
 									disabled={!settings.jira_enabled ||
-										!hasProTier}
+										!hasGrowthTier}
 									aria-label="Jira project key"
 								/>
 							</div>
@@ -171,7 +171,7 @@
 									bind:value={settings.jira_issue_type}
 									placeholder="Task"
 									disabled={!settings.jira_enabled ||
-										!hasProTier}
+										!hasGrowthTier}
 									aria-label="Jira issue type"
 								/>
 							</div>
@@ -187,7 +187,7 @@
 									? 'Stored token exists. Enter new token to rotate.'
 									: 'Enter Jira API token'}
 								disabled={!settings.jira_enabled ||
-									!hasProTier}
+									!hasGrowthTier}
 								aria-label="Jira API token"
 							/>
 						</div>
@@ -198,7 +198,7 @@
 								class="toggle"
 								disabled={!settings.jira_enabled ||
 									!settings.has_jira_api_token ||
-									!hasProTier}
+									!hasGrowthTier}
 								aria-label="Clear stored Jira API token"
 							/>
 							<span>Clear stored Jira token</span>
@@ -209,7 +209,7 @@
 							onclick={testJira}
 							disabled={!settings.jira_enabled ||
 								testingJira ||
-								!hasProTier}
+								!hasGrowthTier}
 							aria-label="Send test Jira issue"
 						>
 							{testingJira ? '⏳ Sending...' : '🧪 Send Test Jira Issue'}

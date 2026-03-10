@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { page } from '$app/stores';
 	import { api } from '$lib/api';
 	import { edgeApiPath } from '$lib/edgeProxy';
+	import { trackProductFunnelStage } from '$lib/funnel/productFunnelTelemetry';
 	import { normalizeCheckoutUrl } from '$lib/utils';
 	import './billing-page.css';
 
@@ -10,24 +12,24 @@
 		BILLING_USAGE_LABELS,
 		BILLING_USAGE_ORDER,
 		canSelfServeCheckout,
+		formatBillingDate as formatDate,
+		formatBillingUsd as formatUsd,
+		getAnnualPlanSavings as getAnnualSavings,
+		getDisplayedMonthlyPlanPrice as getDisplayedMonthlyPrice,
 		getVisibleBillingPlans,
 		mergeBillingPlans,
 		type BillingCycle,
+		type BillingSubscription,
 		type ConnectionUsageItem
 	} from './billingPage';
 	import { DEFAULT_PRICING_PLANS, type PricingPlan } from '../pricing/plans';
-
-	type BillingSubscription = {
-		tier?: string;
-		status?: string;
-		next_payment_date?: string | null;
-	};
 
 	let { data }: { data: PageData } = $props();
 
 	let billingCycle = $state<BillingCycle>('monthly');
 	let upgrading = $state('');
 	let error = $state('');
+	let pricingViewTracked = $state(false);
 	let subscription = $derived((data.subscription ?? { tier: 'free', status: 'active' }) as BillingSubscription);
 
 	let plans = $derived(
@@ -41,31 +43,28 @@
 		visiblePlans.some((plan) => canSelfServeCheckout(plan.id, currentTier))
 	);
 
+	$effect(() => {
+		if (pricingViewTracked || !data.user || !data.session?.access_token) {
+			return;
+		}
+		pricingViewTracked = true;
+		void trackProductFunnelStage({
+			accessToken: data.session.access_token,
+			stage: 'pricing_viewed',
+			tenantId: data.user?.tenant_id,
+			url: $page.url,
+			currentTier,
+			persona: String(data.profile?.persona ?? ''),
+			source: 'billing_page'
+		});
+	});
+
 	function isCurrentPlan(planId: string): boolean {
 		return currentTier === planId;
 	}
 
-	function formatUsd(value: number): string {
-		return new Intl.NumberFormat('en-US', {
-			style: 'currency',
-			currency: 'USD',
-			maximumFractionDigits: 0
-		}).format(value);
-	}
-
-	function formatDate(timestamp: string): string {
-		return new Intl.DateTimeFormat('en-US', {
-			dateStyle: 'medium',
-			timeStyle: 'short'
-		}).format(new Date(timestamp));
-	}
-
-	function getDisplayedMonthlyPrice(plan: PricingPlan): number {
-		return billingCycle === 'monthly' ? plan.price_monthly : Math.round(plan.price_annual / 12);
-	}
-
 	function getPlanBadge(plan: PricingPlan): string {
-		return plan.story?.badge ?? (plan.popular ? 'Most popular' : 'Plan');
+		return plan.story?.badge ?? (plan.popular ? 'Recommended paid plan' : 'Plan');
 	}
 
 	function getPlanValueNote(plan: PricingPlan): string {
@@ -73,18 +72,14 @@
 			if (billingCycle === 'annual' && plan.price_annual > 0) {
 				return `Billed annually at ${formatUsd(plan.price_annual)}. Save ${formatUsd(getAnnualSavings(plan))} per year.`;
 			}
-			return `${formatUsd(getDisplayedMonthlyPrice(plan))}/mo starting price.`;
+			return `${formatUsd(getDisplayedMonthlyPrice(plan, billingCycle))}/mo starting price.`;
 		}
 
 		if (billingCycle === 'annual' && plan.price_annual > 0) {
-			return `${formatUsd(plan.price_annual)} billed yearly. Effective ${formatUsd(getDisplayedMonthlyPrice(plan))}/mo. ${plan.story.note}`;
+			return `${formatUsd(plan.price_annual)} billed yearly. Effective ${formatUsd(getDisplayedMonthlyPrice(plan, billingCycle))}/mo. ${plan.story.note}`;
 		}
 
 		return `${formatUsd(plan.price_monthly)}/mo starting price. ${plan.story.note}`;
-	}
-
-	function getAnnualSavings(plan: PricingPlan): number {
-		return Math.max(plan.price_monthly * 12 - plan.price_annual, 0);
 	}
 
 	function getUsageItem(provider: (typeof BILLING_USAGE_ORDER)[number]): ConnectionUsageItem {
@@ -144,6 +139,15 @@
 			}
 
 			const { checkout_url } = await response.json();
+			await trackProductFunnelStage({
+				accessToken: session.access_token,
+				stage: 'checkout_started',
+				tenantId: data.user?.tenant_id,
+				url: $page.url,
+				currentTier,
+				persona: String(data.profile?.persona ?? ''),
+				source: `billing_${billingCycle}`
+			}).catch(() => false);
 			window.location.assign(normalizeCheckoutUrl(checkout_url, window.location.origin));
 		} catch (err) {
 			error = err instanceof Error ? err.message : 'Checkout failed';
@@ -318,7 +322,7 @@
 						{/if}
 					</div>
 					<p class="billing-plan-card__price">
-						{formatUsd(getDisplayedMonthlyPrice(plan))}
+						{formatUsd(getDisplayedMonthlyPrice(plan, billingCycle))}
 						<span>/mo</span>
 					</p>
 					<p class="billing-card__copy">{plan.description}</p>

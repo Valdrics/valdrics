@@ -10,7 +10,7 @@ Displays real-time usage metrics for tenants:
 Endpoint: GET /usage
 """
 
-from typing import Annotated
+from typing import Annotated, Literal
 from uuid import UUID
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends
@@ -25,6 +25,10 @@ from app.shared.core.cache import get_cache_service
 from app.shared.core.connection_queries import list_tenant_connections
 from app.models.llm import LLMUsage, LLMBudget
 from app.models.background_job import BackgroundJob, JobType, JobStatus
+from app.modules.reporting.domain.tenant_growth_funnel import (
+    normalize_growth_funnel_attribution,
+    record_tenant_growth_funnel_stage,
+)
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Usage Metering"])
@@ -94,6 +98,45 @@ class UsageResponse(BaseModel):
     generated_at: str
 
 
+class GrowthFunnelUtmPayload(BaseModel):
+    source: str | None = None
+    medium: str | None = None
+    campaign: str | None = None
+    term: str | None = None
+    content: str | None = None
+
+
+class GrowthFunnelAttributionPayload(BaseModel):
+    persona: str | None = None
+    intent: str | None = None
+    page_path: str | None = None
+    first_touch_at: datetime | None = None
+    last_touch_at: datetime | None = None
+    utm: GrowthFunnelUtmPayload | None = None
+
+
+class GrowthFunnelStageRequest(BaseModel):
+    stage: Literal[
+        "connection_verified",
+        "pricing_viewed",
+        "checkout_started",
+        "first_value_activated",
+    ]
+    provider: str | None = None
+    source: str | None = None
+    current_tier: str | None = None
+    occurred_at: datetime | None = None
+    attribution: GrowthFunnelAttributionPayload | None = None
+
+
+class GrowthFunnelStageResponse(BaseModel):
+    status: Literal["accepted"]
+    tenant_id: UUID
+    stage: str
+    pql_qualified: bool
+    pql_qualified_at: str | None = None
+
+
 @router.get("", response_model=UsageResponse)
 async def get_usage_metrics(
     user: Annotated[CurrentUser, Depends(requires_role("member"))],
@@ -149,6 +192,50 @@ async def get_usage_metrics(
             ttl=USAGE_METRICS_CACHE_TTL,
         )
     return payload
+
+
+@router.post("/funnel", response_model=GrowthFunnelStageResponse)
+async def record_growth_funnel_stage(
+    payload: GrowthFunnelStageRequest,
+    user: Annotated[CurrentUser, Depends(requires_role("member"))],
+    db: AsyncSession = Depends(get_db),
+) -> GrowthFunnelStageResponse:
+    tenant_id = _require_tenant_id(user)
+    attribution_payload = payload.attribution
+    utm_payload = attribution_payload.utm if attribution_payload else None
+    snapshot = await record_tenant_growth_funnel_stage(
+        db,
+        tenant_id=tenant_id,
+        stage=payload.stage,
+        occurred_at=payload.occurred_at,
+        current_tier=payload.current_tier or user.tier,
+        provider=payload.provider,
+        source=payload.source,
+        attribution=normalize_growth_funnel_attribution(
+            utm_source=utm_payload.source if utm_payload else None,
+            utm_medium=utm_payload.medium if utm_payload else None,
+            utm_campaign=utm_payload.campaign if utm_payload else None,
+            utm_term=utm_payload.term if utm_payload else None,
+            utm_content=utm_payload.content if utm_payload else None,
+            persona=attribution_payload.persona if attribution_payload else None,
+            intent=attribution_payload.intent if attribution_payload else None,
+            page_path=attribution_payload.page_path if attribution_payload else None,
+            first_touch_at=attribution_payload.first_touch_at if attribution_payload else None,
+            last_touch_at=attribution_payload.last_touch_at if attribution_payload else None,
+        ),
+        commit=True,
+    )
+    return GrowthFunnelStageResponse(
+        status="accepted",
+        tenant_id=tenant_id,
+        stage=payload.stage,
+        pql_qualified=snapshot.pql_qualified_at is not None,
+        pql_qualified_at=(
+            snapshot.pql_qualified_at.isoformat()
+            if snapshot.pql_qualified_at is not None
+            else None
+        ),
+    )
 
 
 async def _get_recent_llm_activity(

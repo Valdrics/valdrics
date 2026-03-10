@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 from typing import Dict, Any
 from uuid import UUID
@@ -8,7 +9,8 @@ from pydantic import BaseModel, EmailStr, Field
 import structlog
 
 from app.shared.db.session import get_db
-from app.shared.core.logging import audit_log
+from app.shared.core.async_utils import maybe_await
+from app.shared.core.logging import audit_log_async as durable_audit_log
 from app.shared.core.auth import get_current_user_from_jwt, CurrentUser
 from app.models.tenant import Tenant, User, UserRole
 from app.shared.core.pricing import PricingTier
@@ -17,6 +19,10 @@ from app.shared.core.proxy_headers import resolve_request_scheme
 from app.shared.core.rate_limit import auth_limit
 from app.shared.core.provider import normalize_provider
 from app.shared.core.turnstile import require_turnstile_for_onboard
+from app.modules.reporting.domain.tenant_growth_funnel import (
+    normalize_growth_funnel_attribution,
+    record_tenant_growth_funnel_stage,
+)
 
 logger = structlog.get_logger()
 ONBOARDING_VERIFICATION_RECOVERABLE_EXCEPTIONS = (
@@ -30,12 +36,39 @@ ONBOARDING_VERIFICATION_RECOVERABLE_EXCEPTIONS = (
 )
 
 
+def _parse_optional_iso_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 class OnboardRequest(BaseModel):
     tenant_name: str = Field(..., min_length=3, max_length=100)
     admin_email: EmailStr | None = None
     cloud_config: Dict[str, Any] | None = Field(
         None, description="Optional cloud credentials for immediate verification"
     )
+    acquisition_context: "OnboardAcquisitionContext | None" = None
+
+
+class OnboardAcquisitionUtm(BaseModel):
+    source: str | None = Field(default=None, max_length=96)
+    medium: str | None = Field(default=None, max_length=96)
+    campaign: str | None = Field(default=None, max_length=96)
+    term: str | None = Field(default=None, max_length=96)
+    content: str | None = Field(default=None, max_length=96)
+
+
+class OnboardAcquisitionContext(BaseModel):
+    persona: str | None = Field(default=None, max_length=64)
+    intent: str | None = Field(default=None, max_length=64)
+    page_path: str | None = Field(default=None, max_length=256)
+    first_touch_at: str | None = None
+    last_touch_at: str | None = None
+    utm: OnboardAcquisitionUtm | None = None
 
 
 class OnboardResponse(BaseModel):
@@ -243,7 +276,7 @@ async def onboard(
             raise HTTPException(400, f"Error verifying {platform} connection: {str(e)}")
 
     db.add(tenant)
-    await db.flush()  # Get tenant.id
+    await maybe_await(db.flush())  # Get tenant.id
 
     # 3. Create User linked to Tenant
     new_user = User(
@@ -251,6 +284,55 @@ async def onboard(
     )
     db.add(new_user)
     try:
+        acquisition_context = onboard_req.acquisition_context
+        attribution = normalize_growth_funnel_attribution(
+            utm_source=acquisition_context.utm.source
+            if acquisition_context and acquisition_context.utm
+            else None,
+            utm_medium=acquisition_context.utm.medium
+            if acquisition_context and acquisition_context.utm
+            else None,
+            utm_campaign=acquisition_context.utm.campaign
+            if acquisition_context and acquisition_context.utm
+            else None,
+            utm_term=acquisition_context.utm.term
+            if acquisition_context and acquisition_context.utm
+            else None,
+            utm_content=acquisition_context.utm.content
+            if acquisition_context and acquisition_context.utm
+            else None,
+            persona=acquisition_context.persona if acquisition_context else None,
+            intent=acquisition_context.intent if acquisition_context else None,
+            page_path=acquisition_context.page_path if acquisition_context else None,
+            first_touch_at=_parse_optional_iso_datetime(
+                acquisition_context.first_touch_at if acquisition_context else None
+            ),
+            last_touch_at=_parse_optional_iso_datetime(
+                acquisition_context.last_touch_at if acquisition_context else None
+            ),
+        )
+        await record_tenant_growth_funnel_stage(
+            db,
+            tenant_id=tenant.id,
+            stage="tenant_onboarded",
+            current_tier=PricingTier.FREE,
+            attribution=attribution,
+            source="settings_onboard",
+            commit=False,
+        )
+        await maybe_await(
+            durable_audit_log(
+                event="tenant_onboarded",
+                user_id=str(user.id),
+                tenant_id=str(tenant.id),
+                details={"tenant_name": onboard_req.tenant_name},
+                db=db,
+                resource_type="tenant",
+                resource_id=str(tenant.id),
+                request_method="POST",
+                request_path="/api/v1/settings/onboard",
+            )
+        )
         await db.commit()
     except IntegrityError as exc:
         await db.rollback()
@@ -258,13 +340,5 @@ async def onboard(
             "onboarding_race_detected_user_already_exists", user_id=str(user.id)
         )
         raise HTTPException(400, "Already onboarded") from exc
-
-    # 4. Audit Log
-    audit_log(
-        event="tenant_onboarded",
-        user_id=str(user.id),
-        tenant_id=str(tenant.id),
-        details={"tenant_name": onboard_req.tenant_name},
-    )
 
     return OnboardResponse(status="onboarded", tenant_id=tenant.id)

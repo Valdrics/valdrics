@@ -119,7 +119,7 @@ describe('settings page integration wiring (advanced)', () => {
 		await screen.findByText('ActiveOps (Autonomous Remediation)');
 
 		expect(document.body.textContent || '').toMatch(
-			/best for teams that want higher automation depth, finance close support/i
+			/Best for teams that need finance-grade operations: auditability, finance close support/i
 		);
 		expect(document.body.textContent || '').toMatch(
 			/ActiveOps automation stays on Pro and Enterprise\.\s+Slack and Jira switches in this card apply\s+to remediation policy events, not the general notification channel\./i

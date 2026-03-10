@@ -122,6 +122,44 @@ class TestNotificationDispatcherCoverage:
         mock_logger.warning.assert_called()
 
     @pytest.mark.asyncio
+    async def test_send_alert_skips_tenant_teams_after_downgrade(self):
+        """Tenant Teams settings should not dispatch once the tier loses incident integrations."""
+        fake_db = MagicMock()
+        mock_teams = AsyncMock()
+
+        with (
+            patch.object(
+                NotificationDispatcher,
+                "_tenant_has_feature",
+                new=AsyncMock(return_value=False),
+            ),
+            patch(
+                "app.shared.core.notifications.get_tenant_teams_service",
+                new=AsyncMock(return_value=mock_teams),
+            ) as mock_get_teams,
+            patch(
+                "app.shared.core.notifications.get_tenant_slack_service",
+                new=AsyncMock(return_value=None),
+            ),
+            patch("app.shared.core.notifications.logger") as mock_logger,
+        ):
+            await NotificationDispatcher.send_alert(
+                title="Tenant Alert",
+                message="Scoped message",
+                severity="warning",
+                tenant_id="tenant-102",
+                db=fake_db,
+            )
+
+        mock_get_teams.assert_not_awaited()
+        mock_teams.send_alert.assert_not_awaited()
+        mock_logger.info.assert_called_once_with(
+            "notification_dispatched",
+            title="Tenant Alert",
+            severity="warning",
+        )
+
+    @pytest.mark.asyncio
     async def test_notify_zombies_with_slack(self):
         """Test notify_zombies with Slack service available."""
         mock_slack = AsyncMock()
@@ -450,6 +488,11 @@ class TestNotificationDispatcherCoverage:
         with (
             patch("app.shared.core.notifications.get_slack_service", return_value=None),
             patch("app.shared.core.notifications.get_jira_service", return_value=None),
+            patch.object(
+                NotificationDispatcher,
+                "_tenant_has_feature",
+                new=AsyncMock(return_value=True),
+            ),
             patch(
                 "app.shared.core.notifications.get_tenant_workflow_dispatchers",
                 new=AsyncMock(return_value=[workflow]),
@@ -483,6 +526,11 @@ class TestNotificationDispatcherCoverage:
         fake_db = MagicMock()
         with (
             patch("app.shared.core.notifications.get_slack_service", return_value=None),
+            patch.object(
+                NotificationDispatcher,
+                "_tenant_has_feature",
+                new=AsyncMock(return_value=True),
+            ),
             patch(
                 "app.shared.core.notifications.get_tenant_workflow_dispatchers",
                 new=AsyncMock(return_value=[workflow]),
@@ -512,6 +560,11 @@ class TestNotificationDispatcherCoverage:
         workflow.dispatch = AsyncMock(return_value=True)
         fake_db = MagicMock()
         with (
+            patch.object(
+                NotificationDispatcher,
+                "_tenant_has_feature",
+                new=AsyncMock(return_value=True),
+            ),
             patch(
                 "app.shared.core.notifications.get_tenant_workflow_dispatchers",
                 new=AsyncMock(return_value=[workflow]),
@@ -546,6 +599,11 @@ class TestNotificationDispatcherCoverage:
         env_workflow.provider = "github_actions"
         env_workflow.dispatch = AsyncMock(return_value=True)
         with (
+            patch.object(
+                NotificationDispatcher,
+                "_tenant_has_feature",
+                new=AsyncMock(return_value=True),
+            ),
             patch(
                 "app.shared.core.notifications.get_tenant_workflow_dispatchers",
                 new=AsyncMock(return_value=[]),
@@ -606,3 +664,45 @@ class TestNotificationDispatcherCoverage:
         tenant_dispatchers.assert_not_awaited()
         env_dispatchers.assert_not_called()
         env_workflow.dispatch.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_notify_policy_event_workflow_skips_downgraded_tenant_dispatchers(
+        self,
+    ):
+        """Workflow dispatch should not consult tenant dispatchers after downgrade."""
+        workflow = MagicMock()
+        workflow.provider = "github_actions"
+        workflow.dispatch = AsyncMock(return_value=True)
+        fake_db = MagicMock()
+
+        with (
+            patch.object(
+                NotificationDispatcher,
+                "_tenant_has_feature",
+                new=AsyncMock(return_value=False),
+            ),
+            patch(
+                "app.shared.core.notifications.get_tenant_workflow_dispatchers",
+                new=AsyncMock(return_value=[workflow]),
+            ) as tenant_dispatchers,
+            patch(
+                "app.shared.core.notifications.get_workflow_dispatchers",
+                return_value=[],
+            ) as env_dispatchers,
+        ):
+            await NotificationDispatcher.notify_policy_event(
+                tenant_id="tenant-downgraded",
+                decision="block",
+                summary="downgraded tenant should not dispatch",
+                resource_id="prod-db",
+                action="delete_rds_instance",
+                notify_slack=False,
+                notify_jira=False,
+                notify_workflow=True,
+                request_id="req-downgraded",
+                db=fake_db,
+            )
+
+        tenant_dispatchers.assert_not_awaited()
+        env_dispatchers.assert_not_called()
+        workflow.dispatch.assert_not_awaited()

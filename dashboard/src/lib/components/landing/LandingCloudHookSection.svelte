@@ -28,15 +28,16 @@
 
 <section
 	id="cloud-hook"
-	class="container mx-auto px-6 pt-8 pb-16 md:pt-10 landing-section-lazy"
+	class="container mx-auto px-6 pt-8 pb-16 md:pt-10 landing-section-lazy landing-hook-entry"
 	data-landing-section="cloud_hook"
 >
 	<div class="landing-hook glass-panel">
-		<p class="landing-proof-k">Reactive vs controlled</p>
-		<h2 class="landing-h2">See the operating gap after detection.</h2>
+		<p class="landing-proof-k">After the alert</p>
+		<h2 class="landing-h2">See what happens after detection.</h2>
 		<p class="landing-section-sub">
-			Compare the reactive path teams already know with the controlled path Valdrics creates once
-			an alert gets an owner, checks, and approval.
+			Most tools stop at detection. Compare the reactive path teams already live with against the
+			governed path Valdrics creates once an issue gets an owner, controls, workflow routing, and
+			recorded proof.
 		</p>
 
 		<div class="landing-hook-switch" role="group" aria-label="Compare cloud operations">
@@ -55,6 +56,7 @@
 
 		<div class="landing-hook-scene" class:is-with={activeHookState.id === 'with'}>
 			<p class="landing-hook-sub">{activeHookState.subtitle}</p>
+			<p class="landing-hook-aha">{activeHookState.ahaMoment}</p>
 			<ul class="landing-hook-list">
 				{#each activeHookState.points as point (point)}
 					<li>{point}</li>

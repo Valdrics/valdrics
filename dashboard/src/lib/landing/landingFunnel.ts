@@ -85,15 +85,16 @@ const EMPTY_COUNTS: LandingFunnelCounts = Object.freeze({
 
 const CTA_VALUE_LABELS: Record<string, string> = Object.freeze({
 	start_free: 'Start Free',
+	see_pricing: 'See Pricing',
 	enterprise_review: 'Enterprise Review',
 	request_validation_briefing: 'Request Validation Briefing',
 	book_briefing: 'Book Executive Briefing',
 	see_signal_map: 'See Live Signal Map',
 	start_roi_assessment: 'Open Full ROI Planner',
-	start_plan_free: 'Start on Free Tier',
-	start_plan_starter: 'Start with Starter',
-	start_plan_growth: 'Start with Growth',
-	start_plan_pro: 'Start with Pro',
+	start_plan_free: 'Start Free Workspace',
+	start_plan_starter: 'Start Starter Workspace',
+	start_plan_growth: 'Start Growth Workspace',
+	start_plan_pro: 'Start Pro Workspace',
 	talk_to_sales: 'Talk to Sales'
 });
 
@@ -106,7 +107,9 @@ function normalizeToken(input: string | null | undefined): string | undefined {
 }
 
 function normalizeCtaValue(value: string): string | undefined {
-	return normalizeToken(value)?.toLowerCase().replace(/[^a-z0-9_]/g, '_');
+	return normalizeToken(value)
+		?.toLowerCase()
+		.replace(/[^a-z0-9_]/g, '_');
 }
 
 function ctaValueLabel(value: string): string {

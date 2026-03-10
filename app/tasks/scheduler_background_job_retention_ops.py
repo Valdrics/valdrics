@@ -26,6 +26,11 @@ async def purge_terminal_background_jobs(
         default=7,
         minimum=1,
     )
+    failed_days = coerce_positive_int(
+        getattr(settings, "BACKGROUND_JOB_FAILED_RETENTION_DAYS", 30),
+        default=30,
+        minimum=1,
+    )
     dead_letter_days = coerce_positive_int(
         getattr(settings, "BACKGROUND_JOB_DEAD_LETTER_RETENTION_DAYS", 30),
         default=30,
@@ -50,6 +55,11 @@ async def purge_terminal_background_jobs(
             completed_days,
         ),
         (
+            job_status.FAILED.value,
+            now - timedelta_cls(days=failed_days),
+            failed_days,
+        ),
+        (
             job_status.DEAD_LETTER.value,
             now - timedelta_cls(days=dead_letter_days),
             dead_letter_days,
@@ -58,19 +68,25 @@ async def purge_terminal_background_jobs(
 
     deleted_by_status: dict[str, int] = {
         job_status.COMPLETED.value: 0,
+        job_status.FAILED.value: 0,
         job_status.DEAD_LETTER.value: 0,
     }
 
     for status_value, cutoff, retention_days in retention_plan:
         status_deleted = 0
+        terminal_timestamp = sa.func.coalesce(
+            background_job_model.completed_at,
+            background_job_model.updated_at,
+            background_job_model.created_at,
+        )
         for _ in range(max_batches):
             id_subquery = (
                 sa.select(background_job_model.id)
                 .where(
                     background_job_model.status == status_value,
-                    background_job_model.created_at < cutoff,
+                    terminal_timestamp < cutoff,
                 )
-                .order_by(background_job_model.created_at)
+                .order_by(terminal_timestamp)
                 .limit(batch_size)
                 .subquery()
             )
@@ -95,11 +111,14 @@ async def purge_terminal_background_jobs(
 
     return {
         "completed_deleted": deleted_by_status[job_status.COMPLETED.value],
+        "failed_deleted": deleted_by_status[job_status.FAILED.value],
         "dead_letter_deleted": deleted_by_status[job_status.DEAD_LETTER.value],
         "total_deleted": (
             deleted_by_status[job_status.COMPLETED.value]
+            + deleted_by_status[job_status.FAILED.value]
             + deleted_by_status[job_status.DEAD_LETTER.value]
         ),
         "completed_retention_days": completed_days,
+        "failed_retention_days": failed_days,
         "dead_letter_retention_days": dead_letter_days,
     }

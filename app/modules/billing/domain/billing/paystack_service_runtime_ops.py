@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+import hashlib
+import re
 from typing import Any
 
 
@@ -54,6 +56,24 @@ def resolve_checkout_currency(
     if resolved not in {"NGN", "USD"}:
         raise ValueError(f"Unsupported checkout currency: {resolved}")
     return resolved
+
+
+def build_charge_reference(
+    *,
+    subscription_id: Any,
+    charge_kind: str,
+    sequence: Any,
+) -> str:
+    raw_kind = re.sub(r"[^a-z0-9]+", "-", str(charge_kind or "").strip().lower())
+    normalized_kind = raw_kind.strip("-") or "charge"
+    normalized_sequence = re.sub(r"[^a-z0-9]+", "-", str(sequence or "").strip().lower())
+    normalized_sequence = normalized_sequence.strip("-") or "1"
+    fingerprint = hashlib.sha256(
+        f"{subscription_id}:{normalized_kind}:{normalized_sequence}".encode("utf-8")
+    ).hexdigest()[:20]
+    return (
+        f"valdrics-{normalized_kind[:18]}-{normalized_sequence[:24]}-{fingerprint}"
+    )[:96]
 
 
 def parse_paystack_datetime(value: Any) -> datetime | None:

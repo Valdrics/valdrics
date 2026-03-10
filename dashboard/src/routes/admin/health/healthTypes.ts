@@ -70,6 +70,61 @@ export type HealthDashboard = {
 		failure_rate_percent: number;
 		avg_time_to_complete_hours: number | null;
 	};
+	landing_funnel: {
+		weekly_current: {
+			total_events: number;
+			cta_events: number;
+			signup_intent_events: number;
+			onboarded_tenants: number;
+			connected_tenants: number;
+			first_value_tenants: number;
+			pql_tenants: number;
+			pricing_view_tenants: number;
+			checkout_started_tenants: number;
+			paid_tenants: number;
+			signup_to_connection_rate: number | null;
+			connection_to_first_value_rate: number | null;
+		};
+		weekly_previous: {
+			total_events: number;
+			cta_events: number;
+			signup_intent_events: number;
+			onboarded_tenants: number;
+			connected_tenants: number;
+			first_value_tenants: number;
+			pql_tenants: number;
+			pricing_view_tenants: number;
+			checkout_started_tenants: number;
+			paid_tenants: number;
+			signup_to_connection_rate: number | null;
+			connection_to_first_value_rate: number | null;
+		};
+		weekly_delta: {
+			total_events: number;
+			signup_intent_events: number;
+			onboarded_tenants: number;
+			connected_tenants: number;
+			first_value_tenants: number;
+			pql_tenants: number;
+			pricing_view_tenants: number;
+			checkout_started_tenants: number;
+			paid_tenants: number;
+			signup_to_connection_rate: number | null;
+			connection_to_first_value_rate: number | null;
+		};
+		alerts: Array<{
+			key: string;
+			label: string;
+			status: string;
+			threshold_rate: number;
+			current_rate: number | null;
+			previous_rate: number | null;
+			weekly_delta: number | null;
+			current_numerator: number;
+			current_denominator: number;
+			message: string;
+		}>;
+	};
 };
 
 export type FairUseRuntime = {

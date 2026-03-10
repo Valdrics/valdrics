@@ -13,6 +13,10 @@ from app.modules.billing.domain.billing.paystack_billing import (
     PaystackClient,
     WebhookHandler,
 )
+from app.modules.billing.domain.billing.webhook_retry import (
+    WebhookPermanentError,
+    WebhookRetryableError,
+)
 from app.shared.core.pricing import PricingTier, TIER_CONFIG
 
 STARTER_MONTHLY_USD = float(TIER_CONFIG[PricingTier.STARTER]["price_usd"]["monthly"])
@@ -283,6 +287,32 @@ async def test_charge_renewal_returns_false_when_auth_decryption_fails(
 
 
 @pytest.mark.asyncio
+async def test_charge_renewal_duplicate_reference_short_circuits_provider_call(
+    mock_db: MagicMock,
+    configured_settings: None,
+) -> None:
+    service = BillingService(mock_db)
+    service.client.charge_authorization = AsyncMock()
+    sub = MagicMock(
+        id=uuid4(),
+        paystack_auth_code="enc",
+        tenant_id=uuid4(),
+        tier=PricingTier.STARTER.value,
+        billing_currency="USD",
+        last_charge_reference="REF_DUP",
+    )
+    mock_db.execute.return_value = _scalar_result(MagicMock(price_usd=10.0))
+
+    with patch(
+        "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
+        return_value="AUTH",
+    ):
+        assert await service.charge_renewal(sub, reference="REF_DUP") is True
+
+    service.client.charge_authorization.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_charge_renewal_invalid_tier_value_returns_false(
     mock_db: MagicMock,
     configured_settings: None,
@@ -479,12 +509,19 @@ async def test_handle_subscription_create_edge_branches(mock_db: MagicMock) -> N
     handler = WebhookHandler(mock_db)
 
     # Missing customer code branch
-    await handler._handle_subscription_create({"subscription_code": "SUB"})
+    with pytest.raises(
+        WebhookPermanentError, match="subscription.create missing customer_code"
+    ):
+        await handler._handle_subscription_create({"subscription_code": "SUB"})
     mock_db.execute.assert_not_awaited()
 
     # Tenant not found branch
     mock_db.execute.return_value = _scalar_result(None)
-    await handler._handle_subscription_create({"customer": {"customer_code": "CUS"}})
+    with pytest.raises(
+        WebhookRetryableError,
+        match="subscription.create could not find tenant subscription",
+    ):
+        await handler._handle_subscription_create({"customer": {"customer_code": "CUS"}})
 
     # Invalid date branch
     sub = MagicMock()
@@ -534,13 +571,16 @@ async def test_handle_charge_success_with_unusable_metadata_returns(
     mock_db: MagicMock,
 ) -> None:
     handler = WebhookHandler(mock_db)
-    await handler._handle_charge_success(
-        {
-            "metadata": "{not-json",
-            "customer": {},
-            "reference": "REF123",
-        }
-    )
+    with pytest.raises(
+        WebhookPermanentError, match="charge.success missing tenant identifiers"
+    ):
+        await handler._handle_charge_success(
+            {
+                "metadata": "{not-json",
+                "customer": {},
+                "reference": "REF123",
+            }
+        )
     mock_db.execute.assert_not_awaited()
 
 
@@ -558,6 +598,10 @@ async def test_handle_charge_success_email_fallback_paths(
         patch(
             "app.modules.billing.domain.billing.paystack_shared.encrypt_string",
             return_value="enc-auth",
+        ),
+        patch(
+            "app.modules.billing.domain.billing.paystack_webhook_impl.record_tenant_growth_funnel_stage",
+            new=AsyncMock(),
         ),
     ):
         mock_db.execute.side_effect = [
@@ -579,13 +623,16 @@ async def test_handle_charge_success_email_fallback_paths(
     mock_db.execute.side_effect = None
     with patch("app.shared.core.security.generate_blind_index", return_value="BIDX"):
         mock_db.execute.return_value = _scalar_result(None)
-        await handler._handle_charge_success(
-            {
-                "metadata": {},
-                "customer": {"customer_code": "CUS2", "email": "none@example.com"},
-                "reference": "REF-NONE",
-            }
-        )
+        with pytest.raises(
+            WebhookRetryableError, match="charge.success could not resolve tenant"
+        ):
+            await handler._handle_charge_success(
+                {
+                    "metadata": {},
+                    "customer": {"customer_code": "CUS2", "email": "none@example.com"},
+                    "reference": "REF-NONE",
+                }
+            )
 
 
 @pytest.mark.asyncio
@@ -595,10 +642,16 @@ async def test_handle_charge_success_creates_subscription_without_auth(
     handler = WebhookHandler(mock_db)
     tenant_id = uuid4()
     mock_db.execute.return_value = _scalar_result(None)
-    with patch(
-        "app.modules.billing.domain.billing.paystack_webhook_impl.sync_tenant_plan",
-        new=AsyncMock(),
-    ) as mock_sync_tenant_plan:
+    with (
+        patch(
+            "app.modules.billing.domain.billing.paystack_webhook_impl.sync_tenant_plan",
+            new=AsyncMock(),
+        ) as mock_sync_tenant_plan,
+        patch(
+            "app.modules.billing.domain.billing.paystack_webhook_impl.record_tenant_growth_funnel_stage",
+            new=AsyncMock(),
+        ) as mock_record_growth_funnel,
+    ):
         await handler._handle_charge_success(
             {
                 "metadata": {"tenant_id": str(tenant_id), "tier": PricingTier.GROWTH.value},
@@ -609,6 +662,12 @@ async def test_handle_charge_success_creates_subscription_without_auth(
     added_objects = [call.args[0] for call in mock_db.add.call_args_list]
     assert any(isinstance(obj, billing_mod.TenantSubscription) for obj in added_objects)
     mock_sync_tenant_plan.assert_awaited_once()
+    mock_record_growth_funnel.assert_awaited_once()
+    assert mock_record_growth_funnel.await_args.kwargs["tenant_id"] == tenant_id
+    assert mock_record_growth_funnel.await_args.kwargs["stage"] == "paid_activated"
+    assert mock_record_growth_funnel.await_args.kwargs["source"] == "paystack_charge_success"
+    assert mock_record_growth_funnel.await_args.kwargs["current_tier"] == PricingTier.GROWTH
+    assert mock_record_growth_funnel.await_args.kwargs["commit"] is False
     # Billing webhooks should also emit an immutable audit log event.
     assert any(obj.__class__.__name__ == "AuditLog" for obj in added_objects)
 
@@ -618,20 +677,35 @@ async def test_subscription_disable_and_invoice_failed_edge_paths(
     mock_db: MagicMock,
 ) -> None:
     handler = WebhookHandler(mock_db)
-    await handler._handle_subscription_disable({})
+    with pytest.raises(
+        WebhookPermanentError, match="subscription.disable missing subscription_code"
+    ):
+        await handler._handle_subscription_disable({})
     mock_db.execute.assert_not_awaited()
 
     mock_db.execute.return_value = _scalar_result(None)
-    await handler._handle_subscription_disable({"subscription_code": "SUB-NONE"})
+    with pytest.raises(
+        WebhookRetryableError, match="subscription.disable could not find subscription"
+    ):
+        await handler._handle_subscription_disable({"subscription_code": "SUB-NONE"})
 
     mock_db.execute.reset_mock()
-    await handler._handle_invoice_failed(
-        {"invoice_code": "INV1", "customer": {"customer_code": "CUS"}}
-    )
-    mock_db.execute.assert_not_awaited()
+    mock_db.execute.return_value = _scalar_result(None)
+    with pytest.raises(
+        WebhookRetryableError,
+        match="invoice.payment_failed could not find subscription",
+    ):
+        await handler._handle_invoice_failed(
+            {"invoice_code": "INV1", "customer": {"customer_code": "CUS"}}
+        )
+    mock_db.execute.assert_awaited()
 
     mock_db.execute.return_value = _scalar_result(None)
-    await handler._handle_invoice_failed({"subscription_code": "SUB-NONE"})
+    with pytest.raises(
+        WebhookRetryableError,
+        match="invoice.payment_failed could not find subscription",
+    ):
+        await handler._handle_invoice_failed({"subscription_code": "SUB-NONE"})
 
 
 @pytest.mark.asyncio

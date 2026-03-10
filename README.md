@@ -212,14 +212,17 @@ cd valdrics
 cp .env.example .env
 ```
 
-For deterministic local isolated testing, generate a safe mock env file:
+For fast local sqlite development, generate the local runtime profile and bootstrap the
+current ORM schema instead of replaying the historical Alembic chain:
+
 ```bash
 make env-dev
-cp .env.dev .env
+make bootstrap-local-db
 ```
-This mock profile is local-only (`TESTING=true`) and must not be used in staging/production.
 
-Edit `.env` and add:
+`.env.dev` is local-only, runs with `TESTING=false`, and must not be used in staging/production.
+
+For the Postgres/Redis docker path, edit `.env` and add:
 ```env
 DATABASE_URL=postgresql+asyncpg://...
 OPENAI_API_KEY=sk-...  # or GROQ_API_KEY, etc.
@@ -227,6 +230,17 @@ SUPABASE_JWT_SECRET=your-jwt-secret
 ```
 
 ### 2. Start the Stack
+
+Fast local sqlite path:
+
+```bash
+make dev
+```
+
+If `.env.dev` exists, `make dev` auto-loads it and bootstraps the local sqlite schema before
+starting the API.
+
+Full dockerized Postgres/Redis path:
 
 ```bash
 docker-compose up -d

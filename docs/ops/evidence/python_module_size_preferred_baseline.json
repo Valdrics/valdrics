@@ -1,4 +1,70 @@
 {
   "root": "/home/daretechie/DevProject/GitHub/CloudSentinel-AI",
-  "breaches": []
+  "breaches": [
+    {
+      "path": "app/main.py",
+      "lines": 513,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/billing/domain/billing/paystack_service_impl.py",
+      "lines": 530,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/billing/domain/billing/paystack_webhook_impl.py",
+      "lines": 539,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/governance/api/v1/settings/connections_cloud_plus.py",
+      "lines": 536,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/governance/api/v1/settings/connections_setup_aws_discovery.py",
+      "lines": 530,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/governance/domain/jobs/processor.py",
+      "lines": 602,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/governance/domain/scheduler/orchestrator.py",
+      "lines": 593,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/governance/domain/security/audit_log.py",
+      "lines": 509,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/shared/core/config.py",
+      "lines": 503,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/shared/core/ops_metrics.py",
+      "lines": 627,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/shared/db/session.py",
+      "lines": 530,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/tasks/scheduler_maintenance_ops.py",
+      "lines": 502,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/tasks/scheduler_tasks.py",
+      "lines": 576,
+      "preferred_max_lines": 500
+    }
+  ]
 }

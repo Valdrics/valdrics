@@ -38,6 +38,17 @@
 		return value.toLocaleString();
 	}
 
+	function formatPercent(value: number | null | undefined): string {
+		if (value === null || value === undefined || Number.isNaN(value)) return 'n/a';
+		return `${(value * 100).toFixed(1)}%`;
+	}
+
+	function formatRateDelta(value: number | null | undefined): string {
+		if (value === null || value === undefined || Number.isNaN(value)) return 'n/a';
+		const points = value * 100;
+		return `${points > 0 ? '+' : ''}${points.toFixed(1)} pts`;
+	}
+
 	function statusBadgeClass(status: string | undefined): string {
 		switch ((status || '').toLowerCase()) {
 			case 'healthy':
@@ -55,8 +66,8 @@
 <div class="space-y-8 page-enter">
 	<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 		<div>
-			<h1 class="text-2xl font-bold mb-1">Investor Health Dashboard</h1>
-			<p class="text-ink-400 text-sm">Operational metrics pulled from live governance telemetry.</p>
+			<h1 class="text-2xl font-bold mb-1">Internal Health Dashboard</h1>
+			<p class="text-ink-400 text-sm">Operational metrics pulled from live governance telemetry for internal operators.</p>
 		</div>
 		<div class="flex items-center gap-2">
 			<span class={statusBadgeClass(dashboard.system.status)}>{dashboard.system.status.toUpperCase()}</span>
@@ -245,6 +256,62 @@
 				<span class="text-ink-400">Cache hit rate</span>
 				<span>{(dashboard.llm_usage.cache_hit_rate * 100).toFixed(1)}%</span>
 			</div>
+		</div>
+	</div>
+
+	<div class="card">
+		<h2 class="text-lg font-semibold mb-3">Landing Funnel Health</h2>
+		<div class="grid gap-4 lg:grid-cols-4">
+			<div class="frosted-glass rounded-lg p-3">
+				<p class="text-ink-400 text-xs uppercase">7d signup → connection</p>
+				<p class="text-xl font-bold">{formatPercent(dashboard.landing_funnel.weekly_current.signup_to_connection_rate)}</p>
+				<p class="text-xs text-ink-500 mt-1">
+					{formatRateDelta(dashboard.landing_funnel.weekly_delta.signup_to_connection_rate)}
+				</p>
+			</div>
+			<div class="frosted-glass rounded-lg p-3">
+				<p class="text-ink-400 text-xs uppercase">7d connection → first value</p>
+				<p class="text-xl font-bold">
+					{formatPercent(dashboard.landing_funnel.weekly_current.connection_to_first_value_rate)}
+				</p>
+				<p class="text-xs text-ink-500 mt-1">
+					{formatRateDelta(dashboard.landing_funnel.weekly_delta.connection_to_first_value_rate)}
+				</p>
+			</div>
+			<div class="frosted-glass rounded-lg p-3">
+				<p class="text-ink-400 text-xs uppercase">7d PQL</p>
+				<p class="text-xl font-bold">{dashboard.landing_funnel.weekly_current.pql_tenants}</p>
+				<p class="text-xs text-ink-500 mt-1">
+					Δ {dashboard.landing_funnel.weekly_delta.pql_tenants > 0 ? '+' : ''}{dashboard.landing_funnel.weekly_delta.pql_tenants}
+				</p>
+			</div>
+			<div class="frosted-glass rounded-lg p-3">
+				<p class="text-ink-400 text-xs uppercase">7d paid activations</p>
+				<p class="text-xl font-bold">{dashboard.landing_funnel.weekly_current.paid_tenants}</p>
+				<p class="text-xs text-ink-500 mt-1">
+					Δ {dashboard.landing_funnel.weekly_delta.paid_tenants > 0 ? '+' : ''}{dashboard.landing_funnel.weekly_delta.paid_tenants}
+				</p>
+			</div>
+		</div>
+		<div class="grid gap-3 mt-4 lg:grid-cols-2">
+			{#each dashboard.landing_funnel.alerts as alert (alert.key)}
+				<div class="frosted-glass rounded-lg p-3">
+					<div class="flex items-start justify-between gap-3">
+						<div>
+							<p class="text-ink-400 text-xs uppercase">{alert.label}</p>
+							<p class="text-lg font-bold mt-1">{formatPercent(alert.current_rate)}</p>
+						</div>
+						<span class={statusBadgeClass(alert.status)}>{alert.status.toUpperCase()}</span>
+					</div>
+					<p class="text-sm text-ink-300 mt-3">{alert.message}</p>
+					<p class="text-xs text-ink-500 mt-2">
+						Floor {formatPercent(alert.threshold_rate)} · Previous {formatPercent(alert.previous_rate)} · Delta {formatRateDelta(alert.weekly_delta)}
+					</p>
+					<p class="text-xs text-ink-500 mt-1">
+						{alert.current_numerator}/{alert.current_denominator} tenants in the current week
+					</p>
+				</div>
+			{/each}
 		</div>
 	</div>
 

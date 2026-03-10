@@ -64,7 +64,7 @@ Reference operator steps:
 1. Deploy the dashboard to Cloudflare Pages.
 2. Deploy the API to Koyeb using the checked-in `Dockerfile`.
 3. Deploy the Celery worker to Koyeb using `koyeb-worker.yaml`.
-4. Configure runtime secrets through the platform secret store, including `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRUSTED_PROXY_CIDRS`, and `INTERNAL_METRICS_AUTH_TOKEN`.
+4. Configure runtime secrets through the platform secret store, including `SENTRY_DSN`, `OTEL_EXPORTER_OTLP_ENDPOINT`, `TRUSTED_PROXY_CIDRS`, `INTERNAL_METRICS_AUTH_TOKEN`, and `INTERNAL_JOB_SECRET`.
 5. Validate dashboard-to-API connectivity, worker connectivity to Redis, and API health endpoints.
 
 Promote this path to production only if external release automation enforces

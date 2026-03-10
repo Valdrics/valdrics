@@ -125,10 +125,10 @@
 				<div class="success-icon">🎉</div>
 				<h2>Connection Successful!</h2>
 				<p>
-					Valdrics can now analyze your {getProviderLabel(selectedProvider)} spend and include it in Cloud+
-					optimization workflows.
+					Valdrics can now analyze your {getProviderLabel(selectedProvider)} spend. Open the
+					dashboard to confirm the first live signal, owner context, and next action.
 				</p>
 
-				<a href={`${base}/`} class="primary-btn"> Go to Dashboard → </a>
+				<a href={`${base}/`} class="primary-btn"> Open First-Value Dashboard → </a>
 			</div>
 		{/if}

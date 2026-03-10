@@ -235,14 +235,62 @@
 
 .public-nav-menu-toggle {
 	flex-shrink: 0;
+	display: inline-flex;
+	align-items: center;
+	gap: 0.45rem;
 	color: #3d5368;
 	border: 1px solid rgb(8 126 164 / 0.12);
 	background: rgb(255 255 255 / 0.88);
+	box-shadow: 0 10px 22px rgb(15 23 42 / 0.08);
 }
 
 .public-nav-menu-toggle:hover:not(:disabled) {
 	background: rgb(255 255 255 / 0.96);
 	color: var(--color-brand-600);
+}
+
+.public-nav-menu-label {
+	font-size: 0.82rem;
+	font-weight: 700;
+	letter-spacing: 0.03em;
+}
+
+.public-mobile-menu-panel {
+	border-top: 1px solid rgb(255 255 255 / 0.08);
+	background:
+		linear-gradient(180deg, rgb(10 19 29 / 0.98), rgb(9 17 26 / 0.96)),
+		radial-gradient(420px 160px at 12% 0%, rgb(34 211 238 / 0.12), transparent 70%);
+	box-shadow: 0 26px 52px rgb(2 8 14 / 0.28);
+}
+
+.public-mobile-menu-shell {
+	display: grid;
+	gap: 0.9rem;
+}
+
+.public-mobile-menu-copy {
+	display: grid;
+	gap: 0.28rem;
+}
+
+.public-mobile-menu-kicker {
+	margin: 0;
+	font-size: 0.72rem;
+	font-weight: 800;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--color-accent-300);
+}
+
+.public-mobile-menu-intro {
+	margin: 0;
+	font-size: 0.95rem;
+	line-height: 1.45;
+	color: var(--color-ink-200);
+}
+
+.public-mobile-menu-links {
+	padding-top: 0.15rem;
 }
 
 .public-nav-secondary .btn-secondary {
@@ -270,6 +318,12 @@
 @media (min-width: 640px) {
 	.public-nav-mobile-cta {
 		display: inline-flex;
+	}
+}
+
+@media (max-width: 389px) {
+	.public-nav-menu-label {
+		display: none;
 	}
 }
 

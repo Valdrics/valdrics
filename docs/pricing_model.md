@@ -1,6 +1,6 @@
 # Pricing Metric Model
 
-Last updated: March 9, 2026
+Last updated: March 10, 2026
 
 ## Default Value Metric
 
@@ -20,7 +20,7 @@ Reference implementation:
 
 - `free`: permanent entry tier with strict limits and no credit card requirement.
 - `starter`: small-team operating tier with up to `5 AWS` accounts plus limited non-AWS visibility (`1 Azure` tenant, `1 GCP` project).
-- `growth`: first full team rollout tier with broad multi-cloud coverage, Slack integration, and SSO.
+- `growth`: first full team rollout tier with broad multi-cloud coverage, Slack, Jira, and SSO.
 - `pro`: finance-grade controls including API access, audit logs, Cloud+ connectors, reconciliation, compliance exports, and incident integrations.
 - `enterprise`: SCIM, effectively unbounded scale limits, and enterprise commercial controls such as private deployment and custom support motions.
 - BYOK is available on all tiers.
@@ -35,7 +35,7 @@ The current package shape intentionally preserves a simple `Free -> Starter -> G
 - `Starter` is now a real team-visibility tier rather than AWS-only expansion.
 - `Growth` is the first cross-functional rollout lane and now includes:
   - full AWS/Azure/GCP coverage,
-  - Slack-integrated workflows,
+  - Slack and Jira collaboration hooks,
   - SSO federation + enforcement.
 - `Pro` remains the finance-grade governance tier and keeps:
   - `audit_logs`
@@ -59,8 +59,8 @@ The current package shape intentionally preserves a simple `Free -> Starter -> G
 Current intended upgrade path:
 
 - `Free -> Starter`: more accounts, daily cadence, AI insights, limited cross-cloud visibility, longer retention.
-- `Starter -> Growth`: owner routing, anomalies, remediation, backfill, chargeback, policy preview, Slack workflows, SSO.
-- `Growth -> Pro`: auditability, API access, finance close support, compliance evidence, Cloud+ connectors, incident routing.
+- `Starter -> Growth`: owner routing, anomalies, remediation, backfill, chargeback, policy preview, Slack, Jira, SSO.
+- `Growth -> Pro`: auditability, API access, finance close support, compliance evidence, Cloud+ connectors, Teams/workflow incident routing.
 - `Pro -> Enterprise`: SCIM, procurement-ready deployment options, custom controls, and effectively unlimited scale.
 
 ## Billing Event Mapping (Product to Billing)

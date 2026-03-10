@@ -10,47 +10,50 @@ export const HERO_ROLE_CONTEXT: Record<
 	}
 > = Object.freeze({
 	cto: {
-		controlTitle: 'Stop cloud and software waste before it slows your roadmap.',
-		metricsTitle: 'From cost dashboards to fast, owner-led engineering action.',
+		controlTitle:
+			'Turn cloud, SaaS, and software spend into governed action without slowing delivery.',
+		metricsTitle: 'From dashboards and tickets to one governed spend action system.',
 		subtitle:
-			'Valdrics routes cloud and software spend alerts to the right owner, approval path, and measurable outcome.',
+			'Valdrics turns cost, usage, and policy signals into owner-routed approvals, workflow execution, and exportable proof across cloud and software environments.',
 		primaryIntent: 'engineering_control'
 	},
 	finops: {
-		controlTitle: 'Control every dollar with accountable ownership and faster decisions.',
-		metricsTitle: 'From visibility reporting to faster financial action.',
+		controlTitle: 'Move from spend visibility to owner-routed action across cloud and software.',
+		metricsTitle: 'From spend reporting to one governed action path.',
 		subtitle:
-			'Valdrics turns spend findings into accountable owners, approval paths, and measurable savings.',
+			'Valdrics connects anomalies, chargeback, remediation, and savings proof so finance and engineering work from one decision system.',
 		primaryIntent: 'finops_governance'
 	},
 	security: {
-		controlTitle: 'Reduce spend and change risk without becoming a delivery bottleneck.',
-		metricsTitle: 'From anomalies to safe, reviewable remediation.',
+		controlTitle:
+			'Control cost-changing actions with approvals, workflow routing, and audit-ready proof.',
+		metricsTitle: 'From spend anomalies to controlled execution.',
 		subtitle:
-			'Valdrics routes spend and change findings through checks, approvals, and reviewable execution.',
+			'Valdrics keeps policy checks, approval lineage, and decision evidence attached before spend-changing actions move.',
 		primaryIntent: 'security_governance'
 	},
 	cfo: {
-		controlTitle: 'Control cloud margin risk before it reaches the boardroom.',
-		metricsTitle: 'From spend metrics to board-ready economic control.',
+		controlTitle:
+			'Protect margin with one governed system for cloud, SaaS, and software decisions.',
+		metricsTitle: 'From variance reporting to board-ready action and proof.',
 		subtitle:
-			'Valdrics ties spend movement to accountable owners, approvals, and measurable outcomes before variance compounds.',
+			'Valdrics ties spend movement to accountable owners, approvals, and measurable proof before variance turns into board-level noise.',
 		primaryIntent: 'executive_briefing'
 	}
 });
 
 export const HERO_PROOF_POINTS = Object.freeze([
 	{
-		title: 'One Economic Truth',
-		detail: 'Cloud, SaaS, and license decisions share one operating view.'
+		title: 'One Governed Operating Layer',
+		detail: 'Cloud, SaaS, and software decisions share one control loop.'
 	},
 	{
-		title: 'Execution With Guardrails',
-		detail: 'Owners, approvals, and safety checks are built into every action path.'
+		title: 'Owner-Routed Action',
+		detail: 'Signals move with named owners, approvals, and deadlines instead of ad hoc follow-up.'
 	},
 	{
-		title: 'Global Compliance Proof',
-		detail: 'SOC 2, GDPR, and ISO 27001 readiness alignment out of the box.'
+		title: 'Reviewable Outcomes',
+		detail: 'Finance, security, and leadership can review one clean decision trail.'
 	}
 ]);
 
@@ -60,26 +63,27 @@ export const HERO_OUTCOME_CHIPS = Object.freeze([
 		value: '< 1 business day target'
 	},
 	{
-		label: 'Controllable waste opportunity',
-		value: '10-18% target range'
+		label: 'Action path',
+		value: 'Checks + approvals attached'
 	},
 	{
-		label: 'Operating model',
-		value: 'Visibility + ownership + GreenOps'
+		label: 'Operating scope',
+		value: 'Cloud + SaaS + software'
 	}
 ]);
 
 export const ABOVE_FOLD_TRUST_RAIL = Object.freeze([
 	{
-		title: 'Read-only access',
-		detail: 'Read-only cloud roles where supported. Connector secrets stay encrypted at rest.'
+		title: 'Cloud + SaaS + software in one control layer',
+		detail: 'Cost, usage, policy, and remediation records stay in one governed operating path.'
 	},
 	{
-		title: '3-10 day rollout',
-		detail: 'First production workflow typically goes live in 3-10 business days.'
+		title: 'Read-only onboarding where supported',
+		detail:
+			'Read-only cloud roles are used where supported. Connector secrets stay encrypted at rest.'
 	},
 	{
-		title: 'Export-ready records',
+		title: 'Approval trail and exportable proof',
 		detail: 'Decision history and export-ready records support finance, security, and buyer review.'
 	}
 ]);
@@ -111,7 +115,8 @@ export const MICRO_DEMO_STEPS = Object.freeze([
 	{
 		id: 'govern',
 		title: 'Routed',
-		detail: 'The issue moves to the right owner and review path before teams split into side threads.'
+		detail:
+			'The issue moves to the right owner and review path before teams split into side threads.'
 	},
 	{
 		id: 'approve',
@@ -129,52 +134,57 @@ export const CLOUD_HOOK_STATES = Object.freeze([
 	{
 		id: 'without',
 		title: 'Without Valdrics',
-		subtitle: 'Reactive cloud cost operations',
-		ahaMoment: 'Anomalies surface late, ownership is unclear, and teams react under pressure.',
+		subtitle: 'Dashboards, tickets, and side threads',
+		ahaMoment:
+			'The alert appears, but the team still has to figure out owner, risk, approval, and proof across separate systems.',
 		points: [
-			'Spend spikes are discovered after the billing cycle.',
-			'Remediation ownership is ambiguous across teams.',
-			'Cost actions execute ad hoc, and outcomes are hard to track.'
+			'Detection lives in one tool, ticketing in another, and proof in a spreadsheet or slide.',
+			'The accountable owner is negotiated after the alert instead of assigned at ingest.',
+			'Finance and engineering reconstruct the decision later when someone asks what happened.'
 		],
 		metrics: [
-			{ label: 'Signal Lag', value: 'After invoice close' },
-			{ label: 'Decision Owner', value: 'Unclear' },
-			{ label: 'Execution Safety', value: 'Inconsistent' }
+			{ label: 'Systems Touched', value: '4+' },
+			{ label: 'Decision Owner', value: 'Negotiated' },
+			{ label: 'Proof Quality', value: 'Fragmented' }
 		]
 	},
 	{
 		id: 'with',
 		title: 'With Valdrics',
-		subtitle: 'Controlled cloud economics',
-		ahaMoment: 'Anomaly detected, owner assigned, risk checked, and action approved in one flow.',
+		subtitle: 'One governed action path',
+		ahaMoment:
+			'The issue is scoped once, routed to the right owner, moved through approvals, and kept as one reviewable record.',
 		points: [
-			'Realtime anomalies route to a named accountable owner.',
-			'Safety checks run before every change.',
-			'Decision history is easy to share with finance and leadership.'
+			'Owner, policy, and approval path are attached the moment the issue is created.',
+			'Slack, Jira, Teams, and workflow automation move the work without losing governance.',
+			'The final action keeps rationale, savings proof, and export-ready records for review.'
 		],
 		metrics: [
-			{ label: 'Signal Lag', value: 'Realtime' },
-			{ label: 'Decision Owner', value: 'Explicit' },
-			{ label: 'Execution Safety', value: 'Guardrailed' }
+			{ label: 'Systems Touched', value: '1 operating layer' },
+			{ label: 'Decision Owner', value: 'Assigned at ingest' },
+			{ label: 'Proof Quality', value: 'Reviewable + exportable' }
 		]
 	}
 ]);
 
 export const EXECUTIVE_CONFIDENCE_POINTS = Object.freeze([
 	{
-		kicker: 'Decision Quality',
-		title: 'Teams decide faster with less friction',
-		detail: 'Economic controls are clear, reviewable, and consistently applied across teams.'
+		kicker: 'Decision Proof',
+		title: 'Every material action keeps owner, approval, and savings evidence',
+		detail:
+			'Finance, engineering, and security can review the same record instead of reconstructing events from chat threads and spreadsheets.'
 	},
 	{
-		kicker: 'Execution',
-		title: 'Actions stay safe and accountable',
-		detail: 'Change flows remain safe with clear ownership and explicit approvals.'
+		kicker: 'Operational Fit',
+		title: 'Cross-functional teams work from one governed system',
+		detail:
+			'Cloud, SaaS, software, and carbon decisions move through one owner-routed path instead of separate tools and handoffs.'
 	},
 	{
-		kicker: 'Leadership',
-		title: 'Reviews stay focused on outcomes',
-		detail: 'Leadership gets a clear narrative from signal to action without noise.'
+		kicker: 'Rollout Confidence',
+		title: 'The first controlled workflow lands without a services-heavy rollout',
+		detail:
+			'Teams can start with one controlled workflow, then expand into finance-grade rollout when procurement and governance depth increase.'
 	}
 ]);
 
@@ -192,52 +202,53 @@ export const BUYER_ROLE_VIEWS = Object.freeze([
 	{
 		id: 'cto' as const,
 		label: 'Engineering',
-		headline: 'Keep roadmap velocity while controlling cloud and software spend',
+		headline: 'Keep delivery moving while turning spend signals into governed action',
 		detail:
-			'Engineering ships faster when spend risk is managed inside delivery workflows, not escalated after the close.',
+			'Engineering moves faster when cost risk is handled inside the operating path instead of escalated after finance close.',
 		signals: ['Roadmap stability', 'Controlled velocity', 'Fewer escalation loops'],
 		thirtyDayOutcomes: [
-			'Top spend regressions mapped to accountable owners.',
-			'High-risk actions routed through explicit owner sign-off.',
-			'Weekly engineering reviews include cost + risk with clear next actions.'
+			'Top spend regressions mapped to accountable owners and workflow routes.',
+			'High-risk changes move through explicit owner and policy sign-off.',
+			'Weekly engineering reviews include cost, risk, and recorded actions in one view.'
 		]
 	},
 	{
 		id: 'finops' as const,
 		label: 'FinOps',
-		headline: 'Move from reporting to faster financial action',
+		headline: 'Move from reporting to governed financial action across every spend surface',
 		detail:
-			'Use one operating loop to attribute spend movement, assign ownership, and route remediation clearly.',
+			'Use one operating system to attribute spend movement, assign ownership, route action, and keep savings proof intact.',
 		signals: ['Forecast confidence', 'Ownership clarity', 'Faster remediation cycle'],
 		thirtyDayOutcomes: [
-			'Material anomalies triaged with ownership and deadlines.',
+			'Material anomalies triaged with ownership, approval lane, and deadlines.',
 			'Escalation volume reduced through earlier owner-led decisions.',
-			'Finance and platform teams review one shared operating narrative.'
+			'Finance and platform teams review one shared operating narrative with proof.'
 		]
 	},
 	{
 		id: 'security' as const,
 		label: 'Security',
-		headline: 'Reduce risk without becoming a delivery bottleneck',
-		detail: 'Run risk checks before execution with explicit ownership and a clear change history.',
+		headline: 'Reduce risk without becoming the handoff bottleneck',
+		detail:
+			'Run risk checks before execution with explicit ownership, workflow routing, and clear decision history.',
 		signals: ['Control adherence', 'Risk visibility', 'Decision traceability'],
 		thirtyDayOutcomes: [
-			'Risk checks applied before cost-impacting actions.',
-			'Approval lineage made explicit for sensitive changes.',
-			'Security and platform teams share one review trail.'
+			'Risk checks applied before cost-impacting actions move.',
+			'Approval lineage made explicit for sensitive changes and workflow dispatch.',
+			'Security and platform teams share one review trail and exportable evidence set.'
 		]
 	},
 	{
 		id: 'cfo' as const,
 		label: 'CFO',
-		headline: 'Protect gross margin with predictable spend decisions',
+		headline: 'Protect gross margin with predictable, reviewable spend decisions',
 		detail:
-			'Tie cloud actions to financial impact and ownership so executive decisions rely on controlled, trusted signals.',
+			'Tie cloud and software actions to financial impact, ownership, and proof so executive decisions rely on controlled signals instead of after-the-fact explanations.',
 		signals: ['Margin protection', 'Investment confidence', 'Board-level explainability'],
 		thirtyDayOutcomes: [
-			'Top margin risks linked to named owners and action dates.',
+			'Top margin risks linked to named owners, approval dates, and action status.',
 			'Forecast conversations shift from variance explanation to decision planning.',
-			'Board updates include a concise signal-to-action narrative.'
+			'Board updates include a concise signal-to-action narrative with evidence.'
 		]
 	}
 ]);

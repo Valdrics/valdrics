@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
+import subprocess
 
 from scripts.generate_local_dev_env import generate_local_dev_env
 
@@ -72,8 +73,12 @@ def test_generate_local_dev_env_derives_required_key_shapes(tmp_path: Path) -> N
     generate_local_dev_env(template_path=template, output_path=output, seed="seed-2")
     values = _parse_env(output)
 
-    assert values["TESTING"] == "true"
-    assert values["ENVIRONMENT"] == "development"
+    assert values["TESTING"] == "false"
+    assert values["ENVIRONMENT"] == "local"
+    assert values["LOCAL_SQLITE_BOOTSTRAP"] == "true"
+    assert values["ENABLE_SCHEDULER"] == "false"
+    assert values["DB_SSL_MODE"] == "disable"
+    assert values["REDIS_URL"] == ""
     assert len(values["CSRF_SECRET_KEY"]) >= 32
     assert len(values["SUPABASE_JWT_SECRET"]) >= 32
     assert len(values["ADMIN_API_KEY"]) >= 32
@@ -97,3 +102,31 @@ def test_generate_local_dev_env_changes_with_seed(tmp_path: Path) -> None:
 
     assert values_a["CSRF_SECRET_KEY"] != values_b["CSRF_SECRET_KEY"]
     assert values_a["ENCRYPTION_KEY"] != values_b["ENCRYPTION_KEY"]
+
+
+def test_generate_local_dev_env_is_shell_source_safe_for_json_values(tmp_path: Path) -> None:
+    template = tmp_path / ".env.example"
+    output = tmp_path / ".env.dev"
+    _write(
+        template,
+        "\n".join(
+            [
+                'CORS_ORIGINS=["http://localhost:5173","http://localhost:5174"]',
+                "CSRF_SECRET_KEY=",
+                "ENCRYPTION_KEY=",
+                "SUPABASE_JWT_SECRET=",
+                "KDF_SALT=",
+            ]
+        ),
+    )
+
+    generate_local_dev_env(template_path=template, output_path=output, seed="seed-3")
+
+    sourced = subprocess.run(
+        ["bash", "-lc", f"set -a && source {output} && printf '%s' \"$CORS_ORIGINS\""],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert sourced.stdout == '["http://localhost:5173","http://localhost:5174"]'

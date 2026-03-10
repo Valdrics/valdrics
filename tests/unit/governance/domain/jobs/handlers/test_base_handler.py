@@ -146,10 +146,16 @@ async def test_transition_to_dead_letter_swallows_recoverable_alert_failures(
     mock_db, job
 ):
     handler = TestHandler()
-    with patch(
-        "app.shared.core.sentry.capture_exception",
-        side_effect=RuntimeError("sentry unavailable"),
+    with (
+        patch(
+            "app.shared.core.sentry.capture_exception",
+            side_effect=RuntimeError("sentry unavailable"),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.base.record_background_job_dead_letter"
+        ) as record_dead_letter,
     ):
         await handler._transition_to_dead_letter(job, "test error", mock_db)
 
     assert job.status == JobStatus.DEAD_LETTER
+    record_dead_letter.assert_called_once_with("TEST_JOB", reason="handler_dead_letter")

@@ -431,6 +431,18 @@ async def internal_process_jobs(
             processor = JobProcessor(session)
             await processor.process_pending_jobs()
 
-    background_tasks.add_task(run_processor)
+    try:
+        from app.shared.core.celery_app import celery_app
 
-    return {"status": "accepted", "message": "Job processing started in background"}
+        celery_app.send_task("scheduler.process_background_jobs")
+        return {
+            "status": "accepted",
+            "message": "Background job processing dispatched to Celery",
+        }
+    except (ImportError, AttributeError, RuntimeError, OSError, ValueError, TypeError):
+        del background_tasks
+        await run_processor()
+        return {
+            "status": "completed",
+            "message": "Background job processing completed inline",
+        }

@@ -9,6 +9,15 @@ import {
 
 const STATUS_REQUEST_TIMEOUT_MS = 5000;
 
+function isLocalBackendOrigin(origin: string): boolean {
+	try {
+		const parsed = new URL(origin);
+		return parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+	} catch {
+		return false;
+	}
+}
+
 async function readHealthPayload(response: Response): Promise<unknown> {
 	try {
 		return await response.json();
@@ -22,10 +31,12 @@ export const load: PageServerLoad = async ({ fetch, setHeaders }) => {
 		'Cache-Control': 'no-store'
 	});
 
+	const backendOrigin = resolveBackendOrigin();
+
 	try {
 		const response = await fetchWithTimeout(
 			fetch,
-			`${resolveBackendOrigin()}/health`,
+			`${backendOrigin}/health`,
 			{
 				headers: {
 					accept: 'application/json'
@@ -47,6 +58,8 @@ export const load: PageServerLoad = async ({ fetch, setHeaders }) => {
 		const reason =
 			error instanceof TimeoutError
 				? 'The automated health summary timed out before it completed.'
+				: isLocalBackendOrigin(backendOrigin)
+					? `The local API at ${backendOrigin} is unavailable. Start the backend or update the backend origin configuration.`
 				: 'The automated health summary is temporarily unavailable.';
 		return buildFallbackStatusSnapshot(reason);
 	}

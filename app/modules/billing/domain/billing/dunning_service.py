@@ -22,6 +22,9 @@ from app.modules.billing.domain.billing.paystack_billing import (
     SubscriptionStatus,
     BillingService,
 )
+from app.modules.billing.domain.billing.paystack_service_runtime_ops import (
+    build_charge_reference,
+)
 from app.modules.billing.domain.billing.entitlement_policy import sync_tenant_plan
 from app.shared.core.pricing import PricingTier
 from app.models.background_job import JobType
@@ -118,7 +121,11 @@ class DunningService:
         return self._email_service_factory()
 
     async def process_failed_payment(
-        self, subscription_id: UUID, is_webhook: bool = True
+        self,
+        subscription_id: UUID,
+        is_webhook: bool = True,
+        *,
+        commit: bool = True,
     ) -> Dict[str, Any]:
         """
         Process a failed payment - called by webhook or job handler.
@@ -131,7 +138,9 @@ class DunningService:
             Status dict with action taken
         """
         result = await self.db.execute(
-            select(TenantSubscription).where(TenantSubscription.id == subscription_id)
+            select(TenantSubscription)
+            .where(TenantSubscription.id == subscription_id)
+            .with_for_update()
         )
         subscription = result.scalar_one_or_none()
 
@@ -194,12 +203,26 @@ class DunningService:
 
         # Enqueue retry job
         try:
-            await enqueue_job(
+            retry_attempt = attempt + 1
+            charge_reference = build_charge_reference(
+                subscription_id=subscription.id,
+                charge_kind="dunning",
+                sequence=retry_attempt,
+            )
+            queued_job = await enqueue_job(
                 db=self.db,
                 job_type=JobType.DUNNING,
                 tenant_id=subscription.tenant_id,
-                payload={"subscription_id": subscription.id, "attempt": attempt + 1},
+                payload={
+                    "subscription_id": str(subscription.id),
+                    "attempt": retry_attempt,
+                    "charge_reference": charge_reference,
+                },
                 scheduled_for=next_retry,
+                deduplication_key=(
+                    f"dunning:{subscription.id}:attempt:{retry_attempt}"
+                ),
+                auto_commit=False,
             )
         except DUNNING_RECOVERABLE_ERRORS as e:
             logger.error(
@@ -227,18 +250,30 @@ class DunningService:
                 "state_reverted": True,
             }
 
-        await self.db.commit()
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
 
         # Send notification email
         await self._send_payment_failed_email(subscription, attempt, next_retry)
 
-        return {
+        response = {
             "status": "scheduled_retry",
             "attempt": attempt,
             "next_retry_at": next_retry.isoformat(),
         }
+        if not bool(getattr(queued_job, "_enqueue_created", True)):
+            response["queue_state"] = "deduplicated_existing_retry"
+        return response
 
-    async def retry_payment(self, subscription_id: UUID) -> Dict[str, Any]:
+    async def retry_payment(
+        self,
+        subscription_id: UUID,
+        *,
+        charge_reference: str | None = None,
+        commit: bool = True,
+    ) -> Dict[str, Any]:
         """
         Attempt to charge the subscription again.
         Called by DunningHandler.
@@ -247,7 +282,9 @@ class DunningService:
             {"status": "success"} or {"status": "failed", "reason": ...}
         """
         result = await self.db.execute(
-            select(TenantSubscription).where(TenantSubscription.id == subscription_id)
+            select(TenantSubscription)
+            .where(TenantSubscription.id == subscription_id)
+            .with_for_update()
         )
         subscription = result.scalar_one_or_none()
 
@@ -257,13 +294,17 @@ class DunningService:
         billing = self._billing_service_factory(self.db)
 
         try:
-            success = await billing.charge_renewal(subscription)
+            success = await billing.charge_renewal(
+                subscription,
+                reference=charge_reference,
+                commit=commit,
+            )
 
             if success:
-                return await self._handle_retry_success(subscription)
+                return await self._handle_retry_success(subscription, commit=commit)
             else:
                 return await self.process_failed_payment(
-                    subscription.id, is_webhook=False
+                    subscription.id, is_webhook=False, commit=commit
                 )
 
         except DUNNING_RECOVERABLE_ERRORS as e:
@@ -272,10 +313,17 @@ class DunningService:
                 subscription_id=str(subscription_id),
                 error=str(e),
             )
-            return await self.process_failed_payment(subscription.id, is_webhook=False)
+            return await self.process_failed_payment(
+                subscription.id,
+                is_webhook=False,
+                commit=commit,
+            )
 
     async def _handle_retry_success(
-        self, subscription: TenantSubscription
+        self,
+        subscription: TenantSubscription,
+        *,
+        commit: bool = True,
     ) -> Dict[str, Any]:
         """Clear dunning state after successful payment."""
         subscription.status = SubscriptionStatus.ACTIVE.value
@@ -290,7 +338,10 @@ class DunningService:
             source="dunning_retry_success",
         )
 
-        await self.db.commit()
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
 
         logger.info(
             "dunning_retry_success",
@@ -304,7 +355,10 @@ class DunningService:
         return {"status": "success", "action": "subscription_reactivated"}
 
     async def _handle_final_failure(
-        self, subscription: TenantSubscription
+        self,
+        subscription: TenantSubscription,
+        *,
+        commit: bool = True,
     ) -> Dict[str, Any]:
         """Handle max retries exhausted - downgrade to FREE."""
         subscription.status = SubscriptionStatus.CANCELLED.value
@@ -319,7 +373,10 @@ class DunningService:
             source="dunning_final_failure",
         )
 
-        await self.db.commit()
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
 
         logger.warning(
             "dunning_max_attempts_reached",

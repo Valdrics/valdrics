@@ -24,7 +24,8 @@ from app.shared.core.connection_queries import (
     get_connection_model,
     list_tenant_connections,
 )
-from app.shared.core.logging import audit_log
+from app.shared.core.async_utils import maybe_await
+from app.shared.core.logging import audit_log_async as audit_log
 from app.shared.core.provider import normalize_provider, resolve_provider_from_connection
 
 logger = structlog.get_logger()
@@ -118,13 +119,19 @@ class CloudConnectionService:
                 if hasattr(connection, "error_message"):
                     connection.error_message = None
 
-                await self.db.commit()
-                audit_log(
-                    f"{provider_norm}_connection_verified",
-                    "system",
-                    str(tenant_id),
-                    {"id": str(connection_id)},
+                await maybe_await(
+                    audit_log(
+                        f"{provider_norm}_connection_verified",
+                        "system",
+                        str(tenant_id),
+                        {"id": str(connection_id)},
+                        db=self.db,
+                        resource_type=f"{provider_norm}_connection",
+                        resource_id=str(connection_id),
+                        request_method="POST",
+                    )
                 )
+                await self.db.commit()
 
                 return {
                     "status": "active",
