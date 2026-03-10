@@ -75,6 +75,7 @@ class PaystackClient:
         amount_kobo: int,
         authorization_code: str,
         metadata: dict[str, Any],
+        reference: str | None = None,
     ) -> dict[str, Any]:
         """Charge a stored authorization code (recurring billing)."""
         data = {
@@ -83,6 +84,8 @@ class PaystackClient:
             "authorization_code": authorization_code,
             "metadata": metadata,
         }
+        if reference:
+            data["reference"] = reference
         return await self._request("POST", "transaction/charge_authorization", data)
 
     async def verify_transaction(self, reference: str) -> dict[str, Any]:

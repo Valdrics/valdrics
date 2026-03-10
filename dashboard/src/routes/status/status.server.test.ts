@@ -94,6 +94,7 @@ describe('status server load', () => {
 
 	it('falls back cleanly when the health fetch fails', async () => {
 		const setHeaders = vi.fn();
+		mocks.resolveBackendOrigin.mockReturnValueOnce('https://api.valdrics.test');
 		mocks.fetchWithTimeout.mockRejectedValueOnce(new Error('network down'));
 
 		const result = (await load({
@@ -104,5 +105,20 @@ describe('status server load', () => {
 		expect(result.source).toBe('fallback');
 		expect(result.summaryLabel).toBe('Status unavailable');
 		expect(result.summaryDetail).toMatch(/temporarily unavailable/i);
+	});
+
+	it('surfaces a local-backend hint when localhost health is unreachable', async () => {
+		const setHeaders = vi.fn();
+		mocks.resolveBackendOrigin.mockReturnValueOnce('http://localhost:8000');
+		mocks.fetchWithTimeout.mockRejectedValueOnce(new Error('connection refused'));
+
+		const result = (await load({
+			fetch: vi.fn() as unknown as typeof fetch,
+			setHeaders
+		} as unknown as Parameters<typeof load>[0])) as StatusSnapshot;
+
+		expect(result.source).toBe('fallback');
+		expect(result.summaryDetail).toContain('http://localhost:8000');
+		expect(result.summaryDetail).toMatch(/start the backend/i);
 	});
 });

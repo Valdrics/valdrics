@@ -1,4 +1,4 @@
-"""Tests for Investor Health Dashboard API endpoints."""
+"""Tests for internal health dashboard API endpoints."""
 
 import uuid
 from datetime import datetime, timezone
@@ -186,6 +186,68 @@ async def test_get_investor_health_dashboard_handler_success():
                 )
             ),
         ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_landing_funnel_health",
+            new=AsyncMock(
+                return_value={
+                    "weekly_current": {
+                        "total_events": 20,
+                        "cta_events": 8,
+                        "signup_intent_events": 4,
+                        "onboarded_tenants": 4,
+                        "connected_tenants": 3,
+                        "first_value_tenants": 2,
+                        "pql_tenants": 2,
+                        "pricing_view_tenants": 2,
+                        "checkout_started_tenants": 1,
+                        "paid_tenants": 1,
+                        "signup_to_connection_rate": 0.75,
+                        "connection_to_first_value_rate": 2 / 3,
+                    },
+                    "weekly_previous": {
+                        "total_events": 16,
+                        "cta_events": 6,
+                        "signup_intent_events": 3,
+                        "onboarded_tenants": 3,
+                        "connected_tenants": 2,
+                        "first_value_tenants": 1,
+                        "pql_tenants": 1,
+                        "pricing_view_tenants": 1,
+                        "checkout_started_tenants": 1,
+                        "paid_tenants": 0,
+                        "signup_to_connection_rate": 2 / 3,
+                        "connection_to_first_value_rate": 0.5,
+                    },
+                    "weekly_delta": {
+                        "total_events": 4,
+                        "signup_intent_events": 1,
+                        "onboarded_tenants": 1,
+                        "connected_tenants": 1,
+                        "first_value_tenants": 1,
+                        "pql_tenants": 1,
+                        "pricing_view_tenants": 1,
+                        "checkout_started_tenants": 0,
+                        "paid_tenants": 1,
+                        "signup_to_connection_rate": 0.0833,
+                        "connection_to_first_value_rate": 0.1667,
+                    },
+                    "alerts": [
+                        {
+                            "key": "signup_to_connection",
+                            "label": "Signup -> connection",
+                            "status": "healthy",
+                            "threshold_rate": 0.35,
+                            "current_rate": 0.75,
+                            "previous_rate": 2 / 3,
+                            "weekly_delta": 0.0833,
+                            "current_numerator": 3,
+                            "current_denominator": 4,
+                            "message": "Weekly conversion is within the expected operating band.",
+                        }
+                    ],
+                }
+            ),
+        ),
     ):
         response = await get_investor_health_dashboard(mock_admin, mock_db)
 
@@ -198,6 +260,8 @@ async def test_get_investor_health_dashboard_handler_success():
     assert response.cloud_plus_connections.total_connections == 8
     assert response.cloud_plus_connections.providers["platform"].errored_connections == 1
     assert response.license_governance.requests_created_24h == 12
+    assert response.landing_funnel.weekly_current.connected_tenants == 3
+    assert response.landing_funnel.alerts[0].status == "healthy"
 
 
 @pytest.mark.asyncio
@@ -308,6 +372,63 @@ async def test_get_investor_health_dashboard_returns_cached_payload():
             "failure_rate_percent": 25.0,
             "avg_time_to_complete_hours": 2.0,
         },
+        landing_funnel={
+            "weekly_current": {
+                "total_events": 10,
+                "cta_events": 4,
+                "signup_intent_events": 2,
+                "onboarded_tenants": 2,
+                "connected_tenants": 1,
+                "first_value_tenants": 1,
+                "pql_tenants": 1,
+                "pricing_view_tenants": 1,
+                "checkout_started_tenants": 0,
+                "paid_tenants": 0,
+                "signup_to_connection_rate": 0.5,
+                "connection_to_first_value_rate": 1.0,
+            },
+            "weekly_previous": {
+                "total_events": 8,
+                "cta_events": 3,
+                "signup_intent_events": 2,
+                "onboarded_tenants": 2,
+                "connected_tenants": 2,
+                "first_value_tenants": 1,
+                "pql_tenants": 1,
+                "pricing_view_tenants": 1,
+                "checkout_started_tenants": 0,
+                "paid_tenants": 0,
+                "signup_to_connection_rate": 1.0,
+                "connection_to_first_value_rate": 0.5,
+            },
+            "weekly_delta": {
+                "total_events": 2,
+                "signup_intent_events": 0,
+                "onboarded_tenants": 0,
+                "connected_tenants": -1,
+                "first_value_tenants": 0,
+                "pql_tenants": 0,
+                "pricing_view_tenants": 0,
+                "checkout_started_tenants": 0,
+                "paid_tenants": 0,
+                "signup_to_connection_rate": -0.5,
+                "connection_to_first_value_rate": 0.5,
+            },
+            "alerts": [
+                {
+                    "key": "signup_to_connection",
+                    "label": "Signup -> connection",
+                    "status": "watch",
+                    "threshold_rate": 0.35,
+                    "current_rate": 0.5,
+                    "previous_rate": 1.0,
+                    "weekly_delta": -0.5,
+                    "current_numerator": 1,
+                    "current_denominator": 2,
+                    "message": "Conversion stayed above floor but deteriorated sharply versus the prior week.",
+                }
+            ],
+        },
     ).model_dump(mode="json")
     cache = _CacheHit(cached_payload)
 
@@ -340,6 +461,10 @@ async def test_get_investor_health_dashboard_returns_cached_payload():
             "app.modules.governance.api.v1.health_dashboard._get_license_governance_health",
             new=AsyncMock(),
         ) as license_mock,
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_landing_funnel_health",
+            new=AsyncMock(),
+        ) as landing_funnel_mock,
     ):
         response = await get_investor_health_dashboard(mock_admin, mock_db)
 
@@ -350,6 +475,7 @@ async def test_get_investor_health_dashboard_returns_cached_payload():
     cloud_mock.assert_not_awaited()
     cloud_plus_mock.assert_not_awaited()
     license_mock.assert_not_awaited()
+    landing_funnel_mock.assert_not_awaited()
     assert cache.set_called is False
 
 

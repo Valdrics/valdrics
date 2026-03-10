@@ -81,6 +81,8 @@ This document defines the operational database surface for Valdrics backend serv
 ## Local verification commands
 
 ```bash
+make env-dev
+make bootstrap-local-db
 uv run python scripts/verify_alembic_head_integrity.py
 DB_SSL_MODE=disable DATABASE_URL='postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/valdrics_ci' uv run alembic upgrade head
 DB_SSL_MODE=disable DATABASE_URL='postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/valdrics_ci' uv run alembic downgrade -1
@@ -90,3 +92,7 @@ DB_SSL_MODE=disable DATABASE_URL='postgresql+asyncpg://postgres:postgres@127.0.0
 Treat the downgrade command above as a targeted reversibility smoke test for the
 latest step only, not as a universal rollback promise for every migration in the
 history.
+
+For local sqlite development, the supported path is ORM bootstrap plus Alembic head
+stamping via `make bootstrap-local-db`. Do not replay the historical Alembic graph
+against sqlite unless you are running a controlled compatibility investigation.

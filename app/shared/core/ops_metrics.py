@@ -40,6 +40,11 @@ def record_audit_log_retention_purge(deleted_count: int) -> None:
     _sync_runtime_metric_exports()
     _ops_metrics_runtime.record_audit_log_retention_purge(deleted_count)
 
+
+def _normalize_metric_label(value: Any, *, default: str = "unknown") -> str:
+    normalized = str(value or "").strip().lower()
+    return normalized or default
+
 # --- Roadmap Compatibility Metrics ---
 STUCK_JOB_COUNT = Gauge(
     "stuck_job_count", "Current number of jobs detected as stuck in scheduler sweeps"
@@ -74,6 +79,35 @@ BACKGROUND_JOB_DURATION = Histogram(
     "Duration of background job execution",
     ["job_type", "status"],
     buckets=(1, 5, 10, 30, 60, 120, 300, 600, 1800),
+)
+
+BACKGROUND_JOBS_STALE_RUNNING_RECOVERED_TOTAL = Counter(
+    "valdrics_ops_background_jobs_stale_running_recovered_total",
+    "Total number of stale RUNNING background jobs recovered after lock timeout",
+    ["job_type", "outcome"],
+)
+
+BACKGROUND_JOBS_DEAD_LETTERED_TOTAL = Counter(
+    "valdrics_ops_background_jobs_dead_lettered_total",
+    "Total number of background jobs moved to dead-letter state",
+    ["job_type", "reason"],
+)
+
+BACKGROUND_JOBS_OVERDUE_PENDING = Gauge(
+    "valdrics_ops_background_jobs_overdue_pending_count",
+    "Current number of pending background jobs whose scheduled time is overdue",
+)
+
+AUDIT_LOG_RETENTION_FAILURES_TOTAL = Counter(
+    "valdrics_ops_audit_log_retention_failures_total",
+    "Total number of audit-log retention sweep failures",
+    ["operation"],
+)
+
+SCHEDULER_INLINE_FALLBACK_TOTAL = Counter(
+    "valdrics_scheduler_inline_fallback_total",
+    "Total number of scheduler inline fallback executions by job and outcome",
+    ["job_name", "outcome"],
 )
 
 # --- Scan Performance Metrics ---
@@ -251,12 +285,128 @@ TURNSTILE_VERIFICATION_EVENTS_TOTAL = Counter(
     ["surface", "outcome"],
 )
 
+LANDING_FUNNEL_WEEKLY_CONVERSION_RATE = Gauge(
+    "valdrics_ops_landing_funnel_weekly_conversion_rate",
+    "Current 7-day conversion rate for internal landing funnel steps",
+    ["step"],
+)
+
+LANDING_FUNNEL_WEEKLY_DELTA_RATE = Gauge(
+    "valdrics_ops_landing_funnel_weekly_delta_rate",
+    "Week-over-week delta for 7-day landing funnel conversion rates",
+    ["step"],
+)
+
+LANDING_FUNNEL_WEEKLY_THRESHOLD_RATE = Gauge(
+    "valdrics_ops_landing_funnel_weekly_threshold_rate",
+    "Operating floor threshold for 7-day landing funnel conversion rates",
+    ["step"],
+)
+
+LANDING_FUNNEL_WEEKLY_NUMERATOR = Gauge(
+    "valdrics_ops_landing_funnel_weekly_numerator",
+    "Current 7-day numerator volume for landing funnel conversion steps",
+    ["step"],
+)
+
+LANDING_FUNNEL_WEEKLY_DENOMINATOR = Gauge(
+    "valdrics_ops_landing_funnel_weekly_denominator",
+    "Current 7-day denominator volume for landing funnel conversion steps",
+    ["step"],
+)
+
+LANDING_FUNNEL_HEALTH_STATUS = Gauge(
+    "valdrics_ops_landing_funnel_health_status",
+    "Landing funnel health status by step (-1=insufficient_data, 0=healthy, 1=watch, 2=critical)",
+    ["step"],
+)
+
+LANDING_FUNNEL_LAST_EVALUATED_UNIXTIME = Gauge(
+    "valdrics_ops_landing_funnel_last_evaluated_unixtime",
+    "Unix timestamp of the last successful landing funnel health metric refresh",
+)
+
 REMEDIATION_DURATION_SECONDS = Histogram(
     "valdrics_ops_remediation_duration_seconds",
     "Duration of remediation execution in seconds",
     ["action", "provider"],
     buckets=(1, 5, 10, 30, 60, 120, 300, 600),
 )
+
+
+def record_background_job_stale_running_recovery(
+    job_type: str,
+    *,
+    outcome: str,
+) -> None:
+    BACKGROUND_JOBS_STALE_RUNNING_RECOVERED_TOTAL.labels(
+        job_type=_normalize_metric_label(job_type),
+        outcome=_normalize_metric_label(outcome),
+    ).inc()
+
+
+def record_background_job_dead_letter(job_type: str, *, reason: str) -> None:
+    BACKGROUND_JOBS_DEAD_LETTERED_TOTAL.labels(
+        job_type=_normalize_metric_label(job_type),
+        reason=_normalize_metric_label(reason),
+    ).inc()
+
+
+def set_background_jobs_overdue_pending(count: int) -> None:
+    normalized = int(count)
+    if normalized < 0:
+        raise ValueError("count must be >= 0")
+    BACKGROUND_JOBS_OVERDUE_PENDING.set(normalized)
+
+
+def record_audit_log_retention_failure(operation: str) -> None:
+    AUDIT_LOG_RETENTION_FAILURES_TOTAL.labels(
+        operation=_normalize_metric_label(operation),
+    ).inc()
+
+
+def record_scheduler_inline_fallback(job_name: str, *, outcome: str) -> None:
+    SCHEDULER_INLINE_FALLBACK_TOTAL.labels(
+        job_name=_normalize_metric_label(job_name),
+        outcome=_normalize_metric_label(outcome),
+    ).inc()
+
+
+def record_landing_funnel_health_snapshot(*, evaluated_at: Any, alerts: list[Any]) -> None:
+    status_map = {
+        "insufficient_data": -1.0,
+        "healthy": 0.0,
+        "watch": 1.0,
+        "critical": 2.0,
+    }
+    if hasattr(evaluated_at, "timestamp"):
+        LANDING_FUNNEL_LAST_EVALUATED_UNIXTIME.set(float(evaluated_at.timestamp()))
+    else:
+        LANDING_FUNNEL_LAST_EVALUATED_UNIXTIME.set(float(evaluated_at))
+
+    for alert in alerts:
+        step = _normalize_metric_label(getattr(alert, "key", None))
+        LANDING_FUNNEL_WEEKLY_THRESHOLD_RATE.labels(step=step).set(
+            float(getattr(alert, "threshold_rate", 0.0) or 0.0)
+        )
+        LANDING_FUNNEL_WEEKLY_CONVERSION_RATE.labels(step=step).set(
+            float(getattr(alert, "current_rate", 0.0) or 0.0)
+        )
+        LANDING_FUNNEL_WEEKLY_DELTA_RATE.labels(step=step).set(
+            float(getattr(alert, "weekly_delta", 0.0) or 0.0)
+        )
+        LANDING_FUNNEL_WEEKLY_NUMERATOR.labels(step=step).set(
+            int(getattr(alert, "current_numerator", 0) or 0)
+        )
+        LANDING_FUNNEL_WEEKLY_DENOMINATOR.labels(step=step).set(
+            int(getattr(alert, "current_denominator", 0) or 0)
+        )
+        LANDING_FUNNEL_HEALTH_STATUS.labels(step=step).set(
+            status_map.get(
+                _normalize_metric_label(getattr(alert, "status", None), default="healthy"),
+                0.0,
+            )
+        )
 
 REMEDIATION_FAILURE = Counter(
     "valdrics_ops_remediation_failure_total",

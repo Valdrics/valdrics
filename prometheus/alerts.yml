@@ -64,6 +64,98 @@ groups:
           summary: "Multiple scan failures detected"
           description: "{{ $value }} scan errors in the last hour"
 
+      - alert: BackgroundJobStaleRunningRecoveryDetected
+        expr: sum(increase(valdrics_ops_background_jobs_stale_running_recovered_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Stale RUNNING jobs were recovered"
+          description: "{{ $value }} stale RUNNING background jobs were recovered in the last 15 minutes"
+
+      - alert: BackgroundJobDeadLetterGrowth
+        expr: sum(increase(valdrics_ops_background_jobs_dead_lettered_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Background jobs are moving to dead letter"
+          description: "{{ $value }} background jobs moved to dead-letter state in the last 15 minutes"
+
+      - alert: BackgroundJobsOverduePending
+        expr: max(valdrics_ops_background_jobs_overdue_pending_count) > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Background jobs are overdue in pending state"
+          description: "{{ $value }} pending background jobs are overdue beyond the configured alert window"
+
+      - alert: AuditLogRetentionFailures
+        expr: sum(increase(valdrics_ops_audit_log_retention_failures_total[1h])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Audit log retention sweep failures detected"
+          description: "{{ $value }} audit-log retention failures were recorded in the last hour"
+
+      - alert: SchedulerInlineFallbackActive
+        expr: sum(increase(valdrics_scheduler_inline_fallback_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scheduler inline fallback is active"
+          description: "{{ $value }} scheduler dispatches used inline fallback in the last 15 minutes"
+
+  - name: valdrics-growth
+    rules:
+      - alert: LandingSignupToConnectionCritical
+        expr: valdrics_ops_landing_funnel_weekly_denominator{step="signup_to_connection"} > 0 and valdrics_ops_landing_funnel_weekly_conversion_rate{step="signup_to_connection"} < 0.35
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Signup to connection conversion dropped below floor"
+          description: "7-day signup-to-connection conversion is {{ $value | humanizePercentage }} with a 35% operating floor."
+
+      - alert: LandingConnectionToFirstValueCritical
+        expr: valdrics_ops_landing_funnel_weekly_denominator{step="connection_to_first_value"} > 0 and valdrics_ops_landing_funnel_weekly_conversion_rate{step="connection_to_first_value"} < 0.40
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Connection to first-value conversion dropped below floor"
+          description: "7-day connection-to-first-value conversion is {{ $value | humanizePercentage }} with a 40% operating floor."
+
+      - alert: LandingSignupToConnectionWatch
+        expr: valdrics_ops_landing_funnel_weekly_denominator{step="signup_to_connection"} > 0 and valdrics_ops_landing_funnel_weekly_conversion_rate{step="signup_to_connection"} >= 0.35 and valdrics_ops_landing_funnel_weekly_delta_rate{step="signup_to_connection"} <= -0.10
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Signup to connection conversion deteriorated sharply"
+          description: "7-day signup-to-connection conversion stayed above floor but fell by {{ $value | humanizePercentage }} or worse week over week."
+
+      - alert: LandingConnectionToFirstValueWatch
+        expr: valdrics_ops_landing_funnel_weekly_denominator{step="connection_to_first_value"} > 0 and valdrics_ops_landing_funnel_weekly_conversion_rate{step="connection_to_first_value"} >= 0.40 and valdrics_ops_landing_funnel_weekly_delta_rate{step="connection_to_first_value"} <= -0.10
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Connection to first-value conversion deteriorated sharply"
+          description: "7-day connection-to-first-value conversion stayed above floor but fell by {{ $value | humanizePercentage }} or worse week over week."
+
+      - alert: LandingFunnelHealthMetricsStale
+        expr: valdrics_ops_landing_funnel_last_evaluated_unixtime > 0 and time() - valdrics_ops_landing_funnel_last_evaluated_unixtime > 7200
+        for: 20m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Landing funnel health metrics are stale"
+          description: "The scheduled landing funnel health refresh has not updated Prometheus metrics for more than 2 hours."
+
   - name: valdrics-infrastructure
     rules:
       # High memory usage

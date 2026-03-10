@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { readable } from 'svelte/store';
 import Page from './+page.svelte';
 import type { PageData } from './$types';
+import { DEFAULT_PRICING_PLANS } from '../pricing/plans';
 
 const { postMock } = vi.hoisted(() => ({
 	postMock: vi.fn()
@@ -19,6 +21,12 @@ vi.mock('$env/dynamic/public', () => ({
 
 vi.mock('$app/paths', () => ({
 	base: ''
+}));
+
+vi.mock('$app/stores', () => ({
+	page: readable({
+		url: new URL('https://example.com/onboarding?utm_source=google&utm_medium=cpc')
+	})
 }));
 
 vi.mock('$lib/api', () => ({
@@ -186,26 +194,24 @@ describe('onboarding cloud+ flow', () => {
 	});
 
 	it('shows growth plan prompt when Azure onboarding is selected below growth', async () => {
+		const growthPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'growth');
 		renderPage('free');
 
 		await fireEvent.click(screen.getByRole('button', { name: /Microsoft Azure/i }));
 
 		expect(screen.getByText('Move to Growth for Azure and GCP coverage')).toBeTruthy();
-		expect(document.body.textContent || '').toMatch(
-			/best for teams that need broader provider coverage, owner routing, slack-integrated workflows, sso rollout/i
-		);
+		expect(document.body.textContent || '').toContain(growthPlan?.story?.summary ?? '');
 		expect(screen.getByRole('link', { name: /View Growth plan/i })).toBeTruthy();
 	});
 
 	it('shows pro plan prompt when SaaS onboarding is selected below pro', async () => {
+		const proPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'pro');
 		renderPage('growth');
 
 		await fireEvent.click(screen.getByRole('button', { name: /SaaS Spend Connector/i }));
 
 		expect(screen.getByText('Move to Pro for Cloud+ connectors')).toBeTruthy();
-		expect(document.body.textContent || '').toMatch(
-			/best for teams that want higher automation depth, finance close support, cloud-plus connectors/i
-		);
+		expect(document.body.textContent || '').toContain(proPlan?.story?.summary ?? '');
 		expect(screen.getByRole('link', { name: /View Pro plan/i })).toBeTruthy();
 	});
 });

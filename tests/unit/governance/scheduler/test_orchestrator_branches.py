@@ -29,7 +29,6 @@ async def test_acquire_dispatch_lock_paths(
     monkeypatch.setattr(
         orchestrator_module.settings, "SCHEDULER_LOCK_FAIL_OPEN", False, raising=False
     )
-    monkeypatch.setattr(orchestrator_module.os, "getenv", lambda _: None)
 
     with patch(
         "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
@@ -78,11 +77,17 @@ async def test_cohort_analysis_job_celery_error_still_updates_last_run(
     orchestrator: SchedulerOrchestrator,
 ) -> None:
     orchestrator._acquire_dispatch_lock = AsyncMock(return_value=True)  # type: ignore[method-assign]
-    with patch(
-        "app.shared.core.celery_app.celery_app.send_task",
-        side_effect=RuntimeError("down"),
+    with (
+        patch(
+            "app.shared.core.celery_app.celery_app.send_task",
+            side_effect=RuntimeError("down"),
+        ),
+        patch.object(
+            orchestrator, "_run_cohort_analysis_inline", new_callable=AsyncMock
+        ) as mock_inline,
     ):
         await orchestrator.cohort_analysis_job(TenantCohort.HIGH_VALUE)
+    mock_inline.assert_awaited_once_with(TenantCohort.HIGH_VALUE)
     assert orchestrator._last_run_success is True
     assert orchestrator._last_run_time is not None
 
@@ -202,8 +207,32 @@ async def test_sweep_jobs_skip_when_lock_not_acquired(
         await orchestrator.billing_sweep_job()
         await orchestrator.license_governance_sweep_job()
         await orchestrator.enforcement_reconciliation_sweep_job()
+        await orchestrator.landing_funnel_health_refresh_job()
         await orchestrator.maintenance_sweep_job()
     mock_send.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_dispatch_task_returns_false_when_inline_fallback_also_fails(
+    orchestrator: SchedulerOrchestrator,
+) -> None:
+    with (
+        patch(
+            "app.shared.core.celery_app.celery_app.send_task",
+            side_effect=RuntimeError("broker unavailable"),
+        ),
+        patch(
+            "app.modules.governance.domain.scheduler.orchestrator.record_scheduler_inline_fallback"
+        ) as record_fallback,
+    ):
+        dispatched = await orchestrator._dispatch_task(
+            task_name="scheduler.maintenance_sweep",
+            job_name="maintenance",
+            inline_fallback=AsyncMock(side_effect=TimeoutError("db timeout")),
+        )
+
+    assert dispatched is False
+    record_fallback.assert_called_once_with("maintenance", outcome="failed")
 
 
 @pytest.mark.asyncio
@@ -219,10 +248,13 @@ async def test_detect_stuck_jobs_no_results_no_commit(
 
     with patch(
         "app.modules.governance.domain.scheduler.orchestrator.STUCK_JOB_COUNT"
-    ) as metric:
+    ) as metric, patch(
+        "app.modules.governance.domain.scheduler.orchestrator.set_background_jobs_overdue_pending"
+    ) as set_overdue:
         await orchestrator.detect_stuck_jobs()
 
     metric.set.assert_called_once_with(0)
+    set_overdue.assert_called_once_with(0)
     db.commit.assert_not_awaited()
 
 
@@ -236,7 +268,7 @@ def test_start_stop_and_status(orchestrator: SchedulerOrchestrator) -> None:
     orchestrator.scheduler = scheduler
 
     orchestrator.start()
-    assert scheduler.add_job.call_count == 10
+    assert scheduler.add_job.call_count == 12
     scheduler.start.assert_called_once()
 
     status = orchestrator.get_status()

@@ -190,6 +190,7 @@ async def get_db_impl(
 async def mark_session_system_context(
     *,
     session: AsyncSession,
+    resolve_session_backend_fn: Callable[[AsyncSession], tuple[str, str]],
     db_operation_recoverable_errors: tuple[type[Exception], ...],
     logger_obj: Any,
 ) -> None:
@@ -208,6 +209,24 @@ async def mark_session_system_context(
     except db_operation_recoverable_errors as exc:
         logger_obj.debug(
             "mark_session_system_context_connection_unavailable", error=str(exc)
+        )
+        return
+
+    session.info["tenant_id"] = None
+    conn.info["tenant_id"] = None
+    backend, source = resolve_session_backend_fn(session)
+    if backend == "postgresql":
+        try:
+            await session.execute(text("SELECT set_config('app.current_tenant_id', '', true)"))
+            await session.execute(
+                text("SELECT set_config('app.is_system_context', 'true', true)")
+            )
+        except db_operation_recoverable_errors as exc:
+            logger_obj.warning("failed_to_set_system_context_in_session", error=str(exc))
+    elif backend == "unknown":
+        logger_obj.error(
+            "mark_session_system_context_backend_unknown_fail_closed",
+            source=source,
         )
 
 
@@ -232,6 +251,9 @@ async def clear_session_tenant_context(
     if backend == "postgresql":
         try:
             await session.execute(text("SELECT set_config('app.current_tenant_id', '', true)"))
+            await session.execute(
+                text("SELECT set_config('app.is_system_context', 'false', true)")
+            )
         except db_operation_recoverable_errors as exc:
             logger_obj.warning("failed_to_clear_rls_config_in_session", error=str(exc))
     elif backend == "unknown":
@@ -285,6 +307,9 @@ async def set_session_tenant_id(
             await session.execute(
                 text("SELECT set_config('app.current_tenant_id', :tid, true)"),
                 {"tid": str(tenant_id)},
+            )
+            await session.execute(
+                text("SELECT set_config('app.is_system_context', 'false', true)")
             )
             rls_enforcement_latency_metric.observe(time_module.perf_counter() - rls_start)
         except db_operation_recoverable_errors as exc:

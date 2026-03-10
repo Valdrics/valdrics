@@ -373,7 +373,7 @@ async def dispatch_cost_anomaly_alerts(
             from app.modules.notifications.domain import get_tenant_jira_service
 
             tier = await get_tenant_tier(tenant_id, db)
-            jira_allowed = is_feature_enabled(tier, FeatureFlag.INCIDENT_INTEGRATIONS)
+            jira_allowed = is_feature_enabled(tier, FeatureFlag.JIRA_INTEGRATION)
             if jira_allowed:
                 jira = await get_tenant_jira_service(db, tenant_id)
         except ANOMALY_JIRA_BOOTSTRAP_RECOVERABLE_EXCEPTIONS:

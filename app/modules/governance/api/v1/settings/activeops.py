@@ -15,7 +15,8 @@ from app.shared.core.auth import (
     get_current_user_with_db_context,
     requires_role_with_db_context,
 )
-from app.shared.core.logging import audit_log
+from app.shared.core.async_utils import maybe_await
+from app.shared.core.logging import audit_log_async as audit_log
 from app.shared.db.session import get_db
 from app.models.remediation_settings import RemediationSettings
 from app.shared.remediation.hard_cap_service import BudgetHardCapService
@@ -218,6 +219,31 @@ async def update_activeops_settings(
             "policy_escalation_required_role"
         ]
 
+    await maybe_await(
+        audit_log(
+            "settings.activeops_updated",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {
+                "auto_pilot_enabled": settings.auto_pilot_enabled,
+                "threshold": float(settings.min_confidence_threshold),
+                "policy_enabled": settings.policy_enabled,
+                "policy_block_production_destructive": settings.policy_block_production_destructive,
+                "policy_require_gpu_override": settings.policy_require_gpu_override,
+                "policy_low_confidence_warn_threshold": float(
+                    settings.policy_low_confidence_warn_threshold
+                ),
+                "policy_violation_notify_slack": settings.policy_violation_notify_slack,
+                "policy_violation_notify_jira": settings.policy_violation_notify_jira,
+                "policy_escalation_required_role": settings.policy_escalation_required_role,
+            },
+            db=db,
+            resource_type="activeops_settings",
+            resource_id=str(current_user.tenant_id),
+            request_method="PUT",
+            request_path="/api/v1/settings/activeops",
+        )
+    )
     await db.commit()
     await db.refresh(settings)
 
@@ -227,25 +253,6 @@ async def update_activeops_settings(
         auto_pilot=settings.auto_pilot_enabled,
         threshold=float(settings.min_confidence_threshold),
         policy_enabled=settings.policy_enabled,
-    )
-
-    audit_log(
-        "settings.activeops_updated",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {
-            "auto_pilot_enabled": settings.auto_pilot_enabled,
-            "threshold": float(settings.min_confidence_threshold),
-            "policy_enabled": settings.policy_enabled,
-            "policy_block_production_destructive": settings.policy_block_production_destructive,
-            "policy_require_gpu_override": settings.policy_require_gpu_override,
-            "policy_low_confidence_warn_threshold": float(
-                settings.policy_low_confidence_warn_threshold
-            ),
-            "policy_violation_notify_slack": settings.policy_violation_notify_slack,
-            "policy_violation_notify_jira": settings.policy_violation_notify_jira,
-            "policy_escalation_required_role": settings.policy_escalation_required_role,
-        },
     )
 
     return ActiveOpsSettingsResponse.model_validate(settings)

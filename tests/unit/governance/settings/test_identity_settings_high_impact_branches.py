@@ -349,7 +349,7 @@ async def test_identity_update_rejects_cross_tenant_domain_conflict(
 
 
 @pytest.mark.asyncio
-async def test_identity_update_succeeds_when_audit_log_fails(
+async def test_identity_update_fails_when_audit_log_fails(
     ac, db: AsyncSession, monkeypatch
 ) -> None:
     _tenant, _user, headers = await _seed_admin(db, plan="enterprise")
@@ -369,15 +369,11 @@ async def test_identity_update_succeeds_when_audit_log_fails(
             "scim_group_mappings": [],
         },
     )
-    assert response.status_code == 200
-    payload = response.json()
-    assert payload["scim_enabled"] is True
-    assert payload["has_scim_token"] is True
-    assert payload["scim_last_rotated_at"] is not None
+    assert response.status_code == 500
 
 
 @pytest.mark.asyncio
-async def test_identity_rotate_scim_token_succeeds_when_audit_log_fails(
+async def test_identity_rotate_scim_token_fails_when_audit_log_fails(
     ac, db: AsyncSession, monkeypatch
 ) -> None:
     _tenant, _user, headers = await _seed_admin(db, plan="enterprise")
@@ -388,7 +384,4 @@ async def test_identity_rotate_scim_token_succeeds_when_audit_log_fails(
     )
 
     response = await ac.post("/api/v1/settings/identity/rotate-scim-token", headers=headers)
-    assert response.status_code == 200
-    payload = response.json()
-    assert isinstance(payload.get("scim_token"), str)
-    assert payload.get("scim_token")
+    assert response.status_code == 500

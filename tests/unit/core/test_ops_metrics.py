@@ -1,4 +1,6 @@
 import pytest
+from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import patch
 from prometheus_client import REGISTRY
 from app.shared.core import ops_metrics
@@ -154,6 +156,121 @@ def test_record_audit_log_retention_purge_updates_counter_and_last_run_gauge() -
 def test_record_audit_log_retention_purge_rejects_negative_values() -> None:
     with pytest.raises(ValueError, match="deleted_count must be >= 0"):
         ops_metrics.record_audit_log_retention_purge(-1)
+
+
+def test_background_job_reliability_metrics_record_expected_values() -> None:
+    ops_metrics.record_background_job_stale_running_recovery(
+        "webhook_retry",
+        outcome="requeued",
+    )
+    ops_metrics.record_background_job_dead_letter(
+        "webhook_retry",
+        reason="max_attempts_exhausted",
+    )
+    ops_metrics.set_background_jobs_overdue_pending(4)
+    ops_metrics.record_audit_log_retention_failure("audit_logs_retention")
+    ops_metrics.record_scheduler_inline_fallback(
+        "background_job_processing",
+        outcome="succeeded",
+    )
+
+    recovered = REGISTRY.get_sample_value(
+        "valdrics_ops_background_jobs_stale_running_recovered_total",
+        labels={"job_type": "webhook_retry", "outcome": "requeued"},
+    )
+    dead_lettered = REGISTRY.get_sample_value(
+        "valdrics_ops_background_jobs_dead_lettered_total",
+        labels={
+            "job_type": "webhook_retry",
+            "reason": "max_attempts_exhausted",
+        },
+    )
+    overdue = REGISTRY.get_sample_value(
+        "valdrics_ops_background_jobs_overdue_pending_count"
+    )
+    audit_failures = REGISTRY.get_sample_value(
+        "valdrics_ops_audit_log_retention_failures_total",
+        labels={"operation": "audit_logs_retention"},
+    )
+    inline_fallbacks = REGISTRY.get_sample_value(
+        "valdrics_scheduler_inline_fallback_total",
+        labels={
+            "job_name": "background_job_processing",
+            "outcome": "succeeded",
+        },
+    )
+
+    assert recovered == 1.0
+    assert dead_lettered == 1.0
+    assert overdue == 4.0
+    assert audit_failures == 1.0
+    assert inline_fallbacks == 1.0
+
+
+def test_record_landing_funnel_health_snapshot_updates_gauges() -> None:
+    now = datetime(2026, 3, 10, 12, 0, tzinfo=timezone.utc)
+    alerts = [
+        SimpleNamespace(
+            key="signup_to_connection",
+            status="critical",
+            threshold_rate=0.35,
+            current_rate=0.25,
+            weekly_delta=-0.15,
+            current_numerator=1,
+            current_denominator=4,
+        ),
+        SimpleNamespace(
+            key="connection_to_first_value",
+            status="watch",
+            threshold_rate=0.40,
+            current_rate=0.45,
+            weekly_delta=-0.11,
+            current_numerator=9,
+            current_denominator=20,
+        ),
+    ]
+
+    ops_metrics.record_landing_funnel_health_snapshot(
+        evaluated_at=now,
+        alerts=alerts,
+    )
+
+    assert REGISTRY.get_sample_value(
+        "valdrics_ops_landing_funnel_weekly_conversion_rate",
+        labels={"step": "signup_to_connection"},
+    ) == 0.25
+    assert REGISTRY.get_sample_value(
+        "valdrics_ops_landing_funnel_weekly_delta_rate",
+        labels={"step": "signup_to_connection"},
+    ) == -0.15
+    assert REGISTRY.get_sample_value(
+        "valdrics_ops_landing_funnel_weekly_threshold_rate",
+        labels={"step": "signup_to_connection"},
+    ) == 0.35
+    assert REGISTRY.get_sample_value(
+        "valdrics_ops_landing_funnel_weekly_numerator",
+        labels={"step": "signup_to_connection"},
+    ) == 1.0
+    assert REGISTRY.get_sample_value(
+        "valdrics_ops_landing_funnel_weekly_denominator",
+        labels={"step": "signup_to_connection"},
+    ) == 4.0
+    assert REGISTRY.get_sample_value(
+        "valdrics_ops_landing_funnel_health_status",
+        labels={"step": "signup_to_connection"},
+    ) == 2.0
+    assert REGISTRY.get_sample_value(
+        "valdrics_ops_landing_funnel_health_status",
+        labels={"step": "connection_to_first_value"},
+    ) == 1.0
+    assert REGISTRY.get_sample_value(
+        "valdrics_ops_landing_funnel_last_evaluated_unixtime"
+    ) == now.timestamp()
+
+
+def test_set_background_jobs_overdue_pending_rejects_negative_values() -> None:
+    with pytest.raises(ValueError, match="count must be >= 0"):
+        ops_metrics.set_background_jobs_overdue_pending(-1)
 
 
 def test_time_operation_records_db_duration():

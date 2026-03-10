@@ -2,8 +2,11 @@ import sys
 import structlog
 import logging
 from typing import Any, cast
+from uuid import UUID
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.core.config import get_settings
 from app.shared.core.log_exporter import configure_otlp_log_export, mirror_event_to_otel
+from app.shared.core.async_utils import maybe_await
 
 
 def pii_redactor(
@@ -160,3 +163,113 @@ def audit_log(
         tenant_id=str(tenant_id),
         metadata=details or {},
     )
+
+
+def _parse_tenant_id(value: str | UUID) -> UUID:
+    return UUID(str(value))
+
+
+async def audit_log_async(
+    event: str,
+    user_id: str | UUID | None,
+    tenant_id: str | UUID | None,
+    details: dict[str, Any] | None = None,
+    *,
+    db: AsyncSession | None,
+    actor_email: str | None = None,
+    actor_ip: str | None = None,
+    resource_type: str | None = None,
+    resource_id: str | None = None,
+    success: bool = True,
+    error_message: str | None = None,
+    correlation_id: str | None = None,
+    request_method: str | None = None,
+    request_path: str | None = None,
+    commit: bool = False,
+    isolated: bool = False,
+) -> Any:
+    """
+    Persist an audit event to `audit_logs` while preserving structured log emission.
+
+    `commit=False` lets callers keep the audit row inside the surrounding transaction.
+    `isolated=True` writes via an independent tenant-scoped session so the audit row
+    survives outer transaction rollbacks for deny/error paths.
+    """
+
+    async def _write(session: AsyncSession) -> Any:
+        if tenant_id is None:
+            from app.modules.governance.domain.security.audit_log import (
+                SystemAuditLogger,
+            )
+
+            entry = await SystemAuditLogger(
+                session,
+                correlation_id=correlation_id,
+            ).log(
+                event_type=event,
+                actor_id=user_id,
+                actor_email=actor_email,
+                actor_ip=actor_ip,
+                resource_type=resource_type,
+                resource_id=resource_id,
+                details=details,
+                success=success,
+                error_message=error_message,
+                request_method=request_method,
+                request_path=request_path,
+            )
+            audit_log(event, user_id or "system", "system", details)
+            return entry
+
+        from app.modules.governance.domain.security.audit_log import AuditLogger
+
+        entry = await AuditLogger(
+            session,
+            tenant_id=tenant_id,
+            correlation_id=correlation_id,
+        ).log(
+            event_type=event,
+            actor_id=user_id,
+            actor_email=actor_email,
+            actor_ip=actor_ip,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            details=details,
+            success=success,
+            error_message=error_message,
+            request_method=request_method,
+            request_path=request_path,
+        )
+        audit_log(event, user_id or "system", tenant_id, details)
+        return entry
+
+    if isolated and db is not None and not isinstance(db, AsyncSession):
+        entry = await _write(db)
+        commit_fn = getattr(db, "commit", None)
+        if callable(commit_fn):
+            await maybe_await(commit_fn())
+        return entry
+
+    if isolated:
+        from app.shared.db.session import (
+            async_session_maker,
+            mark_session_system_context,
+            set_session_tenant_id,
+        )
+
+        async with async_session_maker() as session:
+            if tenant_id is None:
+                await mark_session_system_context(session)
+            else:
+                await set_session_tenant_id(session, _parse_tenant_id(tenant_id))
+            entry = await _write(session)
+            await maybe_await(session.commit())
+            return entry
+
+    if db is None:
+        raise ValueError("db session is required unless isolated=True")
+
+    entry = await _write(db)
+    if commit:
+        await maybe_await(db.commit())
+    return entry

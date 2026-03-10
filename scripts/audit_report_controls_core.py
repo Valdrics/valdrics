@@ -26,6 +26,11 @@ ROOT_PROHIBITED_PATTERNS: tuple[str, ...] = (
     "test_*.sqlite",
     "test_*.sqlite-shm",
     "test_*.sqlite-wal",
+    "valdrics_local*.sqlite3",
+    "valdrics_local*.sqlite3-journal",
+    "valdrics_local*.sqlite3-shm",
+    "valdrics_local*.sqlite3-wal",
+    "valdrics_local*.sqlite3.bootstrap.lock",
 )
 
 PERSONAL_EMAIL_DOMAINS: frozenset[str] = frozenset(
@@ -159,7 +164,9 @@ def check_c03(repo_root: Path) -> tuple[str, ...]:
 
 
 def check_h01(repo_root: Path) -> tuple[str, ...]:
-    return check_root_file_absent(repo_root, "test_*.sqlite*")
+    errors = list(check_root_file_absent(repo_root, "test_*.sqlite*"))
+    errors.extend(check_root_file_absent(repo_root, "valdrics_local*.sqlite3*"))
+    return tuple(errors)
 
 
 def check_h02(repo_root: Path) -> tuple[str, ...]:

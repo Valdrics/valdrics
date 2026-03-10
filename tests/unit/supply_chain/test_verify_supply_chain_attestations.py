@@ -36,8 +36,8 @@ def test_build_verify_command_includes_repo_workflow_and_json_output() -> None:
     assert cmd[-2:] == ["--format", "json"]
 
 
-def test_verify_attestations_requires_repo() -> None:
-    artifact = Path("artifact.json")
+def test_verify_attestations_requires_repo(tmp_path: Path) -> None:
+    artifact = tmp_path / "artifact.json"
     _write(artifact)
 
     with pytest.raises(ValueError, match="repo"):

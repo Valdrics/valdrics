@@ -2,12 +2,12 @@
 	import { onMount } from 'svelte';
 
 	let {
-		startFreeHref,
+		selfServeHref,
 		resourcesHref,
 		subscribeApiPath,
 		onTrackCta
 	}: {
-		startFreeHref: string;
+		selfServeHref: string;
 		resourcesHref: string;
 		subscribeApiPath: string;
 		onTrackCta: (action: string, section: string, value: string) => void;
@@ -137,11 +137,11 @@
 					Open Resources
 				</a>
 				<a
-					href={startFreeHref}
+					href={selfServeHref}
 					class="btn btn-primary"
 					onclick={() => onTrackCta('cta_click', 'exit_prompt', 'start_free')}
 				>
-					Start Free
+					Start Free Workspace
 				</a>
 			</div>
 		</div>

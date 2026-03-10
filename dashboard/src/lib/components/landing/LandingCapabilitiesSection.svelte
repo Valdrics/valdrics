@@ -15,9 +15,10 @@
 	data-landing-section="capabilities"
 >
 	<div class="landing-section-head">
-		<h2 class="landing-h2">What Valdrics coordinates</h2>
+		<h2 class="landing-h2">The operating layer after detection</h2>
 		<p class="landing-section-sub">
-			One operating layer for owner routing, guardrails, approvals, and recorded outcomes.
+			Valdrics connects signals, owners, approvals, workflows, and proof across cloud, SaaS, and
+			software spend.
 		</p>
 	</div>
 
@@ -25,9 +26,13 @@
 		<div class="landing-coverage-surface-copy">
 			<p class="landing-proof-k">Decision operating layer</p>
 			<h3 class="landing-h3">This is not another dashboard layer.</h3>
-			<p class="landing-p">
-				Valdrics is built around the missing motion after detection: who owns the issue, what
-				checks apply, who approves it, and how the outcome gets recorded.
+			<p class="landing-p landing-coverage-full-copy">
+				Most spend tools surface the signal and stop. Valdrics handles the next work: who owns the
+				issue, which controls apply, who approves it, what workflow moves it, and what proof
+				survives the meeting.
+			</p>
+			<p class="landing-p landing-coverage-mobile-summary">
+				Owner, controls, workflow, and proof stay attached after detection.
 			</p>
 			<div class="landing-coverage-summary" aria-label="Coverage summary">
 				{#each coverageSummary as item (item.label)}
@@ -50,6 +55,7 @@
 
 	<div class="landing-coverage-grid-head">
 		<p class="landing-proof-k">Decision ledger</p>
+		<p class="landing-coverage-grid-note">Swipe through the owner, approval, and outcome flow.</p>
 	</div>
 
 	<div class="landing-decision-ledger">

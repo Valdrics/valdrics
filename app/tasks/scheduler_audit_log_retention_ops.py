@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime
+import inspect
 from typing import Any, Callable
 
 from sqlalchemy import tuple_
@@ -26,6 +27,7 @@ async def purge_expired_audit_logs(
     timezone_obj: Any,
     timedelta_cls: Any,
     get_settings_fn: Callable[[], Any],
+    set_audit_retention_purge_flag_fn: Callable[[Any, bool], Any] | None = None,
 ) -> dict[str, Any]:
     settings = get_settings_fn()
     retention_days = coerce_positive_int(
@@ -47,44 +49,61 @@ async def purge_expired_audit_logs(
     cutoff = datetime_cls.now(timezone_obj.utc) - timedelta_cls(days=retention_days)
     total_deleted = 0
     deleted_by_tenant: dict[Any, int] = defaultdict(int)
+    tenant_id_column = getattr(audit_log_model, "tenant_id", None)
 
-    for _ in range(max_batches):
-        selection_stmt = (
-            sa.select(
+    if callable(set_audit_retention_purge_flag_fn):
+        flag_result = set_audit_retention_purge_flag_fn(db, True)
+        if inspect.isawaitable(flag_result):
+            await flag_result
+
+    try:
+        for _ in range(max_batches):
+            selection_columns = [
                 audit_log_model.id,
                 audit_log_model.event_timestamp,
-                audit_log_model.tenant_id,
+            ]
+            if tenant_id_column is not None:
+                selection_columns.append(tenant_id_column)
+
+            selection_stmt = (
+                sa.select(*selection_columns)
+                .where(audit_log_model.event_timestamp < cutoff)
+                .order_by(audit_log_model.event_timestamp)
+                .limit(batch_size)
             )
-            .where(audit_log_model.event_timestamp < cutoff)
-            .order_by(audit_log_model.event_timestamp)
-            .limit(batch_size)
-        )
-        selected_rows = list((await db.execute(selection_stmt)).all())
-        if not selected_rows:
-            break
+            selected_rows = list((await db.execute(selection_stmt)).all())
+            if not selected_rows:
+                break
 
-        key_pairs = []
-        for row in selected_rows:
-            log_id = _row_attr(row, "id")
-            event_timestamp = _row_attr(row, "event_timestamp")
-            tenant_id = _row_attr(row, "tenant_id")
-            if log_id is None or event_timestamp is None:
-                continue
-            key_pairs.append((log_id, event_timestamp))
-            if tenant_id is not None:
-                deleted_by_tenant[tenant_id] += 1
+            key_pairs = []
+            for row in selected_rows:
+                log_id = _row_attr(row, "id")
+                event_timestamp = _row_attr(row, "event_timestamp")
+                tenant_id = (
+                    _row_attr(row, "tenant_id") if tenant_id_column is not None else None
+                )
+                if log_id is None or event_timestamp is None:
+                    continue
+                key_pairs.append((log_id, event_timestamp))
+                if tenant_id is not None:
+                    deleted_by_tenant[tenant_id] += 1
 
-        if not key_pairs:
-            break
+            if not key_pairs:
+                break
 
-        delete_stmt = sa.delete(audit_log_model).where(
-            tuple_(audit_log_model.id, audit_log_model.event_timestamp).in_(key_pairs)
-        )
-        delete_result = await db.execute(delete_stmt)
-        deleted_count = extract_deleted_count(delete_result, fallback=len(key_pairs))
-        if deleted_count == 0:
-            break
-        total_deleted += deleted_count
+            delete_stmt = sa.delete(audit_log_model).where(
+                tuple_(audit_log_model.id, audit_log_model.event_timestamp).in_(key_pairs)
+            )
+            delete_result = await db.execute(delete_stmt)
+            deleted_count = extract_deleted_count(delete_result, fallback=len(key_pairs))
+            if deleted_count == 0:
+                break
+            total_deleted += deleted_count
+    finally:
+        if callable(set_audit_retention_purge_flag_fn):
+            flag_result = set_audit_retention_purge_flag_fn(db, False)
+            if inspect.isawaitable(flag_result):
+                await flag_result
 
     if total_deleted:
         logger.info(

@@ -1,0 +1,35 @@
+.landing-section-head {
+	max-width: 52rem;
+	margin: 0 auto 0.95rem auto;
+	text-align: center;
+}
+
+.landing-h2 {
+	font-family: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
+	font-weight: 800;
+	letter-spacing: -0.03em;
+	line-height: 1.1;
+	font-size: clamp(1.85rem, 3vw, 2.3rem);
+	margin: 0;
+}
+
+.landing-section-sub {
+	margin: 0.55rem auto 0 auto;
+	color: var(--color-ink-300);
+	font-size: 1.06rem;
+	line-height: 1.55;
+	max-width: 46rem;
+}
+
+.landing-h3 {
+	font-weight: 700;
+	font-size: 1.08rem;
+	margin: 0 0 0.42rem 0;
+}
+
+.landing-p {
+	margin: 0;
+	color: var(--color-ink-200);
+	font-size: 1.02rem;
+	line-height: 1.55;
+}

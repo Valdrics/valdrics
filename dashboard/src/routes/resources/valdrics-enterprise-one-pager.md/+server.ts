@@ -3,7 +3,7 @@ import type { RequestHandler } from './$types';
 const ONE_PAGER = `# Valdrics Executive One-Pager
 
 ## Positioning
-Valdrics is the economic control plane for cloud and software spend.
+Valdrics is a governed spend control platform for cloud, SaaS, and software.
 
 ## What Teams Get
 - Unified visibility for cloud, SaaS, and ITAM/license movement.
@@ -15,8 +15,8 @@ Valdrics is the economic control plane for cloud and software spend.
 - Week 2: run first controlled remediation cycle with finance + engineering.
 
 ## Commercial Model
-- Free: permanent workspace for validating the first live workflow.
-- Starter / Growth / Pro: self-serve path as coverage, rollout controls, and governance depth expand.
+- Free: permanent workspace for proving the first governed workflow.
+- Starter / Growth / Pro: self-serve path as coverage, owner routing, and governance depth expand.
 - Enterprise: separate buying lane for SCIM, private deployment, procurement, and custom control review.
 
 ## Ideal Buyer Motion

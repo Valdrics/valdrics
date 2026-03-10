@@ -40,7 +40,11 @@ describe('Landing decomposition lead capture and exit intent', () => {
 			await fireEvent.submit(form);
 
 			expect(fetchSpy).toHaveBeenCalledTimes(1);
-			expect(onTrackCta).toHaveBeenCalledWith('cta_click', 'lead_capture', 'newsletter_subscribe_success');
+			expect(onTrackCta).toHaveBeenCalledWith(
+				'cta_click',
+				'lead_capture',
+				'newsletter_subscribe_success'
+			);
 			expect(screen.getByText(/subscribed\. check your inbox/i)).toBeTruthy();
 		} finally {
 			fetchSpy.mockRestore();
@@ -63,7 +67,7 @@ describe('Landing decomposition lead capture and exit intent', () => {
 
 		render(LandingExitIntentPrompt, {
 			props: {
-				startFreeHref: '/auth/login?intent=start_free',
+				selfServeHref: '/auth/login?intent=free_tier&plan=free',
 				resourcesHref: '/resources',
 				subscribeApiPath: '/api/marketing/subscribe',
 				onTrackCta
@@ -80,10 +84,14 @@ describe('Landing decomposition lead capture and exit intent', () => {
 		expect(
 			await screen.findByRole('heading', { name: /want a weekly spend-control brief instead/i })
 		).toBeTruthy();
+		const selfServeLink = screen.getByRole('link', { name: /start free workspace/i });
+		expect(selfServeLink.getAttribute('href')).toContain('intent=free_tier');
 		expect(onTrackCta).toHaveBeenCalledWith('cta_view', 'exit_prompt', 'desktop_exit_intent');
 
 		await fireEvent.click(screen.getByRole('button', { name: /close prompt/i }));
-		const dismissedUntil = Number(localStorage.getItem('valdrics.landing.exit_prompt.dismissed.v2'));
+		const dismissedUntil = Number(
+			localStorage.getItem('valdrics.landing.exit_prompt.dismissed.v2')
+		);
 		expect(Number.isFinite(dismissedUntil)).toBe(true);
 		expect(dismissedUntil).toBeGreaterThan(Date.now());
 	});

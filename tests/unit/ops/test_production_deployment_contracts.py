@@ -60,6 +60,18 @@ def test_api_template_uses_runtime_secret_helper() -> None:
     assert 'include "valdrics.frontendUrl" .' in text
 
 
+def test_helm_helpers_support_explicit_host_overrides() -> None:
+    values_text = (REPO_ROOT / "helm/valdrics/values.yaml").read_text(encoding="utf-8")
+    helpers_text = (REPO_ROOT / "helm/valdrics/templates/_helpers.tpl").read_text(
+        encoding="utf-8"
+    )
+
+    assert "apiHostOverride" in values_text
+    assert "frontendHostOverride" in values_text
+    assert ".Values.global.apiHostOverride" in helpers_text
+    assert ".Values.global.frontendHostOverride" in helpers_text
+
+
 def test_runtime_healthchecks_use_liveness_only() -> None:
     compose = _load_yaml(REPO_ROOT / "docker-compose.yml")
     prod_compose = _load_yaml(REPO_ROOT / "docker-compose.prod.yml")
@@ -162,6 +174,9 @@ def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults()
         item["name"] for item in koyeb["definition"]["env"] if "name" in item
     }
     assert "INTERNAL_METRICS_AUTH_TOKEN" in {
+        item["name"] for item in koyeb["definition"]["env"] if "name" in item
+    }
+    assert "INTERNAL_JOB_SECRET" in {
         item["name"] for item in koyeb["definition"]["env"] if "name" in item
     }
     assert "TRUSTED_PROXY_CIDRS" in {

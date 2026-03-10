@@ -36,13 +36,14 @@ describe('LandingHero', () => {
 		expect(mainHeading.textContent?.length).toBeGreaterThan(12);
 
 		const primaryCandidates = screen.getAllByRole('link', {
-			name: /Start Free|Book Executive Briefing/i
+			name: /Start Free Workspace|Book Executive Briefing/i
 		});
 		const primaryCta = primaryCandidates.find((element) =>
 			(element.getAttribute('class') || '').includes('pulse-glow')
 		);
 		expect(primaryCta).toBeTruthy();
 		expect(primaryCta?.getAttribute('href')).toContain('/auth/login?');
+		expect(primaryCta?.getAttribute('href')).toContain('intent=engineering_control');
 		if (primaryCta) {
 			await fireEvent.click(primaryCta);
 		}
@@ -50,20 +51,23 @@ describe('LandingHero', () => {
 		const heroSection = document.querySelector('#hero');
 		expect(heroSection).toBeTruthy();
 		const heroView = within(heroSection as HTMLElement);
+		expect(heroView.getByText(/governed action for cloud, saas, and software spend/i)).toBeTruthy();
 		expect(
-			heroView.getByText(/routes cloud and software spend alerts to the right owner/i)
+			heroView.getByText(/detect waste\. route the owner\. approve the action\. keep the proof\./i)
 		).toBeTruthy();
-		const secondaryCta = heroView.getByRole('link', { name: /see enterprise path/i });
+		expect(
+			heroView.getByText(/turns cost, usage, and policy signals into owner-routed approvals/i)
+		).toBeTruthy();
+		const secondaryCta = heroView.getByRole('link', { name: /see pricing/i });
 		expect(secondaryCta).toBeTruthy();
 		const secondaryHref = secondaryCta?.getAttribute('href') || '';
-		expect(secondaryHref).toContain('/enterprise?');
-		expect(secondaryHref).toContain('source=hero_secondary');
+		expect(secondaryHref).toContain('/pricing?entry=hero_secondary');
 		if (secondaryCta) {
 			await fireEvent.click(secondaryCta);
 		}
-		expect(heroView.getByText(/read-only access/i)).toBeTruthy();
-		expect(heroView.getByText(/3-10 day rollout/i)).toBeTruthy();
-		expect(heroView.getByText(/export-ready records/i)).toBeTruthy();
+		expect(heroView.getByText(/cloud \+ saas \+ software in one control layer/i)).toBeTruthy();
+		expect(heroView.getByText(/read-only onboarding where supported/i)).toBeTruthy();
+		expect(heroView.getByText(/approval trail and exportable proof/i)).toBeTruthy();
 		expect(heroView.queryByText(/verify before you commit/i)).toBeNull();
 		expect(heroView.queryByText(/modeled first-quarter range:/i)).toBeNull();
 		expect(heroView.queryByRole('link', { name: /technical validation/i })).toBeNull();
@@ -73,24 +77,28 @@ describe('LandingHero', () => {
 		expect(heroView.queryByText(/evidence snapshot · february 28, 2026/i)).toBeNull();
 		expect(heroView.queryByRole('link', { name: /view technical validation brief/i })).toBeNull();
 
-		expect(screen.getByRole('heading', { name: /what valdrics coordinates/i })).toBeTruthy();
+		expect(
+			screen.getByRole('heading', { name: /the operating layer after detection/i })
+		).toBeTruthy();
 		expect(screen.getByText(/connected inputs/i)).toBeTruthy();
 		expect(screen.getAllByText(/^AWS$/i).length).toBeGreaterThanOrEqual(1);
 		expect(screen.getAllByText(/^Microsoft 365$/i).length).toBeGreaterThanOrEqual(1);
 		expect(screen.getByText(/decision ledger/i)).toBeTruthy();
-		expect(screen.getByText(/the issue lands with owner and context/i)).toBeTruthy();
-		expect(screen.getByText(/approval happens with the right checks/i)).toBeTruthy();
+		expect(
+			screen.getByText(/the issue lands with owner, scope, and financial context/i)
+		).toBeTruthy();
+		expect(screen.getByText(/policy, budget, and approval checks stay attached/i)).toBeTruthy();
 		expect(screen.queryByText(/three core wins/i)).toBeNull();
 		expect(screen.queryByText(/what changes after rollout/i)).toBeNull();
-		expect(screen.getByRole('heading', { name: /see the decision loop in action/i })).toBeTruthy();
+		expect(screen.getByRole('heading', { name: /see what happens after detection/i })).toBeTruthy();
 		expect(
 			screen.getByRole('heading', { name: /realtime spend scenario simulator/i })
 		).toBeTruthy();
 		expect(
-			screen.getByRole('heading', { name: /choose a plan and launch fast/i })
+			screen.getByRole('heading', { name: /choose the plan that fits your control depth/i })
 		).toBeTruthy();
 		expect(
-			screen.getByRole('heading', { name: /security and readiness/i })
+			screen.getByRole('heading', { name: /security proof and enterprise rollout/i })
 		).toBeTruthy();
 
 		expect(
@@ -132,47 +140,75 @@ describe('LandingHero', () => {
 		);
 		expect(screen.getByRole('link', { name: /Open Full ROI Planner/i })).toBeTruthy();
 
-		const freePlanCta = screen.getByRole('link', { name: /start on free tier/i });
+		const freePlanCta = screen
+			.getAllByRole('link', { name: /start free workspace/i })
+			.find((element) => (element.getAttribute('href') || '').includes('plan=free'));
+		expect(freePlanCta).toBeTruthy();
+		if (!freePlanCta) {
+			throw new Error('expected free tier CTA');
+		}
 		expect(freePlanCta.getAttribute('href') || '').toContain('plan=free');
 		await fireEvent.click(freePlanCta);
+		expect(screen.getByText(/monthly starting prices shown here are entry points/i)).toBeTruthy();
+		expect(screen.getByText(/self-serve proof lane/i)).toBeTruthy();
 		expect(
-			screen.getByText(/monthly starting prices shown here are entry points/i)
-		).toBeTruthy();
-		expect(screen.getByText(/start here first/i)).toBeTruthy();
-		expect(screen.getByText(/permanent free workspace for one live savings workflow/i)).toBeTruthy();
-		expect(screen.getByText(/free is best for proving one workflow permanently/i)).toBeTruthy();
-		expect(
-			screen.getByText(/\$49\/mo starting price\. priced for the first team that needs daily review cadence/i)
+			screen.getByText(/permanent free workspace for one owner-routed savings workflow/i)
 		).toBeTruthy();
 		expect(
-			screen.getByText(/\$149\/mo starting price\. priced for the first cross-functional rollout/i)
+			screen.getByText(
+				/free is best for proving one controlled workflow with no procurement overhead/i
+			)
 		).toBeTruthy();
 		expect(
-			screen.getByText(/\$299\/mo starting price\. priced for finance-grade operations/i)
+			screen.getByText(
+				/\$49\/mo starting price\. priced for the first team that needs daily review cadence, initial cross-cloud visibility, and stronger owner routing/i
+			)
+		).toBeTruthy();
+		expect(
+			screen.getByText(
+				/\$149\/mo starting price\. priced for the first cross-functional team that needs full multi-cloud coverage, owner routing, slack, jira, and sso to land together/i
+			)
+		).toBeTruthy();
+		expect(
+			screen.getByText(
+				/\$299\/mo starting price\. priced for finance-grade self-serve rollout once auditability, api access, reconciliation, workflow automation, and export-ready evidence become operational requirements/i
+			)
 		).toBeTruthy();
 		expect(screen.getAllByText(/^Best for$/i).length).toBeGreaterThanOrEqual(4);
 		expect(screen.getAllByText(/^Why teams upgrade$/i).length).toBeGreaterThanOrEqual(4);
 		expect(
-			screen.getByText(/cross-functional teams need full aws, azure, and gcp coverage with owner routing/i)
+			screen.getByText(
+				/cross-functional teams need full aws, azure, and gcp coverage with owner routing/i
+			)
 		).toBeTruthy();
 		expect(
-			screen.getByText(/move to the enterprise lane only when scim, private deployment, procurement review/i)
+			screen.getByText(
+				/move to the enterprise lane only when scim, private deployment, procurement review/i
+			)
 		).toBeTruthy();
+		const growthPlanCard = screen.getByRole('heading', { name: /^growth$/i }).closest('article');
+		expect(growthPlanCard?.className).toContain('is-featured');
 
 		const trustSection = document.querySelector('#trust');
 		expect(trustSection).toBeTruthy();
 		const trustView = within(trustSection as HTMLElement);
-		const validationBriefingLink = trustView.getByRole('link', {
-			name: /^talk to sales$/i
+		const enterprisePathLink = trustView.getByRole('link', {
+			name: /^open enterprise path$/i
 		});
-		const validationHref = validationBriefingLink.getAttribute('href') || '';
-		expect(validationHref).toContain('/talk-to-sales?');
-		expect(validationHref).toContain('source=trust_validation');
+		const enterpriseHref = enterprisePathLink.getAttribute('href') || '';
+		expect(enterpriseHref).toContain('/enterprise?');
+		expect(enterpriseHref).toContain('source=trust_enterprise');
+		const validationBriefingLink = trustView.getByRole('link', {
+			name: /^book validation briefing$/i
+		});
+		expect(validationBriefingLink.getAttribute('href') || '').toContain('/talk-to-sales?');
+		expect(validationBriefingLink.getAttribute('href') || '').toContain('source=trust_validation');
 		const onePagerLink = screen.getByRole('link', {
 			name: /download executive one-pager/i
 		});
 		expect(onePagerLink.getAttribute('href')).toBe('/resources/valdrics-enterprise-one-pager.md');
-		expect(trustView.getByText(/need formal review/i)).toBeTruthy();
+		expect(trustView.getByText(/formal evaluation lane/i)).toBeTruthy();
+		expect(trustView.getByText(/control and access checklist/i)).toBeTruthy();
 		expect(trustView.queryByText(/current proof reflects design-partner feedback/i)).toBeNull();
 
 		expect(dispatchSpy).toHaveBeenCalled();

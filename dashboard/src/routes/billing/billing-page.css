@@ -116,10 +116,37 @@
 }
 
 .billing-plan-card--popular {
+	position: relative;
+	overflow: hidden;
 	border-color: rgb(18 158 192 / 0.28);
+	background:
+		radial-gradient(120% 120% at 50% 0%, rgb(34 211 238 / 0.12), transparent 44%),
+		linear-gradient(180deg, rgb(255 255 255 / 0.98), rgb(242 248 250 / 0.96));
 	box-shadow:
 		0 0 0 1px rgb(18 158 192 / 0.08),
-		0 20px 42px rgb(18 158 192 / 0.12);
+		0 22px 46px rgb(18 158 192 / 0.14);
+	transform: translateY(-0.14rem);
+}
+
+.billing-plan-card--popular::before {
+	content: '';
+	position: absolute;
+	inset: 0 0 auto 0;
+	height: 3px;
+	background: linear-gradient(90deg, rgb(18 158 192 / 0.24), rgb(18 158 192 / 0.96), rgb(16 185 129 / 0.62));
+}
+
+.billing-plan-card--popular .billing-plan-card__story-row {
+	border-color: rgb(18 158 192 / 0.18);
+	background: linear-gradient(180deg, rgb(226 244 249 / 0.92), rgb(241 248 250 / 0.88));
+}
+
+.billing-plan-card--popular .billing-plan-card__story-row span {
+	color: var(--color-ink-700);
+}
+
+.billing-plan-card--popular .billing-plan-card__story-row p {
+	color: var(--color-ink-800);
 }
 
 .billing-plan-card__price,

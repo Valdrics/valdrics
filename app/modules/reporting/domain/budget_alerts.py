@@ -17,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.shared.core.async_utils import maybe_await
+
 logger = structlog.get_logger()
 CARBON_SLACK_ALERT_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     ImportError,
@@ -197,17 +199,21 @@ class CarbonBudgetService:
             return False
 
         # Item 13: Audit log for budget alert
-        from app.shared.core.logging import audit_log
+        from app.shared.core.logging import audit_log_async as audit_log
 
-        audit_log(
-            event="carbon_budget_alert",
-            user_id="system",
-            tenant_id=str(tenant_id),
-            details={
-                "status": budget_status["alert_status"],
-                "usage_kg": budget_status["current_usage_kg"],
-                "budget_kg": budget_status["budget_kg"],
-            },
+        await maybe_await(
+            audit_log(
+                event="carbon_budget_alert",
+                user_id="system",
+                tenant_id=str(tenant_id),
+                details={
+                    "status": budget_status["alert_status"],
+                    "usage_kg": budget_status["current_usage_kg"],
+                    "budget_kg": budget_status["budget_kg"],
+                },
+                db=self.db,
+                isolated=True,
+            )
         )
 
         app_settings = get_settings()

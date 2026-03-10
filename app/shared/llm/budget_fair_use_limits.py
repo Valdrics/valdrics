@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.core.pricing import PricingTier
+from app.shared.core.async_utils import maybe_await
 
 
 async def enforce_daily_analysis_limit_impl(
@@ -78,17 +79,21 @@ async def enforce_daily_analysis_limit_impl(
             reason="daily_tenant_limit_exceeded",
             tenant_tier=tier.value,
         ).inc()
-        manager_module.audit_log(
-            event="llm_quota_denied",
-            user_id=str(user_id or "system"),
-            tenant_id=str(tenant_id),
-            details={
-                "gate": "daily_tenant",
-                "tier": tier.value,
-                "limit": daily_limit,
-                "observed": requests_today,
-                "actor_type": normalized_actor_type,
-            },
+        await maybe_await(
+            manager_module.audit_log(
+                event="llm_quota_denied",
+                user_id=str(user_id or "system"),
+                tenant_id=str(tenant_id),
+                details={
+                    "gate": "daily_tenant",
+                    "tier": tier.value,
+                    "limit": daily_limit,
+                    "observed": requests_today,
+                    "actor_type": normalized_actor_type,
+                },
+                db=db,
+                isolated=True,
+            )
         )
         raise manager_module.BudgetExceededError(
             "Daily LLM analysis limit reached for your current plan.",
@@ -140,16 +145,20 @@ async def enforce_daily_analysis_limit_impl(
                 reason="daily_system_limit_exceeded",
                 tenant_tier=tier.value,
             ).inc()
-            manager_module.audit_log(
-                event="llm_quota_denied",
-                user_id="system",
-                tenant_id=str(tenant_id),
-                details={
-                    "gate": "daily_system",
-                    "tier": tier.value,
-                    "limit": system_daily_limit,
-                    "observed": system_requests_today,
-                },
+            await maybe_await(
+                manager_module.audit_log(
+                    event="llm_quota_denied",
+                    user_id="system",
+                    tenant_id=str(tenant_id),
+                    details={
+                        "gate": "daily_system",
+                        "tier": tier.value,
+                        "limit": system_daily_limit,
+                        "observed": system_requests_today,
+                    },
+                    db=db,
+                    isolated=True,
+                )
             )
             raise manager_module.BudgetExceededError(
                 "Daily system LLM analysis limit reached for your current plan.",
@@ -182,16 +191,20 @@ async def enforce_daily_analysis_limit_impl(
             reason="daily_user_limit_exceeded",
             tenant_tier=tier.value,
         ).inc()
-        manager_module.audit_log(
-            event="llm_quota_denied",
-            user_id=str(user_id),
-            tenant_id=str(tenant_id),
-            details={
-                "gate": "daily_user",
-                "tier": tier.value,
-                "limit": user_daily_limit,
-                "observed": 0,
-            },
+        await maybe_await(
+            manager_module.audit_log(
+                event="llm_quota_denied",
+                user_id=str(user_id),
+                tenant_id=str(tenant_id),
+                details={
+                    "gate": "daily_user",
+                    "tier": tier.value,
+                    "limit": user_daily_limit,
+                    "observed": 0,
+                },
+                db=db,
+                isolated=True,
+            )
         )
         raise manager_module.BudgetExceededError(
             "Daily per-user LLM analysis limit reached for your current plan.",
@@ -216,16 +229,20 @@ async def enforce_daily_analysis_limit_impl(
             reason="daily_user_limit_exceeded",
             tenant_tier=tier.value,
         ).inc()
-        manager_module.audit_log(
-            event="llm_quota_denied",
-            user_id=str(user_id),
-            tenant_id=str(tenant_id),
-            details={
-                "gate": "daily_user",
-                "tier": tier.value,
-                "limit": user_daily_limit,
-                "observed": user_requests_today,
-            },
+        await maybe_await(
+            manager_module.audit_log(
+                event="llm_quota_denied",
+                user_id=str(user_id),
+                tenant_id=str(tenant_id),
+                details={
+                    "gate": "daily_user",
+                    "tier": tier.value,
+                    "limit": user_daily_limit,
+                    "observed": user_requests_today,
+                },
+                db=db,
+                isolated=True,
+            )
         )
         raise manager_module.BudgetExceededError(
             "Daily per-user LLM analysis limit reached for your current plan.",
@@ -281,16 +298,20 @@ async def enforce_fair_use_guards_impl(
             manager_module.LLM_FAIR_USE_EVALUATIONS.labels(
                 gate="soft_daily", outcome="deny", tenant_tier=tier_label
             ).inc()
-            manager_module.audit_log(
-                event="llm_fair_use_denied",
-                user_id="system",
-                tenant_id=str(tenant_id),
-                details={
-                    "gate": "soft_daily",
-                    "tier": tier_label,
-                    "limit": daily_soft_cap,
-                    "observed": requests_today,
-                },
+            await maybe_await(
+                manager_module.audit_log(
+                    event="llm_fair_use_denied",
+                    user_id="system",
+                    tenant_id=str(tenant_id),
+                    details={
+                        "gate": "soft_daily",
+                        "tier": tier_label,
+                        "limit": daily_soft_cap,
+                        "observed": requests_today,
+                    },
+                    db=db,
+                    isolated=True,
+                )
             )
             raise manager_module.LLMFairUseExceededError(
                 "Daily fair-use limit reached. Retry tomorrow or contact support to increase limits.",
@@ -327,16 +348,20 @@ async def enforce_fair_use_guards_impl(
             manager_module.LLM_FAIR_USE_EVALUATIONS.labels(
                 gate="per_minute", outcome="deny", tenant_tier=tier_label
             ).inc()
-            manager_module.audit_log(
-                event="llm_fair_use_denied",
-                user_id="system",
-                tenant_id=str(tenant_id),
-                details={
-                    "gate": "per_minute",
-                    "tier": tier_label,
-                    "limit": per_minute_cap,
-                    "observed": requests_last_minute,
-                },
+            await maybe_await(
+                manager_module.audit_log(
+                    event="llm_fair_use_denied",
+                    user_id="system",
+                    tenant_id=str(tenant_id),
+                    details={
+                        "gate": "per_minute",
+                        "tier": tier_label,
+                        "limit": per_minute_cap,
+                        "observed": requests_last_minute,
+                    },
+                    db=db,
+                    isolated=True,
+                )
             )
             raise manager_module.LLMFairUseExceededError(
                 "Rate limit reached for this tenant. Retry in about 60 seconds or contact support for higher throughput.",
@@ -383,16 +408,20 @@ async def enforce_fair_use_guards_impl(
         manager_module.LLM_FAIR_USE_EVALUATIONS.labels(
             gate="concurrency", outcome="deny", tenant_tier=tier_label
         ).inc()
-        manager_module.audit_log(
-            event="llm_fair_use_denied",
-            user_id="system",
-            tenant_id=str(tenant_id),
-            details={
-                "gate": "concurrency",
-                "tier": tier_label,
-                "limit": max_concurrency,
-                "observed": current_inflight,
-            },
+        await maybe_await(
+            manager_module.audit_log(
+                event="llm_fair_use_denied",
+                user_id="system",
+                tenant_id=str(tenant_id),
+                details={
+                    "gate": "concurrency",
+                    "tier": tier_label,
+                    "limit": max_concurrency,
+                    "observed": current_inflight,
+                },
+                db=db,
+                isolated=True,
+            )
         )
         raise manager_module.LLMFairUseExceededError(
             "Too many in-flight LLM requests for this tenant. Retry shortly or contact support for higher throughput.",

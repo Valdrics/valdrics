@@ -11,8 +11,13 @@ from __future__ import annotations
 
 import argparse
 import os
+from pathlib import Path
 import sys
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from scripts.env_generation_common import parse_env_file
 from app.shared.core.config import Settings
 from app.shared.core.runtime_dependencies import validate_runtime_dependencies
 
@@ -32,12 +37,22 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not force TESTING=false (default forces production-style validation).",
     )
+    parser.add_argument(
+        "--env-file",
+        type=Path,
+        default=None,
+        help="Optional shell-source-safe env file to load before validation.",
+    )
     return parser
 
 
 def main() -> int:
     parser = _build_parser()
     args = parser.parse_args()
+
+    if args.env_file is not None:
+        for key, value in parse_env_file(args.env_file).items():
+            os.environ[key] = value
 
     if args.environment:
         os.environ["ENVIRONMENT"] = args.environment

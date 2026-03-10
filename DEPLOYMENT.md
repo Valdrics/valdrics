@@ -19,18 +19,30 @@ cd valdrics
 # Install dependencies (using uv)
 uv sync
 
+# Fast local sqlite path
+make env-dev
+make bootstrap-local-db
+make dev
+```
+
+For the full local Postgres/Redis path instead:
+
+```bash
 # Copy environment file
 cp .env.example .env
 
 # Start services
 docker-compose up -d
 
-# Run migrations
+# Run migrations (Postgres only)
 uv run alembic upgrade head
 
 # Start API
 uv run uvicorn app.main:app --reload
 ```
+
+Do not replay the historical Alembic graph against local sqlite. Use
+`scripts/bootstrap_local_sqlite_schema.py` or `make bootstrap-local-db` for the local sqlite profile.
 
 ---
 

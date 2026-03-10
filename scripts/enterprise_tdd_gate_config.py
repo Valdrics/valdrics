@@ -52,6 +52,7 @@ ENTERPRISE_GATE_TEST_TARGETS: tuple[str, ...] = (
     "tests/unit/ops/test_verify_enforcement_stress_evidence.py",
     "tests/unit/ops/test_verify_enforcement_post_closure_sanity.py",
     "tests/unit/ops/test_verify_alembic_head_integrity.py",
+    "tests/unit/ops/test_webhook_job_reliability_drill_pack.py",
     "tests/unit/ops/test_verify_finance_guardrails_evidence.py",
     "tests/unit/ops/test_finance_guardrails_evidence_pack.py",
     "tests/unit/ops/test_verify_monthly_finance_evidence_refresh.py",

@@ -1,6 +1,6 @@
 import inspect
 import re
-import ssl
+import ssl  # noqa: F401  # Retained for compatibility with focused DB test patches.
 import time
 from dataclasses import dataclass
 from threading import Lock
@@ -33,6 +33,7 @@ from app.shared.db.session_context_ops import (
     set_session_tenant_id as _set_session_tenant_id_impl,
 )
 from app.shared.db.session_rls_ops import check_rls_policy as _check_rls_policy_impl
+from app.shared.db.connect_args import build_connect_args as _build_connect_args_impl
 
 logger = structlog.get_logger()
 __all__ = ["ValdricsException"]
@@ -46,6 +47,22 @@ settings = get_settings()
 _RLS_EXEMPT_TABLE_PATTERN = re.compile(
     r"\b(" + "|".join(re.escape(table.lower()) for table in RLS_EXEMPT_TABLES) + r")\b"
 )
+_AUDIT_LOG_TABLE_PATTERN = re.compile(r"\baudit_logs(?:_[a-z0-9_]+)?\b")
+_AUDIT_LOG_UPDATE_PATTERN = re.compile(
+    r"\bupdate\s+(?:only\s+)?audit_logs(?:_[a-z0-9_]+)?\b"
+)
+_AUDIT_LOG_DELETE_PATTERN = re.compile(
+    r"\bdelete\s+from\s+(?:only\s+)?audit_logs(?:_[a-z0-9_]+)?\b"
+)
+_SYSTEM_AUDIT_LOG_TABLE_PATTERN = re.compile(r"\bsystem_audit_logs\b")
+_SYSTEM_AUDIT_LOG_UPDATE_PATTERN = re.compile(
+    r"\bupdate\s+(?:only\s+)?system_audit_logs\b"
+)
+_SYSTEM_AUDIT_LOG_DELETE_PATTERN = re.compile(
+    r"\bdelete\s+from\s+(?:only\s+)?system_audit_logs\b"
+)
+_AUDIT_LOG_RETENTION_DELETE_FLAG = "allow_audit_log_retention_purge"
+_SYSTEM_AUDIT_LOG_RETENTION_DELETE_FLAG = "allow_system_audit_log_retention_purge"
 
 
 @dataclass(slots=True)
@@ -122,59 +139,10 @@ def _resolve_effective_url(settings_obj: Any) -> tuple[str, bool, bool]:
 
 
 def _build_connect_args(settings_obj: Any, effective_url: str) -> dict[str, Any]:
-    connect_args: dict[str, Any] = {}
-    ssl_mode = str(getattr(settings_obj, "DB_SSL_MODE", "require")).lower()
-
-    if "postgresql" in effective_url:
-        connect_args["statement_cache_size"] = 0  # Required for Supavisor
-
-    if ssl_mode == "disable":
-        logger.warning(
-            "database_ssl_disabled",
-            msg="SSL disabled - INSECURE, do not use in production!",
-        )
-        if "postgresql" in effective_url:
-            connect_args["ssl"] = False
-        return connect_args
-
-    if ssl_mode == "require":
-        ssl_context = ssl.create_default_context()
-        if getattr(settings_obj, "DB_SSL_CA_CERT_PATH", None):
-            ssl_context.load_verify_locations(cafile=settings_obj.DB_SSL_CA_CERT_PATH)
-            ssl_context.verify_mode = ssl.CERT_REQUIRED
-            ssl_context.check_hostname = True
-            logger.info(
-                "database_ssl_require_verified",
-                ca_cert=settings_obj.DB_SSL_CA_CERT_PATH,
-            )
-        else:
-            ssl_context.verify_mode = ssl.CERT_REQUIRED
-            ssl_context.check_hostname = True
-            logger.info(
-                "database_ssl_require_system_trust",
-                msg=(
-                    "SSL enabled with system trust store verification. "
-                    "Set DB_SSL_CA_CERT_PATH to pin an explicit CA bundle."
-                ),
-            )
-        if "postgresql" in effective_url:
-            connect_args["ssl"] = ssl_context
-        return connect_args
-
-    if ssl_mode in {"verify-ca", "verify-full"}:
-        ca_cert = getattr(settings_obj, "DB_SSL_CA_CERT_PATH", None)
-        if not ca_cert:
-            raise ValueError(f"DB_SSL_CA_CERT_PATH required for ssl_mode={ssl_mode}")
-        ssl_context = ssl.create_default_context(cafile=ca_cert)
-        ssl_context.verify_mode = ssl.CERT_REQUIRED
-        ssl_context.check_hostname = ssl_mode == "verify-full"
-        if "postgresql" in effective_url:
-            connect_args["ssl"] = ssl_context
-        logger.info("database_ssl_verified", mode=ssl_mode, ca_cert=ca_cert)
-        return connect_args
-
-    raise ValueError(
-        f"Invalid DB_SSL_MODE: {ssl_mode}. Use: disable, require, verify-ca, verify-full"
+    return _build_connect_args_impl(
+        settings_obj,
+        effective_url,
+        logger=logger,
     )
 
 
@@ -220,6 +188,12 @@ def _register_engine_event_listeners(engine: AsyncEngine) -> None:
         logger.debug("db_engine_listener_registration_skipped_non_engine_target")
         return
     event.listen(sync_engine, "before_cursor_execute", check_rls_policy, retval=True)
+    event.listen(
+        sync_engine,
+        "before_cursor_execute",
+        enforce_audit_log_immutability,
+        retval=True,
+    )
     event.listen(sync_engine, "before_cursor_execute", before_cursor_execute)
     event.listen(sync_engine, "after_cursor_execute", after_cursor_execute)
 
@@ -389,6 +363,7 @@ async def get_db(
 async def mark_session_system_context(session: AsyncSession) -> None:
     await _mark_session_system_context_impl(
         session=session,
+        resolve_session_backend_fn=_resolve_session_backend,
         db_operation_recoverable_errors=DB_OPERATION_RECOVERABLE_ERRORS,
         logger_obj=logger,
     )
@@ -445,6 +420,88 @@ def check_rls_policy(
         rls_metric_recoverable_errors=RLS_METRIC_RECOVERABLE_ERRORS,
         logger_obj=logger,
     )
+
+
+def enforce_audit_log_immutability(
+    conn: Connection,
+    _cursor: Any,
+    statement: str,
+    parameters: Any,
+    _context: Any,
+    _executemany: bool,
+) -> tuple[str, Any]:
+    stmt_lower = statement.lower()
+    if _AUDIT_LOG_UPDATE_PATTERN.search(stmt_lower):
+        raise ValdricsException(
+            message="audit_logs entries are immutable and cannot be updated",
+            code="audit_logs_update_forbidden",
+            status_code=500,
+            details={
+                "reason": "Audit evidence must be write-once.",
+                "action": "Insert a new audit row instead of updating an existing one.",
+            },
+        )
+
+    if _AUDIT_LOG_DELETE_PATTERN.search(stmt_lower):
+        if bool(conn.info.get(_AUDIT_LOG_RETENTION_DELETE_FLAG, False)):
+            return statement, parameters
+        raise ValdricsException(
+            message="audit_logs deletes are reserved for the retention purge path",
+            code="audit_logs_delete_forbidden",
+            status_code=500,
+            details={
+                "reason": "Audit evidence deletion requires the explicit retention purge flag.",
+                "action": "Use the scheduled audit-log retention workflow.",
+            },
+        )
+
+    if _SYSTEM_AUDIT_LOG_UPDATE_PATTERN.search(stmt_lower):
+        raise ValdricsException(
+            message="system_audit_logs entries are immutable and cannot be updated",
+            code="system_audit_logs_update_forbidden",
+            status_code=500,
+            details={
+                "reason": "System audit evidence must be write-once.",
+                "action": "Insert a new system audit row instead of updating an existing one.",
+            },
+        )
+
+    if _SYSTEM_AUDIT_LOG_DELETE_PATTERN.search(stmt_lower):
+        if bool(conn.info.get(_SYSTEM_AUDIT_LOG_RETENTION_DELETE_FLAG, False)):
+            return statement, parameters
+        raise ValdricsException(
+            message="system_audit_logs deletes are reserved for the retention purge path",
+            code="system_audit_logs_delete_forbidden",
+            status_code=500,
+            details={
+                "reason": "System audit evidence deletion requires the explicit retention purge flag.",
+                "action": "Use the scheduled system audit-log retention workflow.",
+            },
+        )
+
+    if not (
+        _AUDIT_LOG_TABLE_PATTERN.search(stmt_lower)
+        or _SYSTEM_AUDIT_LOG_TABLE_PATTERN.search(stmt_lower)
+    ):
+        return statement, parameters
+
+    return statement, parameters
+
+
+async def allow_audit_log_retention_purge(
+    session: AsyncSession, enabled: bool = True
+) -> None:
+    session.info[_AUDIT_LOG_RETENTION_DELETE_FLAG] = enabled
+    conn = await session.connection()
+    conn.info[_AUDIT_LOG_RETENTION_DELETE_FLAG] = enabled
+
+
+async def allow_system_audit_log_retention_purge(
+    session: AsyncSession, enabled: bool = True
+) -> None:
+    session.info[_SYSTEM_AUDIT_LOG_RETENTION_DELETE_FLAG] = enabled
+    conn = await session.connection()
+    conn.info[_SYSTEM_AUDIT_LOG_RETENTION_DELETE_FLAG] = enabled
 
 
 async def health_check() -> Dict[str, Any]:

@@ -160,7 +160,7 @@ def to_jira_policy_diagnostics(
     if not policy_notify_jira:
         reasons.append("policy_jira_notifications_disabled")
     if not feature_allowed_by_tier:
-        reasons.append("tier_missing_incident_integrations_feature")
+        reasons.append("tier_missing_jira_integration_feature")
     if not jira_enabled:
         reasons.append("tenant_jira_disabled")
     if not has_base_url:

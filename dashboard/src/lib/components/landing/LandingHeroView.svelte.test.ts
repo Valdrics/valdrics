@@ -23,10 +23,11 @@ function buildProps(sectionOrderVariant: 'problem_first' | 'workflow_first') {
 		imageUrl: 'https://www.example.com/og.png',
 		heroTitle: 'Control cloud spend decisions.',
 		heroSubtitle: 'Route signals to owners and record outcomes.',
-		primaryCtaLabel: 'Start Free',
-		secondaryCtaLabel: 'See enterprise path',
-		secondaryCtaHref: '/enterprise',
-		primaryCtaHref: '/auth/login',
+		primaryCtaLabel: 'Start Free Workspace',
+		secondaryCtaLabel: 'See Pricing',
+		secondaryCtaHref: '/pricing?entry=hero_secondary',
+		primaryCtaHref: '/auth/login?intent=engineering_control',
+		secondaryCtaTelemetryValue: 'see_pricing',
 		ctaVariant: 'start_free' as const,
 		sectionOrderVariant,
 		cloudHookStates: CLOUD_HOOK_STATES,
@@ -65,6 +66,8 @@ function buildProps(sectionOrderVariant: 'problem_first' | 'workflow_first') {
 		freeTierCtaHref: '/pricing?plan=free',
 		buildPlanCtaHref: (planId: string) => `/pricing?plan=${planId}`,
 		plansTalkToSalesHref: '/talk-to-sales',
+		plansEnterpriseHref: '/enterprise?source=plans_enterprise',
+		trustEnterpriseHref: '/enterprise?source=trust_enterprise',
 		requestValidationBriefingHref: '/talk-to-sales?source=trust_validation',
 		onePagerHref: '/resources/one-pager.md',
 		subscribeApiPath: '/api/marketing/subscribe',
@@ -83,8 +86,9 @@ function storyBandOrder(container: HTMLElement): string[] {
 	if (!(storyBand instanceof HTMLElement)) {
 		throw new Error('missing story band');
 	}
-	return Array.from(storyBand.children).map((element) =>
-		element.id || element.getAttribute('data-landing-section') || element.tagName.toLowerCase()
+	return Array.from(storyBand.children).map(
+		(element) =>
+			element.id || element.getAttribute('data-landing-section') || element.tagName.toLowerCase()
 	);
 }
 

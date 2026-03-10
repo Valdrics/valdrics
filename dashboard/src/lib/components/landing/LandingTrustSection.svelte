@@ -1,19 +1,25 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import { COMPLIANCE_FOUNDATION_BADGES, EXECUTIVE_CONFIDENCE_POINTS } from '$lib/landing/heroContent';
+	import {
+		COMPLIANCE_FOUNDATION_BADGES,
+		EXECUTIVE_CONFIDENCE_POINTS
+	} from '$lib/landing/heroContent';
 
 	let {
 		onTrackCta,
+		enterprisePathHref,
 		requestValidationBriefingHref,
 		onePagerHref,
 		globalComplianceWorkbookHref = `${base}/resources/global-finops-compliance-workbook.md`
 	}: {
 		onTrackCta: (
 			value:
+				| 'enterprise_review'
 				| 'request_validation_briefing'
 				| 'download_executive_one_pager'
 				| 'download_global_compliance_workbook'
 		) => void;
+		enterprisePathHref: string;
 		requestValidationBriefingHref: string;
 		onePagerHref: string;
 		globalComplianceWorkbookHref?: string;
@@ -26,43 +32,50 @@
 	data-landing-section="proof"
 >
 	<div class="landing-section-head">
-		<h2 class="landing-h2">Security and Readiness</h2>
+		<h2 class="landing-h2">Security proof and enterprise rollout</h2>
 		<p class="landing-section-sub">
-			Security essentials and a clear enterprise handoff when review is required.
+			Concrete control evidence, buyer-ready materials, and a clear handoff for procurement,
+			security, and rollout review.
 		</p>
 	</div>
 
-	<div class="landing-validation-cta glass-panel" aria-label="Security and Readiness">
-		<p class="landing-proof-k">Need formal review?</p>
+	<div
+		class="landing-validation-cta glass-panel"
+		aria-label="Security proof and enterprise rollout"
+	>
+		<p class="landing-proof-k">Formal evaluation lane</p>
 		<p class="landing-p">
-			Use the enterprise path when procurement, security review, or rollout planning is part of
-			the buying process.
+			Use the enterprise path when architecture review, rollout planning, procurement, or security
+			validation needs a dedicated diligence track. Self-serve teams can keep moving in the
+			workspace path above.
 		</p>
 		<div class="landing-lead-actions">
 			<a
-				href={requestValidationBriefingHref}
+				href={enterprisePathHref}
 				class="btn btn-primary w-fit pulse-glow"
-				onclick={() => onTrackCta('request_validation_briefing')}
+				onclick={() => onTrackCta('enterprise_review')}
 			>
-				Talk to Sales
+				Open Enterprise Path
 			</a>
 			<a
-				href={onePagerHref}
+				href={requestValidationBriefingHref}
 				class="btn btn-secondary w-fit"
-				onclick={() => onTrackCta('download_executive_one_pager')}
+				onclick={() => onTrackCta('request_validation_briefing')}
 			>
-				Download Executive One-Pager
+				Book Validation Briefing
 			</a>
 		</div>
 		<p class="landing-more-resources">
 			Also see:
-			<a href={`${base}/enterprise`}>Enterprise Governance Overview</a>
+			<a href={onePagerHref} onclick={() => onTrackCta('download_executive_one_pager')}
+				>Download Executive One-Pager</a
+			>
 			•
 			<a
 				href={globalComplianceWorkbookHref}
 				onclick={() => onTrackCta('download_global_compliance_workbook')}
 			>
-				Access Control & Compliance Checklist
+				Control and Access Checklist
 			</a>
 		</p>
 	</div>
@@ -78,13 +91,11 @@
 	</div>
 
 	<div class="landing-compliance-block">
-		<p class="landing-proof-k">Security essentials</p>
+		<p class="landing-proof-k">Control foundations</p>
 		<div class="landing-trust-badges">
 			{#each COMPLIANCE_FOUNDATION_BADGES as badge (badge)}
-				<span
-					class="landing-trust-badge {badge.includes('ISO 27001') || badge.includes('DORA')
-						? 'is-featured'
-						: ''}">{badge}</span
+				<span class="landing-trust-badge {badge.includes('Decision history') ? 'is-featured' : ''}"
+					>{badge}</span
 				>
 			{/each}
 		</div>

@@ -109,6 +109,63 @@ class LicenseGovernanceHealth(BaseModel):
     avg_time_to_complete_hours: float | None
 
 
+class LandingFunnelWindowSummary(BaseModel):
+    """Current or previous weekly landing-to-paid funnel snapshot."""
+
+    total_events: int = 0
+    cta_events: int = 0
+    signup_intent_events: int = 0
+    onboarded_tenants: int = 0
+    connected_tenants: int = 0
+    first_value_tenants: int = 0
+    pql_tenants: int = 0
+    pricing_view_tenants: int = 0
+    checkout_started_tenants: int = 0
+    paid_tenants: int = 0
+    signup_to_connection_rate: float | None = None
+    connection_to_first_value_rate: float | None = None
+
+
+class LandingFunnelWeeklyDelta(BaseModel):
+    """Week-over-week delta for the landing-to-paid funnel."""
+
+    total_events: int = 0
+    signup_intent_events: int = 0
+    onboarded_tenants: int = 0
+    connected_tenants: int = 0
+    first_value_tenants: int = 0
+    pql_tenants: int = 0
+    pricing_view_tenants: int = 0
+    checkout_started_tenants: int = 0
+    paid_tenants: int = 0
+    signup_to_connection_rate: float | None = None
+    connection_to_first_value_rate: float | None = None
+
+
+class LandingFunnelHealthAlert(BaseModel):
+    """Operational alert for a critical funnel conversion step."""
+
+    key: str
+    label: str
+    status: str
+    threshold_rate: float
+    current_rate: float | None = None
+    previous_rate: float | None = None
+    weekly_delta: float | None = None
+    current_numerator: int = 0
+    current_denominator: int = 0
+    message: str
+
+
+class LandingFunnelHealth(BaseModel):
+    """Internal weekly landing-funnel health state for ops dashboards."""
+
+    weekly_current: LandingFunnelWindowSummary
+    weekly_previous: LandingFunnelWindowSummary
+    weekly_delta: LandingFunnelWeeklyDelta
+    alerts: list[LandingFunnelHealthAlert]
+
+
 class InvestorHealthDashboard(BaseModel):
     """Complete health dashboard for investors."""
 
@@ -120,6 +177,7 @@ class InvestorHealthDashboard(BaseModel):
     cloud_connections: CloudConnectionHealth
     cloud_plus_connections: CloudPlusConnectionHealth
     license_governance: LicenseGovernanceHealth
+    landing_funnel: LandingFunnelHealth
 
 
 __all__ = [
@@ -128,6 +186,10 @@ __all__ = [
     "CloudPlusProviderHealth",
     "InvestorHealthDashboard",
     "JobQueueHealth",
+    "LandingFunnelHealth",
+    "LandingFunnelHealthAlert",
+    "LandingFunnelWeeklyDelta",
+    "LandingFunnelWindowSummary",
     "LLMFairUseRuntime",
     "LLMFairUseThresholds",
     "LLMUsageMetrics",

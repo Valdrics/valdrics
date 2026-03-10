@@ -20,6 +20,11 @@ PROHIBITED_ROOT_PATTERNS: tuple[str, ...] = (
     "test_*.sqlite",
     "test_*.sqlite-shm",
     "test_*.sqlite-wal",
+    "valdrics_local*.sqlite3",
+    "valdrics_local*.sqlite3-journal",
+    "valdrics_local*.sqlite3-shm",
+    "valdrics_local*.sqlite3-wal",
+    "valdrics_local*.sqlite3.bootstrap.lock",
 )
 
 

@@ -1,15 +1,18 @@
 # Valdrics Makefile
 # Developer convenience commands using uv
 
-.PHONY: help install dev test lint format security clean docker-build docker-up helm-install env-dev
+.PHONY: help install dev test lint format security clean docker-build docker-up helm-install env-dev bootstrap-local-db clean-local-db smoke-local-db
 
 # Default target
 help:
 	@echo "Valdrics Development Commands"
 	@echo ""
 	@echo "  make install     - Install dependencies with uv"
-	@echo "  make env-dev     - Generate deterministic .env.dev for local isolated testing"
-	@echo "  make dev         - Start development servers"
+	@echo "  make env-dev     - Generate deterministic .env.dev for local sqlite development"
+	@echo "  make bootstrap-local-db - Bootstrap current ORM schema into local sqlite without replaying legacy migrations"
+	@echo "  make clean-local-db - Remove local sqlite bootstrap artifacts from the repo root"
+	@echo "  make smoke-local-db - Prove the local sqlite bootstrap path reaches a healthy app state"
+	@echo "  make dev         - Start development servers (auto-uses .env.dev when present)"
 	@echo "  make test        - Run test suite"
 	@echo "  make lint        - Run linters"
 	@echo "  make format      - Format code"
@@ -33,9 +36,23 @@ install:
 env-dev:
 	uv run python3 scripts/generate_local_dev_env.py
 
+bootstrap-local-db:
+	@/bin/bash -lc 'if [ ! -f .env.dev ]; then echo "Missing .env.dev. Run '\''make env-dev'\'' first."; exit 1; fi; set -a && source .env.dev && set +a && uv run python3 scripts/bootstrap_local_sqlite_schema.py'
+
+clean-local-db:
+	@rm -f valdrics_local*.sqlite3 valdrics_local*.sqlite3-journal valdrics_local*.sqlite3-shm valdrics_local*.sqlite3-wal valdrics_local*.sqlite3.bootstrap.lock
+
+smoke-local-db:
+	uv run python3 scripts/smoke_test_local_sqlite_bootstrap.py
+
 dev:
-	@echo "Starting API server..."
-	uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 &
+	@if [ -f .env.dev ]; then \
+		echo "Starting API server with .env.dev local sqlite bootstrap..."; \
+		/bin/bash -lc 'set -a && source .env.dev && set +a && uv run python3 scripts/bootstrap_local_sqlite_schema.py && exec uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000' & \
+	else \
+		echo "Starting API server..."; \
+		uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 & \
+	fi
 	@echo "Starting dashboard..."
 	cd dashboard && pnpm run dev
 

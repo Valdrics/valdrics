@@ -40,6 +40,9 @@ def _policy_notification_flags(
     remediation_settings: Any,
     tenant_tier: Any,
 ) -> dict[str, bool]:
+    jira_integration_enabled = bool(
+        is_feature_enabled(tenant_tier, FeatureFlag.JIRA_INTEGRATION)
+    )
     incident_integrations_enabled = bool(
         is_feature_enabled(tenant_tier, FeatureFlag.INCIDENT_INTEGRATIONS)
     )
@@ -51,7 +54,7 @@ def _policy_notification_flags(
     notify_jira = bool(
         remediation_settings
         and bool(getattr(remediation_settings, "policy_violation_notify_jira", False))
-        and incident_integrations_enabled
+        and jira_integration_enabled
     )
     return {
         "notify_slack": notify_slack,

@@ -21,6 +21,10 @@ vi.mock('$app/paths', () => ({
 
 describe('billing page plan messaging', () => {
 	it('reuses the shared plan value narrative from pricing', () => {
+		const starterPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'starter');
+		const growthPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'growth');
+		const proPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'pro');
+
 		render(Page, {
 			props: {
 				data: {
@@ -36,15 +40,9 @@ describe('billing page plan messaging', () => {
 		});
 
 		expect(screen.getByRole('heading', { level: 1, name: /subscription and usage/i })).toBeTruthy();
-		expect(
-			screen.getByText(/\$49\/mo starting price\. priced for the first team that needs daily review cadence/i)
-		).toBeTruthy();
-		expect(
-			screen.getByText(/\$149\/mo starting price\. priced for the first cross-functional rollout/i)
-		).toBeTruthy();
-		expect(
-			screen.getByText(/\$299\/mo starting price\. priced for finance-grade operations/i)
-		).toBeTruthy();
+		expect((document.body.textContent || '').includes(`$49/mo starting price. ${starterPlan?.story?.note}`)).toBe(true);
+		expect((document.body.textContent || '').includes(`$149/mo starting price. ${growthPlan?.story?.note}`)).toBe(true);
+		expect((document.body.textContent || '').includes(`$299/mo starting price. ${proPlan?.story?.note}`)).toBe(true);
 		expect(screen.getAllByText(/^Best for$/i).length).toBeGreaterThanOrEqual(4);
 		expect(screen.getAllByText(/^Why teams upgrade$/i).length).toBeGreaterThanOrEqual(4);
 		expect(
@@ -53,5 +51,7 @@ describe('billing page plan messaging', () => {
 		expect(
 			screen.getByText(/move to the enterprise lane only when scim, private deployment, procurement review/i)
 		).toBeTruthy();
+		const growthPlanCard = screen.getByRole('heading', { name: /^growth$/i }).closest('article');
+		expect(growthPlanCard?.className).toContain('billing-plan-card--popular');
 	});
 });

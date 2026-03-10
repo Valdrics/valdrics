@@ -9,9 +9,10 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 
 from alembic import context
-import ssl
 
 from app.shared.db.base import Base
+from app.shared.db.connect_args import build_connect_args
+from app.shared.db.migration_context import build_migration_context_kwargs
 # Import all models so Base knows about them!
 from app.models.llm import LLMUsage, LLMBudget  # noqa: F401 # pylint: disable=unused-import
 from app.models.carbon_settings import CarbonSettings  # noqa: F401 # pylint: disable=unused-import
@@ -29,7 +30,7 @@ from app.models.tenant import User, Tenant  # noqa: F401 # pylint: disable=unuse
 from app.models.pricing import PricingPlan, ExchangeRate, TenantSubscription, LLMProviderPricing  # noqa: F401
 from app.models.background_job import BackgroundJob  # noqa: F401 # pylint: disable=unused-import
 # TenantSubscription now imported from app.models.pricing
-from app.modules.governance.domain.security.audit_log import AuditLog  # noqa: F401 # pylint: disable=unused-import
+from app.modules.governance.domain.security.audit_log import AuditLog, SystemAuditLog  # noqa: F401 # pylint: disable=unused-import
 from app.models.attribution import AttributionRule, CostAllocation  # noqa: F401 # pylint: disable=unused-import
 from app.models.anomaly_marker import AnomalyMarker  # noqa: F401 # pylint: disable=unused-import
 from app.models.optimization import OptimizationStrategy, StrategyRecommendation  # noqa: F401 # pylint: disable=unused-import
@@ -41,11 +42,11 @@ from app.models.enforcement import (  # noqa: F401 # pylint: disable=unused-impo
     EnforcementPolicy,
 )
 
-from app.shared.core.config import get_settings
+from app.shared.core.migration_settings import get_migration_settings
 from sqlalchemy.ext.asyncio import create_async_engine
 
 
-settings = get_settings()
+migration_settings = get_migration_settings()
 
 
 # this is the Alembic Config object, which provides
@@ -70,6 +71,14 @@ target_metadata = Base.metadata
 
 
 _COST_RECORD_PARTITION_RE = re.compile(r"^cost_records_\d{4}_\d{2}$")
+
+
+def _sqlite_replay_disabled_error_message() -> str:
+    return (
+        "SQLite Alembic replay is disabled. "
+        "Use scripts/bootstrap_local_sqlite_schema.py or make bootstrap-local-db "
+        "for local sqlite development."
+    )
 
 
 def _is_ignored_partition_table(name: str) -> bool:
@@ -138,6 +147,8 @@ def run_migrations_offline() -> None:
 
     """
     url = config.get_main_option("sqlalchemy.url")
+    if "sqlite" in str(url or "").strip().lower():
+        raise RuntimeError(_sqlite_replay_disabled_error_message())
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -152,11 +163,15 @@ def run_migrations_offline() -> None:
 
 
 def do_run_migrations(connection: Connection) -> None:
+    if connection.dialect.name == "sqlite":
+        raise RuntimeError(_sqlite_replay_disabled_error_message())
     context.configure(
-        connection=connection, 
-        target_metadata=target_metadata,
-        include_object=include_object,
-        compare_type=compare_type,
+        **build_migration_context_kwargs(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
+            compare_type=compare_type,
+        )
     )
 
     with context.begin_transaction():
@@ -166,32 +181,13 @@ async def run_async_migrations() -> None:
     """In this scenario we need to create an Engine
     and associate a connection with the context.
     """
-    ssl_mode = (settings.DB_SSL_MODE or "require").lower()
-    connect_args: dict[str, Any] = {"statement_cache_size": 0}
-
-    if ssl_mode == "disable":
-        connect_args["ssl"] = False
-    elif ssl_mode == "require":
-        ssl_context = ssl.create_default_context()
-        if settings.DB_SSL_CA_CERT_PATH:
-            ssl_context.load_verify_locations(cafile=settings.DB_SSL_CA_CERT_PATH)
-        ssl_context.verify_mode = ssl.CERT_REQUIRED
-        ssl_context.check_hostname = True
-        connect_args["ssl"] = ssl_context
-    elif ssl_mode in {"verify-ca", "verify-full"}:
-        if not settings.DB_SSL_CA_CERT_PATH:
-            raise ValueError(f"DB_SSL_CA_CERT_PATH is required when DB_SSL_MODE={ssl_mode}")
-        ssl_context = ssl.create_default_context(cafile=settings.DB_SSL_CA_CERT_PATH)
-        ssl_context.check_hostname = ssl_mode == "verify-full"
-        ssl_context.verify_mode = ssl.CERT_REQUIRED
-        connect_args["ssl"] = ssl_context
-    else:
-        raise ValueError(
-            f"Invalid DB_SSL_MODE: {ssl_mode}. Use: disable, require, verify-ca, verify-full"
-        )
+    connect_args: dict[str, Any] = build_connect_args(
+        migration_settings,
+        migration_settings.DATABASE_URL,
+    )
 
     connectable = create_async_engine(
-        settings.DATABASE_URL,
+        migration_settings.DATABASE_URL,
         poolclass=pool.NullPool,
         connect_args=connect_args,
     )
@@ -204,7 +200,10 @@ async def run_async_migrations() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     # Escape % characters for ConfigParser interpolation
-    config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
+    config.set_main_option(
+        "sqlalchemy.url",
+        migration_settings.DATABASE_URL.replace("%", "%%"),
+    )
     asyncio.run(run_async_migrations())
 
 

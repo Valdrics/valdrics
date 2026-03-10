@@ -153,7 +153,8 @@ async def evaluate_background_jobs(
         result = await db.execute(
             select(func.count()).where(
                 BackgroundJob.status == JobStatus.PENDING,
-                BackgroundJob.created_at < cutoff_time,
+                BackgroundJob.scheduled_for <= cutoff_time,
+                sa.not_(BackgroundJob.is_deleted),
             )
         )
 

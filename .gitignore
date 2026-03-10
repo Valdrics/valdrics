@@ -70,6 +70,11 @@ cover/
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+valdrics_local*.sqlite3
+valdrics_local*.sqlite3-journal
+valdrics_local*.sqlite3-shm
+valdrics_local*.sqlite3-wal
+valdrics_local*.sqlite3.bootstrap.lock
 
 # Flask stuff:
 instance/
@@ -148,6 +153,11 @@ celerybeat.pid
 .env
 .env.dev
 .env.dev.*
+.env.staging
+.env.staging.*
+.env.production
+.env.production.*
+.runtime/
 .envrc
 .venv
 env/

@@ -13,12 +13,14 @@ def test_collect_root_hygiene_violations_detects_exact_and_glob_matches(
 ) -> None:
     (tmp_path / "artifact.json").write_text("x", encoding="utf-8")
     (tmp_path / "test_alpha.sqlite").write_text("", encoding="utf-8")
+    (tmp_path / "valdrics_local_dev.sqlite3").write_text("", encoding="utf-8")
     (tmp_path / "README.md").write_text("ok", encoding="utf-8")
 
     violations = collect_root_hygiene_violations(tmp_path)
     assert [item.name for item in violations] == [
         "artifact.json",
         "test_alpha.sqlite",
+        "valdrics_local_dev.sqlite3",
     ]
 
 

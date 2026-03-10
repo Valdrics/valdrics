@@ -18,6 +18,7 @@ from app.modules.notifications.domain import (
     get_tenant_slack_service,
 )
 from app.shared.core.config import get_settings
+from app.shared.core.pricing import FeatureFlag, get_tenant_tier, is_feature_enabled
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -47,6 +48,18 @@ class NotificationDispatcher:
         return get_slack_service()
 
     @staticmethod
+    async def _tenant_has_feature(
+        *,
+        tenant_id: str | None,
+        db: "AsyncSession | None",
+        feature: FeatureFlag,
+    ) -> bool:
+        if not tenant_id or db is None:
+            return False
+        tier = await get_tenant_tier(tenant_id, db)
+        return bool(is_feature_enabled(tier, feature))
+
+    @staticmethod
     async def _resolve_teams_service(
         tenant_id: str | None = None,
         db: "AsyncSession | None" = None,
@@ -58,6 +71,12 @@ class NotificationDispatcher:
                 "notification_teams_skipped_missing_tenant_db_context",
                 tenant_id=tenant_id,
             )
+            return None
+        if not await NotificationDispatcher._tenant_has_feature(
+            tenant_id=tenant_id,
+            db=db,
+            feature=FeatureFlag.INCIDENT_INTEGRATIONS,
+        ):
             return None
         return await get_tenant_teams_service(db, tenant_id)
 
@@ -209,6 +228,12 @@ class NotificationDispatcher:
                     event_type=event_type,
                     tenant_id=tenant_id,
                 )
+                return
+            if not await NotificationDispatcher._tenant_has_feature(
+                tenant_id=tenant_id,
+                db=db,
+                feature=FeatureFlag.INCIDENT_INTEGRATIONS,
+            ):
                 return
             dispatchers = await get_tenant_workflow_dispatchers(db, tenant_id)
             if not dispatchers:

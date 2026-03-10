@@ -21,7 +21,7 @@ async def test_update_notification_settings_with_jira_config(
     override_current_user,
     build_jira_payload,
 ) -> None:
-    admin = make_current_user(tier=PricingTier.PRO)
+    admin = make_current_user(tier=PricingTier.GROWTH)
 
     with override_current_user(app, admin):
         response = await async_client.put(
@@ -37,21 +37,21 @@ async def test_update_notification_settings_with_jira_config(
 
 
 @pytest.mark.asyncio
-async def test_update_notification_settings_jira_requires_incident_tier(
+async def test_update_notification_settings_jira_requires_growth_tier(
     async_client: AsyncClient,
     app,
     make_current_user,
     override_current_user,
     build_jira_payload,
 ) -> None:
-    with override_current_user(app, make_current_user(tier=PricingTier.GROWTH)):
+    with override_current_user(app, make_current_user(tier=PricingTier.STARTER)):
         response = await async_client.put(
             "/api/v1/settings/notifications",
-            json=build_jira_payload(),
+            json=build_jira_payload(slack_enabled=False, slack_channel_override=None),
         )
 
     assert response.status_code == 403
-    assert "incident_integrations" in response.json()["error"]
+    assert "jira_integration" in response.json()["error"]
 
 
 @pytest.mark.asyncio
@@ -62,7 +62,7 @@ async def test_update_notification_settings_rejects_unsafe_jira_base_url(
     override_current_user,
     build_jira_payload,
 ) -> None:
-    with override_current_user(app, make_current_user(tier=PricingTier.PRO)):
+    with override_current_user(app, make_current_user(tier=PricingTier.GROWTH)):
         response = await async_client.put(
             "/api/v1/settings/notifications",
             json=build_jira_payload(jira_base_url="https://127.0.0.1"),
@@ -209,7 +209,7 @@ async def test_test_jira_notification_success(
     override_current_user,
 ) -> None:
     tenant_id = uuid.uuid4()
-    admin = make_current_user(tier=PricingTier.PRO, tenant_id=tenant_id)
+    admin = make_current_user(tier=PricingTier.GROWTH, tenant_id=tenant_id)
     db.add(
         NotificationSettings(
             tenant_id=tenant_id,
@@ -246,11 +246,25 @@ async def test_test_jira_notification_missing_config(
     make_current_user,
     override_current_user,
 ) -> None:
-    with override_current_user(app, make_current_user(tier=PricingTier.PRO)):
+    with override_current_user(app, make_current_user(tier=PricingTier.GROWTH)):
         response = await async_client.post("/api/v1/settings/notifications/test-jira")
 
     assert response.status_code == 400
     assert "Jira is not configured" in response.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_test_jira_notification_requires_growth_tier(
+    async_client: AsyncClient,
+    app,
+    make_current_user,
+    override_current_user,
+) -> None:
+    with override_current_user(app, make_current_user(tier=PricingTier.STARTER)):
+        response = await async_client.post("/api/v1/settings/notifications/test-jira")
+
+    assert response.status_code == 403
+    assert "jira_integration" in response.json()["error"]
 
 
 def test_notification_settings_update_rejects_token_and_clear_flag() -> None:
@@ -334,7 +348,7 @@ async def test_update_notification_settings_jira_missing_fields_returns_422(
     override_current_user,
     build_jira_payload,
 ) -> None:
-    with override_current_user(app, make_current_user(tier=PricingTier.PRO)):
+    with override_current_user(app, make_current_user(tier=PricingTier.GROWTH)):
         response = await async_client.put(
             "/api/v1/settings/notifications",
             json=build_jira_payload(
@@ -356,7 +370,7 @@ async def test_test_jira_notification_requires_tenant(
 ) -> None:
     with override_current_user(
         app,
-        make_current_user(tier=PricingTier.PRO, tenant_id=None),
+        make_current_user(tier=PricingTier.GROWTH, tenant_id=None),
     ):
         response = await async_client.post("/api/v1/settings/notifications/test-jira")
 
@@ -371,7 +385,7 @@ async def test_test_jira_notification_failure_and_exception(
     make_current_user,
     override_current_user,
 ) -> None:
-    admin = make_current_user(tier=PricingTier.PRO)
+    admin = make_current_user(tier=PricingTier.GROWTH)
 
     with override_current_user(app, admin):
         mock_jira = AsyncMock()

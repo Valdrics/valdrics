@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.core.pricing import PricingTier
+from app.shared.core.async_utils import maybe_await
 
 
 def classify_client_ip(client_ip: str | None) -> tuple[str, int]:
@@ -47,7 +48,6 @@ async def record_authenticated_abuse_signal_impl(
     import app.shared.llm.budget_manager as manager_module
 
     del manager_cls
-    del db
     normalized_actor_type = str(actor_type or "").strip().lower()
     if normalized_actor_type not in {"user", "system"}:
         normalized_actor_type = "user" if user_id is not None else "system"
@@ -67,15 +67,19 @@ async def record_authenticated_abuse_signal_impl(
     if risk_score < 70:
         return
 
-    manager_module.audit_log(
-        event="llm_authenticated_abuse_signal",
-        user_id=str(user_id or "system"),
-        tenant_id=str(tenant_id),
-        details={
-            "actor_type": normalized_actor_type,
-            "ip_bucket": ip_bucket,
-            "risk_score": risk_score,
-        },
+    await maybe_await(
+        manager_module.audit_log(
+            event="llm_authenticated_abuse_signal",
+            user_id=str(user_id or "system"),
+            tenant_id=str(tenant_id),
+            details={
+                "actor_type": normalized_actor_type,
+                "ip_bucket": ip_bucket,
+                "risk_score": risk_score,
+            },
+            db=db,
+            isolated=True,
+        )
     )
 
 
@@ -237,18 +241,22 @@ async def enforce_global_abuse_guard_impl(
         manager_module.LLM_FAIR_USE_EVALUATIONS.labels(
             gate="global_abuse", outcome="deny", tenant_tier=tier_label
         ).inc()
-        manager_module.audit_log(
-            event="llm_global_abuse_triggered",
-            user_id="system",
-            tenant_id=str(tenant_id),
-            details={
-                "gate": "global_abuse",
-                "global_requests_last_minute": global_requests_last_minute,
-                "active_tenants_last_minute": active_tenants_last_minute,
-                "rpm_threshold": rpm_threshold,
-                "tenant_threshold": tenant_threshold,
-                "block_seconds": block_seconds,
-            },
+        await maybe_await(
+            manager_module.audit_log(
+                event="llm_global_abuse_triggered",
+                user_id="system",
+                tenant_id=str(tenant_id),
+                details={
+                    "gate": "global_abuse",
+                    "global_requests_last_minute": global_requests_last_minute,
+                    "active_tenants_last_minute": active_tenants_last_minute,
+                    "rpm_threshold": rpm_threshold,
+                    "tenant_threshold": tenant_threshold,
+                    "block_seconds": block_seconds,
+                },
+                db=db,
+                isolated=True,
+            )
         )
         manager_cls._local_global_abuse_block_until = now + timedelta(
             seconds=block_seconds

@@ -16,7 +16,8 @@ from app.shared.core.auth import (
     get_current_user_with_db_context,
     requires_role_with_db_context,
 )
-from app.shared.core.logging import audit_log
+from app.shared.core.async_utils import maybe_await
+from app.shared.core.logging import audit_log_async as audit_log
 from app.shared.core.pricing import normalize_tier, get_tier_limit
 from app.shared.db.session import get_db
 from app.models.llm import LLMBudget
@@ -179,6 +180,28 @@ async def update_llm_settings(
             if key in update_data:
                 setattr(settings, key, update_data[key])
 
+    await maybe_await(
+        audit_log(
+            "settings.llm_updated",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {
+                "monthly_limit": float(settings.monthly_limit_usd),
+                "provider": settings.preferred_provider,
+                "model": settings.preferred_model,
+                "keys_updated": [
+                    k
+                    for k, v in data.model_dump().items()
+                    if "api_key" in k and v is not None
+                ],
+            },
+            db=db,
+            resource_type="llm_settings",
+            resource_id=str(current_user.tenant_id),
+            request_method="PUT",
+            request_path="/api/v1/settings/llm",
+        )
+    )
     await db.commit()
     await db.refresh(settings)
 
@@ -187,23 +210,6 @@ async def update_llm_settings(
         tenant_id=str(current_user.tenant_id),
         provider=settings.preferred_provider,
         model=settings.preferred_model,
-    )
-
-    # SEC: Audit log critical settings change
-    audit_log(
-        "settings.llm_updated",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {
-            "monthly_limit": float(settings.monthly_limit_usd),
-            "provider": settings.preferred_provider,
-            "model": settings.preferred_model,
-            "keys_updated": [
-                k
-                for k, v in data.model_dump().items()
-                if "api_key" in k and v is not None
-            ],
-        },
     )
 
     # Map model flags for response

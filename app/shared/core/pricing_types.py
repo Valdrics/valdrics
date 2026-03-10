@@ -20,6 +20,7 @@ class FeatureFlag(str, Enum):
     COST_TRACKING = "cost_tracking"
     ALERTS = "alerts"
     SLACK_INTEGRATION = "slack_integration"
+    JIRA_INTEGRATION = "jira_integration"
     ZOMBIE_SCAN = "zombie_scan"
     LLM_ANALYSIS = "llm_analysis"
     AI_INSIGHTS = "ai_insights"

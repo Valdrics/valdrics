@@ -171,56 +171,42 @@ async def update_identity_settings_route(
     identity.scim_enabled = bool(payload.scim_enabled)
     identity.scim_group_mappings = [m.model_dump() for m in payload.scim_group_mappings]
 
+    audit = audit_logger_cls(
+        db=db,
+        tenant_id=cast(UUID, current_user.tenant_id),
+        correlation_id=str(uuid4()),
+    )
+    await audit.log(
+        event_type=audit_event_type.IDENTITY_SETTINGS_UPDATED,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        resource_type="identity_settings",
+        resource_id=str(current_user.tenant_id),
+        details={
+            "sso_enabled": bool(identity.sso_enabled),
+            "allowed_email_domains_count": len(identity.allowed_email_domains or []),
+            "sso_federation_enabled": bool(
+                getattr(identity, "sso_federation_enabled", False)
+            ),
+            "sso_federation_mode": str(
+                getattr(identity, "sso_federation_mode", "domain") or "domain"
+            ),
+            "sso_federation_provider_id_configured": bool(
+                str(getattr(identity, "sso_federation_provider_id", "") or "").strip()
+            ),
+            "scim_enabled": bool(identity.scim_enabled),
+            "scim_token_generated": bool(scim_token_generated),
+            "scim_last_rotated_at": identity.scim_last_rotated_at.isoformat()
+            if identity.scim_last_rotated_at
+            else None,
+            "scim_group_mappings_count": len(identity.scim_group_mappings or []),
+        },
+        success=True,
+        request_method="PUT",
+        request_path="/api/v1/settings/identity",
+    )
     await db.commit()
     await db.refresh(identity)
-
-    try:
-        audit = audit_logger_cls(
-            db=db,
-            tenant_id=cast(UUID, current_user.tenant_id),
-            correlation_id=str(uuid4()),
-        )
-        await audit.log(
-            event_type=audit_event_type.IDENTITY_SETTINGS_UPDATED,
-            actor_id=current_user.id,
-            actor_email=current_user.email,
-            resource_type="identity_settings",
-            resource_id=str(current_user.tenant_id),
-            details={
-                "sso_enabled": bool(identity.sso_enabled),
-                "allowed_email_domains_count": len(identity.allowed_email_domains or []),
-                "sso_federation_enabled": bool(
-                    getattr(identity, "sso_federation_enabled", False)
-                ),
-                "sso_federation_mode": str(
-                    getattr(identity, "sso_federation_mode", "domain") or "domain"
-                ),
-                "sso_federation_provider_id_configured": bool(
-                    str(getattr(identity, "sso_federation_provider_id", "") or "").strip()
-                ),
-                "scim_enabled": bool(identity.scim_enabled),
-                "scim_token_generated": bool(scim_token_generated),
-                "scim_last_rotated_at": identity.scim_last_rotated_at.isoformat()
-                if identity.scim_last_rotated_at
-                else None,
-                "scim_group_mappings_count": len(identity.scim_group_mappings or []),
-            },
-            success=True,
-            request_method="PUT",
-            request_path="/api/v1/settings/identity",
-        )
-        await db.commit()
-    except (RuntimeError, ValueError, TypeError, AttributeError) as exc:
-        logger.warning(
-            "identity_settings_audit_log_failed",
-            tenant_id=str(current_user.tenant_id),
-            error=str(exc),
-        )
-        await db.rollback()
-        try:
-            await db.refresh(identity)
-        except (RuntimeError, ValueError, TypeError, AttributeError):
-            pass
 
     logger.info(
         "identity_settings_updated",
@@ -279,42 +265,28 @@ async def rotate_scim_token_route(
     identity.scim_bearer_token = token
     identity.scim_last_rotated_at = datetime.now(timezone.utc)
 
+    audit = audit_logger_cls(
+        db=db,
+        tenant_id=cast(UUID, current_user.tenant_id),
+        correlation_id=str(uuid4()),
+    )
+    await audit.log(
+        event_type=audit_event_type.SCIM_TOKEN_ROTATED,
+        actor_id=current_user.id,
+        actor_email=current_user.email,
+        resource_type="identity_settings",
+        resource_id=str(current_user.tenant_id),
+        details={
+            "rotated_at": identity.scim_last_rotated_at.isoformat()
+            if identity.scim_last_rotated_at
+            else None,
+        },
+        success=True,
+        request_method="POST",
+        request_path="/api/v1/settings/identity/rotate-scim-token",
+    )
     await db.commit()
     await db.refresh(identity)
-
-    try:
-        audit = audit_logger_cls(
-            db=db,
-            tenant_id=cast(UUID, current_user.tenant_id),
-            correlation_id=str(uuid4()),
-        )
-        await audit.log(
-            event_type=audit_event_type.SCIM_TOKEN_ROTATED,
-            actor_id=current_user.id,
-            actor_email=current_user.email,
-            resource_type="identity_settings",
-            resource_id=str(current_user.tenant_id),
-            details={
-                "rotated_at": identity.scim_last_rotated_at.isoformat()
-                if identity.scim_last_rotated_at
-                else None,
-            },
-            success=True,
-            request_method="POST",
-            request_path="/api/v1/settings/identity/rotate-scim-token",
-        )
-        await db.commit()
-    except (RuntimeError, ValueError, TypeError, AttributeError) as exc:
-        logger.warning(
-            "scim_token_rotation_audit_log_failed",
-            tenant_id=str(current_user.tenant_id),
-            error=str(exc),
-        )
-        await db.rollback()
-        try:
-            await db.refresh(identity)
-        except (RuntimeError, ValueError, TypeError, AttributeError):
-            pass
 
     logger.info("scim_token_rotated", tenant_id=str(current_user.tenant_id))
     return rotate_scim_token_response_model(

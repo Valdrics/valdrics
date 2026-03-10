@@ -25,7 +25,8 @@ from app.shared.connections.azure import AzureConnectionService
 from app.shared.connections.gcp import GCPConnectionService
 from app.shared.connections.oidc import OIDCService
 from app.shared.core.auth import CurrentUser, requires_role_with_db_context
-from app.shared.core.logging import audit_log
+from app.shared.core.async_utils import maybe_await
+from app.shared.core.logging import audit_log_async as audit_log
 from app.shared.core.rate_limit import rate_limit
 from app.shared.db.session import get_db
 
@@ -77,15 +78,22 @@ async def create_azure_connection(
         is_active=False,
     )
     db.add(connection)
+    await maybe_await(db.flush())
+    await maybe_await(
+        audit_log(
+            "azure_connection_created",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"subscription_id": data.subscription_id},
+            db=db,
+            resource_type="azure_connection",
+            resource_id=str(connection.id),
+            request_method="POST",
+            request_path="/api/v1/settings/azure",
+        )
+    )
     await db.commit()
     await db.refresh(connection)
-
-    audit_log(
-        "azure_connection_created",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"subscription_id": data.subscription_id},
-    )
     return connection
 
 
@@ -130,13 +138,20 @@ async def delete_azure_connection(
         raise HTTPException(404, "Connection not found")
 
     await db.delete(connection)
-    await db.commit()
-    audit_log(
-        "azure_connection_deleted",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"id": str(connection_id)},
+    await maybe_await(
+        audit_log(
+            "azure_connection_deleted",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"id": str(connection_id)},
+            db=db,
+            resource_type="azure_connection",
+            resource_id=str(connection_id),
+            request_method="DELETE",
+            request_path="/api/v1/settings/azure/{connection_id}",
+        )
     )
+    await db.commit()
 
 
 @router.post(
@@ -193,15 +208,22 @@ async def create_gcp_connection(
         is_active=False,
     )
     db.add(connection)
+    await maybe_await(db.flush())
+    await maybe_await(
+        audit_log(
+            "gcp_connection_created",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"project_id": data.project_id},
+            db=db,
+            resource_type="gcp_connection",
+            resource_id=str(connection.id),
+            request_method="POST",
+            request_path="/api/v1/settings/gcp",
+        )
+    )
     await db.commit()
     await db.refresh(connection)
-
-    audit_log(
-        "gcp_connection_created",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"project_id": data.project_id},
-    )
     return connection
 
 
@@ -248,10 +270,17 @@ async def delete_gcp_connection(
         raise HTTPException(404, "Connection not found")
 
     await db.delete(connection)
-    await db.commit()
-    audit_log(
-        "gcp_connection_deleted",
-        str(current_user.id),
-        str(current_user.tenant_id),
-        {"id": str(connection_id)},
+    await maybe_await(
+        audit_log(
+            "gcp_connection_deleted",
+            str(current_user.id),
+            str(current_user.tenant_id),
+            {"id": str(connection_id)},
+            db=db,
+            resource_type="gcp_connection",
+            resource_id=str(connection_id),
+            request_method="DELETE",
+            request_path="/api/v1/settings/gcp/{connection_id}",
+        )
     )
+    await db.commit()

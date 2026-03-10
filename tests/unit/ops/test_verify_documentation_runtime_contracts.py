@@ -48,7 +48,7 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     )
     _write(
         tmp_path / "docs/runbooks/production_env_checklist.md",
-        "API_URL=https://api.example.com\nFRONTEND_URL=https://app.example.com\nSENTRY_DSN=https://...\nOTEL_EXPORTER_OTLP_ENDPOINT=https://collector:4317\nENFORCEMENT_APPROVAL_TOKEN_SECRET=...\nENFORCEMENT_EXPORT_SIGNING_SECRET=...\nINTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>\nEXPOSE_API_DOCUMENTATION_PUBLICLY=false\n",
+        "API_URL=https://api.example.com\nFRONTEND_URL=https://app.example.com\nSENTRY_DSN=https://...\nOTEL_EXPORTER_OTLP_ENDPOINT=https://collector:4317\nENFORCEMENT_APPROVAL_TOKEN_SECRET=...\nENFORCEMENT_EXPORT_SIGNING_SECRET=...\nINTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>\nEXPOSE_API_DOCUMENTATION_PUBLICLY=false\ngenerate_managed_runtime_env.py\ngenerate_managed_migration_env.py\ngenerate_managed_deployment_artifacts.py\n--env-file .runtime/production.env\n--env-file .runtime/production.migrate.env\nset -a && source .runtime/production.migrate.env && uv run alembic upgrade head\n",
     )
     _write(
         tmp_path / "docs/integrations/workflow_automation.md",
@@ -125,6 +125,8 @@ def test_verify_contracts_reports_missing_and_forbidden_phrases(tmp_path: Path) 
                 "OTEL_EXPORTER_OTLP_ENDPOINT=https://",
                 "ENFORCEMENT_APPROVAL_TOKEN_SECRET=...",
                 "ENFORCEMENT_EXPORT_SIGNING_SECRET=...",
+                "generate_managed_migration_env.py",
+                "generate_managed_deployment_artifacts.py",
             ),
         ),
         DocumentationContract(

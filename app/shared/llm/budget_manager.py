@@ -35,7 +35,7 @@ from app.shared.core.ops_metrics import (  # noqa: F401
     LLM_AUTH_IP_RISK_SCORE,
 )
 from app.shared.core.pricing import get_tenant_tier, PricingTier  # noqa: F401
-from app.shared.core.logging import audit_log  # noqa: F401
+from app.shared.core.logging import audit_log_async as audit_log  # noqa: F401
 
 __all__ = [
     "LLMBudget",

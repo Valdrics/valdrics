@@ -14,8 +14,7 @@ def enforce_incident_integrations_access(
     raise_http_exception_fn: Callable[[int, str], None],
 ) -> None:
     needs_incident_integrations = bool(
-        getattr(data, "jira_enabled", False)
-        or getattr(data, "teams_enabled", False)
+        getattr(data, "teams_enabled", False)
         or getattr(data, "workflow_github_enabled", False)
         or getattr(data, "workflow_gitlab_enabled", False)
         or getattr(data, "workflow_webhook_enabled", False)
@@ -31,6 +30,31 @@ def enforce_incident_integrations_access(
         403,
         (
             f"Feature '{incident_integrations_feature.value}' requires an upgrade. "
+            f"Current tier: {tier.value}"
+        ),
+    )
+
+
+def enforce_jira_integration_access(
+    *,
+    data: Any,
+    current_tier: Any,
+    normalize_tier_fn: Callable[[Any], Any],
+    is_feature_enabled_fn: Callable[[Any, Any], bool],
+    jira_integration_feature: Any,
+    raise_http_exception_fn: Callable[[int, str], None],
+) -> None:
+    if not bool(getattr(data, "jira_enabled", False)):
+        return
+
+    tier = normalize_tier_fn(current_tier)
+    if is_feature_enabled_fn(tier, jira_integration_feature):
+        return
+
+    raise_http_exception_fn(
+        403,
+        (
+            f"Feature '{jira_integration_feature.value}' requires an upgrade. "
             f"Current tier: {tier.value}"
         ),
     )

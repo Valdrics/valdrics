@@ -339,11 +339,11 @@ async def test_update_identity_settings_creates_mappings_and_scim_token(
     assert response.sso_federation_mode == "provider_id"
     assert response.has_scim_token is True
     assert response.scim_enabled is True
-    assert mock_db.commit.await_count >= 2
+    mock_db.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_update_identity_settings_tolerates_audit_failure_and_refresh_failure(
+async def test_update_identity_settings_fails_when_audit_logging_fails(
     monkeypatch,
 ) -> None:
     tenant_id = uuid4()
@@ -378,19 +378,16 @@ async def test_update_identity_settings_tolerates_audit_failure_and_refresh_fail
 
     monkeypatch.setattr(identity_api, "AuditLogger", _AuditLoggerFailure)
 
-    response = await identity_api.update_identity_settings(
-        payload=payload,
-        current_user=_admin_user(
-            tenant_id,
-            tier=PricingTier.ENTERPRISE,
-            email="admin@corp.example",
-        ),
-        db=mock_db,
-    )
-
-    assert response.sso_enabled is False
-    assert response.scim_enabled is False
-    mock_db.rollback.assert_awaited()
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        await identity_api.update_identity_settings(
+            payload=payload,
+            current_user=_admin_user(
+                tenant_id,
+                tier=PricingTier.ENTERPRISE,
+                email="admin@corp.example",
+            ),
+            db=mock_db,
+        )
 
 
 @pytest.mark.asyncio
@@ -420,11 +417,11 @@ async def test_rotate_scim_token_creates_identity_and_audit_success(monkeypatch)
     assert isinstance(response.scim_token, str)
     assert response.scim_token
     mock_db.add.assert_called_once()
-    assert mock_db.commit.await_count >= 2
+    mock_db.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_rotate_scim_token_tolerates_audit_and_refresh_failures(
+async def test_rotate_scim_token_fails_when_audit_logging_fails(
     monkeypatch,
 ) -> None:
     tenant_id = uuid4()
@@ -439,11 +436,8 @@ async def test_rotate_scim_token_tolerates_audit_and_refresh_failures(
 
     monkeypatch.setattr(identity_api, "AuditLogger", _AuditLoggerFailure)
 
-    response = await identity_api.rotate_scim_token(
-        current_user=_admin_user(tenant_id, tier=PricingTier.ENTERPRISE),
-        db=mock_db,
-    )
-
-    assert isinstance(response.scim_token, str)
-    assert response.scim_token
-    mock_db.rollback.assert_awaited()
+    with pytest.raises(RuntimeError, match="audit unavailable"):
+        await identity_api.rotate_scim_token(
+            current_user=_admin_user(tenant_id, tier=PricingTier.ENTERPRISE),
+            db=mock_db,
+        )

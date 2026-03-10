@@ -113,7 +113,7 @@ describe('settings page integration wiring (core)', () => {
 		await screen.findByText('Failed to save settings');
 	});
 
-	it('shows Growth as the Slack floor while keeping Pro automation integrations separate', async () => {
+	it('shows Growth as the Slack and Jira floor while keeping Pro automation integrations separate', async () => {
 		setupApiMocks({
 			getOverrides: {
 				[endpoint('/settings/notifications')]: jsonResponse({
@@ -157,12 +157,12 @@ describe('settings page integration wiring (core)', () => {
 
 		expect(
 			screen.getByText(
-				/Slack delivery and test routing start on Growth\. Jira, Teams, and workflow dispatch stay in the Pro automation lane\./i
+				/Slack delivery and Jira routing start on Growth\. Teams and workflow dispatch stay in the Pro automation lane\./i
 			)
 		).toBeTruthy();
 		expect(screen.getAllByText('Growth Plan Required').length).toBeGreaterThan(0);
 		expect(
-			screen.getByText(/Create Jira issues from policy and remediation events on Pro and Enterprise\./i)
+			screen.getByText(/Create Jira issues from policy and remediation events on Growth and above\./i)
 		).toBeTruthy();
 		expect(
 			screen.getByText(/Route policy and remediation alerts into Teams on Pro and Enterprise\./i)

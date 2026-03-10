@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.background_job import BackgroundJob
 from app.modules.governance.domain.jobs.handlers.base import BaseJobHandler
+from app.modules.governance.domain.jobs.errors import PermanentJobError
 
 
 class DunningHandler(BaseJobHandler):
@@ -24,11 +25,18 @@ class DunningHandler(BaseJobHandler):
         payload = job.payload or {}
         sub_id = payload.get("subscription_id")
         attempt = payload.get("attempt", 1)
+        charge_reference = payload.get("charge_reference")
 
         if not sub_id:
             raise ValueError("subscription_id required for dunning")
 
         dunning = DunningService(db)
-        result = await dunning.retry_payment(UUID(sub_id))
+        result = await dunning.retry_payment(
+            UUID(sub_id),
+            charge_reference=str(charge_reference) if charge_reference else None,
+            commit=False,
+        )
+        if result.get("reason") == "subscription_not_found":
+            raise PermanentJobError("Dunning subscription not found")
 
         return {"status": result.get("status"), "attempt": attempt, **result}

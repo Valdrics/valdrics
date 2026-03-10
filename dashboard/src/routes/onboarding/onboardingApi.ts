@@ -40,12 +40,18 @@ function authHeaders(accessToken: string): Record<string, string> {
 	};
 }
 
-export async function ensureOnboardedRequest(accessToken: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function ensureOnboardedRequest(
+	accessToken: string,
+	acquisitionContext?: Record<string, unknown>
+): Promise<{ ok: true } | { ok: false; error: string }> {
 	try {
 		const turnstileToken = await getTurnstileToken('onboard');
 		const response = await api.post(
 			edgeApiPath('/settings/onboard'),
-			{ tenant_name: 'My Organization' },
+			{
+				tenant_name: 'My Organization',
+				...(acquisitionContext ? { acquisition_context: acquisitionContext } : {})
+			},
 			{
 				headers: {
 					...authHeaders(accessToken),

@@ -43,6 +43,112 @@ Set these in production runtime (Koyeb/Kubernetes/etc):
   - `OUTBOUND_TLS_BREAK_GLASS_REASON=<incident/ticket reference>`
   - `OUTBOUND_TLS_BREAK_GLASS_EXPIRES_AT=<ISO-8601 UTC future timestamp>`
 
+## 2a. Generate the runtime scaffold first
+
+Use the repo-managed generator to create staging or production env scaffolds with fresh
+internal secrets:
+
+```bash
+uv run python scripts/generate_managed_runtime_env.py --environment staging
+uv run python scripts/generate_managed_runtime_env.py --environment production
+```
+
+Default outputs:
+
+- `.runtime/staging.env`
+- `.runtime/staging.report.json`
+- `.runtime/production.env`
+- `.runtime/production.report.json`
+
+The generated env files already include fresh internal secrets such as
+`CSRF_SECRET_KEY`, `ENCRYPTION_KEY`, `ADMIN_API_KEY`,
+`INTERNAL_JOB_SECRET`, `INTERNAL_METRICS_AUTH_TOKEN`,
+`ENFORCEMENT_APPROVAL_TOKEN_SECRET`, and
+`ENFORCEMENT_EXPORT_SIGNING_SECRET`.
+
+They do **not** invent provider-owned live values. Expect explicit `REPLACE_WITH_...`
+placeholders for operator-managed values such as:
+
+- `DATABASE_URL`
+- `SUPABASE_URL`
+- `SUPABASE_JWT_SECRET`
+- `REDIS_URL`
+- `API_URL`
+- `FRONTEND_URL`
+- `TRUSTED_PROXY_CIDRS`
+- `PAYSTACK_SECRET_KEY`
+- `PAYSTACK_PUBLIC_KEY`
+- selected LLM provider API key
+- `SENTRY_DSN`
+- `OTEL_EXPORTER_OTLP_ENDPOINT`
+
+Validate a completed file directly:
+
+```bash
+uv run python scripts/validate_runtime_env.py --environment production --env-file .runtime/production.env
+```
+
+The runtime report separates hard deployment blockers from broader declared
+placeholders:
+
+- `runtime_validation_blockers`: values that will fail the strict runtime validator.
+- `declared_external_placeholders`: all still-placeholder external values in the file.
+- `declared_but_not_runtime_required`: declared placeholders that do not currently gate startup.
+
+## 2b. Generate the migration scaffold separately
+
+Use the migration-specific scaffold for Alembic. This path is intentionally decoupled
+from the full runtime contract so migrations only depend on database connectivity:
+
+```bash
+uv run python scripts/generate_managed_migration_env.py --environment staging
+uv run python scripts/generate_managed_migration_env.py --environment production
+```
+
+Default outputs:
+
+- `.runtime/staging.migrate.env`
+- `.runtime/staging.migrate.report.json`
+- `.runtime/production.migrate.env`
+- `.runtime/production.migrate.report.json`
+
+By default, the only migration blocker is `DATABASE_URL`. If you switch
+`DB_SSL_MODE` to `verify-ca` or `verify-full`, `DB_SSL_CA_CERT_PATH` also becomes
+mandatory.
+
+Validate the migration env directly:
+
+```bash
+uv run python scripts/validate_migration_env.py --env-file .runtime/production.migrate.env
+```
+
+## 2c. Generate deployment artifacts from the runtime env
+
+Once the runtime env is filled, generate deployment-ready artifacts for both the
+reference managed-platform path and the supported Helm/EKS production path:
+
+```bash
+uv run python scripts/generate_managed_deployment_artifacts.py --environment staging --runtime-env-file .runtime/staging.env
+uv run python scripts/generate_managed_deployment_artifacts.py --environment production --runtime-env-file .runtime/production.env
+```
+
+Default outputs:
+
+- `.runtime/deploy/<environment>/koyeb-api.yaml`
+- `.runtime/deploy/<environment>/koyeb-worker.yaml`
+- `.runtime/deploy/<environment>/koyeb-secrets.json`
+- `.runtime/deploy/<environment>/helm-values.yaml`
+- `.runtime/deploy/<environment>/aws-runtime-secret.json`
+- `.runtime/deploy/<environment>/terraform.runtime.auto.tfvars.json`
+- `.runtime/deploy/<environment>/deployment.report.json`
+
+The deployment report separates:
+
+- `runtime_validation_blockers`: app-runtime values still blocking startup
+- `koyeb_secret_value_blockers`: placeholder/empty values still blocking the generated Koyeb bundle
+- `helm_runtime_secret_value_blockers`: placeholder/empty values still blocking the Helm/EKS secret payload
+- `terraform_remaining_inputs`: infrastructure values still required outside the runtime env, such as `external_id` and `valdrics_account_id`
+
 ## 3. Strict SaaS integration rules
 
 When `SAAS_STRICT_INTEGRATIONS=true`:
@@ -70,12 +176,15 @@ All tokens/secrets are stored in tenant notification settings.
 
 ## 5. Deployment sequence
 
-1. Deploy backend image/code.
-2. Run migrations: `uv run alembic upgrade head`
-3. Validate runtime contract: `uv run python scripts/validate_runtime_env.py --environment production`
-4. Apply env vars above and restart app.
-5. Deploy frontend.
-6. Validate health and notification paths.
+1. Generate or refresh both `.runtime/production.env` and `.runtime/production.migrate.env`.
+2. Validate the migration env: `uv run python scripts/validate_migration_env.py --env-file .runtime/production.migrate.env`
+3. Run migrations with the migration env:
+   `set -a && source .runtime/production.migrate.env && uv run alembic upgrade head`
+4. Validate the full runtime env:
+   `uv run python scripts/validate_runtime_env.py --environment production --env-file .runtime/production.env`
+5. Apply the full runtime env and restart the app.
+6. Deploy frontend.
+7. Validate health and notification paths.
 
 ## 6. Smoke tests after deploy
 
@@ -83,6 +192,12 @@ All tokens/secrets are stored in tenant notification settings.
 - `GET /health/live` returns `200`.
 - `GET /docs`, `GET /redoc`, and `GET /openapi.json` are blocked from the public deployment surface.
 - `GET /_internal/metrics` is blocked from the unauthenticated public surface and accessible only to internal scrapers or callers presenting `INTERNAL_METRICS_AUTH_TOKEN`.
+- Internal Alertmanager routing is live for:
+  - `LandingSignupToConnectionCritical`
+  - `LandingConnectionToFirstValueCritical`
+  - `LandingSignupToConnectionWatch`
+  - `LandingConnectionToFirstValueWatch`
+  - `LandingFunnelHealthMetricsStale`
 - From UI/API, run:
   - `POST /api/v1/settings/notifications/test-jira`
   - `POST /api/v1/settings/notifications/test-workflow`

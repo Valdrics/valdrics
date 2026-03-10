@@ -28,16 +28,34 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.background_job import BackgroundJob, JobStatus
+from app.shared.core.config import get_settings
+from app.shared.core.ops_metrics import (
+    record_background_job_dead_letter,
+    record_background_job_stale_running_recovery,
+)
+from app.modules.governance.domain.jobs.errors import (
+    JobExecutionError,
+    PermanentJobError,
+)
 
-__all__ = ["JobProcessor", "JobStatus", "enqueue_job"]
+__all__ = [
+    "JobProcessor",
+    "JobStatus",
+    "enqueue_job",
+    "JobExecutionError",
+    "PermanentJobError",
+]
 
 from app.modules.governance.domain.jobs.handlers import get_handler_factory
 
 logger = structlog.get_logger()
+settings = get_settings()
 
 # Job processing configuration
 MAX_JOBS_PER_BATCH = 10
-JOB_LOCK_TIMEOUT_MINUTES = 30
+JOB_LOCK_TIMEOUT_MINUTES = max(
+    1, int(getattr(settings, "BACKGROUND_JOB_RUNNING_TIMEOUT_MINUTES", 30))
+)
 BACKOFF_BASE_SECONDS = 60
 JOB_TIMEOUT_SECONDS = 300  # 5 minutes default timeout
 MAX_JOB_RESULT_BYTES = 256 * 1024
@@ -48,6 +66,7 @@ JOB_RESULT_SERIALIZATION_ERRORS: tuple[type[Exception], ...] = (
 )
 JOB_RUNTIME_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     sa.exc.SQLAlchemyError,
+    JobExecutionError,
     RuntimeError,
     OSError,
     TimeoutError,
@@ -56,8 +75,13 @@ JOB_RUNTIME_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     KeyError,
     AttributeError,
 )
-
-
+JOB_RUNTIME_UNEXPECTED_ERRORS: tuple[type[Exception], ...] = (
+    AssertionError,
+    LookupError,
+    NotImplementedError,
+    UnicodeError,
+    ArithmeticError,
+)
 class JobProcessor:
     """
     Processes background jobs from the database queue.
@@ -70,6 +94,105 @@ class JobProcessor:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _job_status_value(value: Any) -> str:
+        return value.value if hasattr(value, "value") else str(value)
+
+    def _is_stale_running_job(
+        self, job: BackgroundJob, *, now: datetime
+    ) -> bool:
+        started_at = getattr(job, "started_at", None)
+        if not isinstance(started_at, datetime):
+            return False
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        cutoff = now - timedelta(minutes=JOB_LOCK_TIMEOUT_MINUTES)
+        return started_at <= cutoff
+
+    def _apply_failure_transition(
+        self,
+        job: BackgroundJob,
+        *,
+        error_message: str,
+        now: datetime | None = None,
+        permanent: bool = False,
+    ) -> None:
+        now = now or datetime.now(timezone.utc)
+        job.error_message = error_message
+        job.completed_at = None
+
+        if permanent or int(job.attempts or 0) >= int(job.max_attempts or 0):
+            job.status = JobStatus.DEAD_LETTER.value
+            job.completed_at = now
+            record_background_job_dead_letter(
+                str(job.job_type),
+                reason="permanent_error" if permanent else "max_attempts_exhausted",
+            )
+            return
+
+        backoff_seconds = BACKOFF_BASE_SECONDS * (2 ** max(int(job.attempts or 1) - 1, 0))
+        job.status = JobStatus.PENDING.value
+        job.scheduled_for = now + timedelta(seconds=backoff_seconds)
+        job.started_at = None
+
+    async def _recover_stale_running_jobs(self, *, now: datetime) -> int:
+        """Requeue or dead-letter RUNNING jobs abandoned by a crashed worker."""
+        cutoff = now - timedelta(minutes=JOB_LOCK_TIMEOUT_MINUTES)
+        recovered = 0
+
+        async with self.db.begin_nested():
+            result = await self.db.execute(
+                select(BackgroundJob)
+                .where(
+                    BackgroundJob.status == JobStatus.RUNNING.value,
+                    BackgroundJob.started_at.is_not(None),
+                    BackgroundJob.started_at <= cutoff,
+                    sa.not_(BackgroundJob.is_deleted),
+                )
+                .with_for_update(skip_locked=True)
+            )
+            stale_jobs = list(result.scalars().all())
+
+            for job in stale_jobs:
+                recovered += 1
+                job.result = self._prepare_result_for_storage(
+                    job,
+                    {
+                        "status": "recovered_stale_running_job",
+                        "recovered_at": now.isoformat(),
+                        "lock_timeout_minutes": JOB_LOCK_TIMEOUT_MINUTES,
+                    },
+                )
+                job.started_at = None
+                self._apply_failure_transition(
+                    job,
+                    error_message=(
+                        "Recovered stale RUNNING job after lock timeout "
+                        f"({JOB_LOCK_TIMEOUT_MINUTES} minutes)"
+                    ),
+                    now=now,
+                    permanent=False,
+                )
+                record_background_job_stale_running_recovery(
+                    str(job.job_type),
+                    outcome=(
+                        "dead_lettered"
+                        if str(getattr(job, "status", ""))
+                        in {JobStatus.DEAD_LETTER.value, str(JobStatus.DEAD_LETTER)}
+                        else "requeued"
+                    ),
+                )
+
+        if recovered:
+            await self.db.commit()
+            logger.warning(
+                "job_processor_recovered_stale_running_jobs",
+                recovered=recovered,
+                lock_timeout_minutes=JOB_LOCK_TIMEOUT_MINUTES,
+            )
+
+        return recovered
 
     def _prepare_result_for_storage(self, job: BackgroundJob, result: Any) -> Any:
         """Guard background_jobs.result against unbounded payload growth."""
@@ -107,6 +230,22 @@ class JobProcessor:
         if isinstance(result, dict):
             summary["_original_keys"] = list(result.keys())[:50]
         return summary
+
+    @staticmethod
+    def _raise_for_failed_result(result: Any) -> None:
+        if not isinstance(result, dict):
+            return
+
+        status_value = str(result.get("status", "")).strip().lower()
+        if status_value not in {"error", "failed", "enqueue_failed"}:
+            return
+
+        reason = result.get("error") or result.get("reason") or status_value
+        permanent = bool(result.get("permanent"))
+        message = f"Handler returned {status_value}: {reason}"
+        if permanent:
+            raise PermanentJobError(message)
+        raise JobExecutionError(message)
 
     async def process_pending_jobs(
         self,
@@ -201,6 +340,7 @@ class JobProcessor:
         Uses SELECT FOR UPDATE SKIP LOCKED.
         """
         now = datetime.now(timezone.utc)
+        await self._recover_stale_running_jobs(now=now)
         filters = [
             BackgroundJob.status == JobStatus.PENDING.value,
             BackgroundJob.scheduled_for <= now,
@@ -230,8 +370,11 @@ class JobProcessor:
             for job in jobs:
                 job.status = JobStatus.RUNNING.value
                 job.started_at = now
+                job.attempts += 1
+                job.completed_at = None
+                job.error_message = None
                 # Optional: Add metadata for debugging
-                if job.result is None:
+                if not isinstance(job.result, dict):
                     job.result = {}
                 job.result["last_worker"] = worker_id
 
@@ -245,6 +388,11 @@ class JobProcessor:
 
         tracer = get_tracer(__name__)
 
+        if self._job_status_value(job) != JobStatus.RUNNING.value:
+            job.status = JobStatus.RUNNING.value
+            job.started_at = datetime.now(timezone.utc)
+            job.attempts = int(job.attempts or 0) + 1
+
         with tracer.start_as_current_span(f"job_process:{job.job_type}") as span:
             span.set_attribute("job_id", str(job.id))
             span.set_attribute(
@@ -255,14 +403,8 @@ class JobProcessor:
                 "job_processing_start",
                 job_id=str(job.id),
                 job_type=job.job_type,
-                attempt=job.attempts + 1,
+                attempt=job.attempts,
             )
-
-        # Mark as running
-        job.status = JobStatus.RUNNING.value
-        job.started_at = datetime.now(timezone.utc)
-        job.attempts += 1
-        await self.db.commit()
 
         result = None
 
@@ -273,7 +415,10 @@ class JobProcessor:
                 if hasattr(job.job_type, "value")
                 else str(job.job_type)
             )
-            handler_cls = get_handler_factory(job_type_key)
+            try:
+                handler_cls = get_handler_factory(job_type_key)
+            except ValueError as exc:
+                raise PermanentJobError(str(exc)) from exc
             handler = handler_cls()
 
             # Use a savepoint to isolate this job's database changes
@@ -291,6 +436,7 @@ class JobProcessor:
                     result = await asyncio.wait_for(
                         handler.execute(job, self.db), timeout=JOB_TIMEOUT_SECONDS
                     )
+                    self._raise_for_failed_result(result)
                 finally:
                     # Always reset tenant context after tenant-scoped execution.
                     if tenant_context_set:
@@ -310,6 +456,20 @@ class JobProcessor:
                 "job_processing_success", job_id=str(job.id), job_type=job.job_type
             )
 
+        except PermanentJobError as e:
+            logger.error(
+                "job_processing_permanent_failure",
+                job_id=str(job.id),
+                job_type=job.job_type,
+                error=str(e),
+            )
+            self._apply_failure_transition(
+                job,
+                error_message=str(e),
+                now=datetime.now(timezone.utc),
+                permanent=True,
+            )
+
         except asyncio.TimeoutError:
             logger.error(
                 "job_processing_timeout",
@@ -317,24 +477,19 @@ class JobProcessor:
                 job_type=job.job_type,
                 timeout_seconds=JOB_TIMEOUT_SECONDS,
             )
-            job.error_message = f"Job timed out after {JOB_TIMEOUT_SECONDS}s"
-            job.status = JobStatus.FAILED.value
-
-            if job.attempts >= job.max_attempts:
-                job.status = JobStatus.DEAD_LETTER.value
-                job.completed_at = datetime.now(timezone.utc)
-            else:
-                backoff_seconds = BACKOFF_BASE_SECONDS * (2 ** (job.attempts - 1))
-                job.status = JobStatus.PENDING.value
-                job.scheduled_for = datetime.now(timezone.utc) + timedelta(
-                    seconds=backoff_seconds
-                )
+            self._apply_failure_transition(
+                job,
+                error_message=f"Job timed out after {JOB_TIMEOUT_SECONDS}s",
+                now=datetime.now(timezone.utc),
+                permanent=False,
+            )
 
         except asyncio.CancelledError:
             logger.warning("job_processing_cancelled", job_id=str(job.id))
             job.error_message = "Job was cancelled"
             job.status = JobStatus.PENDING.value
             job.scheduled_for = datetime.now(timezone.utc) + timedelta(seconds=60)
+            job.started_at = None
 
         except JOB_RUNTIME_RECOVERABLE_ERRORS as e:
             logger.error(
@@ -343,19 +498,26 @@ class JobProcessor:
                 job_type=job.job_type,
                 error=str(e),
             )
+            self._apply_failure_transition(
+                job,
+                error_message=str(e),
+                now=datetime.now(timezone.utc),
+                permanent=False,
+            )
 
-            job.error_message = str(e)
-            job.status = JobStatus.FAILED.value
-
-            if job.attempts >= job.max_attempts:
-                job.status = JobStatus.DEAD_LETTER.value
-                job.completed_at = datetime.now(timezone.utc)
-            else:
-                backoff_seconds = BACKOFF_BASE_SECONDS * (2 ** (job.attempts - 1))
-                job.status = JobStatus.PENDING.value
-                job.scheduled_for = datetime.now(timezone.utc) + timedelta(
-                    seconds=backoff_seconds
-                )
+        except JOB_RUNTIME_UNEXPECTED_ERRORS as e:
+            logger.error(
+                "job_processing_unexpected_failure",
+                job_id=str(job.id),
+                job_type=job.job_type,
+                error=str(e),
+            )
+            self._apply_failure_transition(
+                job,
+                error_message=f"{type(e).__name__}: {e}",
+                now=datetime.now(timezone.utc),
+                permanent=False,
+            )
 
         await self.db.commit()
 
@@ -371,6 +533,8 @@ async def enqueue_job(
     scheduled_for: Optional[datetime] = None,
     max_attempts: int = 3,
     deduplication_key: str | None = None,
+    *,
+    auto_commit: bool = True,
 ) -> BackgroundJob:
     """
     Enqueue a new background job.
@@ -394,14 +558,18 @@ async def enqueue_job(
         created_at=datetime.now(timezone.utc),
     )
 
-    db.add(job)
     try:
-        await db.commit()
+        async with db.begin_nested():
+            db.add(job)
+            await db.flush()
+        if auto_commit:
+            await db.commit()
         await db.refresh(job)
         # Expose insertion outcome for callers that need queueing semantics.
         setattr(job, "_enqueue_created", True)
     except IntegrityError:
-        await db.rollback()
+        if auto_commit:
+            await db.rollback()
         if not deduplication_key:
             raise
 

@@ -1,4 +1,4 @@
-"""Validation and normalization helpers for application settings."""
+"""Validation helpers for application settings."""
 
 from __future__ import annotations
 
@@ -26,23 +26,11 @@ def _is_synthetic_paystack_public_key(value: str) -> bool:
     return value.startswith("example_paystack_public_")
 
 
-def normalize_branding(settings_obj: object) -> None:
-    """Normalize legacy product names to canonical Valdrics branding."""
-    token = str(getattr(settings_obj, "APP_NAME", "") or "").strip().lower()
-    legacy_names = {
-        "valdrics",
-        "valdrics",
-        "valdrics-ai",
-        "valdrics",
-        "valdrics ai",
-    }
-    if token in legacy_names:
-        structlog.get_logger().warning(
-            "legacy_app_name_normalized",
-            provided_app_name=getattr(settings_obj, "APP_NAME", None),
-            normalized_app_name="Valdrics",
-        )
-        setattr(settings_obj, "APP_NAME", "Valdrics")
+def validate_app_identity(settings_obj: object) -> None:
+    """Require the canonical public product name in runtime settings."""
+    app_name = str(getattr(settings_obj, "APP_NAME", "") or "").strip()
+    if app_name != "Valdrics":
+        raise ValueError("APP_NAME must be set to the canonical product name 'Valdrics'.")
 
 
 def validate_core_secrets(settings_obj: object) -> None:
@@ -89,6 +77,12 @@ def validate_core_secrets(settings_obj: object) -> None:
 
 def validate_database_config(settings_obj: object, *, is_production: bool) -> None:
     """Validate database and redis connectivity settings."""
+    database_url = str(getattr(settings_obj, "DATABASE_URL", "") or "").strip().lower()
+    local_sqlite_bootstrap = bool(
+        getattr(settings_obj, "LOCAL_SQLITE_BOOTSTRAP", False)
+    )
+    environment = str(getattr(settings_obj, "ENVIRONMENT", "") or "").strip().lower()
+
     if is_production:
         if not getattr(settings_obj, "DATABASE_URL", None):
             raise ValueError("DATABASE_URL is required in production.")
@@ -124,6 +118,20 @@ def validate_database_config(settings_obj: object, *, is_production: bool) -> No
 
     if getattr(settings_obj, "DB_SLOW_QUERY_THRESHOLD_SECONDS", 0) <= 0:
         raise ValueError("DB_SLOW_QUERY_THRESHOLD_SECONDS must be > 0.")
+
+    if local_sqlite_bootstrap:
+        if bool(getattr(settings_obj, "TESTING", False)):
+            raise ValueError(
+                "LOCAL_SQLITE_BOOTSTRAP requires TESTING=false so local runtime matches non-test behavior."
+            )
+        if "sqlite" not in database_url:
+            raise ValueError(
+                "LOCAL_SQLITE_BOOTSTRAP requires DATABASE_URL to use sqlite."
+            )
+        if environment in {"production", "staging"}:
+            raise ValueError(
+                "LOCAL_SQLITE_BOOTSTRAP may only be used in local/development environments."
+            )
 
 
 def validate_llm_config(settings_obj: object, *, is_production: bool) -> None:
@@ -249,13 +257,20 @@ def validate_all_config(
     env_staging: str,
 ) -> None:
     """Run full multi-domain settings validation pipeline."""
-    normalize_branding(settings_obj)
+    validate_app_identity(settings_obj)
 
     if bool(getattr(settings_obj, "TESTING", False)) and getattr(
         settings_obj, "ENVIRONMENT", None
     ) in {env_production, env_staging}:
         raise ValueError(
             "TESTING must be false in staging/production runtime environments."
+        )
+
+    if bool(getattr(settings_obj, "LOCAL_SQLITE_BOOTSTRAP", False)) and bool(
+        getattr(settings_obj, "TESTING", False)
+    ):
+        raise ValueError(
+            "LOCAL_SQLITE_BOOTSTRAP requires TESTING=false so local runtime matches non-test behavior."
         )
 
     if bool(getattr(settings_obj, "TESTING", False)):
@@ -291,7 +306,7 @@ def validate_all_config(
 
 
 __all__ = [
-    "normalize_branding",
+    "validate_app_identity",
     "validate_all_config",
     "validate_billing_config",
     "validate_core_secrets",

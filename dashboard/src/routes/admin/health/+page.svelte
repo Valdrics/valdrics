@@ -158,7 +158,7 @@
 </script>
 
 <svelte:head>
-	<title>System Health | Valdrics</title>
+	<title>Internal System Health | Valdrics</title>
 </svelte:head>
 
 <AuthGate authenticated={!!data.user} action="view system health metrics">
@@ -166,8 +166,8 @@
 		<div class="card border-warning-500/50 bg-warning-500/10">
 			<h2 class="text-lg font-semibold mb-2">Admin Access Required</h2>
 			<p class="text-ink-300 text-sm">
-				This dashboard is restricted to tenant admins and owners. Contact your workspace owner if you
-				need access.
+				This dashboard is restricted to internal operations users with admin access. Contact your workspace
+				owner if you need access.
 			</p>
 		</div>
 	{:else if loading}

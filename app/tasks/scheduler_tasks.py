@@ -48,9 +48,13 @@ from app.tasks.scheduler_runtime_ops import (
     system_sweep_connection_limit as _system_sweep_connection_limit_impl,
     system_sweep_tenant_limit as _system_sweep_tenant_limit_impl,
 )
+from app.tasks.scheduler_funnel_ops import (
+    refresh_landing_funnel_health_logic as _refresh_landing_funnel_health_logic_impl,
+)
 from app.tasks.scheduler_remediation_ops import (
     remediation_sweep_logic as _remediation_sweep_logic_impl,
 )
+from app.modules.governance.domain.jobs.processor import JobProcessor
 
 logger = structlog.get_logger()
 tracer = get_tracer(__name__)
@@ -419,6 +423,88 @@ async def _maintenance_sweep_logic() -> None:
         timezone_obj=timezone,
         timedelta_cls=timedelta,
     )
+
+
+@shared_task(
+    name="scheduler.refresh_landing_funnel_health",
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 2, "countdown": 900},
+    retry_backoff=True,
+)  # type: ignore[untyped-decorator]
+def run_refresh_landing_funnel_health() -> None:
+    run_async(_refresh_landing_funnel_health_logic)
+
+
+async def _refresh_landing_funnel_health_logic() -> None:
+    job_name = "landing_funnel_health_refresh"
+    start_time = time.time()
+
+    try:
+        await _refresh_landing_funnel_health_logic_impl(
+            open_db_session_fn=_open_db_session,
+            scheduler_span_fn=_scheduler_span,
+            logger=logger,
+            datetime_cls=datetime,
+            timezone_obj=timezone,
+        )
+        SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
+    except SCHEDULER_RECOVERABLE_ERRORS as exc:
+        SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="failure").inc()
+        logger.error(
+            "landing_funnel_health_refresh_failed",
+            error=str(exc),
+            error_type=type(exc).__name__,
+        )
+        raise
+    finally:
+        SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(
+            time.time() - start_time
+        )
+
+@shared_task(
+    name="scheduler.process_background_jobs",
+    autoretry_for=(Exception,),
+    retry_kwargs={"max_retries": 2, "countdown": 60},
+    retry_backoff=True,
+)  # type: ignore[untyped-decorator]
+def run_background_job_processing() -> None:
+    run_async(_process_background_jobs_logic)
+
+
+async def _process_background_jobs_logic() -> None:
+    settings = get_settings()
+    batch_size = max(1, int(getattr(settings, "BACKGROUND_JOB_PROCESS_BATCH_SIZE", 25)))
+    max_batches = max(
+        1,
+        int(getattr(settings, "BACKGROUND_JOB_PROCESS_MAX_BATCHES_PER_TICK", 8)),
+    )
+    job_name = "background_job_processing"
+    start_time = time.time()
+    totals = {"processed": 0, "succeeded": 0, "failed": 0, "batches": 0}
+
+    with _scheduler_span("scheduler.process_background_jobs", job_name=job_name):
+        try:
+            for _ in range(max_batches):
+                async with _open_db_session() as db:
+                    processor = JobProcessor(db)
+                    batch = await processor.process_pending_jobs(limit=batch_size)
+                totals["batches"] += 1
+                totals["processed"] += int(batch.get("processed", 0))
+                totals["succeeded"] += int(batch.get("succeeded", 0))
+                totals["failed"] += int(batch.get("failed", 0))
+                if int(batch.get("processed", 0)) < batch_size:
+                    break
+
+            SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="success").inc()
+            logger.info("background_job_processing_completed", **totals)
+        except SCHEDULER_RECOVERABLE_ERRORS as exc:
+            SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="failure").inc()
+            logger.error("background_job_processing_failed", error=str(exc), **totals)
+            raise
+        finally:
+            SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(
+                time.time() - start_time
+            )
 
 @shared_task(
     name="scheduler.currency_sync",

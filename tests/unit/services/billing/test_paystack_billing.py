@@ -311,4 +311,6 @@ class TestWebhookHandler:
             new_callable=AsyncMock,
         ) as mock_dunning:
             await handler.handle(self._mock_request(), payload, signature)
-            mock_dunning.assert_called_once_with(sub.id, is_webhook=True)
+            mock_dunning.assert_called_once_with(
+                sub.id, is_webhook=True, commit=False
+            )

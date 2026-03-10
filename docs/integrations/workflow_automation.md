@@ -5,8 +5,8 @@ Valdrics can trigger external automation workflows on remediation policy and exe
 ## Availability
 
 - Tier: **Pro**, **Enterprise**
-- Related package note: tenant-scoped Slack delivery starts on **Growth**, but workflow dispatch, Jira, Teams,
-  and external CI orchestration remain in the **Pro** automation lane.
+- Related package note: tenant-scoped Slack and Jira delivery start on **Growth**, but workflow dispatch,
+  Teams, and external CI orchestration remain in the **Pro** automation lane.
 
 ## Supported targets
 

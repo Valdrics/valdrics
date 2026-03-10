@@ -46,6 +46,9 @@ async def billing_sweep_logic(
         SubscriptionStatus,
         TenantSubscription,
     )
+    from app.modules.billing.domain.billing.paystack_service_runtime_ops import (
+        build_charge_reference,
+    )
 
     job_name = "daily_billing_sweep"
     with scheduler_span_fn("scheduler.billing_sweep", job_name=job_name):
@@ -73,12 +76,20 @@ async def billing_sweep_logic(
                     dedup_key = (
                         f"{sub.tenant_id}:{job_type.RECURRING_BILLING.value}:{bucket_str}"
                     )
+                    charge_reference = build_charge_reference(
+                        subscription_id=sub.id,
+                        charge_kind="renewal",
+                        sequence=bucket_str,
+                    )
                     stmt = (
                         insert(background_job_model)
                         .values(
                             job_type=job_type.RECURRING_BILLING.value,
                             tenant_id=sub.tenant_id,
-                            payload={"subscription_id": str(sub.id)},
+                            payload={
+                                "subscription_id": str(sub.id),
+                                "charge_reference": charge_reference,
+                            },
                             status=job_status.PENDING,
                             scheduled_for=now,
                             created_at=now,

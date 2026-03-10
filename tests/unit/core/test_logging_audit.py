@@ -1,8 +1,13 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import UUID
+
+import pytest
 from app.shared.core.logging import (
     pii_redactor,
     add_otel_trace_id,
     audit_log,
+    audit_log_async,
+    _parse_tenant_id,
     setup_logging,
 )
 
@@ -66,6 +71,110 @@ def test_audit_log_schema():
 
         mock_audit_logger.info.assert_called_with(
             "user_login", user_id="u1", tenant_id="t1", metadata={"ip": "1.1.1.1"}
+        )
+
+
+def test_parse_tenant_id_normalizes_uuid_strings() -> None:
+    tenant_id = "d290f1ee-6c54-4b01-90e6-d701748f0851"
+
+    assert _parse_tenant_id(tenant_id) == UUID(tenant_id)
+
+
+@pytest.mark.asyncio
+async def test_audit_log_async_isolated_parses_tenant_uuid_before_session_context() -> None:
+    session = AsyncMock()
+    parsed_tenant = UUID("d290f1ee-6c54-4b01-90e6-d701748f0851")
+
+    async def _log(**_: object) -> dict[str, str]:
+        return {"status": "ok"}
+
+    audit_logger_instance = MagicMock()
+    audit_logger_instance.log = AsyncMock(side_effect=_log)
+
+    class _SessionContext:
+        async def __aenter__(self) -> AsyncMock:
+            return session
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    with (
+        patch("app.shared.db.session.async_session_maker", return_value=_SessionContext()),
+        patch("app.shared.db.session.set_session_tenant_id", new=AsyncMock()) as set_tenant_id,
+        patch(
+            "app.modules.governance.domain.security.audit_log.AuditLogger",
+            return_value=audit_logger_instance,
+        ),
+        patch("app.shared.core.logging.audit_log"),
+    ):
+        result = await audit_log_async(
+            "user_login",
+            "u1",
+            str(parsed_tenant),
+            {"ip": "1.1.1.1"},
+            db=None,  # type: ignore[arg-type]
+            isolated=True,
+        )
+
+    assert result == {"status": "ok"}
+    set_tenant_id.assert_awaited_once_with(session, parsed_tenant)
+    session.commit.assert_awaited_once()
+    session.rollback.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_audit_log_async_isolated_without_tenant_uses_system_audit_logger() -> None:
+    session = AsyncMock()
+
+    async def _log(**_: object) -> dict[str, str]:
+        return {"status": "ok"}
+
+    audit_logger_instance = MagicMock()
+    audit_logger_instance.log = AsyncMock(side_effect=_log)
+
+    class _SessionContext:
+        async def __aenter__(self) -> AsyncMock:
+            return session
+
+        async def __aexit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    with (
+        patch("app.shared.db.session.async_session_maker", return_value=_SessionContext()),
+        patch(
+            "app.shared.db.session.mark_session_system_context",
+            new=AsyncMock(),
+        ) as mark_system_context,
+        patch(
+            "app.modules.governance.domain.security.audit_log.SystemAuditLogger",
+            return_value=audit_logger_instance,
+        ),
+        patch("app.shared.core.logging.audit_log"),
+    ):
+        result = await audit_log_async(
+            "admin_auth_failed",
+            "admin_portal",
+            None,
+            {"path": "/admin"},
+            db=None,
+            isolated=True,
+        )
+
+    assert result == {"status": "ok"}
+    mark_system_context.assert_awaited_once_with(session)
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_audit_log_async_requires_db_when_not_isolated() -> None:
+    with pytest.raises(ValueError, match="db session is required unless isolated=True"):
+        await audit_log_async(
+            "user_login",
+            "u1",
+            "d290f1ee-6c54-4b01-90e6-d701748f0851",
+            {"ip": "1.1.1.1"},
+            db=None,
+            isolated=False,
         )
 
 

@@ -21,7 +21,8 @@ Usage:
     result = await service.process_webhook(job_id)
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import inspect
 from typing import Optional, Dict, Any
 import hashlib
 import json
@@ -30,7 +31,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.background_job import BackgroundJob, JobStatus, JobType
-from app.modules.governance.domain.jobs.processor import enqueue_job
+from app.modules.governance.domain.jobs.errors import (
+    JobExecutionError,
+    PermanentJobError,
+)
+from app.modules.governance.domain.jobs.processor import (
+    JOB_LOCK_TIMEOUT_MINUTES,
+    enqueue_job,
+)
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
@@ -48,6 +56,14 @@ WEBHOOK_MAX_ATTEMPTS = 5  # More retries for revenue-critical
 WEBHOOK_IDEMPOTENCY_TTL_HOURS = get_settings().WEBHOOK_IDEMPOTENCY_TTL_HOURS
 
 
+class WebhookRetryableError(JobExecutionError):
+    """Webhook failure that should be retried by the background job processor."""
+
+
+class WebhookPermanentError(PermanentJobError):
+    """Webhook failure that should be sent to dead letter immediately."""
+
+
 class WebhookRetryService:
     """
     Durable webhook processing with retry and idempotency.
@@ -60,6 +76,18 @@ class WebhookRetryService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _job_status_value(job: BackgroundJob) -> str:
+        return job.status.value if hasattr(job.status, "value") else str(job.status)
+
+    @staticmethod
+    def _normalize_datetime(value: Any) -> datetime | None:
+        if not isinstance(value, datetime):
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
 
     def _generate_idempotency_key(
         self, provider: str, event_type: str, reference: str
@@ -111,16 +139,73 @@ class WebhookRetryService:
 
     async def is_duplicate(self, idempotency_key: str) -> bool:
         """Check if webhook was already processed successfully."""
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=WEBHOOK_IDEMPOTENCY_TTL_HOURS)
         result = await self.db.execute(
             select(BackgroundJob).where(
                 BackgroundJob.job_type == JobType.WEBHOOK_RETRY,
                 BackgroundJob.payload["idempotency_key"].as_string() == idempotency_key,
                 BackgroundJob.status == JobStatus.COMPLETED,
+                BackgroundJob.completed_at >= cutoff,
             )
         )
 
         existing = result.scalar_one_or_none()
         return existing is not None
+
+    def _completed_within_ttl(self, job: BackgroundJob, *, now: datetime) -> bool:
+        terminal_time = (
+            self._normalize_datetime(getattr(job, "completed_at", None))
+            or self._normalize_datetime(getattr(job, "updated_at", None))
+            or self._normalize_datetime(getattr(job, "created_at", None))
+        )
+        if terminal_time is None:
+            return False
+        cutoff = now - timedelta(hours=WEBHOOK_IDEMPOTENCY_TTL_HOURS)
+        return terminal_time >= cutoff
+
+    def _is_stale_running(self, job: BackgroundJob, *, now: datetime) -> bool:
+        started_at = self._normalize_datetime(getattr(job, "started_at", None))
+        if started_at is None:
+            return False
+        cutoff = now - timedelta(minutes=JOB_LOCK_TIMEOUT_MINUTES)
+        return started_at <= cutoff
+
+    async def _reload_existing_job_for_update(self, job_id: Any) -> BackgroundJob | None:
+        result = await self.db.execute(
+            select(BackgroundJob)
+            .where(BackgroundJob.id == job_id)
+            .with_for_update()
+        )
+        job = result.scalar_one_or_none()
+        if inspect.isawaitable(job):
+            job = await job
+        if job is None or not hasattr(job, "status"):
+            return None
+        return job
+
+    async def _requeue_existing_job(
+        self,
+        job: BackgroundJob,
+        *,
+        reason: str,
+        reset_attempts: bool,
+    ) -> BackgroundJob:
+        now = datetime.now(timezone.utc)
+        if reset_attempts:
+            job.attempts = 0
+        job.status = JobStatus.PENDING.value
+        job.scheduled_for = now
+        job.started_at = None
+        job.completed_at = None
+        job.error_message = None
+        job.result = {
+            "status": "requeued",
+            "reason": reason,
+            "requeued_at": now.isoformat(),
+        }
+        await self.db.commit()
+        setattr(job, "_enqueue_created", False)
+        return job
 
     async def store_webhook(
         self,
@@ -168,23 +253,75 @@ class WebhookRetryService:
 
         created = bool(getattr(job, "_enqueue_created", True))
         if not created:
-            job_status = (
-                job.status.value if hasattr(job.status, "value") else str(job.status)
-            )
-            log_event = (
-                "webhook_duplicate_ignored"
-                if job_status == JobStatus.COMPLETED.value
-                else "webhook_already_queued"
+            existing = await self._reload_existing_job_for_update(job.id)
+            if existing is None:
+                existing = job
+
+            now = datetime.now(timezone.utc)
+            job_status = self._job_status_value(existing)
+            if job_status == JobStatus.COMPLETED.value and self._completed_within_ttl(
+                existing, now=now
+            ):
+                logger.info(
+                    "webhook_duplicate_ignored",
+                    job_id=str(existing.id),
+                    provider=provider,
+                    event_type=event_type,
+                    idempotency_key=idempotency_key,
+                    status=job_status,
+                )
+                return None
+
+            if job_status == JobStatus.PENDING.value:
+                logger.info(
+                    "webhook_already_queued",
+                    job_id=str(existing.id),
+                    provider=provider,
+                    event_type=event_type,
+                    idempotency_key=idempotency_key,
+                    status=job_status,
+                )
+                return None
+
+            if job_status == JobStatus.RUNNING.value and not self._is_stale_running(
+                existing, now=now
+            ):
+                logger.info(
+                    "webhook_already_running",
+                    job_id=str(existing.id),
+                    provider=provider,
+                    event_type=event_type,
+                    idempotency_key=idempotency_key,
+                    status=job_status,
+                )
+                return None
+
+            requeue_reason = "duplicate_redelivery_requeued"
+            reset_attempts = job_status in {
+                JobStatus.COMPLETED.value,
+                JobStatus.FAILED.value,
+                JobStatus.DEAD_LETTER.value,
+            }
+            if job_status == JobStatus.COMPLETED.value:
+                requeue_reason = "dedupe_ttl_expired"
+            elif job_status == JobStatus.RUNNING.value:
+                requeue_reason = "stale_running_redelivery"
+                reset_attempts = False
+            existing = await self._requeue_existing_job(
+                existing,
+                reason=requeue_reason,
+                reset_attempts=reset_attempts,
             )
             logger.info(
-                log_event,
-                job_id=str(job.id),
+                "webhook_requeued_existing_job",
+                job_id=str(existing.id),
                 provider=provider,
                 event_type=event_type,
                 idempotency_key=idempotency_key,
-                status=job_status,
+                prior_status=job_status,
+                reason=requeue_reason,
             )
-            return None
+            return existing
 
         logger.info(
             "webhook_stored",
@@ -249,7 +386,7 @@ async def process_paystack_webhook(
     from app.modules.billing.domain.billing.paystack_billing import WebhookHandler
 
     if not job.payload:
-        return {"status": "error", "reason": "Missing payload"}
+        raise WebhookPermanentError("Missing stored webhook payload")
 
     payload = job.payload
     raw_payload = payload.get("raw_payload")
@@ -274,10 +411,10 @@ async def process_paystack_webhook(
                     job_id=str(job.id),
                     event_type=payload.get("event_type"),
                 )
-                return {"status": "error", "reason": "invalid_stored_signature"}
+                raise WebhookPermanentError("Stored Paystack signature verification failed")
             parsed = json.loads(raw_payload)
             if not isinstance(parsed, dict):
-                return {"status": "error", "reason": "invalid_raw_payload"}
+                raise WebhookPermanentError("Stored webhook payload is not a JSON object")
             event = parsed.get("event", payload.get("event_type"))
             data = parsed.get("data", {})
         except PAYSTACK_STORED_PAYLOAD_PARSE_RECOVERABLE_EXCEPTIONS as exc:
@@ -286,26 +423,26 @@ async def process_paystack_webhook(
                 job_id=str(job.id),
                 error=str(exc),
             )
-            return {"status": "error", "reason": "invalid_raw_payload"}
+            raise WebhookPermanentError("Stored webhook payload could not be parsed") from exc
     else:
         logger.critical(
             "paystack_retry_missing_signature_material",
             job_id=str(job.id),
             event_type=payload.get("event_type"),
         )
-        return {"status": "error", "reason": "missing_signature_material"}
+        raise WebhookPermanentError("Stored webhook signature material is missing")
 
     result = {"status": "processed", "event": event}
 
     # Route to appropriate handler based on event type
     if event == "subscription.create":
-        await handler._handle_subscription_create(data)
+        await handler._handle_subscription_create(data, commit=False)
     elif event == "charge.success":
-        await handler._handle_charge_success(data)
+        await handler._handle_charge_success(data, commit=False)
     elif event == "subscription.disable":
-        await handler._handle_subscription_disable(data)
+        await handler._handle_subscription_disable(data, commit=False)
     elif event == "invoice.payment_failed":
-        await handler._handle_invoice_failed(data)
+        await handler._handle_invoice_failed(data, commit=False)
     else:
         result["status"] = "ignored"
         result["reason"] = f"Unknown event type: {event}"

@@ -1,12 +1,11 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
+	import { page } from '$app/stores';
+	import { buildProductFunnelAttributionContext } from '$lib/funnel/productFunnelTelemetry';
 	import OnboardingPageViewBody from './OnboardingPageViewBody.svelte';
 	import { ensureOnboardedRequest } from './onboardingApi';
 	import {
 		proceedToVerifyFlow,
-		runDiscoveryStageAFlow,
-		runDiscoveryStageBFlow,
-		updateDiscoveryCandidateStatusFlow,
 		verifyAwsConnectionFlow
 	} from './onboardingFlowActions';
 	import {
@@ -18,8 +17,6 @@
 		applyDiscoveryCandidateLocally as applyDiscoveryCandidateLocallyHelper,
 		getAvailableCloudPlusAuthMethods as getAvailableCloudPlusAuthMethodsHelper,
 		getSelectedNativeConnector as getSelectedNativeConnectorHelper,
-		parseCloudPlusConnectorConfig as parseCloudPlusConnectorConfigHelper,
-		parseCloudPlusFeed as parseCloudPlusFeedHelper,
 		upsertDiscoveryCandidates as upsertDiscoveryCandidatesHelper
 	} from './onboardingCloudPlusHelpers';
 	import {
@@ -39,6 +36,20 @@
 		canUseGrowthFeaturesForTier,
 		canUseIdpDeepScanForTier
 	} from './onboardingTierAccess';
+	import {
+		runOnboardingDiscoveryStageA,
+		runOnboardingDiscoveryStageB,
+		updateOnboardingDiscoveryCandidateStatus
+	} from './onboardingDiscoveryActions';
+	import {
+		copyOnboardingTemplate,
+		downloadOnboardingTemplate,
+		getCloudPlusTemplateForTab,
+		getOnboardingSetupAccessError,
+		parseOnboardingCloudPlusConnectorConfig,
+		parseOnboardingCloudPlusFeed,
+		trackOnboardingConnectionVerified
+	} from './onboardingUiActions';
 	import './OnboardingPageViewContent.css';
 	let { data } = $props();
 	let currentStep = $state(0), selectedProvider: OnboardingProvider = $state('aws'); // 0: Select Provider, 1: Setup, 2: Verify, 3: Done
@@ -80,12 +91,10 @@
 	const canUseGrowthFeatures = (): boolean => canUseGrowthFeaturesForTier(data?.subscription?.tier);
 	const canUseCloudPlusFeatures = (): boolean => canUseCloudPlusFeaturesForTier(data?.subscription?.tier);
 	const canUseIdpDeepScan = (): boolean => canUseIdpDeepScanForTier(data?.subscription?.tier);
-	const applyDiscoveryCandidateLocally = (updated: DiscoveryCandidate): void => {
-		discoveryCandidates = applyDiscoveryCandidateLocallyHelper(discoveryCandidates, updated);
-	};
-	const upsertDiscoveryCandidates = (candidates: DiscoveryCandidate[]): void => {
-		discoveryCandidates = upsertDiscoveryCandidatesHelper(discoveryCandidates, candidates);
-	};
+	const applyDiscoveryCandidateLocally = (updated: DiscoveryCandidate): void =>
+		(discoveryCandidates = applyDiscoveryCandidateLocallyHelper(discoveryCandidates, updated));
+	const upsertDiscoveryCandidates = (candidates: DiscoveryCandidate[]): void =>
+		(discoveryCandidates = upsertDiscoveryCandidatesHelper(discoveryCandidates, candidates));
 	function applyDiscoveryFlowResult(result: {
 		info?: string;
 		domain: string;
@@ -93,76 +102,50 @@
 		candidates: DiscoveryCandidate[];
 	}): void {
 		if (!result.info) return;
-		discoveryDomain = result.domain;
-		discoveryWarnings = result.warnings;
-		upsertDiscoveryCandidates(result.candidates);
-		discoveryInfo = result.info;
+		discoveryDomain = result.domain; discoveryWarnings = result.warnings;
+		upsertDiscoveryCandidates(result.candidates); discoveryInfo = result.info;
 	}
 	async function runDiscoveryStageA(): Promise<void> {
-		discoveryError = '';
-		discoveryInfo = '';
-		discoveryLoadingStageA = true;
-		try {
-			applyDiscoveryFlowResult(await runDiscoveryStageAFlow({ email: discoveryEmail, getAccessToken, ensureOnboarded }));
-		} catch (e) {
-			const err = e as Error;
-			discoveryError = err.message || 'Failed to run Stage A discovery';
-		} finally {
-			discoveryLoadingStageA = false;
-		}
+		await runOnboardingDiscoveryStageA({
+			discoveryEmail,
+			getAccessToken,
+			ensureOnboarded,
+			setError: (value) => (discoveryError = value),
+			setInfo: (value) => (discoveryInfo = value),
+			setLoading: (value) => (discoveryLoadingStageA = value),
+			applyDiscoveryFlowResult
+		});
 	}
 	async function runDiscoveryStageB(): Promise<void> {
-		discoveryError = '';
-		discoveryInfo = '';
-		discoveryLoadingStageB = true;
-		try {
-			applyDiscoveryFlowResult(await runDiscoveryStageBFlow({
-				discoveryDomain,
-				discoveryEmail,
-				idpProvider: discoveryIdpProvider,
-				canUseIdpDeepScan: canUseIdpDeepScan(),
-				getAccessToken,
-				ensureOnboarded
-			}));
-		} catch (e) {
-			const err = e as Error;
-			discoveryError = err.message || 'Failed to run Stage B deep scan';
-		} finally {
-			discoveryLoadingStageB = false;
-		}
+		await runOnboardingDiscoveryStageB({
+			discoveryDomain,
+			discoveryEmail,
+			discoveryIdpProvider,
+			canUseIdpDeepScan: canUseIdpDeepScan(),
+			getAccessToken,
+			ensureOnboarded,
+			setError: (value) => (discoveryError = value),
+			setInfo: (value) => (discoveryInfo = value),
+			setLoading: (value) => (discoveryLoadingStageB = value),
+			applyDiscoveryFlowResult
+		});
 	}
 	async function updateDiscoveryCandidateStatus(
 		candidate: DiscoveryCandidate,
 		action: 'accept' | 'ignore' | 'connected'
 	): Promise<DiscoveryCandidate | null> {
-		discoveryError = '';
-		discoveryInfo = '';
-		discoveryActionCandidateId = candidate.id;
-		try {
-			const payload = await updateDiscoveryCandidateStatusFlow({
-				getAccessToken,
-				candidateId: candidate.id,
-				action
-			});
-			applyDiscoveryCandidateLocally(payload);
-			return payload;
-		} catch (e) {
-			const err = e as Error;
-			discoveryError = err.message || `Failed to ${action} discovery candidate`;
-			return null;
-		} finally {
-			discoveryActionCandidateId = null;
-		}
+		return updateOnboardingDiscoveryCandidateStatus({
+			candidate,
+			action,
+			getAccessToken,
+			applyDiscoveryCandidateLocally,
+			setError: (value) => (discoveryError = value),
+			setInfo: (value) => (discoveryInfo = value),
+			setActionCandidateId: (value) => (discoveryActionCandidateId = value)
+		});
 	}
-
-	const ignoreDiscoveryCandidate = async (candidate: DiscoveryCandidate): Promise<void> => {
-		const updated = await updateDiscoveryCandidateStatus(candidate, 'ignore');
-		if (updated) discoveryInfo = `${updated.provider} ignored.`;
-	};
-	const markDiscoveryCandidateConnected = async (candidate: DiscoveryCandidate): Promise<void> => {
-		const updated = await updateDiscoveryCandidateStatus(candidate, 'connected');
-		if (updated) discoveryInfo = `${updated.provider} marked as connected.`;
-	};
+	const ignoreDiscoveryCandidate = async (candidate: DiscoveryCandidate): Promise<void> => { const updated = await updateDiscoveryCandidateStatus(candidate, 'ignore'); if (updated) discoveryInfo = `${updated.provider} ignored.`; };
+	const markDiscoveryCandidateConnected = async (candidate: DiscoveryCandidate): Promise<void> => { const updated = await updateDiscoveryCandidateStatus(candidate, 'connected'); if (updated) discoveryInfo = `${updated.provider} marked as connected.`; };
 
 	async function connectDiscoveryCandidate(candidate: DiscoveryCandidate): Promise<void> {
 		try {
@@ -197,14 +180,8 @@
 		cloudPlusAuthMethod = nextState.authMethod;
 		cloudPlusRequiredConfigValues = nextState.requiredConfigValues;
 	}
-	const handleCloudPlusVendorInputChanged = (): void => {
-		cloudPlusVendor = cloudPlusVendor.trim().toLowerCase();
-		applyCloudPlusVendorDefaults(false);
-	};
-	const chooseNativeCloudPlusVendor = (vendor: string): void => {
-		cloudPlusVendor = vendor.trim().toLowerCase();
-		applyCloudPlusVendorDefaults(true);
-	};
+	const handleCloudPlusVendorInputChanged = (): void => (cloudPlusVendor = cloudPlusVendor.trim().toLowerCase(), applyCloudPlusVendorDefaults(false));
+	const chooseNativeCloudPlusVendor = (vendor: string): void => (cloudPlusVendor = vendor.trim().toLowerCase(), applyCloudPlusVendorDefaults(true));
 	function handleCloudPlusAuthMethodChanged(): void {
 		const supportedAuthMethods = getAvailableCloudPlusAuthMethods();
 		if (!supportedAuthMethods.includes(cloudPlusAuthMethod)) {
@@ -216,9 +193,8 @@
 	}
 	const isCloudPlusNativeAuthMethod = (): boolean =>
 		cloudPlusAuthMethod === 'api_key' || cloudPlusAuthMethod === 'oauth';
-	const setRequiredConfigField = (field: string, value: string): void => {
-		cloudPlusRequiredConfigValues = { ...cloudPlusRequiredConfigValues, [field]: value };
-	};
+	const setRequiredConfigField = (field: string, value: string): void =>
+		(cloudPlusRequiredConfigValues = { ...cloudPlusRequiredConfigValues, [field]: value });
 	const getRequiredConfigFieldValue = (field: string): string =>
 		cloudPlusRequiredConfigValues[field] ?? '';
 	const getAccessToken = async (): Promise<string | null> => data.session?.access_token ?? null;
@@ -229,7 +205,13 @@
 			error = 'Please log in first';
 			return false;
 		}
-		const result = await ensureOnboardedRequest(token);
+		const result = await ensureOnboardedRequest(
+			token,
+			buildProductFunnelAttributionContext({
+				url: $page.url,
+				persona: String(data?.profile?.persona ?? '')
+			})
+		);
 		if (!result.ok) {
 			error = result.error;
 			return false;
@@ -261,15 +243,14 @@
 	}
 
 	async function handleContinueToSetup() {
-		if ((selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseGrowthFeatures()) {
-			error = `${getProviderLabel(selectedProvider)} onboarding requires Growth tier or higher.`;
-			return;
-		}
-		if (
-			(selectedProvider === 'saas' || selectedProvider === 'license') &&
-			!canUseCloudPlusFeatures()
-		) {
-			error = `${getProviderLabel(selectedProvider)} onboarding requires Pro tier or higher.`;
+		const accessError = getOnboardingSetupAccessError({
+			selectedProvider,
+			canUseGrowthFeatures: canUseGrowthFeatures(),
+			canUseCloudPlusFeatures: canUseCloudPlusFeatures(),
+			getProviderLabel
+		});
+		if (accessError) {
+			error = accessError;
 			return;
 		}
 
@@ -284,29 +265,30 @@
 		await fetchSetupData();
 	}
 
-	function copyTemplate() {
-		const template = selectedTab === 'cloudformation' ? cloudformationYaml : terraformHcl;
-		navigator.clipboard.writeText(template);
+	async function copyTemplate() {
+		const { template } = getCloudPlusTemplateForTab({
+			selectedTab,
+			cloudformationYaml,
+			terraformHcl
+		});
+		await copyOnboardingTemplate(template);
 		copied = true;
 		setTimeout(() => (copied = false), 2000);
 	}
 
 	function downloadTemplate() {
-		const template = selectedTab === 'cloudformation' ? cloudformationYaml : terraformHcl;
-		const filename = selectedTab === 'cloudformation' ? 'valdrics-role.yaml' : 'valdrics-role.tf';
-		const blob = new Blob([template], { type: 'text/plain' });
-		const url = URL.createObjectURL(blob);
-		const a = document.createElement('a');
-		a.href = url;
-		a.download = filename;
-		a.click();
-		URL.revokeObjectURL(url);
+		const { template, filename } = getCloudPlusTemplateForTab({
+			selectedTab,
+			cloudformationYaml,
+			terraformHcl
+		});
+		downloadOnboardingTemplate(template, filename);
 	}
 
 	const parseCloudPlusFeed = (): Array<Record<string, unknown>> =>
-		parseCloudPlusFeedHelper(cloudPlusFeedInput);
+		parseOnboardingCloudPlusFeed(cloudPlusFeedInput);
 	const parseCloudPlusConnectorConfig = (): Record<string, unknown> =>
-		parseCloudPlusConnectorConfigHelper({
+		parseOnboardingCloudPlusConnectorConfig({
 			connectorConfigInput: cloudPlusConnectorConfigInput,
 			selectedConnector: getSelectedNativeConnector(),
 			isNativeAuthMethod: isCloudPlusNativeAuthMethod(),
@@ -336,6 +318,16 @@
 			});
 			currentStep = result.currentStep;
 			success = result.success;
+			if (result.success) {
+				trackOnboardingConnectionVerified({
+					accessToken: data.session?.access_token,
+					tenantId: data.user?.tenant_id,
+					url: $page.url,
+					currentTier: data.subscription?.tier,
+					persona: String(data?.profile?.persona ?? ''),
+					provider: selectedProvider
+				});
+			}
 		} catch (e) {
 			const err = e as Error;
 			error = err.message;
@@ -360,6 +352,14 @@
 			});
 			success = true;
 			currentStep = 3;
+			trackOnboardingConnectionVerified({
+				accessToken: data.session?.access_token,
+				tenantId: data.user?.tenant_id,
+				url: $page.url,
+				currentTier: data.subscription?.tier,
+				persona: String(data?.profile?.persona ?? ''),
+				provider: 'aws'
+			});
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Unknown error';
 		} finally {

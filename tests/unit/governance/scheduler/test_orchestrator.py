@@ -65,7 +65,7 @@ async def test_low_carbon_window(orchestrator: SchedulerOrchestrator) -> None:
 
 @pytest.mark.asyncio
 async def test_detect_stuck_jobs(orchestrator, mock_session_maker):
-    """Test detection and mitigation of stuck jobs."""
+    """Test detection of overdue pending jobs without mutating them."""
     # Setup mock DB session
     mock_db = AsyncMock()
     # session_maker() returns an object that can be used in 'async with'
@@ -85,9 +85,8 @@ async def test_detect_stuck_jobs(orchestrator, mock_session_maker):
 
     await orchestrator.detect_stuck_jobs()
 
-    assert stuck_job.status == JobStatus.FAILED
-    assert "Stuck in PENDING" in stuck_job.error_message
-    mock_db.commit.assert_awaited_once()
+    assert stuck_job.status == JobStatus.PENDING
+    mock_db.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -96,6 +95,47 @@ async def test_billing_sweep_job(orchestrator: SchedulerOrchestrator) -> None:
     with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
         await orchestrator.billing_sweep_job()
         mock_send.assert_called_with("scheduler.billing_sweep")
+
+
+@pytest.mark.asyncio
+async def test_background_job_processing_dispatch(orchestrator: SchedulerOrchestrator) -> None:
+    with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
+        await orchestrator.background_job_processing_job()
+        mock_send.assert_called_with("scheduler.process_background_jobs")
+
+
+@pytest.mark.asyncio
+async def test_landing_funnel_health_refresh_dispatch(
+    orchestrator: SchedulerOrchestrator,
+) -> None:
+    with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
+        await orchestrator.landing_funnel_health_refresh_job()
+        mock_send.assert_called_with("scheduler.refresh_landing_funnel_health")
+
+
+@pytest.mark.asyncio
+async def test_background_job_processing_falls_back_inline_when_celery_unavailable(
+    orchestrator: SchedulerOrchestrator,
+) -> None:
+    with (
+        patch(
+            "app.shared.core.celery_app.celery_app.send_task",
+            side_effect=RuntimeError("broker unavailable"),
+        ),
+        patch.object(
+            orchestrator, "_process_background_jobs_inline", new_callable=AsyncMock
+        ) as mock_inline,
+        patch(
+            "app.modules.governance.domain.scheduler.orchestrator.record_scheduler_inline_fallback"
+        ) as record_fallback,
+    ):
+        await orchestrator.background_job_processing_job()
+
+    mock_inline.assert_awaited_once()
+    record_fallback.assert_called_once_with(
+        "background_job_processing",
+        outcome="succeeded",
+    )
 
 
 @pytest.mark.asyncio
@@ -109,8 +149,14 @@ async def test_acceptance_sweep_job(orchestrator: SchedulerOrchestrator) -> None
 @pytest.mark.asyncio
 async def test_maintenance_sweep_job_failure(orchestrator: SchedulerOrchestrator) -> None:
     """Test maintenance sweep job handles Celery being unavailable."""
-    with patch("app.shared.core.celery_app.celery_app.send_task") as mock_send:
+    with (
+        patch("app.shared.core.celery_app.celery_app.send_task") as mock_send,
+        patch.object(
+            orchestrator, "_run_maintenance_sweep_inline", new_callable=AsyncMock
+        ) as mock_inline,
+    ):
         mock_send.side_effect = RuntimeError("Redis connection error")
         # Should not raise
         await orchestrator.maintenance_sweep_job()
         mock_send.assert_called_once()
+        mock_inline.assert_awaited_once()

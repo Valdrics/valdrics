@@ -199,6 +199,19 @@ async def run_jira_connectivity_test(
             message="Tenant context required. Please complete onboarding.",
         )
 
+    tier = normalize_tier(current_user.tier)
+    if not is_feature_enabled(tier, FeatureFlag.JIRA_INTEGRATION):
+        return IntegrationAcceptanceResult(
+            channel="jira",
+            event_type=AuditEventType.INTEGRATION_TEST_JIRA.value,
+            success=False,
+            status_code=status.HTTP_403_FORBIDDEN,
+            message=(
+                f"Feature '{FeatureFlag.JIRA_INTEGRATION.value}' requires an upgrade. "
+                f"Current tier: {tier.value}"
+            ),
+        )
+
     jira = await get_tenant_jira_service(db, current_user.tenant_id)
     if jira is None:
         return IntegrationAcceptanceResult(

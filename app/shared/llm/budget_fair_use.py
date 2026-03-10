@@ -18,7 +18,15 @@ from app.shared.llm.budget_fair_use_limits import (
     enforce_fair_use_guards_impl,
 )
 
-FAIR_USE_CACHE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (RuntimeError, OSError, TimeoutError, TypeError, ValueError, AttributeError)
+FAIR_USE_CACHE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
+    RuntimeError,
+    OSError,
+    TimeoutError,
+    TypeError,
+    ValueError,
+    AttributeError,
+    Exception,
+)
 FAIR_USE_PARSE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (TypeError, ValueError)
 
 

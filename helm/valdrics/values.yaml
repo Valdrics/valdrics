@@ -10,6 +10,12 @@ global:
   subdomain: api
   # -- Subdomain for the frontend/dashboard service
   frontendSubdomain: dashboard
+  # -- Optional exact API hostname override for environments where the API host
+  #    does not follow the default subdomain + baseDomain pattern.
+  apiHostOverride: ""
+  # -- Optional exact frontend hostname override for environments where the
+  #    dashboard host does not follow the default subdomain + baseDomain pattern.
+  frontendHostOverride: ""
 
 # -- Number of API replicas
 # Default to HA-safe API capacity for rolling upgrades and fail-closed controls.

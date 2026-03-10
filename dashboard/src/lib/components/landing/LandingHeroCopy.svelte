@@ -26,10 +26,10 @@
 
 <div class="landing-copy">
 	<div class="landing-kicker fade-in-up" style="animation-delay: 0ms;">
-		<span class="badge badge-accent">Decision operating layer for spend control</span>
+		<span class="badge badge-accent">Governed action for cloud, SaaS, and software spend</span>
 		<span class="landing-sep" aria-hidden="true">•</span>
 		<span class="landing-kicker-text"
-			>Route the right owner. Apply checks. Record the outcome.</span
+			>Detect waste. Route the owner. Approve the action. Keep the proof.</span
 		>
 	</div>
 
@@ -61,7 +61,11 @@
 	<div class="landing-hero-credibility fade-in-up" style="animation-delay: 270ms;">
 		<div class="landing-hero-proof-rail" role="list" aria-label="Prelaunch proof in hero">
 			{#each heroTrustRail as item (item.title)}
-				<p class="landing-hero-proof-rail-item" role="listitem" aria-label={`${item.title}. ${item.detail}`}>
+				<p
+					class="landing-hero-proof-rail-item"
+					role="listitem"
+					aria-label={`${item.title}. ${item.detail}`}
+				>
 					{item.title}
 				</p>
 			{/each}

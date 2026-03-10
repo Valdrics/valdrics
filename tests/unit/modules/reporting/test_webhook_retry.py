@@ -1,9 +1,11 @@
+import asyncio
 import pytest
 """
 Comprehensive tests for WebhookRetryService module.
 Covers webhook storage, idempotency, retry logic, duplicate detection, and Paystack webhook processing.
 """
 
+from datetime import datetime, timezone
 import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -12,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.billing.domain.billing.webhook_retry import (
     WebhookRetryService,
+    WebhookPermanentError,
     process_paystack_webhook,
     WEBHOOK_MAX_ATTEMPTS,
     WEBHOOK_IDEMPOTENCY_TTL_HOURS,
@@ -182,8 +185,12 @@ class TestWebhookStorage:
             mock_existing = MagicMock(spec=BackgroundJob)
             mock_existing.id = uuid.uuid4()
             mock_existing.status = "completed"
+            mock_existing.completed_at = datetime.now(timezone.utc)
             mock_existing._enqueue_created = False
             mock_enqueue.return_value = mock_existing
+            mock_result = MagicMock()
+            mock_result.scalar_one_or_none.return_value = mock_existing
+            mock_db.execute.return_value = mock_result
 
             job = await webhook_service.store_webhook(
                 provider="paystack",
@@ -255,6 +262,9 @@ class TestWebhookStorage:
             mock_existing.status = "pending"
             mock_existing._enqueue_created = False
             mock_enqueue.return_value = mock_existing
+            mock_result = MagicMock()
+            mock_result.scalar_one_or_none.return_value = mock_existing
+            mock_db.execute.return_value = mock_result
 
             job = await webhook_service.store_webhook(
                 provider="paystack",
@@ -264,6 +274,129 @@ class TestWebhookStorage:
             )
 
         assert job is None
+
+    @pytest.mark.asyncio
+    async def test_store_webhook_burst_duplicate_redeliveries_share_single_queue_entry(
+        self, mock_db, webhook_service, sample_paystack_payload
+    ):
+        first_job = MagicMock(spec=BackgroundJob)
+        first_job.id = uuid.uuid4()
+        first_job._enqueue_created = True
+
+        existing_job = MagicMock(spec=BackgroundJob)
+        existing_job.id = first_job.id
+        existing_job.status = JobStatus.PENDING.value
+        existing_job._enqueue_created = False
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_job
+        mock_db.execute.return_value = mock_result
+
+        enqueue = AsyncMock(side_effect=[first_job] + [existing_job] * 7)
+        with patch(
+            "app.modules.billing.domain.billing.webhook_retry.enqueue_job",
+            new=enqueue,
+        ):
+            jobs = [
+                await webhook_service.store_webhook(
+                    provider="paystack",
+                    event_type="charge.success",
+                    payload=sample_paystack_payload,
+                    reference="txn_test_123",
+                )
+                for _ in range(8)
+            ]
+
+        assert jobs[0] is first_job
+        assert all(job is None for job in jobs[1:])
+        assert enqueue.await_count == 8
+        dedup_keys = [
+            call.kwargs["deduplication_key"]
+            for call in enqueue.await_args_list
+        ]
+        assert dedup_keys == [dedup_keys[0]] * 8
+
+    @pytest.mark.asyncio
+    async def test_store_webhook_concurrent_burst_duplicate_redeliveries_share_single_queue_entry(
+        self, mock_db, webhook_service, sample_paystack_payload
+    ):
+        first_job = MagicMock(spec=BackgroundJob)
+        first_job.id = uuid.uuid4()
+        first_job._enqueue_created = True
+
+        existing_job = MagicMock(spec=BackgroundJob)
+        existing_job.id = first_job.id
+        existing_job.status = JobStatus.PENDING.value
+        existing_job._enqueue_created = False
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = existing_job
+        mock_db.execute.return_value = mock_result
+
+        enqueue_calls: list[str] = []
+        creation_lock = asyncio.Lock()
+        created = False
+
+        async def fake_enqueue(**kwargs):
+            nonlocal created
+            enqueue_calls.append(str(kwargs["deduplication_key"]))
+            async with creation_lock:
+                if not created:
+                    created = True
+                    return first_job
+                return existing_job
+
+        with patch(
+            "app.modules.billing.domain.billing.webhook_retry.enqueue_job",
+            new=fake_enqueue,
+        ):
+            jobs = await asyncio.gather(
+                *[
+                    webhook_service.store_webhook(
+                        provider="paystack",
+                        event_type="charge.success",
+                        payload=sample_paystack_payload,
+                        reference="txn_test_123",
+                    )
+                    for _ in range(8)
+                ]
+            )
+
+        assert sum(job is first_job for job in jobs) == 1
+        assert sum(job is None for job in jobs) == 7
+        assert creation_lock.locked() is False
+        assert created is True
+        assert len(enqueue_calls) == 8
+        assert enqueue_calls == [enqueue_calls[0]] * 8
+
+    @pytest.mark.asyncio
+    async def test_store_webhook_requeues_failed_existing_job(
+        self, mock_db, webhook_service, sample_paystack_payload
+    ):
+        with patch(
+            "app.modules.billing.domain.billing.webhook_retry.enqueue_job"
+        ) as mock_enqueue:
+            mock_existing = MagicMock(spec=BackgroundJob)
+            mock_existing.id = uuid.uuid4()
+            mock_existing.status = "failed"
+            mock_existing.attempts = 5
+            mock_existing._enqueue_created = False
+            mock_enqueue.return_value = mock_existing
+            mock_result = MagicMock()
+            mock_result.scalar_one_or_none.return_value = mock_existing
+            mock_db.execute.return_value = mock_result
+
+            job = await webhook_service.store_webhook(
+                provider="paystack",
+                event_type="charge.success",
+                payload=sample_paystack_payload,
+                reference="txn_test_123",
+            )
+
+        assert job is mock_existing
+        assert mock_existing.status == JobStatus.PENDING.value
+        assert mock_existing.attempts == 0
+        mock_db.commit.assert_awaited_once()
 
 
 class TestPendingWebhooks:
@@ -562,10 +695,8 @@ class TestProcessPaystackWebhook:
         mock_job = MagicMock(spec=BackgroundJob)
         mock_job.payload = None
 
-        result = await process_paystack_webhook(mock_job, mock_db)
-
-        assert result["status"] == "error"
-        assert result["reason"] == "Missing payload"
+        with pytest.raises(WebhookPermanentError, match="Missing stored webhook payload"):
+            await process_paystack_webhook(mock_job, mock_db)
 
     @pytest.mark.asyncio
     async def test_process_paystack_webhook_verifies_signature_with_raw_payload(
@@ -610,10 +741,11 @@ class TestProcessPaystackWebhook:
             "app.modules.billing.domain.billing.paystack_billing.WebhookHandler"
         ) as mock_handler_class:
             mock_handler_class.return_value = AsyncMock()
-            result = await process_paystack_webhook(mock_job, mock_db)
-
-        assert result["status"] == "error"
-        assert result["reason"] == "missing_signature_material"
+            with pytest.raises(
+                WebhookPermanentError,
+                match="Stored webhook signature material is missing",
+            ):
+                await process_paystack_webhook(mock_job, mock_db)
 
     @pytest.mark.asyncio
     async def test_process_paystack_webhook_invalid_raw_payload_returns_error(
@@ -633,10 +765,11 @@ class TestProcessPaystackWebhook:
             mock_handler = MagicMock()
             mock_handler_class.return_value = mock_handler
             mock_handler.verify_signature.return_value = True
-            result = await process_paystack_webhook(mock_job, mock_db)
-
-        assert result["status"] == "error"
-        assert result["reason"] == "invalid_raw_payload"
+            with pytest.raises(
+                WebhookPermanentError,
+                match="Stored webhook payload could not be parsed",
+            ):
+                await process_paystack_webhook(mock_job, mock_db)
 
     @pytest.mark.asyncio
     async def test_process_paystack_webhook_does_not_swallow_fatal_parse_errors(

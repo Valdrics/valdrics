@@ -52,7 +52,11 @@ from app.shared.core.validation_errors import sanitize_validation_errors
 # SchedulerService imported lazily in lifespan() to avoid Celery blocking on startup
 from app.shared.core.timeout import TimeoutMiddleware
 from app.shared.core.tracing import setup_tracing
-from app.shared.db.session import async_session_maker, get_engine
+from app.shared.db.local_sqlite_bootstrap import (
+    bootstrap_local_sqlite_schema,
+    should_bootstrap_local_sqlite,
+)
+from app.shared.db.session import async_session_maker, get_engine, reset_db_runtime
 from app.shared.core.exceptions import ValdricsException
 from app.shared.core.rate_limit import (
     setup_rate_limiting,
@@ -114,6 +118,7 @@ API_DOCUMENTATION_PATHS = frozenset({"/openapi.json", "/docs", "/redoc"})
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global settings
     settings = reload_settings_from_environment()
+    reset_db_runtime()
     validate_runtime_dependencies(settings)
     init_sentry()
 
@@ -122,6 +127,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     runtime_data_dir = _runtime_data_dir()
     os.makedirs(runtime_data_dir, exist_ok=True)
+
+    database_url = str(getattr(settings, "DATABASE_URL", "") or "").strip()
+    if should_bootstrap_local_sqlite(settings, database_url):
+        await bootstrap_local_sqlite_schema(
+            engine=get_engine(),
+            effective_url=database_url,
+            settings_obj=settings,
+        )
 
     # Track app's own carbon footprint (GreenOps)
     tracker = None

@@ -1,32 +1,20 @@
 <script lang="ts">
 	import { BarChart3, RefreshCw } from '@lucide/svelte';
 	import AuthGate from '$lib/components/AuthGate.svelte';
-	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
-
-	type CampaignRow = {
-		utm_source: string;
-		utm_medium: string;
-		utm_campaign: string;
-		total_events: number;
-		cta_events: number;
-		signup_intent_events: number;
-		first_seen_at: string | null;
-		last_seen_at: string | null;
-	};
-
-	type CampaignMetricsResponse = {
-		window_start: string;
-		window_end: string;
-		days: number;
-		total_events: number;
-		items: CampaignRow[];
-	};
+	import {
+		buildLandingCampaignApiPath,
+		extractLandingCampaignApiError,
+		formatCampaignDate,
+		formatCampaignDelta,
+		formatCampaignPercent,
+		formatCampaignRateDelta,
+		getFunnelAlertTone,
+		LANDING_CAMPAIGN_REQUEST_TIMEOUT_MS,
+		type CampaignMetricsResponse
+	} from './landingCampaignAnalytics';
 
 	let { data } = $props();
-	const REQUEST_TIMEOUT_MS = 10000;
-	const QUERY_LIMIT = 100;
-
 	let days = $state(30);
 	let loading = $state(false);
 	let refreshing = $state(false);
@@ -34,28 +22,6 @@
 	let error = $state('');
 	let metrics = $state<CampaignMetricsResponse | null>(null);
 	let requestToken = 0;
-
-	function formatDate(value: string | null): string {
-		if (!value) return 'n/a';
-		return new Date(value).toLocaleString();
-	}
-
-	function buildApiPath(windowDays: number): string {
-		const params = new URLSearchParams({
-			days: String(windowDays),
-			limit: String(QUERY_LIMIT)
-		});
-		return edgeApiPath(`/admin/landing/campaigns?${params.toString()}`);
-	}
-
-	function extractApiError(payload: unknown): string | null {
-		if (!payload || typeof payload !== 'object') return null;
-		const body = payload as Record<string, unknown>;
-		if (typeof body.detail === 'string' && body.detail.trim()) return body.detail;
-		if (typeof body.error === 'string' && body.error.trim()) return body.error;
-		if (typeof body.message === 'string' && body.message.trim()) return body.message;
-		return null;
-	}
 
 	async function loadMetrics(windowDays: number): Promise<void> {
 		const accessToken = data.session?.access_token;
@@ -76,13 +42,13 @@
 		try {
 			const response = await fetchWithTimeout(
 				fetch,
-				buildApiPath(windowDays),
+				buildLandingCampaignApiPath(windowDays),
 				{
 					headers: {
 						Authorization: `Bearer ${accessToken}`
 					}
 				},
-				REQUEST_TIMEOUT_MS
+				LANDING_CAMPAIGN_REQUEST_TIMEOUT_MS
 			);
 
 			if (currentToken !== requestToken) return;
@@ -104,7 +70,7 @@
 				const payload = await response.json().catch(() => ({}));
 				metrics = null;
 				error =
-					extractApiError(payload) ||
+					extractLandingCampaignApiError(payload) ||
 					`Failed to load campaign analytics (HTTP ${response.status}).`;
 				return;
 			}
@@ -156,7 +122,8 @@
 					</p>
 					<h1 class="text-2xl font-semibold text-ink-100 mt-1">Landing campaign analytics</h1>
 					<p class="mt-2 text-sm text-ink-400">
-						Global campaign rollups from landing telemetry ingestion.
+						Global campaign rollups from anonymous landing telemetry through authenticated activation
+						and paid conversion.
 					</p>
 				</div>
 				<div class="flex items-center gap-2">
@@ -205,7 +172,7 @@
 				<p class="text-sm text-danger-300">{error}</p>
 			</section>
 		{:else if metrics}
-			<section class="grid gap-4 md:grid-cols-3">
+			<section class="grid gap-4 md:grid-cols-4">
 				<article class="card border border-ink-800">
 					<p class="text-xs uppercase tracking-[0.08em] text-ink-500">Window</p>
 					<p class="text-lg font-semibold text-ink-100 mt-1">{metrics.days} days</p>
@@ -219,6 +186,103 @@
 					<p class="text-xs uppercase tracking-[0.08em] text-ink-500">Campaigns returned</p>
 					<p class="text-lg font-semibold text-ink-100 mt-1">{metrics.items.length}</p>
 				</article>
+				<article class="card border border-ink-800">
+					<p class="text-xs uppercase tracking-[0.08em] text-ink-500">Paid activations</p>
+					<p class="text-lg font-semibold text-ink-100 mt-1">{metrics.total_paid_tenants}</p>
+					<p class="text-xs text-ink-500 mt-1">{metrics.total_pql_tenants} product-qualified tenants</p>
+				</article>
+			</section>
+
+			<section class="grid gap-4 md:grid-cols-4">
+				<article class="card border border-ink-800">
+					<p class="text-xs uppercase tracking-[0.08em] text-ink-500">Onboarded</p>
+					<p class="text-lg font-semibold text-ink-100 mt-1">{metrics.total_onboarded_tenants}</p>
+				</article>
+				<article class="card border border-ink-800">
+					<p class="text-xs uppercase tracking-[0.08em] text-ink-500">Connected</p>
+					<p class="text-lg font-semibold text-ink-100 mt-1">{metrics.total_connected_tenants}</p>
+				</article>
+				<article class="card border border-ink-800">
+					<p class="text-xs uppercase tracking-[0.08em] text-ink-500">First value</p>
+					<p class="text-lg font-semibold text-ink-100 mt-1">{metrics.total_first_value_tenants}</p>
+				</article>
+				<article class="card border border-ink-800">
+					<p class="text-xs uppercase tracking-[0.08em] text-ink-500">Checkout started</p>
+					<p class="text-lg font-semibold text-ink-100 mt-1">{metrics.total_checkout_started_tenants}</p>
+					<p class="text-xs text-ink-500 mt-1">{metrics.total_pricing_view_tenants} pricing views</p>
+				</article>
+			</section>
+
+			<section class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+				<article class="card border border-ink-800">
+					<p class="text-xs uppercase tracking-[0.08em] text-ink-500">7d signup → connection</p>
+					<p class="text-lg font-semibold text-ink-100 mt-1">
+						{formatCampaignPercent(metrics.weekly_current.signup_to_connection_rate)}
+					</p>
+					<p class="text-xs text-ink-500 mt-1">
+						{formatCampaignRateDelta(metrics.weekly_delta.signup_to_connection_rate)} vs previous 7d
+					</p>
+				</article>
+				<article class="card border border-ink-800">
+					<p class="text-xs uppercase tracking-[0.08em] text-ink-500">7d connection → first value</p>
+					<p class="text-lg font-semibold text-ink-100 mt-1">
+						{formatCampaignPercent(metrics.weekly_current.connection_to_first_value_rate)}
+					</p>
+					<p class="text-xs text-ink-500 mt-1">
+						{formatCampaignRateDelta(metrics.weekly_delta.connection_to_first_value_rate)} vs previous 7d
+					</p>
+				</article>
+				<article class="card border border-ink-800">
+					<p class="text-xs uppercase tracking-[0.08em] text-ink-500">7d PQL delta</p>
+					<p class="text-lg font-semibold text-ink-100 mt-1">
+						{formatCampaignDelta(metrics.weekly_delta.pql_tenants)}
+					</p>
+					<p class="text-xs text-ink-500 mt-1">
+						Current {metrics.weekly_current.pql_tenants} vs previous {metrics.weekly_previous.pql_tenants}
+					</p>
+				</article>
+				<article class="card border border-ink-800">
+					<p class="text-xs uppercase tracking-[0.08em] text-ink-500">7d paid delta</p>
+					<p class="text-lg font-semibold text-ink-100 mt-1">
+						{formatCampaignDelta(metrics.weekly_delta.paid_tenants)}
+					</p>
+					<p class="text-xs text-ink-500 mt-1">
+						Current {metrics.weekly_current.paid_tenants} vs previous {metrics.weekly_previous.paid_tenants}
+					</p>
+				</article>
+			</section>
+
+			<section class="card border border-ink-800">
+				<h2 class="text-lg font-semibold text-ink-100">Weekly funnel health alerts</h2>
+				<p class="mt-2 text-sm text-ink-400">
+					Operating thresholds for the last 7 days. Alerts fire when onboarding-to-connection or
+					connection-to-value conversion falls below floor or deteriorates sharply week over week.
+				</p>
+				<div class="mt-4 grid gap-3 lg:grid-cols-2">
+					{#each metrics.funnel_alerts as alert (alert.key)}
+						<article class={`rounded-2xl border p-4 ${getFunnelAlertTone(alert.status)}`}>
+							<div class="flex items-start justify-between gap-3">
+								<div>
+									<p class="text-xs uppercase tracking-[0.08em] font-semibold opacity-80">
+										{alert.label}
+									</p>
+									<p class="mt-1 text-lg font-semibold">{formatCampaignPercent(alert.current_rate)}</p>
+								</div>
+								<span class="text-xs uppercase tracking-[0.08em] font-semibold">
+									{alert.status.replace('_', ' ')}
+								</span>
+							</div>
+							<p class="mt-3 text-sm opacity-90">{alert.message}</p>
+							<p class="mt-3 text-xs opacity-80">
+								Threshold {formatCampaignPercent(alert.threshold_rate)} · Previous {formatCampaignPercent(alert.previous_rate)}
+								· Delta {formatCampaignRateDelta(alert.weekly_delta)}
+							</p>
+							<p class="mt-1 text-xs opacity-80">
+								{alert.current_numerator}/{alert.current_denominator} tenants this week
+							</p>
+						</article>
+					{/each}
+				</div>
 			</section>
 
 			<section class="card border border-ink-800 overflow-x-auto">
@@ -241,6 +305,12 @@
 								<th class="py-2 pr-3 font-medium">Total</th>
 								<th class="py-2 pr-3 font-medium">CTA</th>
 								<th class="py-2 pr-3 font-medium">Signup Intent</th>
+								<th class="py-2 pr-3 font-medium">Onboarded</th>
+								<th class="py-2 pr-3 font-medium">Connected</th>
+								<th class="py-2 pr-3 font-medium">First Value</th>
+								<th class="py-2 pr-3 font-medium">PQL</th>
+								<th class="py-2 pr-3 font-medium">Checkout</th>
+								<th class="py-2 pr-3 font-medium">Paid</th>
 								<th class="py-2 font-medium">Last Seen</th>
 							</tr>
 						</thead>
@@ -253,7 +323,13 @@
 									<td class="py-2 pr-3 text-ink-100">{item.total_events}</td>
 									<td class="py-2 pr-3 text-ink-100">{item.cta_events}</td>
 									<td class="py-2 pr-3 text-ink-100">{item.signup_intent_events}</td>
-									<td class="py-2 text-ink-400">{formatDate(item.last_seen_at)}</td>
+									<td class="py-2 pr-3 text-ink-100">{item.onboarded_tenants}</td>
+									<td class="py-2 pr-3 text-ink-100">{item.connected_tenants}</td>
+									<td class="py-2 pr-3 text-ink-100">{item.first_value_tenants}</td>
+									<td class="py-2 pr-3 text-ink-100">{item.pql_tenants}</td>
+									<td class="py-2 pr-3 text-ink-100">{item.checkout_started_tenants}</td>
+									<td class="py-2 pr-3 text-ink-100">{item.paid_tenants}</td>
+									<td class="py-2 text-ink-400">{formatCampaignDate(item.last_seen_at)}</td>
 								</tr>
 							{/each}
 						</tbody>

@@ -233,7 +233,7 @@ async def test_execute_policy_block_short_circuits_action() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_policy_block_notifies_jira_for_pro_incident_tier() -> None:
+async def test_execute_policy_block_notifies_jira_and_workflow_for_pro_tier() -> None:
     db = MagicMock()
     db.execute = AsyncMock()
     db.commit = AsyncMock()
@@ -405,7 +405,7 @@ async def test_execute_policy_escalate_sets_pending_escalation_state() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_policy_escalation_does_not_notify_jira_without_incident_feature() -> (
+async def test_execute_policy_escalation_does_not_notify_jira_without_jira_feature() -> (
     None
 ):
     db = MagicMock()
@@ -458,7 +458,7 @@ async def test_execute_policy_escalation_does_not_notify_jira_without_incident_f
             "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
         ) as mock_get_strategy,
     ):
-        mock_tier.return_value = "growth"
+        mock_tier.return_value = PricingTier.STARTER
         mock_safety.return_value.check_all_guards = AsyncMock(return_value=None)
         result = await service.execute(request_id, tenant_id, bypass_grace_period=True)
 

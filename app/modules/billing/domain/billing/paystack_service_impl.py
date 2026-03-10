@@ -17,6 +17,7 @@ from app.shared.core.pricing import PricingTier
 from . import paystack_shared as shared
 from .paystack_client_impl import PaystackClient
 from .paystack_service_runtime_ops import (
+    build_charge_reference as _build_charge_reference_impl,
     compute_fallback_next_payment_date as _compute_fallback_next_payment_date_impl,
     fetch_provider_next_payment_date as _fetch_provider_next_payment_date_impl,
     infer_interval_days as _infer_interval_days_impl,
@@ -116,6 +117,7 @@ class BillingService:
 
     _parse_paystack_datetime = staticmethod(_parse_paystack_datetime_impl)
     _infer_interval_days = staticmethod(_infer_interval_days_impl)
+    _build_charge_reference = staticmethod(_build_charge_reference_impl)
 
     async def _fetch_provider_next_payment_date(
         self, subscription: TenantSubscription
@@ -293,7 +295,13 @@ class BillingService:
             )
             raise
 
-    async def charge_renewal(self, subscription: TenantSubscription) -> bool:
+    async def charge_renewal(
+        self,
+        subscription: TenantSubscription,
+        *,
+        reference: str | None = None,
+        commit: bool = True,
+    ) -> bool:
         """Charge a recurring subscription using the stored authorization_code."""
         if not subscription.paystack_auth_code:
             shared.logger.error(
@@ -376,6 +384,27 @@ class BillingService:
             fx_provider = shared.PAYSTACK_FX_PROVIDER
             renewal_currency = shared.PAYSTACK_CHECKOUT_CURRENCY
 
+        next_due = getattr(subscription, "next_payment_date", None)
+        if isinstance(next_due, datetime):
+            sequence = next_due.astimezone(timezone.utc).date().isoformat()
+        else:
+            sequence = "immediate"
+        effective_reference = reference or self._build_charge_reference(
+            subscription_id=subscription.id,
+            charge_kind="renewal",
+            sequence=sequence,
+        )
+        if (
+            isinstance(subscription.last_charge_reference, str)
+            and subscription.last_charge_reference == effective_reference
+        ):
+            shared.logger.info(
+                "renewal_duplicate_reference_skipped",
+                tenant_id=str(subscription.tenant_id),
+                reference=effective_reference,
+            )
+            return True
+
         from app.models.tenant import User
 
         user_res = await self.db.execute(
@@ -411,6 +440,7 @@ class BillingService:
                     "exchange_rate": fx_rate,
                     "fx_provider": fx_provider,
                 },
+                reference=effective_reference,
             )
 
             if response.get("status") and response["data"].get("status") == "success":
@@ -425,8 +455,9 @@ class BillingService:
                 subscription.last_charge_fx_provider = fx_provider
                 if reference:
                     subscription.last_charge_reference = str(reference)
+                else:
+                    subscription.last_charge_reference = effective_reference
                 subscription.last_charge_at = datetime.now(timezone.utc)
-                await self.db.commit()
 
                 try:
                     from app.modules.governance.domain.security.audit_log import (
@@ -450,7 +481,7 @@ class BillingService:
                             "exchange_rate": fx_rate,
                             "amount_subunits": amount_subunits,
                             "settlement_currency": renewal_currency,
-                            "reference": reference,
+                            "reference": reference or effective_reference,
                             "success": True,
                         },
                     )
@@ -460,6 +491,11 @@ class BillingService:
                         tenant_id=str(subscription.tenant_id),
                         error=str(audit_exc),
                     )
+
+                if commit:
+                    await self.db.commit()
+                else:
+                    await self.db.flush()
 
                 return True
             return False

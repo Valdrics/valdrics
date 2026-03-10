@@ -24,22 +24,22 @@ describe('Landing component decomposition', () => {
 			props: {
 				heroTitle: 'Control every dollar in your cloud and software stack.',
 				heroSubtitle: 'From signal to owner and approved action in one loop.',
-				primaryCtaLabel: 'Start Free',
-				secondaryCtaLabel: 'See it in action',
-				secondaryCtaHref: '#signal-map',
-				primaryCtaHref: '/auth/login',
+				primaryCtaLabel: 'Start Free Workspace',
+				secondaryCtaLabel: 'See Pricing',
+				secondaryCtaHref: '/pricing?entry=hero_secondary',
+				primaryCtaHref: '/auth/login?intent=engineering_control',
 				onPrimaryCta,
 				onSecondaryCta
 			}
 		});
 
 		expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
-		await fireEvent.click(screen.getByRole('link', { name: /start free/i }));
-		await fireEvent.click(screen.getByRole('link', { name: /see it in action/i }));
+		await fireEvent.click(screen.getByRole('link', { name: /start free workspace/i }));
+		await fireEvent.click(screen.getByRole('link', { name: /see pricing/i }));
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
-		expect(screen.getByText(/read-only access/i)).toBeTruthy();
-		expect(screen.getByText(/3-10 day rollout/i)).toBeTruthy();
+		expect(screen.getByText(/cloud \+ saas \+ software in one control layer/i)).toBeTruthy();
+		expect(screen.getByText(/read-only onboarding where supported/i)).toBeTruthy();
 		expect(screen.queryByText(/verify before you commit/i)).toBeNull();
 		expect(screen.queryByRole('link', { name: /technical validation/i })).toBeNull();
 		expect(screen.queryByRole('link', { name: /access checklist/i })).toBeNull();
@@ -48,8 +48,10 @@ describe('Landing component decomposition', () => {
 		expect(screen.queryByText(/evidence snapshot · february 28, 2026/i)).toBeNull();
 
 		// Check for GreenOps Global Flip additions
-		expect(screen.getByText(/Decision operating layer for spend control/i)).toBeTruthy();
-		expect(screen.getByText(/Route the right owner\. Apply checks\. Record the outcome\./i)).toBeTruthy();
+		expect(screen.getByText(/Governed action for cloud, SaaS, and software spend/i)).toBeTruthy();
+		expect(
+			screen.getByText(/Detect waste\. Route the owner\. Approve the action\. Keep the proof\./i)
+		).toBeTruthy();
 	});
 
 	it('renders signal map card and propagates interactions', async () => {
@@ -145,12 +147,12 @@ describe('Landing component decomposition', () => {
 		expect(onScenarioWasteWithChange).toHaveBeenCalledWith(8);
 		expect(onScenarioWindowChange).toHaveBeenCalledWith(11);
 		expect(onTrackScenarioAdjust).toHaveBeenCalledTimes(3);
-		expect(simulatorView.getByRole('link', { name: /review methodology/i }).getAttribute('href')).toBe(
-			'/docs/technical-validation'
-		);
-		expect(simulatorView.getByRole('link', { name: /open assumptions csv/i }).getAttribute('href')).toBe(
-			'/resources/valdrics-roi-assumptions.csv'
-		);
+		expect(
+			simulatorView.getByRole('link', { name: /review methodology/i }).getAttribute('href')
+		).toBe('/docs/technical-validation');
+		expect(
+			simulatorView.getByRole('link', { name: /open assumptions csv/i }).getAttribute('href')
+		).toBe('/resources/valdrics-roi-assumptions.csv');
 		await fireEvent.click(simulatorView.getByRole('link', { name: /open full roi planner/i }));
 		expect(onTrackPlannerCta).toHaveBeenCalledTimes(1);
 	});
@@ -176,29 +178,28 @@ describe('Landing component decomposition', () => {
 		const onTrackCta = vi.fn();
 		const view = render(LandingTrustSection, {
 			props: {
-				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
+				enterprisePathHref: '/enterprise?source=trust_enterprise',
+				requestValidationBriefingHref: '/talk-to-sales?source=trust_validation',
 				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
 				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
 				onTrackCta
 			}
 		});
 
-		// Check for specific global compliance badges (ISO 27001 and DORA)
-		expect(view.getAllByText(/ISO 27001 readiness alignment/i).length).toBeGreaterThan(0);
-		expect(view.getAllByText(/DORA operational resilience/i).length).toBeGreaterThan(0);
+		expect(view.getAllByText(/Read-only cloud onboarding where supported/i).length).toBeGreaterThan(
+			0
+		);
+		expect(view.getAllByText(/Decision history export/i).length).toBeGreaterThan(0);
 
-		// Check for the Global FinOps Compliance Workbook CTA
 		const ctaBlock = within(view.container).getByRole('generic', {
-			name: 'Security and Readiness'
+			name: 'Security proof and enterprise rollout'
 		});
 		expect(ctaBlock).toBeTruthy();
 		if (ctaBlock) {
 			const ctaView = within(ctaBlock);
-			expect(ctaView.getByText(/Access Control & Compliance Checklist/i)).toBeTruthy();
-			expect(ctaView.getByText(/need formal review/i)).toBeTruthy();
-			await fireEvent.click(
-				ctaView.getByRole('link', { name: /Access Control & Compliance Checklist/i })
-			);
+			expect(ctaView.getByText(/Control and Access Checklist/i)).toBeTruthy();
+			expect(ctaView.getByText(/formal evaluation lane/i)).toBeTruthy();
+			await fireEvent.click(ctaView.getByRole('link', { name: /Control and Access Checklist/i }));
 			expect(onTrackCta).toHaveBeenCalledWith('download_global_compliance_workbook');
 		}
 	});
@@ -207,7 +208,8 @@ describe('Landing component decomposition', () => {
 		const onTrackCta = vi.fn();
 		const view = render(LandingTrustSection, {
 			props: {
-				requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
+				enterprisePathHref: '/enterprise?source=trust_enterprise',
+				requestValidationBriefingHref: '/talk-to-sales?source=trust_validation',
 				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
 				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
 				onTrackCta
@@ -215,17 +217,18 @@ describe('Landing component decomposition', () => {
 		});
 
 		const ctaBlock = within(view.container).getByRole('generic', {
-			name: 'Security and Readiness'
+			name: 'Security proof and enterprise rollout'
 		});
 		expect(ctaBlock).toBeTruthy();
 		if (ctaBlock) {
 			const ctaView = within(ctaBlock);
-			await fireEvent.click(ctaView.getByRole('link', { name: /^talk to sales$/i }));
+			await fireEvent.click(ctaView.getByRole('link', { name: /^open enterprise path$/i }));
+			expect(onTrackCta).toHaveBeenCalledWith('enterprise_review');
+
+			await fireEvent.click(ctaView.getByRole('link', { name: /^book validation briefing$/i }));
 			expect(onTrackCta).toHaveBeenCalledWith('request_validation_briefing');
 
-			await fireEvent.click(
-				ctaView.getByRole('link', { name: /download executive one-pager/i })
-			);
+			await fireEvent.click(ctaView.getByRole('link', { name: /download executive one-pager/i }));
 			expect(onTrackCta).toHaveBeenCalledWith('download_executive_one_pager');
 		}
 	});
@@ -236,7 +239,8 @@ describe('Landing component decomposition', () => {
 		try {
 			const trust = render(LandingTrustSection, {
 				props: {
-					requestValidationBriefingHref: '/auth/login?intent=executive_briefing',
+					enterprisePathHref: '/enterprise?source=trust_enterprise',
+					requestValidationBriefingHref: '/talk-to-sales?source=trust_validation',
 					onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
 					globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
 					onTrackCta: vi.fn()
@@ -244,9 +248,15 @@ describe('Landing component decomposition', () => {
 			});
 			const trustView = within(trust.container);
 
-			expect(trustView.getByText(/teams decide faster with less friction/i)).toBeTruthy();
-			expect(trustView.getByText(/actions stay safe and accountable/i)).toBeTruthy();
-			expect(trustView.getByText(/reviews stay focused on outcomes/i)).toBeTruthy();
+			expect(
+				trustView.getByText(/every material action keeps owner, approval, and savings evidence/i)
+			).toBeTruthy();
+			expect(
+				trustView.getByText(/cross-functional teams work from one governed system/i)
+			).toBeTruthy();
+			expect(
+				trustView.getByText(/the first controlled workflow lands without a services-heavy rollout/i)
+			).toBeTruthy();
 			expect(trustView.queryByRole('button', { name: /next comment/i })).toBeNull();
 			expect(trustView.queryByRole('button', { name: /show comment/i })).toBeNull();
 			expect(fetchMock).not.toHaveBeenCalled();
@@ -321,5 +331,4 @@ describe('Landing component decomposition', () => {
 		expect(onRoiControlInput).toHaveBeenCalledTimes(5);
 		expect(onRoiCta).toHaveBeenCalledTimes(1);
 	});
-
 });

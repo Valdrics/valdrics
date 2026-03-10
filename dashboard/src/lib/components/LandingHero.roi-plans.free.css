@@ -1,0 +1,146 @@
+.landing-free-tier-card {
+	display: grid;
+	gap: 0.8rem;
+	position: relative;
+	overflow: hidden;
+	border: 1px solid rgb(18 158 192 / 0.22);
+	background: linear-gradient(142deg, rgb(18 158 192 / 0.08), rgb(6 11 18 / 0.54));
+	box-shadow:
+		0 0 0 1px rgb(18 158 192 / 0.05),
+		0 16px 34px rgb(15 23 42 / 0.08);
+	text-align: left;
+}
+
+.landing-free-tier-card::before {
+	content: '';
+	position: absolute;
+	inset: 0 0 auto 0;
+	height: 2px;
+	background: linear-gradient(90deg, rgb(18 158 192 / 0.12), rgb(18 158 192 / 0.68), rgb(16 185 129 / 0.4));
+}
+
+.landing-free-tier-head {
+	display: grid;
+	gap: 0.7rem;
+	justify-items: start;
+}
+
+.landing-free-tier-badge {
+	margin: 0;
+	display: inline-flex;
+	align-items: center;
+	padding: 0.28rem 0.62rem;
+	border-radius: 9999px;
+	border: 1px solid rgb(18 158 192 / 0.24);
+	background: rgb(18 158 192 / 0.12);
+	font-size: 0.76rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--color-brand-600);
+}
+
+@media (min-width: 900px) {
+	.landing-free-tier-head {
+		grid-template-columns: 1fr auto;
+		align-items: start;
+	}
+}
+
+@media (min-width: 1024px) {
+	.landing-free-tier-card {
+		grid-template-columns: minmax(0, 1.35fr) minmax(18rem, 0.78fr);
+		gap: 0.95rem 1.15rem;
+		align-items: start;
+	}
+
+	.landing-free-tier-head {
+		grid-column: 1 / -1;
+	}
+
+	.landing-free-tier-card .landing-plan-features {
+		grid-column: 1 / 2;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		column-gap: 1rem;
+		row-gap: 0.4rem;
+		align-self: start;
+	}
+
+	.landing-free-tier-card .landing-plan-features li {
+		width: 100%;
+	}
+
+	.landing-free-tier-card .landing-plan-context {
+		grid-column: 2 / 3;
+		padding-top: 0;
+		padding-left: 0.15rem;
+		border-top: 0;
+		align-self: start;
+	}
+
+	.landing-free-tier-limit {
+		grid-column: 1 / 2;
+		margin-top: -0.1rem;
+	}
+
+	.landing-free-tier-cta {
+		grid-column: 2 / 3;
+		align-self: end;
+		padding-left: 0.15rem;
+	}
+}
+
+.landing-free-tier-price {
+	border: 1px solid rgb(18 158 192 / 0.2);
+	border-radius: var(--radius-lg);
+	padding: 0.72rem 0.9rem;
+	background: rgb(255 255 255 / 0.9);
+	min-width: 9rem;
+}
+
+.landing-free-tier-price-k {
+	margin: 0;
+	font-size: 0.73rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--color-ink-400);
+}
+
+.landing-free-tier-price-v {
+	margin: 0.18rem 0 0 0;
+	font-size: 2.4rem;
+	line-height: 1;
+	font-weight: 900;
+	color: var(--color-brand-600);
+}
+
+.landing-free-tier-limit {
+	margin: -0.1rem 0 0 0;
+	font-size: 0.93rem;
+	line-height: 1.5;
+	color: var(--color-ink-200);
+}
+
+@media (max-width: 767px) {
+	.landing-free-tier-card {
+		gap: 0.68rem;
+	}
+
+	.landing-free-tier-head {
+		gap: 0.55rem;
+	}
+
+	.landing-free-tier-price {
+		padding: 0.6rem 0.78rem;
+		min-width: 7.6rem;
+	}
+
+	.landing-free-tier-price-v {
+		font-size: 2rem;
+	}
+}
+
+.landing-free-tier-primary-cta {
+	min-width: 13rem;
+}

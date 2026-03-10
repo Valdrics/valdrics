@@ -14,7 +14,11 @@ from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.modules.governance.domain.scheduler.processors import AnalysisProcessor
 from app.shared.core.config import get_settings
 from app.shared.core.rate_limit import get_redis_client
-from app.shared.core.ops_metrics import STUCK_JOB_COUNT
+from app.shared.core.ops_metrics import (
+    STUCK_JOB_COUNT,
+    record_scheduler_inline_fallback,
+    set_background_jobs_overdue_pending,
+)
 
 logger = structlog.get_logger()
 settings = get_settings()
@@ -80,6 +84,90 @@ class SchedulerOrchestrator:
         self._last_run_time: str | None = None
         self._carbon_cache: dict[str, tuple[float, float]] = {}
 
+    async def _dispatch_task(
+        self,
+        *,
+        task_name: str,
+        job_name: str,
+        args: list[Any] | None = None,
+        inline_fallback: Any = None,
+    ) -> bool:
+        try:
+            from app.shared.core.celery_app import celery_app
+
+            if args is None:
+                celery_app.send_task(task_name)
+            else:
+                celery_app.send_task(task_name, args=args)
+            return True
+        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as exc:
+            logger.warning(
+                "scheduler_celery_unavailable",
+                error=str(exc),
+                job=job_name,
+            )
+            if inline_fallback is None:
+                return False
+            logger.info(
+                "scheduler_dispatch_falling_back_inline",
+                task_name=task_name,
+                job=job_name,
+            )
+            try:
+                await inline_fallback()
+                record_scheduler_inline_fallback(job_name, outcome="succeeded")
+                return True
+            except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as fallback_exc:
+                record_scheduler_inline_fallback(job_name, outcome="failed")
+                logger.error(
+                    "scheduler_inline_fallback_failed",
+                    task_name=task_name,
+                    job=job_name,
+                    error=str(fallback_exc),
+                    error_type=type(fallback_exc).__name__,
+                )
+                return False
+
+    async def _run_cohort_analysis_inline(self, target_cohort: TenantCohort) -> None:
+        from app.tasks.scheduler_tasks import _cohort_analysis_logic
+
+        await _cohort_analysis_logic(target_cohort)
+
+    async def _run_remediation_sweep_inline(self) -> None:
+        from app.tasks.scheduler_tasks import _remediation_sweep_logic
+
+        await _remediation_sweep_logic()
+
+    async def _run_billing_sweep_inline(self) -> None:
+        from app.tasks.scheduler_tasks import _billing_sweep_logic
+
+        await _billing_sweep_logic()
+
+    async def _run_acceptance_sweep_inline(self) -> None:
+        from app.tasks.scheduler_tasks import _acceptance_sweep_logic
+
+        await _acceptance_sweep_logic()
+
+    async def _run_license_governance_sweep_inline(self) -> None:
+        from app.tasks.license_tasks import _license_governance_sweep_logic
+
+        await _license_governance_sweep_logic()
+
+    async def _run_enforcement_reconciliation_sweep_inline(self) -> None:
+        from app.tasks.scheduler_tasks import _enforcement_reconciliation_sweep_logic
+
+        await _enforcement_reconciliation_sweep_logic()
+
+    async def _run_maintenance_sweep_inline(self) -> None:
+        from app.tasks.scheduler_tasks import _maintenance_sweep_logic
+
+        await _maintenance_sweep_logic()
+
+    async def _run_landing_funnel_health_refresh_inline(self) -> None:
+        from app.tasks.scheduler_tasks import _refresh_landing_funnel_health_logic
+
+        await _refresh_landing_funnel_health_logic()
+
     async def _acquire_dispatch_lock(
         self, job_name: str, ttl_seconds: int = 180
     ) -> bool:
@@ -135,20 +223,15 @@ class SchedulerOrchestrator:
         if not await self._acquire_dispatch_lock(f"cohort:{target_cohort.value}"):
             return
 
-        # Skip Celery dispatch if Redis unavailable (local dev)
-        try:
-            from app.shared.core.celery_app import celery_app
-
-            celery_app.send_task(
-                "scheduler.cohort_analysis", args=[target_cohort.value]
-            )
-        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
-            logger.warning(
-                "scheduler_celery_unavailable", error=str(e), cohort=target_cohort.value
-            )
-
-        self._last_run_success = True
-        self._last_run_time = datetime.now(timezone.utc).isoformat()
+        dispatched = await self._dispatch_task(
+            task_name="scheduler.cohort_analysis",
+            job_name=f"cohort:{target_cohort.value}",
+            args=[target_cohort.value],
+            inline_fallback=lambda: self._run_cohort_analysis_inline(target_cohort),
+        )
+        if dispatched:
+            self._last_run_success = True
+            self._last_run_time = datetime.now(timezone.utc).isoformat()
 
     async def is_low_carbon_window(self, region: str = "global") -> bool:
         """
@@ -229,56 +312,44 @@ class SchedulerOrchestrator:
         logger.info("scheduler_dispatching_remediation_sweep")
         if not await self._acquire_dispatch_lock("remediation_sweep"):
             return
-        try:
-            from app.shared.core.celery_app import celery_app
-
-            celery_app.send_task("scheduler.remediation_sweep")
-        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
-            logger.warning(
-                "scheduler_celery_unavailable", error=str(e), job="remediation"
-            )
+        await self._dispatch_task(
+            task_name="scheduler.remediation_sweep",
+            job_name="remediation",
+            inline_fallback=self._run_remediation_sweep_inline,
+        )
 
     async def billing_sweep_job(self) -> None:
         """Dispatches billing sweep."""
         logger.info("scheduler_dispatching_billing_sweep")
         if not await self._acquire_dispatch_lock("billing_sweep"):
             return
-        try:
-            from app.shared.core.celery_app import celery_app
-
-            celery_app.send_task("scheduler.billing_sweep")
-        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
-            logger.warning("scheduler_celery_unavailable", error=str(e), job="billing")
+        await self._dispatch_task(
+            task_name="scheduler.billing_sweep",
+            job_name="billing",
+            inline_fallback=self._run_billing_sweep_inline,
+        )
 
     async def acceptance_sweep_job(self) -> None:
         """Dispatches daily acceptance-suite evidence capture sweep."""
         logger.info("scheduler_dispatching_acceptance_sweep")
         if not await self._acquire_dispatch_lock("acceptance_sweep"):
             return
-        try:
-            from app.shared.core.celery_app import celery_app
-
-            celery_app.send_task("scheduler.acceptance_sweep")
-        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
-            logger.warning(
-                "scheduler_celery_unavailable", error=str(e), job="acceptance"
-            )
+        await self._dispatch_task(
+            task_name="scheduler.acceptance_sweep",
+            job_name="acceptance",
+            inline_fallback=self._run_acceptance_sweep_inline,
+        )
 
     async def license_governance_sweep_job(self) -> None:
         """Dispatches tenant-wide license governance sweep."""
         logger.info("scheduler_dispatching_license_governance_sweep")
         if not await self._acquire_dispatch_lock("license_governance_sweep"):
             return
-        try:
-            from app.shared.core.celery_app import celery_app
-
-            celery_app.send_task("license.governance_sweep")
-        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
-            logger.warning(
-                "scheduler_celery_unavailable",
-                error=str(e),
-                job="license_governance",
-            )
+        await self._dispatch_task(
+            task_name="license.governance_sweep",
+            job_name="license_governance",
+            inline_fallback=self._run_license_governance_sweep_inline,
+        )
 
     async def enforcement_reconciliation_sweep_job(self) -> None:
         """Dispatches periodic enforcement reservation reconciliation sweep."""
@@ -290,70 +361,110 @@ class SchedulerOrchestrator:
         logger.info("scheduler_dispatching_enforcement_reconciliation_sweep")
         if not await self._acquire_dispatch_lock("enforcement_reconciliation_sweep"):
             return
-        try:
-            from app.shared.core.celery_app import celery_app
+        await self._dispatch_task(
+            task_name="scheduler.enforcement_reconciliation_sweep",
+            job_name="enforcement_reconciliation",
+            inline_fallback=self._run_enforcement_reconciliation_sweep_inline,
+        )
 
-            celery_app.send_task("scheduler.enforcement_reconciliation_sweep")
-        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
-            logger.warning(
-                "scheduler_celery_unavailable",
-                error=str(e),
-                job="enforcement_reconciliation",
-            )
+    async def _process_background_jobs_inline(self) -> None:
+        from app.modules.governance.domain.jobs.processor import JobProcessor
+
+        batch_size = max(
+            1, int(getattr(settings, "BACKGROUND_JOB_PROCESS_BATCH_SIZE", 25))
+        )
+        max_batches = max(
+            1,
+            int(getattr(settings, "BACKGROUND_JOB_PROCESS_MAX_BATCHES_PER_TICK", 8)),
+        )
+        totals = {"processed": 0, "succeeded": 0, "failed": 0, "batches": 0}
+
+        for _ in range(max_batches):
+            async with self.session_maker() as db:
+                processor = JobProcessor(db)
+                batch = await processor.process_pending_jobs(limit=batch_size)
+            totals["batches"] += 1
+            totals["processed"] += int(batch.get("processed", 0))
+            totals["succeeded"] += int(batch.get("succeeded", 0))
+            totals["failed"] += int(batch.get("failed", 0))
+            if int(batch.get("processed", 0)) < batch_size:
+                break
+
+        logger.info("scheduler_background_job_processing_inline_complete", **totals)
+
+    async def background_job_processing_job(self) -> None:
+        """Dispatches the durable background job drainer."""
+        logger.info("scheduler_dispatching_background_job_processing")
+        if not await self._acquire_dispatch_lock("background_job_processing", ttl_seconds=55):
+            return
+        await self._dispatch_task(
+            task_name="scheduler.process_background_jobs",
+            job_name="background_job_processing",
+            inline_fallback=self._process_background_jobs_inline,
+        )
 
     async def detect_stuck_jobs(self) -> None:
         """
-        Series-A Hardening (Phase 2): Detects jobs stuck in PENDING status for > 1 hour.
-        Emits critical alerts and moves them to FAILED to prevent queue poisoning.
+        Detect overdue pending jobs without mutating future-scheduled retries.
         """
         async with self.session_maker() as db:
             from app.models.background_job import BackgroundJob, JobStatus
             from datetime import datetime, timezone, timedelta
 
-            cutoff = datetime.now(timezone.utc) - timedelta(hours=1)
+            alert_minutes = max(
+                1,
+                int(
+                    getattr(
+                        settings,
+                        "BACKGROUND_JOB_PENDING_OVERDUE_ALERT_MINUTES",
+                        60,
+                    )
+                ),
+            )
+            cutoff = datetime.now(timezone.utc) - timedelta(minutes=alert_minutes)
 
-            # Find stuck jobs
+            # Detect only jobs that were due to run and are still pending.
             stmt = sa.select(BackgroundJob).where(
                 BackgroundJob.status == JobStatus.PENDING,
-                BackgroundJob.created_at < cutoff,
+                BackgroundJob.scheduled_for <= cutoff,
                 sa.not_(BackgroundJob.is_deleted),
             )
             result = await db.execute(stmt)
-            stuck_jobs = result.scalars().all()
-            STUCK_JOB_COUNT.set(len(stuck_jobs))
+            overdue_jobs = result.scalars().all()
+            STUCK_JOB_COUNT.set(len(overdue_jobs))
+            set_background_jobs_overdue_pending(len(overdue_jobs))
 
-            if stuck_jobs:
+            if overdue_jobs:
                 logger.critical(
-                    "stuck_jobs_detected",
-                    count=len(stuck_jobs),
-                    job_ids=[str(j.id) for j in stuck_jobs[:10]],
+                    "overdue_pending_jobs_detected",
+                    count=len(overdue_jobs),
+                    alert_minutes=alert_minutes,
+                    job_ids=[str(j.id) for j in overdue_jobs[:10]],
                 )
-
-                # Update status to avoid re-detection (policy decision: alert and fail instead of retry).
-                for job in stuck_jobs:
-                    job.status = JobStatus.FAILED
-                    job.error_message = (
-                        "Stuck in PENDING for > 1 hour. Terminated by StuckJobDetector."
-                    )
-
-                await db.commit()
-                logger.info("stuck_jobs_mitigated", count=len(stuck_jobs))
 
     async def maintenance_sweep_job(self) -> None:
         """Dispatches maintenance sweep."""
         logger.info("scheduler_dispatching_maintenance_sweep")
         if not await self._acquire_dispatch_lock("maintenance_sweep"):
             return
-        try:
-            from app.shared.core.celery_app import celery_app
-
-            celery_app.send_task("scheduler.maintenance_sweep")
-        except SCHEDULER_DISPATCH_RECOVERABLE_ERRORS as e:
-            logger.warning(
-                "scheduler_celery_unavailable", error=str(e), job="maintenance"
-            )
+        await self._dispatch_task(
+            task_name="scheduler.maintenance_sweep",
+            job_name="maintenance",
+            inline_fallback=self._run_maintenance_sweep_inline,
+        )
 
         # NOTE: Internal metric migration to task is deliberate (resolved Phase 13 uncertainty).
+
+    async def landing_funnel_health_refresh_job(self) -> None:
+        """Dispatches proactive landing funnel health refresh for internal alerting."""
+        logger.info("scheduler_dispatching_landing_funnel_health_refresh")
+        if not await self._acquire_dispatch_lock("landing_funnel_health_refresh"):
+            return
+        await self._dispatch_task(
+            task_name="scheduler.refresh_landing_funnel_health",
+            job_name="landing_funnel_health_refresh",
+            inline_fallback=self._run_landing_funnel_health_refresh_inline,
+        )
 
     def start(self) -> None:
         """Defines cron schedules and starts APScheduler."""
@@ -416,11 +527,25 @@ class SchedulerOrchestrator:
             id="hourly_enforcement_reconciliation_sweep",
             replace_existing=True,
         )
+        # Background job processing: Every minute
+        self.scheduler.add_job(
+            self.background_job_processing_job,
+            trigger=CronTrigger(timezone="UTC"),
+            id="background_job_processor",
+            replace_existing=True,
+        )
         # Stuck Job Detector: Every hour
         self.scheduler.add_job(
             self.detect_stuck_jobs,
             trigger=CronTrigger(minute=0, timezone="UTC"),
             id="stuck_job_detector",
+            replace_existing=True,
+        )
+        # Landing funnel health refresh: Hourly at minute 10 UTC
+        self.scheduler.add_job(
+            self.landing_funnel_health_refresh_job,
+            trigger=CronTrigger(minute=10, timezone="UTC"),
+            id="hourly_landing_funnel_health_refresh",
             replace_existing=True,
         )
         # Maintenance: Daily 3AM UTC

@@ -2,7 +2,9 @@
 @import './LandingHero.hero-copy.css';
 @import './LandingHero.signal-preview.css';
 @import './LandingHero.signal-map.css';
+@import './LandingHero.section-copy.css';
 @import './LandingHero.metrics-demo.css';
+@import './LandingHero.cloud-hook.css';
 @import './LandingHero.roi-plans.css';
 @import './LandingHero.trust.css';
 @import './LandingHero.footer.css';

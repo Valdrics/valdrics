@@ -161,23 +161,33 @@
 	}
 }
 .landing-section-lazy {
-	content-visibility: auto;
-	contain-intrinsic-size: 640px;
+	contain-intrinsic-size: auto;
 }
 @media (max-width: 767px) {
 	.landing .landing-section-lazy {
-		padding-bottom: 2.75rem;
+		padding-bottom: 2rem;
 	}
 	.landing-section-head {
-		margin-bottom: 0.72rem;
+		margin-bottom: 0.56rem;
 	}
 	.landing-section-sub {
-		margin-top: 0.45rem;
+		margin-top: 0.32rem;
+		line-height: 1.48;
+	}
+
+	.landing-hero .container {
+		padding-top: 1.15rem;
+		padding-bottom: 1.55rem;
 	}
 }
 @media (max-width: 420px) {
 	.landing .landing-section-lazy {
-		padding-bottom: 2.35rem;
+		padding-bottom: 1.7rem;
+	}
+
+	.landing-hero .container {
+		padding-top: 1rem;
+		padding-bottom: 1.35rem;
 	}
 }
 .landing-hero {

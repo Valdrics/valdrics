@@ -27,6 +27,8 @@ async def test_purge_terminal_background_jobs_batches_until_empty() -> None:
             _delete_result(2),
             _delete_result(1),
             _delete_result(0),
+            _delete_result(4),
+            _delete_result(0),
             _delete_result(3),
             _delete_result(0),
         ]
@@ -44,6 +46,7 @@ async def test_purge_terminal_background_jobs_batches_until_empty() -> None:
         timedelta_cls=timedelta,
         get_settings_fn=lambda: SimpleNamespace(
             BACKGROUND_JOB_COMPLETED_RETENTION_DAYS=7,
+            BACKGROUND_JOB_FAILED_RETENTION_DAYS=30,
             BACKGROUND_JOB_DEAD_LETTER_RETENTION_DAYS=30,
             BACKGROUND_JOB_RETENTION_PURGE_BATCH_SIZE=1000,
             BACKGROUND_JOB_RETENTION_PURGE_MAX_BATCHES=20,
@@ -51,21 +54,28 @@ async def test_purge_terminal_background_jobs_batches_until_empty() -> None:
     )
 
     assert summary["completed_deleted"] == 3
+    assert summary["failed_deleted"] == 4
     assert summary["dead_letter_deleted"] == 3
-    assert summary["total_deleted"] == 6
-    assert db.execute.await_count == 5
+    assert summary["total_deleted"] == 10
+    assert db.execute.await_count == 7
     purged_statuses = {
         call.kwargs.get("status")
         for call in logger.info.call_args_list
         if call.args and call.args[0] == "maintenance_background_jobs_purged"
     }
-    assert purged_statuses == {JobStatus.COMPLETED.value, JobStatus.DEAD_LETTER.value}
+    assert purged_statuses == {
+        JobStatus.COMPLETED.value,
+        JobStatus.FAILED.value,
+        JobStatus.DEAD_LETTER.value,
+    }
 
 
 @pytest.mark.asyncio
 async def test_purge_terminal_background_jobs_defaults_on_invalid_settings() -> None:
     db = AsyncMock()
-    db.execute = AsyncMock(side_effect=[_delete_result(0), _delete_result(0)])
+    db.execute = AsyncMock(
+        side_effect=[_delete_result(0), _delete_result(0), _delete_result(0)]
+    )
 
     summary = await purge_terminal_background_jobs(
         db=db,
@@ -78,6 +88,7 @@ async def test_purge_terminal_background_jobs_defaults_on_invalid_settings() -> 
         timedelta_cls=timedelta,
         get_settings_fn=lambda: SimpleNamespace(
             BACKGROUND_JOB_COMPLETED_RETENTION_DAYS=-1,
+            BACKGROUND_JOB_FAILED_RETENTION_DAYS=0,
             BACKGROUND_JOB_DEAD_LETTER_RETENTION_DAYS=0,
             BACKGROUND_JOB_RETENTION_PURGE_BATCH_SIZE=10,
             BACKGROUND_JOB_RETENTION_PURGE_MAX_BATCHES=0,
@@ -85,9 +96,10 @@ async def test_purge_terminal_background_jobs_defaults_on_invalid_settings() -> 
     )
 
     assert summary["completed_retention_days"] == 7
+    assert summary["failed_retention_days"] == 30
     assert summary["dead_letter_retention_days"] == 30
     assert summary["total_deleted"] == 0
-    assert db.execute.await_count == 2
+    assert db.execute.await_count == 3
 
 
 @pytest.mark.asyncio
@@ -108,4 +120,4 @@ async def test_purge_terminal_background_jobs_ignores_non_integer_rowcount() -> 
     )
 
     assert summary["total_deleted"] == 0
-    assert db.execute.await_count == 2
+    assert db.execute.await_count == 3
