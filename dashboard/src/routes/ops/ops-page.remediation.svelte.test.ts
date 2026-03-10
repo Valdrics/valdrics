@@ -70,8 +70,10 @@ describe('ops page unit economics interactions', () => {
 		await fireEvent.click(reviewButton);
 
 		const dialog = await screen.findByRole('dialog', { name: 'Remediation review' });
-		expect(within(dialog).getByText('High-risk action requires owner approval.')).toBeTruthy();
-		expect(within(dialog).getByText('ESCALATE')).toBeTruthy();
+		expect(
+			await within(dialog).findByText(/^High-risk action requires owner approval\.$/)
+		).toBeTruthy();
+		expect(await within(dialog).findByText(/^ESCALATE$/)).toBeTruthy();
 
 		await waitFor(() => {
 			expect(
