@@ -9,11 +9,14 @@ import re
 import shlex
 import shutil
 import subprocess  # nosec B404 - controlled GitHub CLI invocation only
+import time
 from collections.abc import Sequence
 from pathlib import Path
 
 MIN_GH_VERSION: tuple[int, int, int] = (2, 67, 0)
 DEFAULT_SIGNER_WORKFLOW = ".github/workflows/sbom.yml"
+DEFAULT_VERIFY_MAX_ATTEMPTS = 4
+DEFAULT_VERIFY_INITIAL_RETRY_DELAY_SECONDS = 2.0
 DEFAULT_ARTIFACT_PATHS: tuple[Path, ...] = (
     Path("sbom/valdrics-python-sbom.json"),
     Path("sbom/valdrics-container-sbom.json"),
@@ -196,6 +199,22 @@ def _assert_verification_output(stdout: str, *, artifact: Path) -> None:
     )
 
 
+def _is_transient_verification_failure(details: str) -> bool:
+    candidate = str(details or "").strip().lower()
+    if not candidate:
+        return False
+    transient_markers = (
+        'verifying with issuer "sigstore.dev"',
+        "no attestations found",
+        "not yet available",
+        "timed out",
+        "timeout",
+        "temporarily unavailable",
+        "try again",
+    )
+    return any(marker in candidate for marker in transient_markers)
+
+
 def verify_attestations(
     *,
     repo: str,
@@ -241,18 +260,33 @@ def verify_attestations(
         if dry_run:
             continue
 
-        completed = subprocess.run(
-            _materialize_gh_command(cmd),
-            check=False,
-            capture_output=True,
-            text=True,
-        )  # nosec B603 - trusted gh CLI invocation with validated local artifact path
-        if completed.returncode != 0:
+        retry_delay_seconds = DEFAULT_VERIFY_INITIAL_RETRY_DELAY_SECONDS
+        for attempt in range(1, DEFAULT_VERIFY_MAX_ATTEMPTS + 1):
+            completed = subprocess.run(
+                _materialize_gh_command(cmd),
+                check=False,
+                capture_output=True,
+                text=True,
+            )  # nosec B603 - trusted gh CLI invocation with validated local artifact path
+            if completed.returncode == 0:
+                _assert_verification_output(completed.stdout, artifact=artifact_path)
+                break
+
             details = completed.stderr.strip() or completed.stdout.strip()
-            raise RuntimeError(
-                f"Attestation verification failed for {artifact.as_posix()}: {details}"
+            is_retryable = _is_transient_verification_failure(details)
+            if not is_retryable or attempt == DEFAULT_VERIFY_MAX_ATTEMPTS:
+                raise RuntimeError(
+                    f"Attestation verification failed for {artifact.as_posix()}: {details}"
+                )
+
+            print(
+                "[attestation-verify] transient verification failure for "
+                f"{artifact.as_posix()} on attempt {attempt}/"
+                f"{DEFAULT_VERIFY_MAX_ATTEMPTS}; retrying in "
+                f"{retry_delay_seconds:.1f}s"
             )
-        _assert_verification_output(completed.stdout, artifact=artifact_path)
+            time.sleep(retry_delay_seconds)
+            retry_delay_seconds *= 2
     return 0
 
 

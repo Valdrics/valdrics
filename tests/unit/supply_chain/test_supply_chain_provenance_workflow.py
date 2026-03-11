@@ -151,10 +151,11 @@ def test_ci_and_security_workflows_fail_on_high_or_critical_infra_and_container_
         encoding="utf-8"
     )
 
-    assert "severity: CRITICAL,HIGH" in ci_text
+    assert "--severity CRITICAL,HIGH" in ci_text
+    assert "--exit-code 1" in ci_text
     assert "--minimum-severity HIGH" in ci_text
-    assert "severity: 'CRITICAL,HIGH'" in security_text
-    assert "exit-code: '1'" in security_text
+    assert "--severity CRITICAL,HIGH" in security_text
+    assert "--exit-code 1" in security_text
 
 
 def test_ci_workflow_pins_tflint_setup_version() -> None:
