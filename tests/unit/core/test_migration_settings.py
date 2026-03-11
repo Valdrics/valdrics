@@ -42,3 +42,21 @@ def test_migration_settings_requires_ca_path_for_verified_ssl() -> None:
             match="DB_SSL_CA_CERT_PATH is required when DB_SSL_MODE is verify-ca or verify-full.",
         ):
             MigrationSettings(_env_file=None)
+
+
+def test_migration_settings_rejects_placeholder_database_url() -> None:
+    with patch.dict(
+        "os.environ",
+        {
+            "DATABASE_URL": (
+                "postgresql+asyncpg://REPLACE_WITH_DB_USER:"
+                "REPLACE_WITH_DB_PASSWORD@REPLACE_WITH_DB_HOST:5432/postgres"
+            ),
+        },
+        clear=True,
+    ):
+        with pytest.raises(
+            ValueError,
+            match="DATABASE_URL contains unresolved placeholder values.",
+        ):
+            MigrationSettings(_env_file=None)

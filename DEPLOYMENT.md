@@ -126,6 +126,7 @@ k6 run loadtest/k6-test.js
 - Liveness: `/health/live`
 - Readiness/dependency health: `/health`
 - `/health` returns a detailed dependency payload and can return HTTP `503` when critical dependencies are unavailable
+- Container images must ship the probe/runtime tools used by the deployment contract, including `curl` for liveness probes and `pgrep` support for worker exec probes
 
 ---
 

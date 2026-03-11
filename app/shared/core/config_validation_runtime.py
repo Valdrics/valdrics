@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import ipaddress
 from urllib.parse import urlparse
 
+from app.shared.core.config_validation_placeholders import require_no_managed_placeholder
 from app.shared.core.cors_policy import validate_strict_cors_allowed_origins
 
 
@@ -99,6 +100,7 @@ def _validate_strict_public_url(url: object, *, name: str) -> None:
     candidate = str(url or "").strip()
     if not candidate:
         raise ValueError(f"{name} must be configured in staging/production.")
+    require_no_managed_placeholder(candidate, name=name)
 
     parsed = urlparse(candidate)
     if parsed.scheme != "https" or not parsed.netloc:

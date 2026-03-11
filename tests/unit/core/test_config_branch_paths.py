@@ -165,7 +165,7 @@ def test_config_database_validator_branch_paths() -> None:
     s = _settings()
     s.ENVIRONMENT = ENV_PRODUCTION
     s.DATABASE_URL = None
-    with pytest.raises(ValueError, match="DATABASE_URL is required in production"):
+    with pytest.raises(ValueError, match="DATABASE_URL is required in staging/production"):
         s._validate_database_config()
 
     s = _settings()
@@ -336,6 +336,13 @@ def test_config_environment_safety_branch_paths() -> None:
         s._validate_environment_safety()
 
     s = _settings()
+    s.ENVIRONMENT = ENV_STAGING
+    s.CORS_ORIGINS = ["https://app.example.com"]
+    s.API_URL = "https://REPLACE_WITH_API_DOMAIN"
+    with pytest.raises(ValueError, match="API_URL contains unresolved placeholder values."):
+        s._validate_environment_safety()
+
+    s = _settings()
     s.ENVIRONMENT = ENV_PRODUCTION
     s.TRUST_PROXY_HEADERS = True
     s.TRUSTED_PROXY_CIDRS = []
@@ -344,6 +351,49 @@ def test_config_environment_safety_branch_paths() -> None:
         match="TRUSTED_PROXY_CIDRS must be configured when TRUST_PROXY_HEADERS=true",
     ):
         s._validate_environment_safety()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.DATABASE_URL = (
+        "postgresql+asyncpg://REPLACE_WITH_DB_USER:"
+        "REPLACE_WITH_DB_PASSWORD@REPLACE_WITH_DB_HOST:5432/postgres"
+    )
+    with pytest.raises(ValueError, match="DATABASE_URL contains unresolved placeholder values."):
+        s._validate_database_config()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_STAGING
+    s.SUPABASE_JWT_SECRET = "REPLACE_WITH_SUPABASE_JWT_SECRET_MINIMUM_32_CHARS_VALUE"
+    with pytest.raises(
+        ValueError,
+        match="SUPABASE_JWT_SECRET contains unresolved placeholder values.",
+    ):
+        s._validate_core_secrets()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.PAYSTACK_SECRET_KEY = "sk_live_REPLACE_WITH_PAYSTACK_SECRET_KEY"
+    s.PAYSTACK_PUBLIC_KEY = "pk_live_REPLACE_WITH_PAYSTACK_PUBLIC_KEY"
+    with pytest.raises(
+        ValueError,
+        match="PAYSTACK_SECRET_KEY contains unresolved placeholder values.",
+    ):
+        s._validate_billing_config()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.OTEL_EXPORTER_OTLP_ENDPOINT = "https://REPLACE_WITH_OTEL_COLLECTOR:4317"
+    with pytest.raises(
+        ValueError,
+        match="OTEL_EXPORTER_OTLP_ENDPOINT contains unresolved placeholder values.",
+    ):
+        s._validate_observability_config()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.GROQ_API_KEY = "REPLACE_WITH_GROQ_API_KEY"
+    with pytest.raises(ValueError, match="GROQ_API_KEY contains unresolved placeholder values."):
+        s._validate_llm_config()
 
 
 @pytest.mark.parametrize(

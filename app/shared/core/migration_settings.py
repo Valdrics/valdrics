@@ -6,6 +6,8 @@ from typing import Optional
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.shared.core.config_validation_placeholders import require_no_managed_placeholder
+
 
 _ALLOWED_DB_SSL_MODES = {"disable", "require", "verify-ca", "verify-full"}
 
@@ -24,6 +26,7 @@ class MigrationSettings(BaseSettings):
         database_url = str(self.DATABASE_URL or "").strip()
         if not database_url:
             raise ValueError("DATABASE_URL is required for Alembic migrations.")
+        require_no_managed_placeholder(database_url, name="DATABASE_URL")
 
         normalized_ssl_mode = str(self.DB_SSL_MODE or "require").strip().lower()
         if normalized_ssl_mode not in _ALLOWED_DB_SSL_MODES:
@@ -32,6 +35,10 @@ class MigrationSettings(BaseSettings):
             )
 
         self.DB_SSL_MODE = normalized_ssl_mode
+        require_no_managed_placeholder(
+            self.DB_SSL_CA_CERT_PATH,
+            name="DB_SSL_CA_CERT_PATH",
+        )
         if normalized_ssl_mode in {"verify-ca", "verify-full"} and not str(
             self.DB_SSL_CA_CERT_PATH or ""
         ).strip():

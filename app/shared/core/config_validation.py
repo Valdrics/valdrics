@@ -9,6 +9,7 @@ import os
 import sys
 
 import structlog
+from app.shared.core.config_validation_placeholders import require_no_managed_placeholder
 from app.shared.core.config_validation_runtime import (
     validate_enforcement_guardrails,
     validate_environment_safety,
@@ -44,6 +45,7 @@ def validate_core_secrets(settings_obj: object) -> None:
     for name, value in critical_keys.items():
         if not value or len(value) < 32:
             raise ValueError(f"{name} must be set to a secure value (>= 32 chars).")
+        require_no_managed_placeholder(value, name=name)
 
     csrf_value = str(getattr(settings_obj, "CSRF_SECRET_KEY", "") or "").strip().lower()
     if csrf_value in {
@@ -82,11 +84,17 @@ def validate_database_config(settings_obj: object, *, is_production: bool) -> No
         getattr(settings_obj, "LOCAL_SQLITE_BOOTSTRAP", False)
     )
     environment = str(getattr(settings_obj, "ENVIRONMENT", "") or "").strip().lower()
+    strict_env = is_production or environment == "staging"
+
+    if strict_env:
+        if not getattr(settings_obj, "DATABASE_URL", None):
+            raise ValueError("DATABASE_URL is required in staging/production.")
+        require_no_managed_placeholder(
+            getattr(settings_obj, "DATABASE_URL", None),
+            name="DATABASE_URL",
+        )
 
     if is_production:
-        if not getattr(settings_obj, "DATABASE_URL", None):
-            raise ValueError("DATABASE_URL is required in production.")
-
         db_ssl_mode = getattr(settings_obj, "DB_SSL_MODE", "")
         if db_ssl_mode not in ["require", "verify-ca", "verify-full"]:
             raise ValueError(
@@ -114,6 +122,11 @@ def validate_database_config(settings_obj: object, *, is_production: bool) -> No
             settings_obj,
             "REDIS_URL",
             f"redis://{getattr(settings_obj, 'REDIS_HOST')}:{getattr(settings_obj, 'REDIS_PORT')}",
+        )
+    if getattr(settings_obj, "REDIS_URL", None):
+        require_no_managed_placeholder(
+            getattr(settings_obj, "REDIS_URL", None),
+            name="REDIS_URL",
         )
 
     if getattr(settings_obj, "DB_SLOW_QUERY_THRESHOLD_SECONDS", 0) <= 0:
@@ -165,6 +178,11 @@ def validate_llm_config(settings_obj: object, *, is_production: bool) -> None:
                 provider=llm_provider,
                 environment=environment or "unknown",
             )
+    elif llm_provider in provider_keys:
+        require_no_managed_placeholder(
+            provider_keys[llm_provider],
+            name=f"{str(llm_provider).upper()}_API_KEY",
+        )
 
     if getattr(settings_obj, "LLM_GLOBAL_ABUSE_PER_MINUTE_CAP", 0) < 1:
         raise ValueError("LLM_GLOBAL_ABUSE_PER_MINUTE_CAP must be >= 1.")
@@ -203,6 +221,8 @@ def validate_billing_config(settings_obj: object, *, is_production: bool) -> Non
             )
         if not paystack_public:
             raise ValueError("PAYSTACK_PUBLIC_KEY is required in production.")
+        require_no_managed_placeholder(paystack_secret, name="PAYSTACK_SECRET_KEY")
+        require_no_managed_placeholder(paystack_public, name="PAYSTACK_PUBLIC_KEY")
         if allow_synthetic:
             synthetic_validation_context = (
                 bool(getattr(settings_obj, "TESTING", False))

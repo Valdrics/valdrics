@@ -78,11 +78,18 @@ jobs:
 
       # Python Dependencies SBOM
       - name: Generate Python SBOM (CycloneDX)
-        uses: CycloneDX/gh-python-generate-sbom@39fe80937489538e12de5a7b427e078649ec44bb # v2
-        with:
-          input: ./pyproject.toml
-          output: ./sbom/valdrics-python-sbom.json
-          format: json
+        shell: bash
+        run: |
+          set -euo pipefail
+          CYCLONEDX_VENV="${RUNNER_TEMP}/cyclonedx-venv"
+          python -m venv "${CYCLONEDX_VENV}"
+          "${CYCLONEDX_VENV}/bin/pip" install --upgrade pip
+          "${CYCLONEDX_VENV}/bin/pip" install "cyclonedx-bom==7.2.2"
+          "${CYCLONEDX_VENV}/bin/cyclonedx-py" environment ./.venv/bin/python \
+            --pyproject ./pyproject.toml \
+            --output-reproducible \
+            --of JSON \
+            -o ./sbom/valdrics-python-sbom.json
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3

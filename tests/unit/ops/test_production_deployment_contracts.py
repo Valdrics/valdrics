@@ -138,6 +138,7 @@ def test_backend_dockerfile_healthcheck_uses_curl_liveness_probe() -> None:
     assert "/health/live" in dockerfile_text
     assert "curl --fail --silent --show-error" in dockerfile_text
     assert "urllib.request" not in dockerfile_text
+    assert "procps" in dockerfile_text
 
 
 def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults() -> None:
@@ -207,11 +208,10 @@ def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults()
     assert "ENFORCEMENT_EXPORT_SIGNING_SECRET" in worker_env_names
     assert "SENTRY_DSN" in worker_env_names
     assert "REDIS_URL" in worker_env_names
-    assert koyeb_worker["definition"]["command"][0:4] == [
-        "uv",
-        "run",
+    assert koyeb_worker["definition"]["command"][0:3] == [
         "celery",
         "-A",
+        "app.shared.core.celery_app:celery_app",
     ]
 
 

@@ -66,3 +66,33 @@ def test_validate_migration_env_rejects_verified_ssl_without_ca_path(
 
     assert result == 1
     assert "DB_SSL_CA_CERT_PATH is required" in capsys.readouterr().err
+
+
+def test_validate_migration_env_rejects_placeholder_database_url(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    env_file = tmp_path / "production.migrate.env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql+asyncpg://REPLACE_WITH_DB_USER:REPLACE_WITH_DB_PASSWORD@REPLACE_WITH_DB_HOST:5432/postgres",
+                "DB_SSL_MODE=require",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    with patch.dict(os.environ, {}, clear=True):
+        monkeypatch.setattr(
+            sys,
+            "argv",
+            [
+                "validate_migration_env.py",
+                "--env-file",
+                str(env_file),
+            ],
+        )
+        result = validate_migration_env.main()
+
+    assert result == 1
+    assert "DATABASE_URL contains unresolved placeholder values." in capsys.readouterr().err

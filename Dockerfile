@@ -36,8 +36,11 @@ FROM python:3.12-slim@sha256:f3fa41d74a768c2fce8016b98c191ae8c1bacd8f1152870a3f9
 
 WORKDIR /app
 
-# Security: Run as non-root user
-RUN useradd --create-home --shell /bin/bash appuser && \
+# Install only the probe/runtime tools required by shipped container contracts.
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y curl procps && \
+    rm -rf /var/lib/apt/lists/* && \
+    useradd --create-home --shell /bin/bash appuser && \
     chown -R appuser:appuser /app
 
 # Copy the lock-synchronized virtual environment from the builder image.
@@ -56,7 +59,7 @@ USER appuser
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import sys, urllib.request; r = urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=5); sys.exit(0 if 200 <= r.status < 400 else 1)"
+    CMD curl --fail --silent --show-error http://127.0.0.1:8000/health/live || exit 1
 
 EXPOSE 8000
 
