@@ -195,6 +195,7 @@ jobs:
               "DEBUG": "False",
               "CSRF_SECRET_KEY": "dast_csrf_secret_key_2026_0123456789abcdef",
               "ENCRYPTION_KEY": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "GRAFANA_PASSWORD": "dast_grafana_admin_password_2026_0123456789abcdef",
               "KDF_SALT": base64.b64encode(b"12345678901234567890123456789012").decode(),
               "SUPABASE_JWT_SECRET": "dast_supabase_jwt_secret_2026_0123456789abcdef",
               "ADMIN_API_KEY": "dast_admin_api_key_2026_0123456789abcdef",

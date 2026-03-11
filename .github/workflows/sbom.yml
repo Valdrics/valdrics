@@ -113,11 +113,14 @@ jobs:
           output-file: ./sbom/valdrics-container-sbom.json
       
       # Vulnerability Scan
-      - name: Scan SBOM for Vulnerabilities (Grype)
+      # Blocking container vulnerability enforcement lives in `security-scan.yml`
+      # and `ci.yml` via Trivy. Keep Grype here for supply-chain evidence without
+      # introducing a second conflicting release gate with a different database.
+      - name: Scan SBOM for Vulnerabilities (Grype report)
         uses: anchore/scan-action@869c549e657a088dc0441b08ce4fc0ecdac2bb65 # v5
         with:
           sbom: ./sbom/valdrics-container-sbom.json
-          fail-build: true
+          fail-build: false
           severity-cutoff: high
 
       - name: Generate supply-chain provenance manifest
