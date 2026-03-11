@@ -109,7 +109,7 @@ export const RAW_PUBLIC_CONTENT_DOCS = [
 		readingMinutes: 6,
 		audiences: ['engineering', 'finance', 'platform'],
 		primaryCta: { label: 'See the Decision Loop', href: '/#signal-map' },
-		secondaryCta: { label: 'Talk to Sales', href: '/talk-to-sales' },
+		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
 		sections: [
 			{
 				title: 'Why routing matters',

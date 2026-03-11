@@ -10,6 +10,12 @@
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { trackProductFunnelStage } from '$lib/funnel/productFunnelTelemetry';
 	import {
+		buildPublicEnterpriseHref,
+		buildPublicSalesHref,
+		buildPublicSignupHref,
+		resolvePublicBuyingMotion
+	} from '$lib/public/publicBuyingMotion';
+	import {
 		FREE_TIER_HIGHLIGHTS,
 		FREE_TIER_LIMIT_NOTE,
 		PLANS_PRICING_EXPLANATION
@@ -30,6 +36,26 @@
 	let error = $state('');
 	let pricingViewTracked = $state(false);
 	let tenantId = $derived(resolveSessionTenantId({ session: data.session, user: data.user }));
+	let buyingMotion = $derived(resolvePublicBuyingMotion($page.url, 'self_serve_first'));
+	let pricingHeroEnterpriseHref = $derived(
+		buildPublicEnterpriseHref(base, $page.url, {
+			entry: 'pricing',
+			source: 'pricing_hero'
+		})
+	);
+	let pricingEnterprisePathHref = $derived(
+		buildPublicEnterpriseHref(base, $page.url, {
+			entry: 'pricing',
+			source: 'pricing_enterprise'
+		})
+	);
+	let pricingValidationBriefingHref = $derived(
+		buildPublicSalesHref(base, $page.url, {
+			entry: 'pricing',
+			source: 'pricing_enterprise',
+			intent: 'enterprise_briefing'
+		})
+	);
 
 	let plans = $derived<PricingPlan[]>(
 		mergePricingPlans(
@@ -90,7 +116,14 @@
 	}
 
 	function getSignupHref(planId: string): string {
-		return `${base}/auth/login?mode=signup&plan=${planId}&cycle=${billingCycle}`;
+		return buildPublicSignupHref(base, $page.url, {
+			entry: 'pricing',
+			source: `pricing_plan_${planId}`,
+			extraParams: {
+				plan: planId,
+				cycle: billingCycle
+			}
+		});
 	}
 
 	function getFreeTierHref(): string {
@@ -170,8 +203,13 @@
 	subtitle="Start on the permanent free tier, prove one governed workflow, and upgrade only when you need broader provider coverage, stronger owner routing, or finance-grade governance."
 >
 	{#snippet heroActions()}
-		<a href={getFreeTierHref()} class="btn btn-primary">Start Free</a>
-		<a href={`${base}/talk-to-sales`} class="btn btn-secondary">Talk to Sales</a>
+		{#if buyingMotion === 'enterprise_first'}
+			<a href={pricingHeroEnterpriseHref} class="btn btn-primary">Open Enterprise Path</a>
+			<a href={getFreeTierHref()} class="btn btn-secondary">Start Free Workspace</a>
+		{:else}
+			<a href={getFreeTierHref()} class="btn btn-primary">Start Free Workspace</a>
+			<a href={pricingHeroEnterpriseHref} class="btn btn-secondary">See Enterprise Path</a>
+		{/if}
 	{/snippet}
 
 	{#snippet heroMeta()}
@@ -377,8 +415,10 @@
 					</p>
 				</div>
 				<div class="public-page__actions-row">
-					<a href={`${base}/talk-to-sales`} class="btn btn-primary">Talk to Sales</a>
-					<a href={`${base}/enterprise`} class="btn btn-secondary">View Enterprise Overview</a>
+					<a href={pricingEnterprisePathHref} class="btn btn-primary">Open Enterprise Path</a>
+					<a href={pricingValidationBriefingHref} class="btn btn-secondary">
+						Request Validation Briefing
+					</a>
 				</div>
 				<div class="public-page__badge-cloud pricing-buying-notes">
 					{#each PRICING_BUYING_NOTES as item (item)}

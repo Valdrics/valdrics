@@ -4,6 +4,9 @@ This plan outlines the infrastructure targets for scaling the platform.
 
 This remains an active planning and documentation-contract artifact. Keep it
 aligned with the supported deployment model and current runtime assumptions.
+Commercial tier scope and the public plan ladder live in
+`docs/architecture/tiering-2026.md` and must stay aligned with runtime
+entitlements.
 
 It assumes the repository-managed `Helm + Terraform (AWS/EKS)` profile as the
 sole supported production scale path. The `Cloudflare Pages + Koyeb` manifests

@@ -12,14 +12,10 @@
 	let {
 		buildFreeTierCtaHref,
 		buildPlanCtaHref,
-		talkToSalesHref,
-		enterprisePathHref,
 		onTrackCta
 	}: {
 		buildFreeTierCtaHref: () => string;
 		buildPlanCtaHref: (planId: string) => string;
-		talkToSalesHref: string;
-		enterprisePathHref: string;
 		onTrackCta: (action: string, section: string, value: string) => void;
 	} = $props();
 
@@ -30,6 +26,7 @@
 	}
 
 	const freePlanStory = freePlan.story;
+	const enterprisePathHref = `${base}/enterprise`;
 </script>
 
 <section
@@ -74,7 +71,7 @@
 						class={`btn ${plan.popular ? 'btn-primary landing-plan-primary-cta' : 'btn-secondary landing-plan-secondary-cta'}`}
 						onclick={() => onTrackCta('cta_click', 'plans', `start_plan_${plan.id}`)}
 					>
-						{plan.id === 'pro' ? 'Start Pro Workspace' : `Start ${plan.name} Workspace`}
+						{`Start with ${plan.name}`}
 					</a>
 				</article>
 			{/each}
@@ -115,7 +112,7 @@
 					class="btn btn-primary landing-free-tier-primary-cta"
 					onclick={() => onTrackCta('cta_click', 'plans', 'start_plan_free')}
 				>
-					Start Free Workspace
+					Start on Free Tier
 				</a>
 				<span class="landing-free-tier-note"
 					>Upgrade when team rollout or deeper governance becomes necessary.</span
@@ -166,7 +163,7 @@
 				class="btn btn-secondary"
 				onclick={() => onTrackCta('cta_click', 'plans', 'enterprise_review')}
 			>
-				See Enterprise Path
+				Open Enterprise Path
 			</a>
 		</div>
 	</section>

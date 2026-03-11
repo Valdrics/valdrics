@@ -34,6 +34,9 @@ Use staging for the full operational rehearsal after the deterministic local dri
 
 ```bash
 uv run python scripts/generate_managed_migration_env.py --environment staging
+uv run python scripts/generate_managed_runtime_env.py --environment staging
+uv run python scripts/generate_managed_deployment_artifacts.py --environment staging --runtime-env-file .runtime/staging.env
+uv run python scripts/verify_managed_deployment_bundle.py --environment staging
 uv run python scripts/validate_migration_env.py --env-file .runtime/staging.migrate.env
 set -a && source .runtime/staging.migrate.env && uv run alembic upgrade head
 ```
@@ -75,6 +78,7 @@ Promotion is blocked unless:
 
 After the staging drill passes, execute the production rollout sequence in
 [`docs/runbooks/production_env_checklist.md`](./production_env_checklist.md),
+including `uv run python scripts/verify_managed_deployment_bundle.py --environment production`,
 including `uv run python scripts/validate_migration_env.py --env-file .runtime/production.migrate.env`,
 `set -a && source .runtime/production.migrate.env && uv run alembic upgrade head`,
 and `uv run python scripts/validate_runtime_env.py --environment production --env-file .runtime/production.env`.

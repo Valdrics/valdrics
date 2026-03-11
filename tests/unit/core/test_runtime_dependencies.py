@@ -175,7 +175,8 @@ def test_validate_runtime_dependencies_allows_prophet_fallback_in_dev() -> None:
         patch("app.shared.core.runtime_dependencies.logger") as logger,
     ):
         validate_runtime_dependencies(settings)  # type: ignore[arg-type]
-        logger.warning.assert_called_once()
+        logger.debug.assert_called_once()
+        logger.warning.assert_not_called()
 
 
 def test_validate_runtime_dependencies_skips_when_testing_enabled() -> None:

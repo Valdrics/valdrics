@@ -78,7 +78,7 @@ describe('publicNav', () => {
 		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/insights')).toBe(true);
 		expect(PUBLIC_RESOURCES_DROPDOWN_LINKS.some((link) => link.href === '/insights')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/insights')).toBe(true);
-		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(true);
+		expect(PUBLIC_SECONDARY_LINKS.some((link) => link.href === '/enterprise')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/talk-to-sales')).toBe(true);
 		expect(PUBLIC_MOBILE_LINKS.some((link) => link.href === '/resources')).toBe(true);
 	});

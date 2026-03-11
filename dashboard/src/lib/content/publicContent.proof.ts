@@ -14,7 +14,7 @@ export const RAW_PUBLIC_CONTENT_PROOF = [
 		readingMinutes: 5,
 		audiences: ['security', 'platform', 'procurement'],
 		primaryCta: { label: 'Open Technical Validation', href: '/docs/technical-validation' },
-		secondaryCta: { label: 'Talk to Sales', href: '/talk-to-sales' },
+		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
 		sections: [
 			{
 				title: 'What buyers need early',
@@ -61,7 +61,7 @@ export const RAW_PUBLIC_CONTENT_PROOF = [
 		readingMinutes: 5,
 		audiences: ['security', 'finance', 'platform'],
 		primaryCta: { label: 'See the Decision Loop', href: '/#signal-map' },
-		secondaryCta: { label: 'Open Enterprise Page', href: '/enterprise' },
+		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
 		sections: [
 			{
 				title: 'Identity matters because accountability matters',

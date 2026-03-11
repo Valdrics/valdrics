@@ -110,11 +110,18 @@
 	let primaryCtaLabel = $derived(
 		experiments.ctaVariant === 'book_briefing' ? 'Book Executive Briefing' : 'Start Free Workspace'
 	);
-	let secondaryCtaLabel = $derived('See Pricing'),
-		secondaryCtaHref = $derived('/pricing?entry=hero_secondary');
+	let secondaryCtaLabel = $derived(
+		experiments.ctaVariant === 'book_briefing' ? 'Start Free Workspace' : 'See Enterprise Path'
+	);
+	let secondaryCtaHref = $derived(
+		experiments.ctaVariant === 'book_briefing'
+			? buildSignupHref(heroContext.primaryIntent, { source: 'hero_secondary' })
+			: buildEnterpriseReviewHref('hero_secondary')
+	);
 	let roiPlannerHref = $derived(buildSignupHref('roi_assessment', { source: 'simulator' }));
-	let plansTalkToSalesHref = $derived(buildTalkToSalesHref('plans')),
-		requestValidationBriefingHref = $derived(buildTalkToSalesHref('trust_validation')),
+	let requestValidationBriefingHref = $derived(
+			buildTalkToSalesHref('trust_validation', 'request_validation_briefing')
+		),
 		plansEnterpriseHref = $derived(buildEnterpriseReviewHref('plans_enterprise')),
 		trustEnterpriseHref = $derived(buildEnterpriseReviewHref('trust_enterprise'));
 	let showBackToTop = $derived(landingScrollProgressPct >= 8),
@@ -124,13 +131,15 @@
 	);
 	let primaryCtaHref = $derived(
 		experiments.ctaVariant === 'book_briefing'
-			? buildTalkToSalesHref('hero_briefing')
+			? buildTalkToSalesHref('hero_briefing', 'executive_briefing')
 			: buildSignupHref(primaryCtaIntent)
 	);
 	let freeTierCtaHref = $derived(
 		buildSignupHref('free_tier', { plan: 'free', source: 'free_tier' })
 	);
-	let secondaryCtaTelemetryValue = $derived('see_pricing');
+	let secondaryCtaTelemetryValue = $derived(
+		experiments.ctaVariant === 'book_briefing' ? 'start_free' : 'enterprise_review'
+	);
 	let includeExperimentQueryParams = $derived(shouldIncludeExperimentQueryParams($page.url, false));
 	let shouldRotateSnapshots = $derived(
 		!prefersReducedMotion &&
@@ -267,10 +276,11 @@
 	function buildPlanCtaHref(planId: string): string {
 		return buildSignupHref('start_plan', { plan: planId, source: 'plans' });
 	}
-	function buildTalkToSalesHref(source: string): string {
+	function buildTalkToSalesHref(source: string, intent?: string): string {
 		return buildLandingHeroSalesPath({
 			path: TALK_TO_SALES_PATH,
 			source,
+			intent,
 			persona: activeBuyerRole.id,
 			utm: attribution.utm
 		});
@@ -390,7 +400,6 @@
 	{roiPlannerHref}
 	{freeTierCtaHref}
 	{buildPlanCtaHref}
-	{plansTalkToSalesHref}
 	{plansEnterpriseHref}
 	{trustEnterpriseHref}
 	{requestValidationBriefingHref}

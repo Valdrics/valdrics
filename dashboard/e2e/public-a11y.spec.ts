@@ -9,7 +9,11 @@ type PublicRoute = {
 };
 
 const PUBLIC_ROUTES: readonly PublicRoute[] = [
-	{ path: '/', mainHeading: /control|waste|margin risk/i },
+	{
+		path: '/',
+		mainHeading:
+			/turn cloud, saas, and software spend into governed action|move from spend visibility to owner-routed action|control cost-changing actions with approvals|protect margin with one governed system/i
+	},
 	{ path: '/docs', mainHeading: /documentation/i },
 	{ path: '/docs/quick-start-workspace', mainHeading: /quick start a valdrics workspace/i },
 	{ path: '/docs/technical-validation', mainHeading: /public capability validation summary/i },

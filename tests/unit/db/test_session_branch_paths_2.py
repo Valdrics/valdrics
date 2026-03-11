@@ -122,6 +122,41 @@ def test_build_connect_args_require_branches_with_and_without_ca() -> None:
     assert "statement_cache_size" not in args3
 
 
+def test_build_connect_args_disable_ssl_logs_debug_for_local_postgres_and_non_postgres() -> None:
+    local_postgres_settings = SimpleNamespace(
+        DB_SSL_MODE="disable",
+        DB_SSL_CA_CERT_PATH=None,
+        ENVIRONMENT="local",
+        is_production=False,
+    )
+    logger = MagicMock()
+
+    with patch.object(session_mod, "logger", logger):
+        args = session_mod._build_connect_args(
+            local_postgres_settings,
+            "postgresql+asyncpg://h/db",
+        )
+    assert args["ssl"] is False
+    logger.debug.assert_called_once()
+    logger.warning.assert_not_called()
+
+    sqlite_settings = SimpleNamespace(
+        DB_SSL_MODE="disable",
+        DB_SSL_CA_CERT_PATH=None,
+        ENVIRONMENT="local",
+        is_production=False,
+    )
+    logger_sqlite = MagicMock()
+    with patch.object(session_mod, "logger", logger_sqlite):
+        sqlite_args = session_mod._build_connect_args(
+            sqlite_settings,
+            "sqlite+aiosqlite:///:memory:",
+        )
+    assert sqlite_args == {}
+    logger_sqlite.debug.assert_called_once()
+    logger_sqlite.warning.assert_not_called()
+
+
 def test_build_pool_config_null_pool_and_testing_override() -> None:
     settings = SimpleNamespace(DB_POOL_RECYCLE=123, DB_ECHO=False, TESTING=False)
     cfg = session_mod._build_pool_config(

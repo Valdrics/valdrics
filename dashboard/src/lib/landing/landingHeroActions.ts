@@ -18,6 +18,7 @@ type HeroSalesArgs = {
 	source: string;
 	persona: string;
 	utm: LandingAttribution['utm'];
+	intent?: string;
 };
 
 type LandingSelectionArgs = {

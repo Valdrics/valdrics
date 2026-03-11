@@ -16,15 +16,26 @@ def build_connect_args(
     ssl_mode = str(getattr(settings_obj, "DB_SSL_MODE", "require")).lower()
     target_logger = logger or structlog.get_logger()
     is_postgres = "postgresql" in effective_url
+    environment = str(getattr(settings_obj, "ENVIRONMENT", "") or "").strip().lower()
+    is_local_env = environment in {"local", "development"}
 
     if is_postgres:
         connect_args["statement_cache_size"] = 0  # Required for Supavisor
 
     if ssl_mode == "disable":
-        target_logger.warning(
-            "database_ssl_disabled",
-            msg="SSL disabled - INSECURE, do not use in production!",
-        )
+        if is_postgres:
+            log_method = target_logger.debug if is_local_env else target_logger.warning
+            log_method(
+                "database_ssl_disabled",
+                msg="SSL disabled - INSECURE, do not use in production!",
+                environment=environment or "unknown",
+            )
+        else:
+            target_logger.debug(
+                "database_ssl_disable_ignored_non_postgres",
+                environment=environment or "unknown",
+                effective_url=effective_url,
+            )
         if is_postgres:
             connect_args["ssl"] = False
         return connect_args

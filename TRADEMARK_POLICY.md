@@ -1,6 +1,6 @@
 # Valdrics Trademark Policy
 
-Last updated: February 12, 2026
+Last updated: March 11, 2026
 
 This policy covers use of the "Valdrics" name, logos, and related brand assets.
 
@@ -47,8 +47,8 @@ Suggested attribution:
 
 Questions or permission requests:
 
-- `trademarks@valdrics.ai`
+- `legal@valdrics.com`
 
 Potential misuse reports:
 
-- `legal@valdrics.ai`
+- `legal@valdrics.com`

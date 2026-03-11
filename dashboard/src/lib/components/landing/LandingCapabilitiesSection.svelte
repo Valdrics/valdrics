@@ -34,7 +34,8 @@
 			<p class="landing-p landing-coverage-mobile-summary">
 				Owner, controls, workflow, and proof stay attached after detection.
 			</p>
-			<div class="landing-coverage-summary" aria-label="Coverage summary">
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="landing-coverage-summary" tabindex="0" aria-label="Coverage summary">
 				{#each coverageSummary as item (item.label)}
 					<div class="landing-coverage-summary-item">
 						<p class="landing-coverage-summary-k">{item.label}</p>
@@ -58,7 +59,8 @@
 		<p class="landing-coverage-grid-note">Swipe through the owner, approval, and outcome flow.</p>
 	</div>
 
-	<div class="landing-decision-ledger">
+	<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+	<div class="landing-decision-ledger" tabindex="0" aria-label="Decision ledger steps">
 		{#each decisionLedger as entry (entry.title)}
 			<article class="glass-panel landing-decision-card">
 				<div class="landing-decision-card-head">

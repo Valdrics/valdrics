@@ -25,14 +25,20 @@ describe('enterprise page', () => {
 		).toBeTruthy();
 
 		const briefingLink = screen.getByRole('link', { name: /request enterprise briefing/i });
-		expect(briefingLink.getAttribute('href')).toBe(
-			'/talk-to-sales?intent=enterprise_briefing&entry=enterprise'
-		);
+		expect(briefingLink.getAttribute('href') || '').toContain('/talk-to-sales?');
+		expect(briefingLink.getAttribute('href') || '').toContain('entry=enterprise');
+		expect(briefingLink.getAttribute('href') || '').toContain('source=enterprise_lane');
+		expect(briefingLink.getAttribute('href') || '').toContain('intent=enterprise_briefing');
 
-		expect(screen.getByRole('link', { name: /talk to sales/i }).getAttribute('href')).toBe(
-			'/talk-to-sales'
+		expect(
+			screen.getByRole('link', { name: /start free workspace/i }).getAttribute('href') || ''
+		).toContain('/auth/login?');
+		expect(
+			screen.getByRole('link', { name: /view pricing/i }).getAttribute('href') || ''
+		).toContain('/pricing?');
+		expect(screen.getByRole('link', { name: /view plans/i }).getAttribute('href') || '').toContain(
+			'/pricing?'
 		);
-		expect(screen.getByRole('link', { name: /view plans/i }).getAttribute('href')).toBe('/pricing');
 		expect(
 			screen.getByRole('link', { name: /download executive one-pager/i }).getAttribute('href')
 		).toBe('/resources/valdrics-enterprise-one-pager.md');

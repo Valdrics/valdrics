@@ -58,10 +58,11 @@ describe('LandingHero', () => {
 		expect(
 			heroView.getByText(/turns cost, usage, and policy signals into owner-routed approvals/i)
 		).toBeTruthy();
-		const secondaryCta = heroView.getByRole('link', { name: /see pricing/i });
+		const secondaryCta = heroView.getByRole('link', { name: /see enterprise path/i });
 		expect(secondaryCta).toBeTruthy();
 		const secondaryHref = secondaryCta?.getAttribute('href') || '';
-		expect(secondaryHref).toContain('/pricing?entry=hero_secondary');
+		expect(secondaryHref).toContain('/enterprise?');
+		expect(secondaryHref).toContain('source=hero_secondary');
 		if (secondaryCta) {
 			await fireEvent.click(secondaryCta);
 		}
@@ -83,6 +84,9 @@ describe('LandingHero', () => {
 		expect(screen.getByText(/connected inputs/i)).toBeTruthy();
 		expect(screen.getAllByText(/^AWS$/i).length).toBeGreaterThanOrEqual(1);
 		expect(screen.getAllByText(/^Microsoft 365$/i).length).toBeGreaterThanOrEqual(1);
+		expect(document.querySelector('.landing-hook-metrics')?.getAttribute('tabindex')).toBe('0');
+		expect(document.querySelector('.landing-coverage-summary')?.getAttribute('tabindex')).toBe('0');
+		expect(document.querySelector('.landing-decision-ledger')?.getAttribute('tabindex')).toBe('0');
 		expect(screen.getByText(/decision ledger/i)).toBeTruthy();
 		expect(
 			screen.getByText(/the issue lands with owner, scope, and financial context/i)
@@ -140,9 +144,9 @@ describe('LandingHero', () => {
 		);
 		expect(screen.getByRole('link', { name: /Open Full ROI Planner/i })).toBeTruthy();
 
-		const freePlanCta = screen
-			.getAllByRole('link', { name: /start free workspace/i })
-			.find((element) => (element.getAttribute('href') || '').includes('plan=free'));
+		const freePlanCta = document.querySelector(
+			'.landing-free-tier-primary-cta'
+		) as HTMLAnchorElement | null;
 		expect(freePlanCta).toBeTruthy();
 		if (!freePlanCta) {
 			throw new Error('expected free tier CTA');
@@ -203,6 +207,9 @@ describe('LandingHero', () => {
 		});
 		expect(validationBriefingLink.getAttribute('href') || '').toContain('/talk-to-sales?');
 		expect(validationBriefingLink.getAttribute('href') || '').toContain('source=trust_validation');
+		expect(validationBriefingLink.getAttribute('href') || '').toContain(
+			'intent=request_validation_briefing'
+		);
 		const onePagerLink = screen.getByRole('link', {
 			name: /download executive one-pager/i
 		});

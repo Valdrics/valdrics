@@ -65,7 +65,6 @@
 		roiPlannerHref,
 		freeTierCtaHref,
 		buildPlanCtaHref,
-		plansTalkToSalesHref,
 		plansEnterpriseHref,
 		trustEnterpriseHref,
 		requestValidationBriefingHref,
@@ -141,7 +140,6 @@
 		roiPlannerHref: string;
 		freeTierCtaHref: string;
 		buildPlanCtaHref: (planId: string) => string;
-		plansTalkToSalesHref: string;
 		plansEnterpriseHref: string;
 		trustEnterpriseHref: string;
 		requestValidationBriefingHref: string;
@@ -295,8 +293,6 @@
 		<LandingPlansSection
 			buildFreeTierCtaHref={() => freeTierCtaHref}
 			{buildPlanCtaHref}
-			talkToSalesHref={plansTalkToSalesHref}
-			enterprisePathHref={plansEnterpriseHref}
 			{onTrackCta}
 		/>
 

@@ -13,8 +13,11 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 		stage: 'evaluate',
 		readingMinutes: 4,
 		audiences: ['procurement', 'security', 'executive'],
-		primaryCta: { label: 'Open Enterprise Page', href: '/enterprise' },
-		secondaryCta: { label: 'Talk to Sales', href: '/talk-to-sales' },
+		primaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
+		secondaryCta: {
+			label: 'Request Validation Briefing',
+			href: '/talk-to-sales?intent=enterprise_briefing'
+		},
 		sections: [
 			{
 				title: 'When to use the enterprise lane',
@@ -201,7 +204,7 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 			label: 'Download One-Pager',
 			href: '/resources/valdrics-enterprise-one-pager.md'
 		},
-		secondaryCta: { label: 'Open Enterprise Page', href: '/enterprise' },
+		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
 		downloads: [
 			{
 				label: 'Executive One-Pager (Markdown)',
@@ -299,7 +302,7 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 			label: 'Download Workbook',
 			href: '/resources/global-finops-compliance-workbook.md'
 		},
-		secondaryCta: { label: 'Talk to Sales', href: '/talk-to-sales' },
+		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
 		downloads: [
 			{
 				label: 'Compliance Workbook (Markdown)',

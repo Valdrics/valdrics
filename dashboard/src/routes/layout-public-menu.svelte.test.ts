@@ -161,7 +161,7 @@ describe('public layout mobile menu', () => {
 	it('keeps desktop conversion actions in the public header', () => {
 		renderPublicLayout();
 
-		expect(screen.getAllByRole('link', { name: /^talk to sales$/i }).length).toBeGreaterThan(0);
+		expect(screen.getAllByRole('link', { name: /^enterprise path$/i }).length).toBeGreaterThan(0);
 		expect(screen.getAllByRole('link', { name: /^start free$/i }).length).toBeGreaterThan(0);
 	});
 

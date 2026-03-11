@@ -33,12 +33,17 @@ describe('PublicContentArticlePage', () => {
 		expect(
 			screen.getByRole('heading', { level: 1, name: /quick start a valdrics workspace/i })
 		).toBeTruthy();
-		expect(screen.getByRole('link', { name: /start free workspace/i }).getAttribute('href')).toBe(
-			'/auth/login?mode=signup'
-		);
-		expect(screen.getByRole('link', { name: /back to documentation/i }).getAttribute('href')).toBe(
-			'/docs'
-		);
+		const primaryHref = screen
+			.getByRole('link', { name: /start free workspace/i })
+			.getAttribute('href');
+		expect(primaryHref || '').toContain('/auth/login?');
+		expect(primaryHref || '').toContain('entry=docs_quick_start_workspace');
+		expect(primaryHref || '').toContain('source=docs_quick_start_workspace_primary');
+		const hubHref = screen
+			.getByRole('link', { name: /back to documentation/i })
+			.getAttribute('href');
+		expect(hubHref || '').toContain('/docs?');
+		expect(hubHref || '').toContain('source=docs_quick_start_workspace_hub');
 		expect(screen.getByRole('heading', { name: /related content/i })).toBeTruthy();
 
 		expect(document.head.innerHTML).toContain('og:type');

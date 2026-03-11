@@ -60,7 +60,7 @@ Shipped execution history and evidence snapshots live in the progress archive:
 
 1. Keep the product differentiated around governed action instead of generic visibility.
 2. Finish public-surface hardening: pricing clarity, proof surfaces, docs/resources consistency, and sales intake quality.
-3. Keep local and production operations explicit: bootstrap-only sqlite dev, fail-closed migrations, strict env/runbook contracts.
+3. Keep local and production operations explicit: bootstrap-only sqlite dev, fail-closed migrations, strict env/runbook contracts, and managed bundle verification.
 4. Expand enterprise readiness only where backed by real controls and verifiable evidence.
 
 ## How to Use This Document

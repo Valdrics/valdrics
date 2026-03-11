@@ -27,7 +27,7 @@ export const PUBLIC_RESOURCES_DROPDOWN_LINKS: readonly PublicNavLink[] = Object.
 export const PUBLIC_SECONDARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/docs', label: 'Docs' },
 	{ href: '/insights', label: 'Insights' },
-	{ href: '/talk-to-sales', label: 'Talk to Sales' }
+	{ href: '/enterprise', label: 'Enterprise Path' }
 ]);
 
 export const PUBLIC_MOBILE_LINKS: readonly PublicNavLink[] = Object.freeze([

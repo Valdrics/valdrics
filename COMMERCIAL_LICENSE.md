@@ -1,10 +1,13 @@
-# Valdrics Commercial License
+# Valdrics Commercial License Agreement (CLA)
 
-Last updated: February 12, 2026
+Last updated: March 11, 2026
 
 This document explains when a separate commercial license is required for Valdrics.
 
-The repository license is BSL 1.1 (`LICENSE`). Under that license, using Valdrics to provide a third-party hosted service is restricted. We offer commercial exceptions for those scenarios.
+The repository license is Business Source License 1.1 (`BUSL-1.1`, commonly
+called `BSL 1.1`). Under that license, providing Valdrics itself as a
+third-party hosted or managed service requires a separate commercial
+agreement. We offer commercial exceptions for those scenarios.
 
 This page is informational and does not grant rights by itself. Rights are granted only through a signed commercial agreement.
 
@@ -20,7 +23,8 @@ You need a commercial license if your use includes any of the following:
 ## Who Usually Does Not Need One
 
 - Organizations self-hosting Valdrics for internal use.
-- Consultants helping a customer deploy and operate a customer-owned instance.
+- Consultants helping a customer deploy and operate a customer-owned or
+  customer-controlled instance.
 - Evaluation, testing, and internal proof-of-concept usage.
 
 ## Available Commercial Paths
@@ -45,7 +49,8 @@ You need a commercial license if your use includes any of the following:
 
 ## Request Process
 
-Email: `licensing@valdrics.ai`
+Primary contact: `licensing@valdrics.com`
+Commercial evaluation path: `enterprise@valdrics.com`
 
 Include:
 

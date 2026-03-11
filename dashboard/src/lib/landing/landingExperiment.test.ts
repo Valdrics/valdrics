@@ -49,6 +49,22 @@ describe('landingExperiment', () => {
 		expect(assignment.sectionOrderVariant).toBe('workflow_first');
 	});
 
+	it('prefers enterprise-first CTA defaults for executive and security signals', () => {
+		const executiveAssignment = resolveLandingExperiments(
+			new URL('https://example.com/?utm_medium=abm&utm_campaign=procurement_diligence'),
+			'visitor-enterprise'
+		);
+		const securityAssignment = resolveLandingExperiments(
+			new URL('https://example.com/?persona=security'),
+			'visitor-security'
+		);
+
+		expect(executiveAssignment.buyerPersonaDefault).toBe('cfo');
+		expect(executiveAssignment.ctaVariant).toBe('book_briefing');
+		expect(securityAssignment.buyerPersonaDefault).toBe('security');
+		expect(securityAssignment.ctaVariant).toBe('book_briefing');
+	});
+
 	it('ignores invalid overrides and falls back to defaults', () => {
 		const url = new URL(
 			'https://example.com/?buyer=invalid&exp_hero=invalid&exp_cta=invalid&exp_order=invalid'

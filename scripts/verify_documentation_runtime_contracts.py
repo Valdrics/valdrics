@@ -42,6 +42,26 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
             "managed-platform preview/reference surface",
             "AWS RDS profile",
             "koyeb-worker.yaml",
+            "docs/architecture/tiering-2026.md",
+        ),
+    ),
+    DocumentationContract(
+        path="docs/roadmap.md",
+        required_phrases=(
+            "active planning document",
+            "reports/roadmap/",
+            "Current Focus",
+            "bootstrap-only sqlite dev",
+            "managed bundle verification",
+        ),
+        forbidden_phrases=("Latest Sprint Shipped", "Sprint Status (Current)"),
+    ),
+    DocumentationContract(
+        path="docs/architecture/tiering-2026.md",
+        required_phrases=(
+            "Permanent public proof lane",
+            "dashboard/src/lib/pricing/publicPlans.ts",
+            "app/shared/core/pricing.py",
         ),
     ),
     DocumentationContract(
@@ -125,6 +145,9 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
             "generate_managed_runtime_env.py",
             "generate_managed_migration_env.py",
             "generate_managed_deployment_artifacts.py",
+            "verify_managed_deployment_bundle.py",
+            "run_public_frontend_quality_gate.py",
+            "deployment.report.json",
             "--env-file .runtime/production.env",
             "--env-file .runtime/production.migrate.env",
             "set -a && source .runtime/production.migrate.env && uv run alembic upgrade head",

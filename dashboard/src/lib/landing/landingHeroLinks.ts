@@ -17,6 +17,7 @@ export interface LandingSignupHrefOptions extends LandingHrefOptions {
 export interface LandingSalesHrefOptions extends LandingHrefOptions {
 	path: string;
 	source: string;
+	intent?: string;
 }
 
 function appendUtmParams(params: URLSearchParams, utm: LandingUtmParams): void {
@@ -53,6 +54,9 @@ export function buildLandingSalesHref(options: LandingSalesHrefOptions): string 
 		source: options.source,
 		persona: options.persona
 	});
+	if (options.intent) {
+		params.set('intent', options.intent);
+	}
 	appendUtmParams(params, options.utm);
 	return `${options.path}?${params.toString()}`;
 }

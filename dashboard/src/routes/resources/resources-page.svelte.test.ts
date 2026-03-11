@@ -16,6 +16,12 @@ describe('resources page contact directory', () => {
 	it('shows extended public contact channels outside the landing footer', () => {
 		render(Page);
 
+		expect(
+			screen.getByRole('link', { name: /start free workspace/i }).getAttribute('href') || ''
+		).toContain('/auth/login?');
+		expect(
+			screen.getByRole('link', { name: /see enterprise path/i }).getAttribute('href') || ''
+		).toContain('/enterprise?');
 		expect(screen.getByRole('heading', { name: /contact directory/i })).toBeTruthy();
 		expect(screen.getAllByRole('link', { name: /open resource/i })[0]?.getAttribute('href')).toBe(
 			'/resources/enterprise-governance-overview'

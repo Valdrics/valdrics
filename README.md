@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/Valdrics/valdrics/actions/workflows/ci.yml"><img src="https://github.com/Valdrics/valdrics/actions/workflows/ci.yml/badge.svg" alt="CI/CD Status" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-BSL%201.1-blue.svg" alt="License: BSL 1.1" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-BUSL%201.1-blue.svg" alt="License: BUSL 1.1" /></a>
   <a href="https://python.org"><img src="https://img.shields.io/badge/Python-3.12-3776AB.svg?logo=python&logoColor=white" alt="Python 3.12" /></a>
   <a href="https://svelte.dev"><img src="https://img.shields.io/badge/Svelte-5-FF3E00.svg?logo=svelte&logoColor=white" alt="Svelte 5" /></a>
   <a href="https://fastapi.tiangolo.com"><img src="https://img.shields.io/badge/FastAPI-0.128+-009688.svg?logo=fastapi&logoColor=white" alt="FastAPI" /></a>
@@ -333,11 +333,15 @@ We're in **active development**. Here's where we are:
 
 ## 📜 License
 
-Valdrics is **source available** under the **Business Source License (BSL) 1.1**.
+Valdrics is **source available** under the **Business Source License 1.1**
+(`BUSL-1.1`, commonly called **BSL 1.1**).
 
 - ✅ **Free for internal use** — Run it on your own infrastructure.
-- ❌ **No resale** — Cannot offer Valdrics as a managed service.
-- 🗓️ **Freedom date:** Converts to **Apache 2.0** on **January 12, 2029**.
+- ❌ **No competing hosted service** — You cannot offer Valdrics itself as a managed or hosted service to third parties without a separate commercial agreement.
+- 🗓️ **Freedom date:** Converts to **Apache 2.0** on **January 5, 2030**.
+
+This repository is public on GitHub, but it is **not OSI open source today**.
+Public source availability does not change the license terms.
 
 See [LICENSE](LICENSE) for full terms.
 

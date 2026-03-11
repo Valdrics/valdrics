@@ -151,9 +151,20 @@ def validate_llm_config(settings_obj: object, *, is_production: bool) -> None:
             raise ValueError(
                 f"LLM_PROVIDER is '{llm_provider}' but its API key is missing."
             )
-        structlog.get_logger().info(
-            "llm_provider_key_missing_non_prod", provider=llm_provider
-        )
+        environment = str(getattr(settings_obj, "ENVIRONMENT", "") or "").strip().lower()
+        logger = structlog.get_logger()
+        if environment in {"local", "development"}:
+            logger.debug(
+                "llm_provider_key_missing_non_prod_local",
+                provider=llm_provider,
+                environment=environment,
+            )
+        else:
+            logger.info(
+                "llm_provider_key_missing_non_prod",
+                provider=llm_provider,
+                environment=environment or "unknown",
+            )
 
     if getattr(settings_obj, "LLM_GLOBAL_ABUSE_PER_MINUTE_CAP", 0) < 1:
         raise ValueError("LLM_GLOBAL_ABUSE_PER_MINUTE_CAP must be >= 1.")

@@ -58,7 +58,7 @@ describe('pricing page public messaging', () => {
 		).toBeTruthy();
 		expect(
 			screen.getByRole('link', { name: /start on free tier/i }).getAttribute('href')
-		).toContain('/auth/login?mode=signup&plan=free');
+		).toContain('plan=free');
 		expect(screen.getByRole('heading', { name: /^starter$/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /^growth$/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /^pro$/i })).toBeTruthy();
@@ -104,10 +104,14 @@ describe('pricing page public messaging', () => {
 			screen.getByText(/the permanent free tier does not require a checkout session/i)
 		).toBeTruthy();
 
-		const salesCta = screen.getAllByRole('link', { name: /talk to sales/i });
-		expect(salesCta.length).toBeGreaterThan(0);
 		expect(
-			screen.getByRole('link', { name: /view enterprise overview/i }).getAttribute('href')
-		).toBe('/enterprise');
+			screen.getByRole('link', { name: /see enterprise path/i }).getAttribute('href') || ''
+		).toContain('/enterprise?');
+		expect(
+			screen.getByRole('link', { name: /open enterprise path/i }).getAttribute('href') || ''
+		).toContain('/enterprise?');
+		expect(
+			screen.getByRole('link', { name: /request validation briefing/i }).getAttribute('href') || ''
+		).toContain('/talk-to-sales?');
 	});
 });
