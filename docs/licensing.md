@@ -1,30 +1,39 @@
 # Licensing Guide
 
-Last updated: February 12, 2026
+Last updated: March 11, 2026
 
-This project is released under the Business Source License 1.1 (BSL 1.1). The legal source of truth is `LICENSE`. If anything in this guide conflicts with `LICENSE`, the `LICENSE` file wins.
+This project is released under the Business Source License 1.1
+(`BUSL-1.1`, commonly called `BSL 1.1`). The legal source of truth is
+`LICENSE`. If anything in this guide conflicts with `LICENSE`, the `LICENSE`
+file wins.
 
 ## Plain-English Summary
 
 - You can run Valdrics internally in your own organization.
-- You cannot offer Valdrics itself as a competing hosted/managed service to third parties.
+- You can operate a customer-owned or customer-controlled instance for that
+  customer's internal business operations.
+- You cannot offer Valdrics itself as a competing hosted or managed service to
+  third parties under the default repository license.
 - On the change date, the code converts to Apache 2.0.
+- The repository being public on GitHub does not make it OSI open source today.
 
 ## Change Terms
 
-- Change Date: January 12, 2029
+- Change Date: January 5, 2030
 - Change License: Apache License 2.0
+- Current repository policy anchors that date to the first public repository
+  history on January 5, 2026.
 
 ## Allowed and Prohibited Use Matrix
 
 | Scenario | Allowed | Notes |
 | --- | --- | --- |
-| Internal self-hosting for your own company | Yes | Includes production internal usage. |
-| Internal use by subsidiaries under same corporate control | Yes | Treated as internal use. |
-| Consulting/professional services deploying a customer-owned instance | Yes | Customer controls the instance and data plane. |
+| Internal self-hosting for your own company | Yes | Includes production internal usage under the Additional Use Grant. |
+| Internal use by subsidiaries under same corporate control | Yes | Treated as internal use under the Additional Use Grant. |
+| Consulting/professional services deploying a customer-owned or customer-controlled instance | Yes | Allowed where the customer's internal operations are the beneficiary. |
 | Reselling Valdrics as your own hosted SaaS | No | Prohibited competitive hosted offering. |
 | Multi-tenant MSP offering Valdrics capabilities as a service | No | Prohibited if customers consume Valdrics as the service. |
-| Research, evaluation, and test environments | Yes | Non-production and production internal use allowed. |
+| Research, evaluation, and test environments | Yes | Non-production use is allowed under the base BUSL terms. |
 
 ## Definitions Used in This Project
 
@@ -40,27 +49,36 @@ Yes, for your own internal operations.
 
 ### Can Valdrics-AI offer an official hosted SaaS?
 
-Yes. The BSL restriction targets third parties offering competing hosted services. It does not block the project owner from operating the official Valdrics SaaS.
+Yes. The BUSL/BSL restriction targets third parties offering competing hosted
+services. It does not block the project owner from operating the official
+Valdrics SaaS.
 
 ### Can I run it for my clients?
 
-You can deploy/support a client-owned instance. You cannot operate a shared hosted Valdrics service for third-party consumption.
+You can deploy or support a customer-owned or customer-controlled instance for
+that customer's internal use. You cannot operate a shared hosted Valdrics
+service for third-party consumption under the default repository license.
 
 ### Can I buy rights to run Valdrics as a managed service?
 
-Yes. We provide commercial exceptions for qualified partners and OEM use cases. See `COMMERCIAL_LICENSE.md`.
+Yes. We provide commercial exceptions for qualified partners and OEM use cases.
+See `COMMERCIAL_LICENSE.md`. Current contact path:
+`licensing@valdrics.com`. Commercial evaluation requests can still flow through
+`enterprise@valdrics.com`.
 
 ### Can I resell or white-label it as a hosted platform?
 
-Not under default BSL terms before the change date. This requires a separate commercial agreement.
+Not under the default BUSL/BSL terms before the change date. This requires a
+separate commercial agreement.
 
 ### When does it become Apache 2.0?
 
-On January 12, 2029, per the change terms in `LICENSE`.
+On January 5, 2030, per the change terms in `LICENSE`.
 
 ### Does Apache conversion stop Valdrics-AI from making money?
 
-No. Valdrics-AI can continue monetizing through the official SaaS, enterprise features, support, compliance packaging, and commercial agreements.
+No. Valdrics-AI can continue monetizing through the official SaaS, enterprise
+features, support, compliance packaging, and commercial agreements.
 
 ## Related Policy Documents
 

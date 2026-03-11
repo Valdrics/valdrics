@@ -145,7 +145,8 @@ def validate_runtime_dependencies(settings: Settings) -> None:
             "as a temporary break-glass override."
         )
 
-    logger.warning(
+    log_method = logger.warning if strict_env else logger.debug
+    log_method(
         "prophet_unavailable_using_holt_winters_fallback",
         environment=settings.ENVIRONMENT,
         strict_env=strict_env,

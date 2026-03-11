@@ -16,12 +16,18 @@ importers:
 
   .:
     dependencies:
+      '@lucide/svelte':
+        specifier: ^0.562.0
+        version: 0.562.0(svelte@5.53.0)
       '@supabase/ssr':
         specifier: ^0.8.0
         version: 0.8.0(@supabase/supabase-js@2.90.1)
       '@supabase/supabase-js':
         specifier: ^2.90.1
         version: 2.90.1
+      '@sveltejs/kit':
+        specifier: ^2.52.2
+        version: 2.52.2(@sveltejs/vite-plugin-svelte@6.2.3(svelte@5.53.0)(vite@7.3.1(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2)))(svelte@5.53.0)(typescript@5.9.3)(vite@7.3.1(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2))
       '@tailwindcss/postcss':
         specifier: ^4.1.18
         version: 4.1.18
@@ -31,9 +37,18 @@ importers:
       chart.js:
         specifier: ^4.5.1
         version: 4.5.1
+      clsx:
+        specifier: ^2.1.1
+        version: 2.1.1
       dompurify:
         specifier: ^3.3.1
         version: 3.3.1
+      svelte:
+        specifier: ^5.51.5
+        version: 5.53.0
+      tailwind-merge:
+        specifier: ^3.4.0
+        version: 3.4.0
       tailwindcss:
         specifier: ^4.1.18
         version: 4.1.18
@@ -41,18 +56,12 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
     devDependencies:
-      '@lucide/svelte':
-        specifier: ^0.562.0
-        version: 0.562.0(svelte@5.53.0)
       '@playwright/test':
         specifier: ^1.58.0
         version: 1.58.0
       '@sveltejs/adapter-cloudflare':
         specifier: ^7.2.8
         version: 7.2.8(@sveltejs/kit@2.52.2(@sveltejs/vite-plugin-svelte@6.2.3(svelte@5.53.0)(vite@7.3.1(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2)))(svelte@5.53.0)(typescript@5.9.3)(vite@7.3.1(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2)))(wrangler@4.66.0(@cloudflare/workers-types@4.20260218.0))
-      '@sveltejs/kit':
-        specifier: ^2.52.2
-        version: 2.52.2(@sveltejs/vite-plugin-svelte@6.2.3(svelte@5.53.0)(vite@7.3.1(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2)))(svelte@5.53.0)(typescript@5.9.3)(vite@7.3.1(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2))
       '@sveltejs/vite-plugin-svelte':
         specifier: ^6.2.1
         version: 6.2.3(svelte@5.53.0)(vite@7.3.1(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2))
@@ -77,9 +86,6 @@ importers:
       axe-playwright:
         specifier: ^2.2.2
         version: 2.2.2(playwright@1.58.0)
-      clsx:
-        specifier: ^2.1.1
-        version: 2.1.1
       globals:
         specifier: ^16.5.0
         version: 16.5.0
@@ -95,15 +101,9 @@ importers:
       prettier-plugin-svelte:
         specifier: ^3.4.0
         version: 3.4.1(prettier@3.7.4)(svelte@5.53.0)
-      svelte:
-        specifier: ^5.51.5
-        version: 5.53.0
       svelte-check:
         specifier: ^4.3.4
         version: 4.3.5(picomatch@4.0.3)(svelte@5.53.0)(typescript@5.9.3)
-      tailwind-merge:
-        specifier: ^3.4.0
-        version: 3.4.0
       tailwind-variants:
         specifier: ^3.2.2
         version: 3.2.2(tailwind-merge@3.4.0)(tailwindcss@4.1.18)

@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import {
-		listRelatedPublicContent,
-		type PublicContentEntry
-	} from '$lib/content/publicContent';
+	import { page } from '$app/stores';
+	import { listRelatedPublicContent, type PublicContentEntry } from '$lib/content/publicContent';
+	import { appendPublicAttribution } from '$lib/public/publicBuyingMotion';
 	import PublicPageMeta from './PublicPageMeta.svelte';
 	import './PublicMarketingPage.css';
 
@@ -15,13 +14,18 @@
 
 	let { entry, hubHref, hubLabel }: Props = $props();
 
-	const relatedEntries = $derived(listRelatedPublicContent(entry));
+	let relatedEntries = $derived(listRelatedPublicContent(entry));
+	let trackingEntry = $derived(
+		`${entry.kind}_${entry.slug}`.replace(/[^a-z0-9]+/gi, '_').toLowerCase()
+	);
 
-	function resolveHref(href: string): string {
+	function resolveHref(href: string, sourceSuffix: string): string {
 		if (/^(https?:|mailto:)/i.test(href)) return href;
-		if (!base) return href;
-		if (href === '/') return base || '/';
-		return `${base}${href}`;
+		const internalHref = !base ? href : href === '/' ? base || '/' : `${base}${href}`;
+		return appendPublicAttribution(internalHref, $page.url, {
+			entry: trackingEntry,
+			source: `${trackingEntry}_${sourceSuffix}`
+		});
 	}
 
 	function toSectionId(value: string): string {
@@ -51,13 +55,15 @@
 				<h1 class="public-page__title public-page__title--article">{entry.title}</h1>
 				<p class="public-page__subtitle public-page__subtitle--article">{entry.summary}</p>
 				<div class="public-page__actions">
-					<a href={resolveHref(entry.primaryCta.href)} class="btn btn-primary">{entry.primaryCta.label}</a>
+					<a href={resolveHref(entry.primaryCta.href, 'primary')} class="btn btn-primary"
+						>{entry.primaryCta.label}</a
+					>
 					{#if entry.secondaryCta}
-						<a href={resolveHref(entry.secondaryCta.href)} class="btn btn-secondary">
+						<a href={resolveHref(entry.secondaryCta.href, 'secondary')} class="btn btn-secondary">
 							{entry.secondaryCta.label}
 						</a>
 					{/if}
-					<a href={resolveHref(hubHref)} class="btn btn-secondary">{hubLabel}</a>
+					<a href={resolveHref(hubHref, 'hub')} class="btn btn-secondary">{hubLabel}</a>
 				</div>
 				<div class="public-article-page__meta">
 					<span>Updated {updatedAtLabel}</span>
@@ -72,7 +78,9 @@
 				{#if entry.downloads.length > 0}
 					<div class="public-page__actions-row">
 						{#each entry.downloads as download (download.href)}
-							<a href={resolveHref(download.href)} class="btn btn-secondary">{download.label}</a>
+							<a href={resolveHref(download.href, 'download')} class="btn btn-secondary">
+								{download.label}
+							</a>
 						{/each}
 					</div>
 				{/if}
@@ -123,7 +131,10 @@
 								<p class="public-page__card-kicker">{related.kicker}</p>
 								<h2 class="public-page__card-title">{related.title}</h2>
 								<p class="public-page__card-copy">{related.summary}</p>
-								<a href={resolveHref(`/${related.kind}/${related.slug}`)} class="btn btn-secondary">
+								<a
+									href={resolveHref(`/${related.kind}/${related.slug}`, `related_${related.kind}`)}
+									class="btn btn-secondary"
+								>
 									Open {related.kind}
 								</a>
 							</article>

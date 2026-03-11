@@ -93,7 +93,7 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "consumed_amount_usd + released_amount_usd <= reserved_amount_usd",
-            name="ck_enforcement_credit_reservation_consumed_released_lte_reserved",
+            name="ck_enf_credit_resv_settlement_lte_reserved",
         ),
         sa.ForeignKeyConstraint(
             ["tenant_id"],
@@ -179,4 +179,3 @@ def downgrade() -> None:
         table_name="enforcement_credit_reservation_allocations",
     )
     op.drop_table("enforcement_credit_reservation_allocations")
-

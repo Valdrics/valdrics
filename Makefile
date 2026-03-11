@@ -1,7 +1,7 @@
 # Valdrics Makefile
 # Developer convenience commands using uv
 
-.PHONY: help install dev test lint format security clean docker-build docker-up helm-install env-dev bootstrap-local-db clean-local-db smoke-local-db
+.PHONY: help install dev test lint format security clean docker-build docker-up helm-install env-dev bootstrap-local-db clean-local-db smoke-local-db verify-managed-bundle public-quality docs-hygiene
 
 # Default target
 help:
@@ -12,6 +12,9 @@ help:
 	@echo "  make bootstrap-local-db - Bootstrap current ORM schema into local sqlite without replaying legacy migrations"
 	@echo "  make clean-local-db - Remove local sqlite bootstrap artifacts from the repo root"
 	@echo "  make smoke-local-db - Prove the local sqlite bootstrap path reaches a healthy app state"
+	@echo "  make verify-managed-bundle ENVIRONMENT=<staging|production> - Verify runtime, migration, and deployment artifacts stay coherent"
+	@echo "  make public-quality [DASHBOARD_URL=http://localhost:5174] - Run public smoke + a11y + perf + visual gates"
+	@echo "  make docs-hygiene - Fail on orphaned dated docs and prohibited active duplicates"
 	@echo "  make dev         - Start development servers (auto-uses .env.dev when present)"
 	@echo "  make test        - Run test suite"
 	@echo "  make lint        - Run linters"
@@ -44,6 +47,16 @@ clean-local-db:
 
 smoke-local-db:
 	uv run python3 scripts/smoke_test_local_sqlite_bootstrap.py
+
+verify-managed-bundle:
+	@test -n "$(ENVIRONMENT)" || (echo "ENVIRONMENT must be set to staging or production" && exit 1)
+	uv run python3 scripts/verify_managed_deployment_bundle.py --environment $(ENVIRONMENT)
+
+public-quality:
+	@/bin/bash -lc 'ARGS=""; if [ -n "$(DASHBOARD_URL)" ]; then ARGS="--dashboard-url $(DASHBOARD_URL) --skip-webserver"; fi; uv run python3 scripts/run_public_frontend_quality_gate.py $$ARGS'
+
+docs-hygiene:
+	uv run python3 scripts/verify_docs_archive_hygiene.py
 
 dev:
 	@if [ -f .env.dev ]; then \

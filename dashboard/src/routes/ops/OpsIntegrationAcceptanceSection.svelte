@@ -18,7 +18,11 @@
 		refreshAcceptanceRuns: AsyncAction;
 		lastAcceptanceCapture: IntegrationAcceptanceCaptureResponse | null;
 		acceptanceRuns: IntegrationAcceptanceRun[];
-		hasSelectedAcceptanceChannels: (includeSlack: boolean, includeJira: boolean, includeWorkflow: boolean) => boolean;
+		hasSelectedAcceptanceChannels: (
+			includeSlack: boolean,
+			includeJira: boolean,
+			includeWorkflow: boolean
+		) => boolean;
 		acceptanceRunStatusClass: (status: string) => string;
 		formatDate: (value: string | null | undefined) => string;
 	}
@@ -61,7 +65,11 @@
 					capturingAcceptanceKpis ||
 					refreshingAcceptanceRuns ||
 					refreshingAcceptanceKpiHistory ||
-					!hasSelectedAcceptanceChannels(captureIncludeSlack, captureIncludeJira, captureIncludeWorkflow)}
+					!hasSelectedAcceptanceChannels(
+						captureIncludeSlack,
+						captureIncludeJira,
+						captureIncludeWorkflow
+					)}
 				onclick={runAcceptanceSuite}
 			>
 				{runningAcceptanceSuite ? 'Running...' : 'Run Full Suite'}
@@ -71,7 +79,11 @@
 				class="btn btn-secondary text-xs"
 				disabled={capturingAcceptanceRuns ||
 					refreshingAcceptanceRuns ||
-					!hasSelectedAcceptanceChannels(captureIncludeSlack, captureIncludeJira, captureIncludeWorkflow)}
+					!hasSelectedAcceptanceChannels(
+						captureIncludeSlack,
+						captureIncludeJira,
+						captureIncludeWorkflow
+					)}
 				onclick={captureAcceptanceRuns}
 			>
 				{capturingAcceptanceRuns ? 'Running...' : 'Run Checks'}

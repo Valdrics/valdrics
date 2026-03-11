@@ -248,7 +248,7 @@ class EnforcementCreditReservationAllocation(Base):
         ),
         CheckConstraint(
             "consumed_amount_usd + released_amount_usd <= reserved_amount_usd",
-            name="ck_enforcement_credit_reservation_consumed_released_lte_reserved",
+            name="ck_enf_credit_resv_settlement_lte_reserved",
         ),
     )
 

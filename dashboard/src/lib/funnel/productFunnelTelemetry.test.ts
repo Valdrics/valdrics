@@ -42,7 +42,9 @@ describe('productFunnelTelemetry', () => {
 
 		expect(attribution.persona).toBe('finance');
 		expect(attribution.intent).toBe('roi_assessment');
-		expect(attribution.page_path).toBe('/onboarding?utm_medium=cpc&utm_campaign=launch&intent=roi_assessment');
+		expect(attribution.page_path).toBe(
+			'/onboarding?utm_medium=cpc&utm_campaign=launch&intent=roi_assessment'
+		);
 		expect(attribution.first_touch_at).toBe('2026-03-08T10:00:00.000Z');
 		expect(attribution.utm?.source).toBe('linkedin');
 		expect(attribution.utm?.medium).toBe('cpc');
@@ -82,11 +84,13 @@ describe('productFunnelTelemetry', () => {
 	it('dedupes a stage only after a successful send', async () => {
 		const storage = new MemoryStorage();
 		const send = vi
-			.fn<(
-				url: string,
-				body?: unknown,
-				options?: { headers?: Record<string, string> }
-			) => Promise<Response>>()
+			.fn<
+				(
+					url: string,
+					body?: unknown,
+					options?: { headers?: Record<string, string> }
+				) => Promise<Response>
+			>()
 			.mockResolvedValue(new Response('{}', { status: 202 }));
 
 		const input = {
@@ -107,11 +111,13 @@ describe('productFunnelTelemetry', () => {
 	it('does not persist dedupe state when the send fails', async () => {
 		const storage = new MemoryStorage();
 		const send = vi
-			.fn<(
-				url: string,
-				body?: unknown,
-				options?: { headers?: Record<string, string> }
-			) => Promise<Response>>()
+			.fn<
+				(
+					url: string,
+					body?: unknown,
+					options?: { headers?: Record<string, string> }
+				) => Promise<Response>
+			>()
 			.mockResolvedValueOnce(new Response('{}', { status: 500 }))
 			.mockResolvedValueOnce(new Response('{}', { status: 202 }));
 

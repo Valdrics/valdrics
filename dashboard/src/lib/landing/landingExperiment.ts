@@ -1,3 +1,8 @@
+import {
+	resolvePublicBuyerPersona,
+	resolvePublicBuyingMotion
+} from '$lib/public/publicBuyingMotion';
+
 export type BuyerPersona = 'cto' | 'finops' | 'security' | 'cfo';
 export type HeroVariant = 'control_every_dollar' | 'from_metrics_to_control';
 export type CtaVariant = 'start_free' | 'book_briefing';
@@ -95,13 +100,19 @@ export function resolveLandingExperiments(
 	const seed = normalizeToken(visitorId) || DEFAULT_ASSIGNMENTS.seed;
 
 	const buyerPersonaDefault =
-		parseBuyerPersona(url.searchParams.get('buyer')) || DEFAULT_ASSIGNMENTS.buyerPersonaDefault;
+		parseBuyerPersona(url.searchParams.get('buyer')) ||
+		parseBuyerPersona(url.searchParams.get('persona')) ||
+		resolvePublicBuyerPersona(url) ||
+		DEFAULT_ASSIGNMENTS.buyerPersonaDefault;
 
 	const heroVariant =
 		parseHeroVariant(url.searchParams.get('exp_hero')) || DEFAULT_ASSIGNMENTS.heroVariant;
 
 	const ctaVariant =
-		parseCtaVariant(url.searchParams.get('exp_cta')) || DEFAULT_ASSIGNMENTS.ctaVariant;
+		parseCtaVariant(url.searchParams.get('exp_cta')) ||
+		(resolvePublicBuyingMotion(url, 'self_serve_first') === 'enterprise_first'
+			? 'book_briefing'
+			: DEFAULT_ASSIGNMENTS.ctaVariant);
 
 	const sectionOrderVariant =
 		parseSectionOrderVariant(url.searchParams.get('exp_order')) ||

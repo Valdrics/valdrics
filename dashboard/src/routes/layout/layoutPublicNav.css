@@ -3,7 +3,13 @@
 	background:
 		radial-gradient(820px 260px at 18% 0%, rgb(34 211 238 / 0.1), transparent 58%),
 		radial-gradient(720px 280px at 85% 4%, rgb(16 185 129 / 0.08), transparent 52%),
-		linear-gradient(180deg, rgb(7 17 24) 0%, rgb(7 17 24) 18rem, rgb(246 249 251) 18rem, rgb(247 250 252) 100%);
+		linear-gradient(
+			180deg,
+			rgb(7 17 24) 0%,
+			rgb(7 17 24) 18rem,
+			rgb(246 249 251) 18rem,
+			rgb(247 250 252) 100%
+		);
 }
 
 .public-site-header {

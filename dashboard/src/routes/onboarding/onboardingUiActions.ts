@@ -15,14 +15,12 @@ export function getOnboardingSetupAccessError(args: {
 	canUseCloudPlusFeatures: boolean;
 	getProviderLabel: (provider: OnboardingProvider) => string;
 }): string | null {
-	const { selectedProvider, canUseGrowthFeatures, canUseCloudPlusFeatures, getProviderLabel } = args;
+	const { selectedProvider, canUseGrowthFeatures, canUseCloudPlusFeatures, getProviderLabel } =
+		args;
 	if ((selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseGrowthFeatures) {
 		return `${getProviderLabel(selectedProvider)} onboarding requires Growth tier or higher.`;
 	}
-	if (
-		(selectedProvider === 'saas' || selectedProvider === 'license') &&
-		!canUseCloudPlusFeatures
-	) {
+	if ((selectedProvider === 'saas' || selectedProvider === 'license') && !canUseCloudPlusFeatures) {
 		return `${getProviderLabel(selectedProvider)} onboarding requires Pro tier or higher.`;
 	}
 	return null;

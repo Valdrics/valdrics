@@ -1,8 +1,5 @@
 <script lang="ts">
-	import {
-		INITIAL_LLM_SETTINGS,
-		INITIAL_PROVIDER_MODELS
-	} from './settingsPageInitialState';
+	import { INITIAL_LLM_SETTINGS, INITIAL_PROVIDER_MODELS } from './settingsPageInitialState';
 
 	type AsyncAction = () => void | Promise<void>;
 	type LlmSettingsState = typeof INITIAL_LLM_SETTINGS;
@@ -100,8 +97,8 @@
 					Bring Your Own Key (Optional)
 				</h3>
 				<p class="text-xs text-ink-400">
-					Provide your own API key to pay the provider directly. The platform will still track
-					usage for your awareness.
+					Provide your own API key to pay the provider directly. The platform will still track usage
+					for your awareness.
 				</p>
 
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">

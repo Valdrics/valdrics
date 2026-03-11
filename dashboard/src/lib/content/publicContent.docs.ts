@@ -3,10 +3,12 @@ export const RAW_PUBLIC_CONTENT_DOCS = [
 		kind: 'docs',
 		slug: 'quick-start-workspace',
 		title: 'Quick Start a Valdrics Workspace',
-		summary: 'Launch your first workspace, connect your first data source, and route your first spend decision without a heavy implementation cycle.',
+		summary:
+			'Launch your first workspace, connect your first data source, and route your first spend decision without a heavy implementation cycle.',
 		kicker: 'Documentation',
 		seoTitle: 'Quick Start a Valdrics Workspace',
-		seoDescription: 'Follow the fastest path from empty workspace to your first owner-routed cloud or software decision in Valdrics.',
+		seoDescription:
+			'Follow the fastest path from empty workspace to your first owner-routed cloud or software decision in Valdrics.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'evaluate',
 		readingMinutes: 5,
@@ -49,10 +51,12 @@ export const RAW_PUBLIC_CONTENT_DOCS = [
 		kind: 'docs',
 		slug: 'connect-first-provider',
 		title: 'Connect the First Provider',
-		summary: 'Use the first provider connection to prove signal quality, review access posture, and establish the operating context for downstream decisions.',
+		summary:
+			'Use the first provider connection to prove signal quality, review access posture, and establish the operating context for downstream decisions.',
 		kicker: 'Documentation',
 		seoTitle: 'Connect the First Provider',
-		seoDescription: 'Review the first-provider connection path for Valdrics, including access posture and first-workflow setup expectations.',
+		seoDescription:
+			'Review the first-provider connection path for Valdrics, including access posture and first-workflow setup expectations.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'evaluate',
 		readingMinutes: 4,
@@ -94,16 +98,18 @@ export const RAW_PUBLIC_CONTENT_DOCS = [
 		kind: 'docs',
 		slug: 'owner-routing-and-approval-path',
 		title: 'Owner Routing and Approval Path',
-		summary: 'Make every material spend issue land with a named owner, clear approval context, and a reviewable next action.',
+		summary:
+			'Make every material spend issue land with a named owner, clear approval context, and a reviewable next action.',
 		kicker: 'Documentation',
 		seoTitle: 'Owner Routing and Approval Path',
-		seoDescription: 'See how Valdrics routes spend issues to named owners and keeps checks attached before action moves.',
+		seoDescription:
+			'See how Valdrics routes spend issues to named owners and keeps checks attached before action moves.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'validate',
 		readingMinutes: 6,
 		audiences: ['engineering', 'finance', 'platform'],
 		primaryCta: { label: 'See the Decision Loop', href: '/#signal-map' },
-		secondaryCta: { label: 'Talk to Sales', href: '/talk-to-sales' },
+		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
 		sections: [
 			{
 				title: 'Why routing matters',
@@ -139,16 +145,21 @@ export const RAW_PUBLIC_CONTENT_DOCS = [
 		kind: 'docs',
 		slug: 'decision-history-and-export-records',
 		title: 'Decision History and Export Records',
-		summary: 'Keep a durable record of what changed, who approved it, and what outcome was captured after action.',
+		summary:
+			'Keep a durable record of what changed, who approved it, and what outcome was captured after action.',
 		kicker: 'Documentation',
 		seoTitle: 'Decision History and Export Records',
-		seoDescription: 'Understand how Valdrics records decisions, approvals, and export-ready evidence for later review.',
+		seoDescription:
+			'Understand how Valdrics records decisions, approvals, and export-ready evidence for later review.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'validate',
 		readingMinutes: 5,
 		audiences: ['finance', 'security', 'executive'],
 		primaryCta: { label: 'Open Proof Pack', href: '/proof' },
-		secondaryCta: { label: 'Download One-Pager', href: '/resources/valdrics-enterprise-one-pager.md' },
+		secondaryCta: {
+			label: 'Download One-Pager',
+			href: '/resources/valdrics-enterprise-one-pager.md'
+		},
 		sections: [
 			{
 				title: 'Record what buyers actually need later',

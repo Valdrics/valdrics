@@ -10,9 +10,7 @@ export type UpgradePrompt = {
 	cta: string;
 };
 
-const PLAN_BY_ID = new Map(
-	DEFAULT_PRICING_PLANS.map((plan) => [plan.id, plan] as const)
-);
+const PLAN_BY_ID = new Map(DEFAULT_PRICING_PLANS.map((plan) => [plan.id, plan] as const));
 
 function getRequiredPlan(planId: SupportedUpgradePlanId): PricingPlan {
 	const plan = PLAN_BY_ID.get(planId);

@@ -64,6 +64,7 @@ def upgrade() -> None:
     op.create_index(
         op.f("ix_carbon_factor_sets_factors_checksum_sha256"),
         "carbon_factor_sets",
+        ["factors_checksum_sha256"],
         unique=False,
     )
     op.create_index(op.f("ix_carbon_factor_sets_created_by_user_id"), "carbon_factor_sets", ["created_by_user_id"], unique=False)
@@ -132,4 +133,3 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_carbon_factor_sets_status"), table_name="carbon_factor_sets")
     op.drop_index(op.f("ix_carbon_factor_sets_is_active"), table_name="carbon_factor_sets")
     op.drop_table("carbon_factor_sets")
-

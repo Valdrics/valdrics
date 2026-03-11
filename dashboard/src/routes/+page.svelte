@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onDestroy } from 'svelte';
+	import { resolveSessionTenantId } from '$lib/auth/sessionTenant';
 	import { trackProductFunnelStage } from '$lib/funnel/productFunnelTelemetry';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 	import ProviderSelector from '$lib/components/ProviderSelector.svelte';
@@ -55,6 +56,7 @@
 	let provider = $derived(data.provider || ''); // Default to empty (All)
 	let persona = $derived(String(data.profile?.persona ?? 'engineering').toLowerCase());
 	let tier = $derived(data.subscription?.tier ?? 'free');
+	let tenantId = $derived(resolveSessionTenantId({ session: data.session, user: data.user }));
 	let personaContent = $derived(getDashboardPersonaContent(persona));
 	// Remediation state
 	let remediationCandidate = $state<RemediationFinding | null>(null);
@@ -127,13 +129,13 @@
 	const hasFirstValueSignal = $derived(
 		Boolean(
 			!error &&
-				data.user &&
-				(costs !== null ||
-					carbon !== null ||
-					zombies !== null ||
-					allocation !== null ||
-					unitEconomics !== null ||
-					freshness !== null)
+			data.user &&
+			(costs !== null ||
+				carbon !== null ||
+				zombies !== null ||
+				allocation !== null ||
+				unitEconomics !== null ||
+				freshness !== null)
 		)
 	);
 
@@ -145,7 +147,7 @@
 		void trackProductFunnelStage({
 			accessToken: data.session.access_token,
 			stage: 'first_value_activated',
-			tenantId: data.user?.tenant_id,
+			tenantId,
 			url: $page.url,
 			currentTier: data.subscription?.tier,
 			persona: String(data.profile?.persona ?? ''),
@@ -211,13 +213,13 @@
 			</div>
 
 			<DateRangePicker onDateChange={handleDateChange} />
-			</div>
+		</div>
 
-			{#if error}
-				<div class="card bg-danger-500/10" style="border-color: rgb(244 63 94 / 0.5);">
-					<p class="text-danger-400">{error}</p>
-				</div>
-			{:else}
+		{#if error}
+			<div class="card bg-danger-500/10" style="border-color: rgb(244 63 94 / 0.5);">
+				<p class="text-danger-400">{error}</p>
+			</div>
+		{:else}
 			<!-- Persona Next Actions -->
 			<div class="card stagger-enter" style="animation-delay: 160ms;">
 				<div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">

@@ -10,6 +10,11 @@ Package capabilities so entry tiers are affordable, advanced FinOps workflows ar
 
 ## Tier map
 
+### Free
+- Permanent public proof lane for one controlled savings workflow.
+- One AWS account, baseline signal map access, and limited daily analysis.
+- Public pricing defaults live in `dashboard/src/lib/pricing/publicPlans.ts`; backend entitlement enforcement lives in `app/shared/core/pricing.py`.
+
 ### Starter
 - Baseline visibility and controls:
   - `dashboards`

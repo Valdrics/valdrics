@@ -65,7 +65,9 @@ describe('settings page integration wiring (advanced)', () => {
 		renderPage();
 		await screen.findByRole('button', { name: /Reset remediation circuit breaker/i });
 
-		await fireEvent.click(screen.getByRole('button', { name: /Reset remediation circuit breaker/i }));
+		await fireEvent.click(
+			screen.getByRole('button', { name: /Reset remediation circuit breaker/i })
+		);
 		await waitFor(() => {
 			expect(postMock).toHaveBeenCalledWith(
 				endpoint('/settings/safety/reset'),
@@ -79,7 +81,9 @@ describe('settings page integration wiring (advanced)', () => {
 				[endpoint('/settings/safety/reset')]: new Response('{}', { status: 403 })
 			}
 		});
-		await fireEvent.click(screen.getByRole('button', { name: /Reset remediation circuit breaker/i }));
+		await fireEvent.click(
+			screen.getByRole('button', { name: /Reset remediation circuit breaker/i })
+		);
 		await screen.findByText('Admin role required to reset the circuit breaker.');
 	});
 
@@ -105,7 +109,9 @@ describe('settings page integration wiring (advanced)', () => {
 		});
 		await screen.findByText('Slack integration missing');
 
-		await fireEvent.click(screen.getByRole('button', { name: /Run policy notification diagnostics/i }));
+		await fireEvent.click(
+			screen.getByRole('button', { name: /Run policy notification diagnostics/i })
+		);
 		await waitFor(() => {
 			expect(getMock).toHaveBeenCalledWith(
 				endpoint('/settings/notifications/policy-diagnostics'),
@@ -118,11 +124,12 @@ describe('settings page integration wiring (advanced)', () => {
 		renderPage('growth');
 		await screen.findByText('ActiveOps (Autonomous Remediation)');
 
+		expect(document.body.textContent || '').toMatch(/Move to Pro for ActiveOps automation/i);
 		expect(document.body.textContent || '').toMatch(
-			/Best for teams that need finance-grade operations: auditability, finance close support/i
+			/ActiveOps automation stays on Pro and Enterprise\./i
 		);
 		expect(document.body.textContent || '').toMatch(
-			/ActiveOps automation stays on Pro and Enterprise\.\s+Slack and Jira switches in this card apply\s+to remediation policy events, not the general notification channel\./i
+			/Slack and Jira switches in this card apply to\s+remediation policy events/i
 		);
 		expect(screen.getAllByRole('link', { name: /View Pro plan/i }).length).toBeGreaterThan(0);
 	});

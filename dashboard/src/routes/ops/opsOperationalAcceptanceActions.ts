@@ -49,7 +49,8 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 		const data = getData();
 		if (!hasSessionToken(data)) return;
 		if (hasInvalidUnitWindow(state.unitStartDate, state.unitEndDate)) {
-			state.error = 'Unit economics date range is invalid: start date must be on or before end date.';
+			state.error =
+				'Unit economics date range is invalid: start date must be on or before end date.';
 			return;
 		}
 
@@ -108,7 +109,8 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 		const data = getData();
 		if (!hasSessionToken(data)) return;
 		if (hasInvalidUnitWindow(state.unitStartDate, state.unitEndDate)) {
-			state.error = 'Acceptance KPI date range is invalid: start date must be on or before end date.';
+			state.error =
+				'Acceptance KPI date range is invalid: start date must be on or before end date.';
 			return;
 		}
 
@@ -154,7 +156,9 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 			const headers = buildHeaders(data);
 			const res = await api.get(edgeApiPath(buildAcceptanceEvidenceUrl()), { headers });
 			if (!res.ok) {
-				throw new Error(await parseErrorMessage(res, 'Failed to load integration acceptance runs.'));
+				throw new Error(
+					await parseErrorMessage(res, 'Failed to load integration acceptance runs.')
+				);
 			}
 			const payload = (await res.json()) as IntegrationAcceptanceEvidenceResponse;
 			state.acceptanceRuns = buildAcceptanceRuns(payload.items || []);
@@ -198,7 +202,9 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 				{ headers }
 			);
 			if (!res.ok) {
-				throw new Error(await parseErrorMessage(res, 'Failed to capture integration acceptance run.'));
+				throw new Error(
+					await parseErrorMessage(res, 'Failed to capture integration acceptance run.')
+				);
 			}
 			const payload = (await res.json()) as IntegrationAcceptanceCaptureResponse;
 			state.lastAcceptanceCapture = payload;
@@ -212,7 +218,9 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 		}
 	}
 
-	async function captureAcceptanceKpisOrThrow(data: OpsRuntimeData): Promise<AcceptanceKpiCaptureResponse> {
+	async function captureAcceptanceKpisOrThrow(
+		data: OpsRuntimeData
+	): Promise<AcceptanceKpiCaptureResponse> {
 		const headers = buildHeaders(data);
 		const res = await api.post(
 			edgeApiPath(
@@ -257,7 +265,8 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 		const data = getData();
 		if (!hasSessionToken(data)) return;
 		if (hasInvalidUnitWindow(state.unitStartDate, state.unitEndDate)) {
-			state.error = 'Acceptance KPI date range is invalid: start date must be on or before end date.';
+			state.error =
+				'Acceptance KPI date range is invalid: start date must be on or before end date.';
 			return;
 		}
 		if (

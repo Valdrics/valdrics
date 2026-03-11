@@ -33,7 +33,7 @@ describe('status page', () => {
 			}
 		});
 
-		expect(screen.getByRole('heading', { level: 1, name: /current platform status/i })).toBeTruthy();
+		expect(screen.getByRole('heading', { level: 1, name: /system status/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { level: 3, name: /platform api/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { level: 3, name: /database/i })).toBeTruthy();
 		expect(screen.queryByText(/automated checks are unavailable/i)).toBeNull();

@@ -63,20 +63,26 @@ export const GET: RequestHandler = ({ url }) => {
 		}))
 	];
 
-	const urlsXml = entries.map((entry) => {
-		const loc = new URL(`${basePath}${entry.path}`, url.origin).toString();
-		const dynamicLastMod = dynamicEntries.find((candidate) => candidate.path === entry.path)?.lastmod;
-		const normalizedDynamicLastMod = normalizeConfiguredLastMod(dynamicLastMod);
-		const lastmodValue = configuredLastMod ?? normalizedDynamicLastMod;
-		const lastmod = lastmodValue ? `<lastmod>${escapeXml(lastmodValue)}</lastmod>` : '';
-		const changefreq = entry.changefreq ? `<changefreq>${entry.changefreq}</changefreq>` : '';
-		const priority =
-			typeof entry.priority === 'number' ? `<priority>${entry.priority.toFixed(1)}</priority>` : '';
+	const urlsXml = entries
+		.map((entry) => {
+			const loc = new URL(`${basePath}${entry.path}`, url.origin).toString();
+			const dynamicLastMod = dynamicEntries.find(
+				(candidate) => candidate.path === entry.path
+			)?.lastmod;
+			const normalizedDynamicLastMod = normalizeConfiguredLastMod(dynamicLastMod);
+			const lastmodValue = configuredLastMod ?? normalizedDynamicLastMod;
+			const lastmod = lastmodValue ? `<lastmod>${escapeXml(lastmodValue)}</lastmod>` : '';
+			const changefreq = entry.changefreq ? `<changefreq>${entry.changefreq}</changefreq>` : '';
+			const priority =
+				typeof entry.priority === 'number'
+					? `<priority>${entry.priority.toFixed(1)}</priority>`
+					: '';
 
-		return ['<url>', `<loc>${escapeXml(loc)}</loc>`, lastmod, changefreq, priority, '</url>']
-			.filter(Boolean)
-			.join('');
-	}).join('');
+			return ['<url>', `<loc>${escapeXml(loc)}</loc>`, lastmod, changefreq, priority, '</url>']
+				.filter(Boolean)
+				.join('');
+		})
+		.join('');
 
 	const xml = [
 		'<?xml version="1.0" encoding="UTF-8"?>',

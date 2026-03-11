@@ -76,7 +76,9 @@
 			const res = await getWithTimeout(edgeApiPath(`/savings/proof?${params.toString()}`), headers);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
-				throw new Error(payload.detail || payload.message || 'Failed to load savings proof report.');
+				throw new Error(
+					payload.detail || payload.message || 'Failed to load savings proof report.'
+				);
 			}
 			report = (await res.json()) as SavingsProofResponse;
 			void loadDrilldown();
@@ -105,7 +107,10 @@
 			params.set('dimension', drilldownDimension);
 			params.set('response_format', 'json');
 
-			const res = await getWithTimeout(edgeApiPath(`/savings/proof/drilldown?${params.toString()}`), headers);
+			const res = await getWithTimeout(
+				edgeApiPath(`/savings/proof/drilldown?${params.toString()}`),
+				headers
+			);
 			if (!res.ok) {
 				const payload = await res.json().catch(() => ({}));
 				throw new Error(payload.detail || payload.message || 'Failed to load drilldown.');

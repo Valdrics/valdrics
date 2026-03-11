@@ -48,9 +48,7 @@ export function allowedNavHrefs(persona: unknown, role: unknown): Set<string> {
 
 	// Hide admin-only routes unless admin/owner.
 	if (!isAdmin) {
-		hrefs = hrefs.filter(
-			(href) => href !== '/admin/health' && href !== '/admin/landing-campaigns'
-		);
+		hrefs = hrefs.filter((href) => href !== '/admin/health' && href !== '/admin/landing-campaigns');
 	}
 
 	return new Set(hrefs);

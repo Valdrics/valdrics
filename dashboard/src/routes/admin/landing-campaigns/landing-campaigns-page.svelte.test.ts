@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
 
 import Page from './+page.svelte';
+import type { PageData } from './$types';
 
 const { fetchWithTimeoutMock } = vi.hoisted(() => ({
 	fetchWithTimeoutMock: vi.fn()
@@ -91,8 +92,7 @@ describe('landing campaign analytics page', () => {
 						weekly_delta: -1 / 3,
 						current_numerator: 2,
 						current_denominator: 3,
-						message:
-							'Conversion stayed above floor but deteriorated sharply versus the prior week.'
+						message: 'Conversion stayed above floor but deteriorated sharply versus the prior week.'
 					},
 					{
 						key: 'connection_to_first_value',
@@ -104,8 +104,7 @@ describe('landing campaign analytics page', () => {
 						weekly_delta: -0.5,
 						current_numerator: 1,
 						current_denominator: 2,
-						message:
-							'Conversion stayed above floor but deteriorated sharply versus the prior week.'
+						message: 'Conversion stayed above floor but deteriorated sharply versus the prior week.'
 					}
 				],
 				items: [
@@ -141,7 +140,7 @@ describe('landing campaign analytics page', () => {
 				data: {
 					user: { id: 'admin-user' },
 					session: { access_token: 'token' }
-				}
+				} as unknown as PageData
 			}
 		});
 

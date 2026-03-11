@@ -48,6 +48,10 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     )
     deployment = (REPO_ROOT / "docs/DEPLOYMENT.md").read_text(encoding="utf-8")
     capacity = (REPO_ROOT / "docs/CAPACITY_PLAN.md").read_text(encoding="utf-8")
+    roadmap = (REPO_ROOT / "docs/roadmap.md").read_text(encoding="utf-8")
+    tiering = (
+        REPO_ROOT / "docs/architecture/tiering-2026.md"
+    ).read_text(encoding="utf-8")
     db_overview = (
         REPO_ROOT / "docs/architecture/database_schema_overview.md"
     ).read_text(encoding="utf-8")
@@ -104,6 +108,16 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     assert "sole supported production scale path" in capacity
     assert "managed-platform preview/reference surface" in capacity
     assert "koyeb-worker.yaml" in capacity
+    assert "docs/architecture/tiering-2026.md" in capacity
+    assert "active planning document" in roadmap
+    assert "reports/roadmap/" in roadmap
+    assert "Current Focus" in roadmap
+    assert "bootstrap-only sqlite dev" in roadmap
+    assert "managed bundle verification" in roadmap
+    assert "Latest Sprint Shipped" not in roadmap
+    assert "Permanent public proof lane" in tiering
+    assert "dashboard/src/lib/pricing/publicPlans.ts" in tiering
+    assert "app/shared/core/pricing.py" in tiering
     assert "One-step forward/rollback smoke" in db_overview
     assert "backup/restore is the primary rollback path" in db_overview
 
@@ -166,6 +180,9 @@ def test_incident_and_production_runbooks_match_strict_saas_observability_contra
     assert "generate_managed_runtime_env.py" in production
     assert "generate_managed_migration_env.py" in production
     assert "generate_managed_deployment_artifacts.py" in production
+    assert "verify_managed_deployment_bundle.py" in production
+    assert "run_public_frontend_quality_gate.py" in production
+    assert "deployment.report.json" in production
     assert "--env-file .runtime/production.env" in production
     assert "--env-file .runtime/production.migrate.env" in production
     assert "set -a && source .runtime/production.migrate.env && uv run alembic upgrade head" in production
@@ -204,4 +221,6 @@ def test_runbooks_with_high_operational_risk_are_covered_by_contract_guard() -> 
     assert "docs/runbooks/enforcement_preprovision_integrations.md" in script_text
     assert "docs/runbooks/partition_maintenance.md" in script_text
     assert "docs/ops/cloudflare_go_live_checklist_2026-03-02.md" in script_text
+    assert "docs/roadmap.md" in script_text
+    assert "docs/architecture/tiering-2026.md" in script_text
     assert 'path="DEPLOYMENT.md"' in script_text

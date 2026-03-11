@@ -104,8 +104,8 @@ def test_reload_settings_from_environment_success_and_cache_warm() -> None:
     assert current.APP_NAME == "new-name"
     assert current.ENVIRONMENT == "production"
     _KeyManager.clear_key_caches.assert_called_once_with(warm=True)
-    logger.info.assert_any_call("settings_reload_started")
-    logger.info.assert_any_call("settings_reload_completed")
+    logger.debug.assert_any_call("settings_reload_started")
+    logger.debug.assert_any_call("settings_reload_completed")
 
 
 def test_reload_settings_from_environment_logs_warning_when_cache_refresh_fails() -> None:
@@ -257,6 +257,19 @@ def test_config_billing_validator_branch_paths() -> None:
     s.PAYSTACK_WEBHOOK_ALLOWED_IPS = ["bad-ip"]
     with pytest.raises(ValueError, match="PAYSTACK_WEBHOOK_ALLOWED_IPS contains invalid IP address"):
         s._validate_billing_config()
+
+
+def test_config_llm_missing_key_logs_debug_in_local_dev_only() -> None:
+    s = _settings()
+    s.ENVIRONMENT = "local"
+    s.GROQ_API_KEY = None
+    logger = MagicMock()
+
+    with patch("app.shared.core.config_validation.structlog.get_logger", return_value=logger):
+        s._validate_llm_config()
+
+    logger.debug.assert_called_once()
+    logger.info.assert_not_called()
 
 
 def test_config_turnstile_validator_branch_paths() -> None:

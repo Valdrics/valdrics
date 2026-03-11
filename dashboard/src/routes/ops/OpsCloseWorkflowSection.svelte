@@ -172,7 +172,11 @@
 				<form class="mt-3 grid gap-2 md:grid-cols-6" onsubmit={saveProviderInvoice}>
 					<label class="text-xs text-ink-400 md:col-span-2">
 						<span class="block mb-1">Invoice #</span>
-						<input class="input text-xs" placeholder="Optional" bind:value={invoiceForm.invoice_number} />
+						<input
+							class="input text-xs"
+							placeholder="Optional"
+							bind:value={invoiceForm.invoice_number}
+						/>
 					</label>
 					<label class="text-xs text-ink-400">
 						<span class="block mb-1">Currency</span>
@@ -255,7 +259,9 @@
 				<p class="text-2xl font-bold text-accent-400">{closePackage.restatements.count}</p>
 			</div>
 		</div>
-		<p class="text-xs text-ink-500 font-mono break-all">Integrity hash: {closePackage.integrity_hash}</p>
+		<p class="text-xs text-ink-500 font-mono break-all">
+			Integrity hash: {closePackage.integrity_hash}
+		</p>
 	{:else}
 		<p class="text-sm text-ink-400">
 			No close package preview loaded for the selected period/provider yet.

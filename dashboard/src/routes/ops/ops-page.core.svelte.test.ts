@@ -9,7 +9,6 @@ import {
 	testOpsPageData
 } from './ops-page.test.setup';
 import Page from './+page.svelte';
-import './ops-page.core.close_workflow.svelte.test';
 
 describe('ops page unit economics interactions', () => {
 	let createObjectUrlSpy: ReturnType<typeof vi.spyOn>;
@@ -259,5 +258,4 @@ describe('ops page unit economics interactions', () => {
 		});
 		expect(await screen.findByText(/Last run run-acce/i)).toBeTruthy();
 	});
-
 });

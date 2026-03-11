@@ -62,7 +62,8 @@
 					<li>{point}</li>
 				{/each}
 			</ul>
-			<div class="landing-hook-metrics">
+			<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+			<div class="landing-hook-metrics" tabindex="0" aria-label="Cloud operations metrics">
 				{#each activeHookState.metrics as metric (metric.label)}
 					<div class="landing-hook-metric">
 						<p class="landing-hook-metric-k">{metric.label}</p>

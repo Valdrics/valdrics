@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 import IdentitySettingsCard from './IdentitySettingsCard.svelte';
 
 const { getMock, putMock, postMock } = vi.hoisted(() => ({
@@ -46,15 +47,16 @@ describe('IdentitySettingsCard', () => {
 	});
 
 	it('renders upgrade overlay when tier is below growth', async () => {
+		const upgradePrompt = getUpgradePrompt('growth', 'identity controls');
 		render(IdentitySettingsCard, {
 			accessToken: 'token',
 			tier: 'free'
 		});
 
 		expect(screen.getByText('Identity (SSO/SCIM)')).toBeTruthy();
-		expect(screen.getByText('Growth Plan Required')).toBeTruthy();
-		expect(screen.getByText(/best for teams that need broader provider coverage, owner routing/i)).toBeTruthy();
-		expect(screen.getByRole('link', { name: /View Growth plan/i })).toBeTruthy();
+		expect(screen.getByText(upgradePrompt.badge)).toBeTruthy();
+		expect(screen.getByText(upgradePrompt.body)).toBeTruthy();
+		expect(screen.getByRole('link', { name: upgradePrompt.cta })).toBeTruthy();
 		await waitFor(() => {
 			expect(getMock).not.toHaveBeenCalled();
 		});

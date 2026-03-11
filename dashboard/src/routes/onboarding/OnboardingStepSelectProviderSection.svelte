@@ -37,7 +37,7 @@
 		(selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseGrowthFeatures()
 			? growthUpgradePrompt
 			: (selectedProvider === 'saas' || selectedProvider === 'license') &&
-					  !canUseCloudPlusFeatures()
+				  !canUseCloudPlusFeatures()
 				? proUpgradePrompt
 				: null
 	);
@@ -127,7 +127,12 @@
 		<div class="discovery-stage-a">
 			<div class="form-group">
 				<label for="discoveryEmail">Work Email</label>
-				<input type="email" id="discoveryEmail" bind:value={discoveryEmail} placeholder="you@company.com" />
+				<input
+					type="email"
+					id="discoveryEmail"
+					bind:value={discoveryEmail}
+					placeholder="you@company.com"
+				/>
 			</div>
 			<div class="discovery-actions">
 				<button
@@ -215,7 +220,8 @@
 								type="button"
 								class="secondary-btn !w-auto px-3 py-1.5 text-xs"
 								onclick={() => ignoreDiscoveryCandidate(candidate)}
-								disabled={discoveryActionCandidateId === candidate.id || candidate.status === 'ignored'}
+								disabled={discoveryActionCandidateId === candidate.id ||
+									candidate.status === 'ignored'}
 							>
 								Ignore
 							</button>
@@ -244,6 +250,8 @@
 			<a href={`${base}/billing`} class="primary-btn mt-2">{selectedProviderUpgradePrompt.cta}</a>
 		</div>
 	{:else}
-		<button type="button" class="primary-btn mt-8" onclick={handleContinueToSetup}>Continue to Setup →</button>
+		<button type="button" class="primary-btn mt-8" onclick={handleContinueToSetup}
+			>Continue to Setup →</button
+		>
 	{/if}
 </div>

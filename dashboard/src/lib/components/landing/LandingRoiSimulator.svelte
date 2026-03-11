@@ -175,7 +175,8 @@
 			<p class="landing-roi-note">
 				This simulator is directional and based on modeled waste-rate, decision-window, and rollout
 				assumptions for finance + engineering planning alignment.
-				<a href={`${base}/docs/technical-validation`} class="landing-cta-link">Review methodology</a>
+				<a href={`${base}/docs/technical-validation`} class="landing-cta-link">Review methodology</a
+				>
 				<a href={`${base}/resources/valdrics-roi-assumptions.csv`} class="landing-cta-link">
 					Open assumptions CSV
 				</a>
@@ -183,8 +184,8 @@
 			<div class="landing-roi-cta">
 				<p class="landing-proof-k">Need the full model?</p>
 				<p class="landing-roi-note">
-					Open the 12-month planner for rollout effort, implementation cost, and payback
-					assumptions using your own numbers.
+					Open the 12-month planner for rollout effort, implementation cost, and payback assumptions
+					using your own numbers.
 				</p>
 				<a href={plannerHref} class="btn btn-primary w-fit" onclick={onTrackPlannerCta}>
 					Open Full ROI Planner

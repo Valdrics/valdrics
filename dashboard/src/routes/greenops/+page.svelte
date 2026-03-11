@@ -80,23 +80,28 @@
 			const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 			const startDate = thirtyDaysAgo.toISOString().split('T')[0];
 			const endDate = today.toISOString().split('T')[0];
-				const headers = { Authorization: `Bearer ${accessToken}` };
+			const headers = { Authorization: `Bearer ${accessToken}` };
 
-				const [carbonRes, gravitonRes, budgetRes, intensityRes] = await Promise.all([
-					fetchWithTimeout(
-						fetch,
-						buildCarbonFootprintPath({ startDate, endDate, region }),
-						{ headers },
-						GREENOPS_TIMEOUT_MS
-					),
-					fetchWithTimeout(fetch, buildGravitonPath(region), { headers }, GREENOPS_TIMEOUT_MS),
-					fetchWithTimeout(fetch, buildCarbonBudgetPath({ region }), { headers }, GREENOPS_TIMEOUT_MS),
-					fetchWithTimeout(
-						fetch,
-						buildCarbonIntensityPath(region, 24),
-						{ headers },
-						GREENOPS_TIMEOUT_MS
-					)
+			const [carbonRes, gravitonRes, budgetRes, intensityRes] = await Promise.all([
+				fetchWithTimeout(
+					fetch,
+					buildCarbonFootprintPath({ startDate, endDate, region }),
+					{ headers },
+					GREENOPS_TIMEOUT_MS
+				),
+				fetchWithTimeout(fetch, buildGravitonPath(region), { headers }, GREENOPS_TIMEOUT_MS),
+				fetchWithTimeout(
+					fetch,
+					buildCarbonBudgetPath({ region }),
+					{ headers },
+					GREENOPS_TIMEOUT_MS
+				),
+				fetchWithTimeout(
+					fetch,
+					buildCarbonIntensityPath(region, 24),
+					{ headers },
+					GREENOPS_TIMEOUT_MS
+				)
 			]);
 
 			if (requestId !== greenopsRequestId) return;
@@ -160,13 +165,13 @@
 </svelte:head>
 
 <div class="space-y-6">
-		<div class="flex items-center justify-between">
-			<div>
-				<h1 class="text-2xl font-bold text-white">🌱 GreenOps Dashboard</h1>
-				<p class="text-ink-400 mt-1">
-					Monitor AWS carbon footprint, workload intensity, and sustainability decisions
-				</p>
-			</div>
+	<div class="flex items-center justify-between">
+		<div>
+			<h1 class="text-2xl font-bold text-white">🌱 GreenOps Dashboard</h1>
+			<p class="text-ink-400 mt-1">
+				Monitor AWS carbon footprint, workload intensity, and sustainability decisions
+			</p>
+		</div>
 
 		<select
 			value={selectedRegion}

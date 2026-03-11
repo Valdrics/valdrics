@@ -46,7 +46,12 @@
 	right: 1.35rem;
 	top: 0;
 	height: 1px;
-	background: linear-gradient(90deg, rgb(18 158 192 / 0.08), rgb(18 158 192 / 0.42), rgb(18 158 192 / 0.08));
+	background: linear-gradient(
+		90deg,
+		rgb(18 158 192 / 0.08),
+		rgb(18 158 192 / 0.42),
+		rgb(18 158 192 / 0.08)
+	);
 	pointer-events: none;
 }
 

@@ -54,7 +54,10 @@ const PRODUCT_FUNNEL_STORAGE_KEY = 'valdrics.product.funnel.v1';
 const MAX_TOKEN_LENGTH = 96;
 const MAX_PATH_LENGTH = 256;
 
-function normalizeToken(input: string | null | undefined, maxLength = MAX_TOKEN_LENGTH): string | undefined {
+function normalizeToken(
+	input: string | null | undefined,
+	maxLength = MAX_TOKEN_LENGTH
+): string | undefined {
 	const normalized = (input || '').trim().toLowerCase();
 	if (!normalized) {
 		return undefined;
@@ -76,7 +79,10 @@ function parseCurrentUrlUtm(url: URL): LandingAttribution['utm'] {
 	};
 }
 
-function mergeAttribution(url: URL, stored: LandingAttribution): ProductFunnelPayload['attribution'] {
+function mergeAttribution(
+	url: URL,
+	stored: LandingAttribution
+): ProductFunnelPayload['attribution'] {
 	const currentUrlUtm = parseCurrentUrlUtm(url);
 	return {
 		intent: normalizeToken(url.searchParams.get('intent'), 64),

@@ -82,8 +82,12 @@ describe('ops page close workflow and defaults interactions', () => {
 		});
 
 		await screen.findByText('Reconciliation Close Workflow');
-		await fireEvent.change(screen.getByLabelText('Provider'), { target: { value: 'aws' } });
-		await fireEvent.click(screen.getByRole('button', { name: 'Preview Close Status' }));
+		const closeCard = screen
+			.getByText('Reconciliation Close Workflow')
+			.closest('.card') as HTMLElement;
+		const closeCardUtils = within(closeCard);
+		await fireEvent.change(closeCardUtils.getByLabelText('Provider'), { target: { value: 'aws' } });
+		await fireEvent.click(closeCardUtils.getByRole('button', { name: 'Preview Close Status' }));
 
 		await waitFor(() => {
 			expect(
@@ -95,7 +99,7 @@ describe('ops page close workflow and defaults interactions', () => {
 				)
 			).toBe(true);
 		});
-		expect(screen.getByText('READY')).toBeTruthy();
+		expect(await closeCardUtils.findByText(/^READY$/)).toBeTruthy();
 	});
 
 	it('saves a provider invoice from the close workflow card', async () => {
@@ -159,7 +163,9 @@ describe('ops page close workflow and defaults interactions', () => {
 
 		await waitFor(() => {
 			expect(
-				postMock.mock.calls.some((call) => String(call[0]).includes('/costs/reconciliation/invoices'))
+				postMock.mock.calls.some((call) =>
+					String(call[0]).includes('/costs/reconciliation/invoices')
+				)
 			).toBe(true);
 		});
 		const [url, body] = postMock.mock.calls.find((call) =>

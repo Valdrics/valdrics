@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 import Page from './+page.svelte';
 import type { PageData } from './$types';
 
@@ -85,6 +86,7 @@ describe('savings proof page', () => {
 	});
 
 	it('shows pro plan prompt for non-pro tiers without loading report data', async () => {
+		const upgradePrompt = getUpgradePrompt('pro', 'savings proof');
 		const data = {
 			user: { id: 'user-id' },
 			session: { access_token: 'token' },
@@ -93,11 +95,9 @@ describe('savings proof page', () => {
 
 		render(Page, { data });
 
-		expect(screen.getByText('Move to Pro for savings proof')).toBeTruthy();
-		expect(document.body.textContent || '').toMatch(
-			/best for teams that want higher automation depth, finance close support, cloud-plus connectors/i
-		);
-		expect(screen.getByRole('link', { name: /View Pro plan/i })).toBeTruthy();
+		expect(screen.getByText(upgradePrompt.heading)).toBeTruthy();
+		expect(screen.getByText(upgradePrompt.body)).toBeTruthy();
+		expect(screen.getByRole('link', { name: upgradePrompt.cta })).toBeTruthy();
 		await waitFor(() => {
 			expect(getMock).not.toHaveBeenCalled();
 		});

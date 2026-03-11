@@ -83,7 +83,12 @@
 					/>
 					<div class="form-group">
 						<label class="sr-only" for="provider">Provider</label>
-						<select id="provider" bind:value={provider} class="select" onchange={() => void loadReport()}>
+						<select
+							id="provider"
+							bind:value={provider}
+							class="select"
+							onchange={() => void loadReport()}
+						>
 							<option value="">All providers</option>
 							<option value="aws">AWS</option>
 							<option value="azure">Azure</option>
@@ -112,7 +117,9 @@
 			</div>
 
 			{#if !isProPlus(data.subscription?.tier)}
-				<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+				<div
+					class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center"
+				>
 					<div class="max-w-md space-y-3 pointer-events-auto">
 						<h3 class="text-lg font-semibold text-white">{upgradePrompt.heading}</h3>
 						<p class="text-sm text-ink-300">{upgradePrompt.body}</p>
@@ -129,7 +136,10 @@
 			{/if}
 
 			{#if success}
-				<div role="status" class="mb-4 rounded-lg border border-success-500/40 bg-success-500/10 p-3">
+				<div
+					role="status"
+					class="mb-4 rounded-lg border border-success-500/40 bg-success-500/10 p-3"
+				>
 					<p class="text-success-300 text-sm">{success}</p>
 				</div>
 			{/if}
@@ -162,7 +172,9 @@
 				<div class="mt-6 rounded-xl border border-ink-800/60 bg-ink-950/30 p-4">
 					<div class="flex items-center justify-between flex-wrap gap-2 mb-3">
 						<h2 class="text-lg font-semibold">Breakdown</h2>
-						<p class="text-xs text-ink-500">As of {formatDate(report.as_of)} • Tier {report.tier}</p>
+						<p class="text-xs text-ink-500">
+							As of {formatDate(report.as_of)} • Tier {report.tier}
+						</p>
 					</div>
 
 					<div class="overflow-x-auto">

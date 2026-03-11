@@ -1,10 +1,29 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { page } from '$app/stores';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import { listPublicContent } from '$lib/content/publicContent';
+	import {
+		buildPublicEnterpriseHref,
+		buildPublicSignupHref,
+		resolvePublicBuyingMotion
+	} from '$lib/public/publicBuyingMotion';
 
 	const insights = listPublicContent('insights');
+	let buyingMotion = $derived(resolvePublicBuyingMotion($page.url, 'self_serve_first'));
+	let startFreeHref = $derived(
+		buildPublicSignupHref(base, $page.url, {
+			entry: 'insights',
+			source: 'insights_hub'
+		})
+	);
+	let enterprisePathHref = $derived(
+		buildPublicEnterpriseHref(base, $page.url, {
+			entry: 'insights',
+			source: 'insights_hub'
+		})
+	);
 
 	const heroHighlights = [
 		{
@@ -37,8 +56,14 @@
 	heroVariant="narrow"
 >
 	{#snippet heroActions()}
-		<a href={`${base}/resources`} class="btn btn-primary">Open Resources</a>
-		<a href={`${base}/auth/login?intent=insights_signup`} class="btn btn-secondary">Start Free</a>
+		{#if buyingMotion === 'enterprise_first'}
+			<a href={enterprisePathHref} class="btn btn-primary">Open Enterprise Path</a>
+			<a href={startFreeHref} class="btn btn-secondary">Start Free Workspace</a>
+		{:else}
+			<a href={startFreeHref} class="btn btn-primary">Start Free Workspace</a>
+			<a href={enterprisePathHref} class="btn btn-secondary">See Enterprise Path</a>
+		{/if}
+		<a href={`${base}/resources`} class="btn btn-secondary">Open Resources</a>
 	{/snippet}
 
 	{#snippet heroMeta()}
@@ -54,7 +79,9 @@
 		<section class="public-page__section" aria-labelledby="insights-library-title">
 			<div class="public-page__section-head">
 				<p class="public-page__eyebrow">Library</p>
-				<h2 id="insights-library-title" class="public-page__section-title">Start with the operating question your buyer is asking</h2>
+				<h2 id="insights-library-title" class="public-page__section-title">
+					Start with the operating question your buyer is asking
+				</h2>
 				<p class="public-page__section-subtitle">
 					These guides translate Valdrics into weekly review, GreenOps, and procurement language.
 				</p>
@@ -75,7 +102,8 @@
 						<h2 class="public-page__card-title">{insight.title}</h2>
 						<p class="public-page__card-copy">{insight.summary}</p>
 						<div class="public-page__actions-row">
-							<a href={`${base}/insights/${insight.slug}`} class="btn btn-secondary">Open Insight</a>
+							<a href={`${base}/insights/${insight.slug}`} class="btn btn-secondary">Open Insight</a
+							>
 						</div>
 					</article>
 				{/each}

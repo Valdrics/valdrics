@@ -33,25 +33,34 @@
 	let { data } = $props();
 	const SETTINGS_REQUEST_TIMEOUT_MS = 8000;
 
-	let loading = $state(false), saving = $state(false);
-	let testing = $state(false), testingJira = $state(false), testingTeams = $state(false), testingWorkflow = $state(false);
+	let loading = $state(false),
+		saving = $state(false);
+	let testing = $state(false),
+		testingJira = $state(false),
+		testingTeams = $state(false),
+		testingWorkflow = $state(false);
 	let diagnosticsLoading = $state(false);
 	let error = $state('');
 	let success = $state('');
 
 	let policyDiagnostics = $state<PolicyDiagnostics | null>(null);
-	let safetyStatus = $state<SafetyStatus | null>(null), loadingSafety = $state(true), resettingSafety = $state(false);
+	let safetyStatus = $state<SafetyStatus | null>(null),
+		loadingSafety = $state(true),
+		resettingSafety = $state(false);
 	let safetyError = $state('');
 	let safetySuccess = $state('');
 
 	let settings = $state({ ...INITIAL_NOTIFICATION_SETTINGS });
 	let llmSettings = $state({ ...INITIAL_LLM_SETTINGS });
-	let loadingLLM = $state(true), savingLLM = $state(false);
+	let loadingLLM = $state(true),
+		savingLLM = $state(false);
 	let activeOpsSettings = $state({ ...INITIAL_ACTIVEOPS_SETTINGS });
-	let loadingActiveOps = $state(true), savingActiveOps = $state(false);
+	let loadingActiveOps = $state(true),
+		savingActiveOps = $state(false);
 	let providerModels = $state({ ...INITIAL_PROVIDER_MODELS });
 	let carbonSettings = $state({ ...INITIAL_CARBON_SETTINGS });
-	let loadingCarbon = $state(true), savingCarbon = $state(false);
+	let loadingCarbon = $state(true),
+		savingCarbon = $state(false);
 
 	let persona = $derived(String(data.profile?.persona ?? 'engineering'));
 	let savingPersona = $state(false);
@@ -163,17 +172,43 @@
 		}
 	}
 
-	const testSlack = () => runNotificationTest('/settings/notifications/test-slack', 'Test notification sent to Slack!', (value) => (testing = value), 'Failed to send test notification');
-	const testJira = () => runNotificationTest('/settings/notifications/test-jira', 'Test issue created in Jira!', (value) => (testingJira = value), 'Failed to send Jira test issue');
-	const testTeams = () => runNotificationTest('/settings/notifications/test-teams', 'Test notification sent to Teams!', (value) => (testingTeams = value), 'Failed to send Teams test notification');
-	const testWorkflowDispatch = () => runNotificationTest('/settings/notifications/test-workflow', 'Workflow test event dispatched!', (value) => (testingWorkflow = value), 'Failed to dispatch workflow test event');
+	const testSlack = () =>
+		runNotificationTest(
+			'/settings/notifications/test-slack',
+			'Test notification sent to Slack!',
+			(value) => (testing = value),
+			'Failed to send test notification'
+		);
+	const testJira = () =>
+		runNotificationTest(
+			'/settings/notifications/test-jira',
+			'Test issue created in Jira!',
+			(value) => (testingJira = value),
+			'Failed to send Jira test issue'
+		);
+	const testTeams = () =>
+		runNotificationTest(
+			'/settings/notifications/test-teams',
+			'Test notification sent to Teams!',
+			(value) => (testingTeams = value),
+			'Failed to send Teams test notification'
+		);
+	const testWorkflowDispatch = () =>
+		runNotificationTest(
+			'/settings/notifications/test-workflow',
+			'Workflow test event dispatched!',
+			(value) => (testingWorkflow = value),
+			'Failed to dispatch workflow test event'
+		);
 
 	async function runPolicyDiagnostics() {
 		diagnosticsLoading = true;
 		error = '';
 		try {
 			const headers = await getHeaders();
-			const res = await api.get(edgeApiPath('/settings/notifications/policy-diagnostics'), { headers });
+			const res = await api.get(edgeApiPath('/settings/notifications/policy-diagnostics'), {
+				headers
+			});
 			if (!res.ok) {
 				throw new Error(await getApiErrorMessage(res, 'Failed to run policy diagnostics'));
 			}
@@ -377,15 +412,42 @@
 	});
 
 	const viewProps = $derived({
-		data, loading, error, success, savingPersona, savePersona,
-		loadingCarbon, savingCarbon, saveCarbonSettings,
-		loadingLLM, savingLLM, providerModels, saveLLMSettings,
-		loadingActiveOps, savingActiveOps, saveActiveOpsSettings,
-		loadingSafety, resettingSafety, loadSafetyStatus, resetSafetyCircuitBreaker,
-		safetyError, safetySuccess, safetyStatus,
-		testing, testingJira, testingTeams, testingWorkflow, diagnosticsLoading, policyDiagnostics,
-		testSlack, testJira, testTeams, testWorkflowDispatch, runPolicyDiagnostics,
-		saveSettings, saving
+		data,
+		loading,
+		error,
+		success,
+		savingPersona,
+		savePersona,
+		loadingCarbon,
+		savingCarbon,
+		saveCarbonSettings,
+		loadingLLM,
+		savingLLM,
+		providerModels,
+		saveLLMSettings,
+		loadingActiveOps,
+		savingActiveOps,
+		saveActiveOpsSettings,
+		loadingSafety,
+		resettingSafety,
+		loadSafetyStatus,
+		resetSafetyCircuitBreaker,
+		safetyError,
+		safetySuccess,
+		safetyStatus,
+		testing,
+		testingJira,
+		testingTeams,
+		testingWorkflow,
+		diagnosticsLoading,
+		policyDiagnostics,
+		testSlack,
+		testJira,
+		testTeams,
+		testWorkflowDispatch,
+		runPolicyDiagnostics,
+		saveSettings,
+		saving
 	});
 </script>
 
@@ -393,4 +455,11 @@
 	<title>Settings | Valdrics</title>
 </svelte:head>
 
-<SettingsPageViewBody {...viewProps} bind:persona bind:carbonSettings bind:llmSettings bind:activeOpsSettings bind:settings />
+<SettingsPageViewBody
+	{...viewProps}
+	bind:persona
+	bind:carbonSettings
+	bind:llmSettings
+	bind:activeOpsSettings
+	bind:settings
+/>

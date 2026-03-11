@@ -32,9 +32,9 @@ describe('public content registry', () => {
 	it('produces sitemap entries for all public slug pages', () => {
 		const sitemapEntries = listPublicSitemapEntries();
 
-		expect(sitemapEntries.some((entry) => entry.path === '/insights/from-alert-to-approved-action')).toBe(
-			true
-		);
+		expect(
+			sitemapEntries.some((entry) => entry.path === '/insights/from-alert-to-approved-action')
+		).toBe(true);
 		expect(sitemapEntries.some((entry) => entry.path === '/proof/safe-access-model')).toBe(true);
 		expect(sitemapEntries.some((entry) => entry.path === '/resources/executive-one-pager')).toBe(
 			true

@@ -55,7 +55,8 @@
 	const SUBSCRIBE_API_PATH = `${base}/api/marketing/subscribe`,
 		TALK_TO_SALES_PATH = `${base}/talk-to-sales`,
 		ENTERPRISE_PATH = `${base}/enterprise`;
-	if (!DEFAULT_SIGNAL_SNAPSHOT) throw new Error('Realtime signal map requires at least one snapshot.');
+	if (!DEFAULT_SIGNAL_SNAPSHOT)
+		throw new Error('Realtime signal map requires at least one snapshot.');
 	let signalMapElement: HTMLDivElement | null = null;
 	let signalMapInView = $state(true),
 		documentVisible = $state(true),
@@ -89,10 +90,14 @@
 		telemetryInitialized = $state(false),
 		cookieBannerVisible = $state(false),
 		roiCurrencyCode = $state('USD');
-	let activeSnapshot = $derived(REALTIME_SIGNAL_SNAPSHOTS[snapshotIndex] ?? DEFAULT_SIGNAL_SNAPSHOT);
+	let activeSnapshot = $derived(
+		REALTIME_SIGNAL_SNAPSHOTS[snapshotIndex] ?? DEFAULT_SIGNAL_SNAPSHOT
+	);
 	let activeHookState = $derived(CLOUD_HOOK_STATES[hookStateIndex] ?? CLOUD_HOOK_STATES[0]);
 	let activeBuyerRole = $derived(BUYER_ROLE_VIEWS[buyerRoleIndex] ?? BUYER_ROLE_VIEWS[0]);
-	let activeSignalLane = $derived(activeSnapshot.lanes.find((lane) => lane.id === activeLaneId) ?? activeSnapshot.lanes[0]);
+	let activeSignalLane = $derived(
+		activeSnapshot.lanes.find((lane) => lane.id === activeLaneId) ?? activeSnapshot.lanes[0]
+	);
 	let heroContext = $derived(HERO_ROLE_CONTEXT[activeBuyerRole.id] ?? HERO_ROLE_CONTEXT.finops);
 	let heroTitle = $derived(
 		experiments.heroVariant === 'from_metrics_to_control'
@@ -105,11 +110,18 @@
 	let primaryCtaLabel = $derived(
 		experiments.ctaVariant === 'book_briefing' ? 'Book Executive Briefing' : 'Start Free Workspace'
 	);
-	let secondaryCtaLabel = $derived('See Pricing'),
-		secondaryCtaHref = $derived('/pricing?entry=hero_secondary');
+	let secondaryCtaLabel = $derived(
+		experiments.ctaVariant === 'book_briefing' ? 'Start Free Workspace' : 'See Enterprise Path'
+	);
+	let secondaryCtaHref = $derived(
+		experiments.ctaVariant === 'book_briefing'
+			? buildSignupHref(heroContext.primaryIntent, { source: 'hero_secondary' })
+			: buildEnterpriseReviewHref('hero_secondary')
+	);
 	let roiPlannerHref = $derived(buildSignupHref('roi_assessment', { source: 'simulator' }));
-	let plansTalkToSalesHref = $derived(buildTalkToSalesHref('plans')),
-		requestValidationBriefingHref = $derived(buildTalkToSalesHref('trust_validation')),
+	let requestValidationBriefingHref = $derived(
+			buildTalkToSalesHref('trust_validation', 'request_validation_briefing')
+		),
 		plansEnterpriseHref = $derived(buildEnterpriseReviewHref('plans_enterprise')),
 		trustEnterpriseHref = $derived(buildEnterpriseReviewHref('trust_enterprise'));
 	let showBackToTop = $derived(landingScrollProgressPct >= 8),
@@ -119,13 +131,15 @@
 	);
 	let primaryCtaHref = $derived(
 		experiments.ctaVariant === 'book_briefing'
-			? buildTalkToSalesHref('hero_briefing')
+			? buildTalkToSalesHref('hero_briefing', 'executive_briefing')
 			: buildSignupHref(primaryCtaIntent)
 	);
 	let freeTierCtaHref = $derived(
 		buildSignupHref('free_tier', { plan: 'free', source: 'free_tier' })
 	);
-	let secondaryCtaTelemetryValue = $derived('see_pricing');
+	let secondaryCtaTelemetryValue = $derived(
+		experiments.ctaVariant === 'book_briefing' ? 'start_free' : 'enterprise_review'
+	);
 	let includeExperimentQueryParams = $derived(shouldIncludeExperimentQueryParams($page.url, false));
 	let shouldRotateSnapshots = $derived(
 		!prefersReducedMotion &&
@@ -259,22 +273,26 @@
 			extraParams
 		});
 	}
-	const buildPlanCtaHref = (planId: string) =>
-		buildSignupHref('start_plan', { plan: planId, source: 'plans' });
-	const buildTalkToSalesHref = (source: string) =>
-		buildLandingHeroSalesPath({
+	function buildPlanCtaHref(planId: string): string {
+		return buildSignupHref('start_plan', { plan: planId, source: 'plans' });
+	}
+	function buildTalkToSalesHref(source: string, intent?: string): string {
+		return buildLandingHeroSalesPath({
 			path: TALK_TO_SALES_PATH,
 			source,
+			intent,
 			persona: activeBuyerRole.id,
 			utm: attribution.utm
 		});
-	const buildEnterpriseReviewHref = (source: string) =>
-		buildLandingHeroSalesPath({
+	}
+	function buildEnterpriseReviewHref(source: string): string {
+		return buildLandingHeroSalesPath({
 			path: ENTERPRISE_PATH,
 			source,
 			persona: activeBuyerRole.id,
 			utm: attribution.utm
 		});
+	}
 	const selectSnapshot = (index: number) =>
 		trackIndexedLandingSelection({
 			index,
@@ -316,7 +334,8 @@
 		markEngaged();
 		emitLandingTelemetrySafe('lane_focus', 'signal_map', laneId, buildTelemetryContext('engaged'));
 	};
-	const handleSignalMapElementChange = (element: HTMLDivElement | null) => (signalMapElement = element);
+	const handleSignalMapElementChange = (element: HTMLDivElement | null) =>
+		(signalMapElement = element);
 	const handleScenarioWasteWithoutChange = (value: number) => (scenarioWasteWithoutPct = value);
 	const handleScenarioWasteWithChange = (value: number) => (scenarioWasteWithPct = value);
 	const handleScenarioWindowChange = (value: number) => (scenarioWindowMonths = value);
@@ -381,7 +400,6 @@
 	{roiPlannerHref}
 	{freeTierCtaHref}
 	{buildPlanCtaHref}
-	{plansTalkToSalesHref}
 	{plansEnterpriseHref}
 	{trustEnterpriseHref}
 	{requestValidationBriefingHref}

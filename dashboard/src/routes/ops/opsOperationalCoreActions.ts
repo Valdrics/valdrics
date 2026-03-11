@@ -10,10 +10,7 @@ import {
 	buildJobSloUrl,
 	buildAcceptanceRuns
 } from './opsUtils';
-import {
-	buildUnitEconomicsUrl,
-	hasInvalidUnitWindow
-} from './unitEconomics';
+import { buildUnitEconomicsUrl, hasInvalidUnitWindow } from './unitEconomics';
 import {
 	syncInvoiceFormFromClosePackage,
 	type OpsOperationalState,
@@ -70,7 +67,8 @@ export function createOpsOperationalCoreActions(input: CoreActionsInput) {
 			return;
 		}
 		if (hasInvalidUnitWindow(state.unitStartDate, state.unitEndDate)) {
-			state.error = 'Unit economics date range is invalid: start date must be on or before end date.';
+			state.error =
+				'Unit economics date range is invalid: start date must be on or before end date.';
 			return;
 		}
 
@@ -94,7 +92,11 @@ export function createOpsOperationalCoreActions(input: CoreActionsInput) {
 					headers,
 					requestTimeoutMs
 				),
-				getWithTimeout(edgeApiPath(buildJobSloUrl(state.jobSloWindowHours)), headers, requestTimeoutMs),
+				getWithTimeout(
+					edgeApiPath(buildJobSloUrl(state.jobSloWindowHours)),
+					headers,
+					requestTimeoutMs
+				),
 				getWithTimeout(
 					edgeApiPath(
 						buildAcceptanceKpiUrl(
@@ -178,7 +180,8 @@ export function createOpsOperationalCoreActions(input: CoreActionsInput) {
 		const data = getData();
 		if (!hasSessionToken(data)) return;
 		if (hasInvalidUnitWindow(state.unitStartDate, state.unitEndDate)) {
-			state.error = 'Unit economics date range is invalid: start date must be on or before end date.';
+			state.error =
+				'Unit economics date range is invalid: start date must be on or before end date.';
 			return;
 		}
 
@@ -280,7 +283,9 @@ export function createOpsOperationalCoreActions(input: CoreActionsInput) {
 				default_customer_volume: Number(state.unitSettings.default_customer_volume),
 				anomaly_threshold_percent: Number(state.unitSettings.anomaly_threshold_percent)
 			};
-			const res = await api.put(edgeApiPath('/costs/unit-economics/settings'), payload, { headers });
+			const res = await api.put(edgeApiPath('/costs/unit-economics/settings'), payload, {
+				headers
+			});
 			if (!res.ok) {
 				throw new Error(
 					await parseErrorMessage(

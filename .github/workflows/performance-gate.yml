@@ -95,6 +95,9 @@ on:
         required: false
         type: boolean
         default: false
+    secrets:
+      VALDRICS_TOKEN:
+        required: false
 
 permissions:
   contents: read
@@ -133,6 +136,8 @@ jobs:
     name: Run Load-Test Gate
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    env:
+      OPTIONAL_VALDRICS_TOKEN: ${{ secrets.VALDRICS_TOKEN }}
     services:
       postgres:
         image: postgres:16.8-alpine
@@ -255,9 +260,9 @@ jobs:
           echo "VALDRICS_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
 
       - name: Export Provided Performance Token
-        if: ${{ !inputs.bootstrap_tenant && secrets.VALDRICS_TOKEN != '' }}
+        if: ${{ !inputs.bootstrap_tenant && env.OPTIONAL_VALDRICS_TOKEN != '' }}
         run: |
-          echo "VALDRICS_TOKEN=${{ secrets.VALDRICS_TOKEN }}" >> "$GITHUB_ENV"
+          echo "VALDRICS_TOKEN=${OPTIONAL_VALDRICS_TOKEN}" >> "$GITHUB_ENV"
 
       - name: Run Load Test (Enforced Thresholds)
         run: |

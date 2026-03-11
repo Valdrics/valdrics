@@ -165,10 +165,14 @@ export async function createAndVerifyCloudPlusConnection(args: {
 	});
 	const payload = buildCloudPlusCreatePayload(request);
 
-	const response = await api.post(edgeApiPath(`/settings/connections/${provider}`), payload, { headers });
+	const response = await api.post(edgeApiPath(`/settings/connections/${provider}`), payload, {
+		headers
+	});
 	const body = await response.json().catch(() => ({}));
 	if (!response.ok) {
-		throw new Error(extractErrorMessage(body, `Failed to create ${provider.toUpperCase()} connection.`));
+		throw new Error(
+			extractErrorMessage(body, `Failed to create ${provider.toUpperCase()} connection.`)
+		);
 	}
 
 	const connectionId =
@@ -199,7 +203,9 @@ export async function verifyCloudPlusConnectionRequest(args: {
 	);
 	const body = await response.json().catch(() => ({}));
 	if (!response.ok) {
-		throw new Error(extractErrorMessage(body, `Failed to verify ${provider.toUpperCase()} connection.`));
+		throw new Error(
+			extractErrorMessage(body, `Failed to verify ${provider.toUpperCase()} connection.`)
+		);
 	}
 	return { message: extractErrorMessage(body, `${provider.toUpperCase()} connection verified.`) };
 }

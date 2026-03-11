@@ -44,7 +44,7 @@ def reload_settings_from_environment() -> "Settings":
     """
     logger = structlog.get_logger()
     with _settings_reload_lock:
-        logger.info("settings_reload_started")
+        logger.debug("settings_reload_started")
         current = get_settings()
         refreshed = Settings()
         for field_name in refreshed.model_dump().keys():
@@ -55,7 +55,7 @@ def reload_settings_from_environment() -> "Settings":
             EncryptionKeyManager.clear_key_caches(warm=True)
         except SETTINGS_RELOAD_CACHE_REFRESH_RECOVERABLE_EXCEPTIONS as cache_exc:  # pragma: no cover - defensive path
             logger.warning("settings_reload_cache_refresh_failed", error=str(cache_exc))
-        logger.info("settings_reload_completed")
+        logger.debug("settings_reload_completed")
         return current
 
 

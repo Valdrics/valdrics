@@ -18,6 +18,12 @@ describe('insights page', () => {
 
 		expect(screen.getByRole('heading', { level: 1, name: /insights/i })).toBeTruthy();
 		expect(
+			screen.getByRole('link', { name: /start free workspace/i }).getAttribute('href') || ''
+		).toContain('/auth/login?');
+		expect(
+			screen.getByRole('link', { name: /see enterprise path/i }).getAttribute('href') || ''
+		).toContain('/enterprise?');
+		expect(
 			screen.getByRole('heading', {
 				name: /why detection without ownership fails/i
 			})
@@ -38,6 +44,9 @@ describe('insights page', () => {
 		);
 		expect(screen.getAllByRole('link', { name: /open insight/i })[2]?.getAttribute('href')).toBe(
 			'/insights/from-alert-to-approved-action'
+		);
+		expect(screen.getByRole('link', { name: /open resources/i }).getAttribute('href')).toBe(
+			'/resources'
 		);
 	});
 });

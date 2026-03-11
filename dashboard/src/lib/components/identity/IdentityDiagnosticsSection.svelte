@@ -16,9 +16,16 @@
 	<div class="flex items-center justify-between gap-3">
 		<div>
 			<p class="font-medium">Onboarding Diagnostics</p>
-			<p class="text-xs text-ink-500 mt-1">Validates SSO enforcement and SCIM readiness for this tenant.</p>
+			<p class="text-xs text-ink-500 mt-1">
+				Validates SSO enforcement and SCIM readiness for this tenant.
+			</p>
 		</div>
-		<button type="button" class="btn btn-secondary shrink-0" onclick={onRefresh} disabled={diagnosticsLoading}>
+		<button
+			type="button"
+			class="btn btn-secondary shrink-0"
+			onclick={onRefresh}
+			disabled={diagnosticsLoading}
+		>
 			{diagnosticsLoading ? 'Refreshing…' : 'Refresh Diagnostics'}
 		</button>
 	</div>

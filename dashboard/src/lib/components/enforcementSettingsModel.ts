@@ -53,8 +53,6 @@ export function extractErrorMessage(data: unknown, fallback: string): string {
 	return fallback;
 }
 
-export function buildEnforcementHeaders(
-	accessToken?: string | null
-): Record<string, string> {
+export function buildEnforcementHeaders(accessToken?: string | null): Record<string, string> {
 	return { Authorization: `Bearer ${accessToken}` };
 }

@@ -1,4 +1,6 @@
 import { mountLandingHeroRuntime } from '$lib/landing/landingHeroRuntime';
+import type { FunnelStage } from '$lib/landing/landingFunnel';
+import type { LandingTelemetryContext } from '$lib/landing/landingTelemetry';
 
 type LandingHeroBrowserRuntimeArgs = {
 	browserEnabled: boolean;
@@ -11,12 +13,12 @@ type LandingHeroBrowserRuntimeArgs = {
 	scrollMilestones: readonly number[];
 	initializeTelemetry: () => void;
 	markEngaged: () => void;
-	buildTelemetryContext: (funnelStage?: string) => Record<string, unknown>;
+	buildTelemetryContext: (funnelStage?: FunnelStage) => LandingTelemetryContext;
 	emitLandingTelemetrySafe: (
 		action: string,
 		section: string,
 		value: string | undefined,
-		context: Record<string, unknown>
+		context: LandingTelemetryContext
 	) => void;
 	setPrefersReducedMotion: (value: boolean) => void;
 	setPageReferrer: (value: string) => void;
@@ -27,9 +29,7 @@ type LandingHeroBrowserRuntimeArgs = {
 	setLandingScrollProgressPct: (value: number) => void;
 };
 
-export function mountLandingHeroBrowserRuntime(
-	args: LandingHeroBrowserRuntimeArgs
-): () => void {
+export function mountLandingHeroBrowserRuntime(args: LandingHeroBrowserRuntimeArgs): () => void {
 	return mountLandingHeroRuntime({
 		browserEnabled: args.browserEnabled,
 		windowRef: args.windowRef,

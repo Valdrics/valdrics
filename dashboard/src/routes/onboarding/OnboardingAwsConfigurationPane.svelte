@@ -123,8 +123,8 @@
 			<div>
 				<p class="text-sm font-semibold text-ink-100 mb-1">Finalize Deployment & Capture ARN</p>
 				<p class="text-xs text-ink-400">
-					Follow the AWS wizard. Once the stack status is <strong>CREATE_COMPLETE</strong>, navigate to
-					the <strong>Outputs</strong> tab to find and copy your new <strong>RoleArn</strong>.
+					Follow the AWS wizard. Once the stack status is <strong>CREATE_COMPLETE</strong>, navigate
+					to the <strong>Outputs</strong> tab to find and copy your new <strong>RoleArn</strong>.
 				</p>
 			</div>
 		</div>
@@ -152,11 +152,15 @@
 	<div class="code-header">
 		<span>{selectedTab === 'cloudformation' ? 'valdrics-role.yaml' : 'valdrics-role.tf'}</span>
 		<div class="code-actions">
-			<button type="button" class="icon-btn" onclick={copyTemplate}>{copied ? '✅' : '📋 Copy'}</button>
+			<button type="button" class="icon-btn" onclick={copyTemplate}
+				>{copied ? '✅' : '📋 Copy'}</button
+			>
 			<button type="button" class="icon-btn" onclick={downloadTemplate}>📥</button>
 		</div>
 	</div>
-	<pre class="code-block">{selectedTab === 'cloudformation' ? cloudformationYaml : terraformHcl}</pre>
+	<pre class="code-block">{selectedTab === 'cloudformation'
+			? cloudformationYaml
+			: terraformHcl}</pre>
 </div>
 
 <div class="divider text-xs text-ink-500 my-8 flex items-center gap-4">
@@ -214,7 +218,13 @@
 	{#if isManagementAccount}
 		<div class="form-group stagger-enter mt-4">
 			<label for="org_id">Organization ID (Optional)</label>
-			<input type="text" id="org_id" bind:value={organizationId} placeholder="o-xxxxxxxxxx" class="input" />
+			<input
+				type="text"
+				id="org_id"
+				bind:value={organizationId}
+				placeholder="o-xxxxxxxxxx"
+				class="input"
+			/>
 		</div>
 	{/if}
 </div>

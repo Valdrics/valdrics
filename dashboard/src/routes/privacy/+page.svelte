@@ -104,13 +104,10 @@
 			For privacy, DPA, or deletion requests, contact <a
 				class="underline"
 				href="mailto:privacy@valdrics.com">privacy@valdrics.com</a
-			>. General support requests can go to <a
-				class="underline"
-				href="mailto:support@valdrics.com">support@valdrics.com</a
-			>. For security-related disclosure or incident coordination, contact <a
-				class="underline"
-				href="mailto:security@valdrics.com">security@valdrics.com</a
-			>.
+			>. General support requests can go to
+			<a class="underline" href="mailto:support@valdrics.com">support@valdrics.com</a>. For
+			security-related disclosure or incident coordination, contact
+			<a class="underline" href="mailto:security@valdrics.com">security@valdrics.com</a>.
 		</p>
 	</section>
 </article>

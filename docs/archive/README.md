@@ -17,3 +17,6 @@ Archive rules:
   in runtime or verification contracts.
 - Prefer archiving over deletion unless the material is duplicated elsewhere and
   has no ongoing governance or historical value.
+- `uv run python3 scripts/verify_docs_archive_hygiene.py` is the enforcement
+  check that prevents orphaned dated docs and prohibited active duplicates from
+  reappearing in the live docs tree.

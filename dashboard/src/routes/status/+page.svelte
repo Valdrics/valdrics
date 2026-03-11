@@ -55,7 +55,9 @@
 			<section class="public-page__section" aria-labelledby="status-notice-title">
 				<article class="public-page__card public-page__card--accent status-notice">
 					<p class="public-page__card-kicker">Health summary notice</p>
-					<h2 id="status-notice-title" class="public-page__card-title">Automated checks are unavailable</h2>
+					<h2 id="status-notice-title" class="public-page__card-title">
+						Automated checks are unavailable
+					</h2>
 					<p class="public-page__card-copy">{data.summaryDetail}</p>
 				</article>
 			</section>
@@ -64,10 +66,12 @@
 		<section class="public-page__section" aria-labelledby="status-services-title">
 			<div class="public-page__section-head">
 				<p class="public-page__eyebrow">Service checks</p>
-				<h2 id="status-services-title" class="public-page__section-title">Live dependency summary</h2>
+				<h2 id="status-services-title" class="public-page__section-title">
+					Live dependency summary
+				</h2>
 				<p class="public-page__section-subtitle">
-					Each card reflects the latest automated health payload. This page reports operational state, not
-					planned maintenance calendars.
+					Each card reflects the latest automated health payload. This page reports operational
+					state, not planned maintenance calendars.
 				</p>
 			</div>
 

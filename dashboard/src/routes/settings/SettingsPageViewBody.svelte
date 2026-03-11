@@ -7,7 +7,13 @@
 	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 	import SettingsActiveOpsCard from './SettingsActiveOpsCard.svelte';
 	import SettingsAiStrategyCard from './SettingsAiStrategyCard.svelte';
-	import { INITIAL_ACTIVEOPS_SETTINGS, INITIAL_CARBON_SETTINGS, INITIAL_LLM_SETTINGS, INITIAL_NOTIFICATION_SETTINGS, INITIAL_PROVIDER_MODELS } from './settingsPageInitialState';
+	import {
+		INITIAL_ACTIVEOPS_SETTINGS,
+		INITIAL_CARBON_SETTINGS,
+		INITIAL_LLM_SETTINGS,
+		INITIAL_NOTIFICATION_SETTINGS,
+		INITIAL_PROVIDER_MODELS
+	} from './settingsPageInitialState';
 	import SettingsNotificationControls from './SettingsNotificationControls.svelte';
 	import type { PolicyDiagnostics, SafetyStatus } from './settingsPageSchemas';
 	import SettingsSafetyControlsCard from './SettingsSafetyControlsCard.svelte';
@@ -105,19 +111,23 @@
 		testJira: AsyncAction;
 		testTeams: AsyncAction;
 		testWorkflowDispatch: AsyncAction;
-	runPolicyDiagnostics: AsyncAction;
-	saveSettings: AsyncAction;
-	saving: boolean;
+		runPolicyDiagnostics: AsyncAction;
+		saveSettings: AsyncAction;
+		saving: boolean;
 	} = $props();
 
-	const isGrowthTier = $derived(['growth', 'pro', 'enterprise'].includes(data.subscription?.tier ?? ''));
+	const isGrowthTier = $derived(
+		['growth', 'pro', 'enterprise'].includes(data.subscription?.tier ?? '')
+	);
 	const carbonUpgradePrompt = getUpgradePrompt('growth', 'GreenOps controls');
 </script>
 
 <div class="space-y-8">
 	<div>
 		<h1 class="text-2xl font-bold mb-1">Preferences</h1>
-		<p class="text-ink-400 text-sm">Configure your notifications, AI strategy, and GreenOps thresholds.</p>
+		<p class="text-ink-400 text-sm">
+			Configure your notifications, AI strategy, and GreenOps thresholds.
+		</p>
 	</div>
 
 	<AuthGate authenticated={!!data.user} action="manage settings">
@@ -141,9 +151,12 @@
 			{/if}
 
 			<div class="card stagger-enter">
-				<h2 class="text-lg font-semibold mb-2 flex items-center gap-2"><span>🧭</span> Default Persona</h2>
+				<h2 class="text-lg font-semibold mb-2 flex items-center gap-2">
+					<span>🧭</span> Default Persona
+				</h2>
 				<p class="text-xs text-ink-400 mb-4">
-					Choose which workflows Valdrics prioritizes by default. This does not change access permissions.
+					Choose which workflows Valdrics prioritizes by default. This does not change access
+					permissions.
 				</p>
 				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
 					<div class="form-group">
@@ -175,7 +188,9 @@
 				class:pointer-events-none={!isGrowthTier}
 			>
 				<div class="flex items-center justify-between mb-5">
-					<h2 class="text-lg font-semibold flex items-center gap-2"><span>🌱</span> Carbon Budget</h2>
+					<h2 class="text-lg font-semibold flex items-center gap-2">
+						<span>🌱</span> Carbon Budget
+					</h2>
 
 					{#if !isGrowthTier}
 						<span class="badge badge-warning text-xs">Growth Plan Required</span>
@@ -183,7 +198,9 @@
 				</div>
 
 				{#if !isGrowthTier}
-					<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+					<div
+						class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center"
+					>
 						<div class="max-w-md space-y-3 pointer-events-auto">
 							<h3 class="text-lg font-semibold text-white">{carbonUpgradePrompt.heading}</h3>
 							<p class="text-sm text-ink-300">{carbonUpgradePrompt.body}</p>
@@ -224,7 +241,9 @@
 								disabled={!isGrowthTier}
 								aria-label="Carbon alert threshold percentage"
 							/>
-							<p class="text-xs text-ink-500 mt-1">Warn when usage reaches this percentage of budget</p>
+							<p class="text-xs text-ink-500 mt-1">
+								Warn when usage reaches this percentage of budget
+							</p>
 						</div>
 
 						<div class="form-group">
@@ -243,7 +262,9 @@
 								<option value="us-east-1">US East (N. Virginia) - 379 gCO₂/kWh</option>
 								<option value="ap-northeast-1">Asia Pacific (Tokyo) - 506 gCO₂/kWh</option>
 							</select>
-							<p class="text-xs text-ink-500 mt-1">Regions marked with ⭐ have lowest carbon intensity</p>
+							<p class="text-xs text-ink-500 mt-1">
+								Regions marked with ⭐ have lowest carbon intensity
+							</p>
 						</div>
 
 						<div class="form-group">
@@ -289,13 +310,19 @@
 				{/if}
 			</div>
 
-			<IdentitySettingsCard accessToken={data.session?.access_token} tier={data.subscription?.tier} />
-			<EnforcementSettingsCard accessToken={data.session?.access_token} tier={data.subscription?.tier} />
+			<IdentitySettingsCard
+				accessToken={data.session?.access_token}
+				tier={data.subscription?.tier}
+			/>
+			<EnforcementSettingsCard
+				accessToken={data.session?.access_token}
+				tier={data.subscription?.tier}
+			/>
 			<EnforcementOpsCard accessToken={data.session?.access_token} tier={data.subscription?.tier} />
 
 			<SettingsAiStrategyCard
 				{loadingLLM}
-				bind:llmSettings={llmSettings}
+				bind:llmSettings
 				{providerModels}
 				{saveLLMSettings}
 				{savingLLM}
@@ -304,7 +331,7 @@
 			<SettingsActiveOpsCard
 				{data}
 				{loadingActiveOps}
-				bind:activeOpsSettings={activeOpsSettings}
+				bind:activeOpsSettings
 				{saveActiveOpsSettings}
 				{savingActiveOps}
 			/>
@@ -321,7 +348,7 @@
 
 			<SettingsNotificationControls
 				{data}
-				bind:settings={settings}
+				bind:settings
 				{testing}
 				{testingJira}
 				{testingTeams}

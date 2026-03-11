@@ -149,6 +149,24 @@ The deployment report separates:
 - `helm_runtime_secret_value_blockers`: placeholder/empty values still blocking the Helm/EKS secret payload
 - `terraform_remaining_inputs`: infrastructure values still required outside the runtime env, such as `external_id` and `valdrics_account_id`
 
+## 2d. Verify the managed bundle before promotion
+
+Once the runtime env, migration env, and deployment artifacts exist, verify the
+bundle as one coherent operator handoff:
+
+```bash
+uv run python scripts/verify_managed_deployment_bundle.py --environment production
+```
+
+This check fails if any of the following drift:
+
+- runtime blockers vs `.runtime/production.report.json`
+- migration blockers vs `.runtime/production.migrate.report.json`
+- deployment blockers/readiness vs `.runtime/deploy/production/deployment.report.json`
+- generated artifact paths or secret payload indexes
+
+Promotion should not proceed when the bundle verifier fails.
+
 ## 3. Strict SaaS integration rules
 
 When `SAAS_STRICT_INTEGRATIONS=true`:
@@ -176,15 +194,16 @@ All tokens/secrets are stored in tenant notification settings.
 
 ## 5. Deployment sequence
 
-1. Generate or refresh both `.runtime/production.env` and `.runtime/production.migrate.env`.
-2. Validate the migration env: `uv run python scripts/validate_migration_env.py --env-file .runtime/production.migrate.env`
-3. Run migrations with the migration env:
+1. Generate or refresh `.runtime/production.env`, `.runtime/production.migrate.env`, and `.runtime/deploy/production/deployment.report.json`.
+2. Verify the bundle: `uv run python scripts/verify_managed_deployment_bundle.py --environment production`
+3. Validate the migration env: `uv run python scripts/validate_migration_env.py --env-file .runtime/production.migrate.env`
+4. Run migrations with the migration env:
    `set -a && source .runtime/production.migrate.env && uv run alembic upgrade head`
-4. Validate the full runtime env:
+5. Validate the full runtime env:
    `uv run python scripts/validate_runtime_env.py --environment production --env-file .runtime/production.env`
-5. Apply the full runtime env and restart the app.
-6. Deploy frontend.
-7. Validate health and notification paths.
+6. Apply the full runtime env and restart the app.
+7. Deploy frontend.
+8. Validate health and notification paths.
 
 ## 6. Smoke tests after deploy
 
@@ -208,6 +227,17 @@ All tokens/secrets are stored in tenant notification settings.
   - `GET /api/v1/audit/compliance-pack?include_focus_export=true&include_savings_proof=true&include_realized_savings=true&include_close_package=true`
 - Trigger one policy event (`block` or `escalate`) and confirm downstream notifications.
 
+## 6a. Public release gate before final promotion
+
+Run the public browser quality gate against the release candidate or staging surface:
+
+```bash
+uv run python scripts/run_public_frontend_quality_gate.py --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver
+```
+
+This gate runs the public smoke, accessibility, performance, and visual suites
+as one operator command.
+
 ## 7. Change management rule
 
 Whenever config behavior changes:
@@ -216,3 +246,4 @@ Whenever config behavior changes:
 2. Update `.env.example`.
 3. Update `docs/integrations/workflow_automation.md`.
 4. Add/adjust tests for config validation where applicable.
+5. Re-run `scripts/verify_managed_deployment_bundle.py` for the affected environment.

@@ -150,8 +150,10 @@
 			Connect SaaS spend feeds for Cloud+ cost visibility and optimization.
 		</p>
 		<div class="flex flex-col gap-2">
-			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a>
-			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span>
+			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a
+			>
+			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span
+			>
 			<p class="text-[11px] leading-relaxed text-ink-500">{proUpgradePrompt.body}</p>
 		</div>
 	{/if}
@@ -277,8 +279,10 @@
 			Connect license/ITAM spend feeds to include seat and contract costs in FinOps.
 		</p>
 		<div class="flex flex-col gap-2">
-			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a>
-			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span>
+			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a
+			>
+			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span
+			>
 			<p class="text-[11px] leading-relaxed text-ink-500">{proUpgradePrompt.body}</p>
 		</div>
 	{/if}

@@ -96,8 +96,6 @@
 			Latest completed ingestion: {formatDate(ingestionSla.latest_completed_at)}
 		</p>
 	{:else}
-		<p class="text-sm text-ink-400">
-			No ingestion SLA data is available for this window yet.
-		</p>
+		<p class="text-sm text-ink-400">No ingestion SLA data is available for this window yet.</p>
 	{/if}
 </div>

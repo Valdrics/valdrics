@@ -59,7 +59,9 @@
 <div class="glass-panel mt-6">
 	<div class="flex items-center justify-between mb-6">
 		<div>
-			<h3 class="text-xl font-bold text-white flex items-center gap-2">🕒 Carbon-Aware Scheduling</h3>
+			<h3 class="text-xl font-bold text-white flex items-center gap-2">
+				🕒 Carbon-Aware Scheduling
+			</h3>
 			<p class="text-ink-400 text-sm">Optimize non-urgent workloads for low-carbon windows</p>
 		</div>
 		<div class="flex items-center gap-2 text-xs">
@@ -113,7 +115,9 @@
 		</div>
 
 		<div class="bg-ink-900/50 p-6 rounded-xl border border-ink-800">
-			<h4 class="text-white text-sm font-semibold mb-4 uppercase tracking-wider">Optimal Scheduler</h4>
+			<h4 class="text-white text-sm font-semibold mb-4 uppercase tracking-wider">
+				Optimal Scheduler
+			</h4>
 			<div class="space-y-4">
 				<div>
 					<label for="duration" class="block text-xs text-ink-400 mb-2"

@@ -2,6 +2,7 @@
 	import { base } from '$app/paths';
 	import { page } from '$app/stores';
 	import { api } from '$lib/api';
+	import { resolveSessionTenantId } from '$lib/auth/sessionTenant';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { trackProductFunnelStage } from '$lib/funnel/productFunnelTelemetry';
 	import { normalizeCheckoutUrl } from '$lib/utils';
@@ -30,14 +31,21 @@
 	let upgrading = $state('');
 	let error = $state('');
 	let pricingViewTracked = $state(false);
-	let subscription = $derived((data.subscription ?? { tier: 'free', status: 'active' }) as BillingSubscription);
+	let tenantId = $derived(resolveSessionTenantId({ session: data.session, user: data.user }));
+	let subscription = $derived(
+		(data.subscription ?? { tier: 'free', status: 'active' }) as BillingSubscription
+	);
 
 	let plans = $derived(
 		mergeBillingPlans(
 			Array.isArray(data.plans) && data.plans.length > 0 ? data.plans : DEFAULT_PRICING_PLANS
 		)
 	);
-	let currentTier = $derived(String(subscription?.tier ?? 'free').trim().toLowerCase());
+	let currentTier = $derived(
+		String(subscription?.tier ?? 'free')
+			.trim()
+			.toLowerCase()
+	);
 	let visiblePlans = $derived(getVisibleBillingPlans(plans, currentTier));
 	let hasSelfServeUpgrade = $derived(
 		visiblePlans.some((plan) => canSelfServeCheckout(plan.id, currentTier))
@@ -51,7 +59,7 @@
 		void trackProductFunnelStage({
 			accessToken: data.session.access_token,
 			stage: 'pricing_viewed',
-			tenantId: data.user?.tenant_id,
+			tenantId,
 			url: $page.url,
 			currentTier,
 			persona: String(data.profile?.persona ?? ''),
@@ -142,7 +150,7 @@
 			await trackProductFunnelStage({
 				accessToken: session.access_token,
 				stage: 'checkout_started',
-				tenantId: data.user?.tenant_id,
+				tenantId,
 				url: $page.url,
 				currentTier,
 				persona: String(data.profile?.persona ?? ''),
@@ -170,10 +178,10 @@
 				plan limits.
 			</p>
 		</div>
-			<div class="billing-header__meta">
-				<span class="badge badge-success capitalize">{subscription?.status ?? 'active'}</span>
-				<span class="billing-header__tier">Current tier: {subscription?.tier ?? 'free'}</span>
-			</div>
+		<div class="billing-header__meta">
+			<span class="badge badge-success capitalize">{subscription?.status ?? 'active'}</span>
+			<span class="billing-header__tier">Current tier: {subscription?.tier ?? 'free'}</span>
+		</div>
 	</header>
 
 	{#if data.checkoutSuccess}
@@ -190,21 +198,21 @@
 	{/if}
 
 	<section class="billing-summary-grid">
-			<article class="card billing-current-plan">
-				<p class="billing-card__kicker">Current plan</p>
-				<h2 class="billing-card__title capitalize">{subscription?.tier ?? 'free'}</h2>
+		<article class="card billing-current-plan">
+			<p class="billing-card__kicker">Current plan</p>
+			<h2 class="billing-card__title capitalize">{subscription?.tier ?? 'free'}</h2>
 			<p class="billing-card__copy">
-				Self-serve checkout supports paid-plan upgrades. For downgrades or enterprise commercial changes,
-				contact billing or sales.
+				Self-serve checkout supports paid-plan upgrades. For downgrades or enterprise commercial
+				changes, contact billing or sales.
 			</p>
-				<div class="billing-current-plan__meta">
-					<span class="badge badge-success capitalize">{subscription?.status ?? 'active'}</span>
-					{#if subscription?.next_payment_date}
-						<span class="billing-current-plan__date">
-							Next billing: {formatDate(subscription.next_payment_date)}
-						</span>
-					{/if}
-				</div>
+			<div class="billing-current-plan__meta">
+				<span class="badge badge-success capitalize">{subscription?.status ?? 'active'}</span>
+				{#if subscription?.next_payment_date}
+					<span class="billing-current-plan__date">
+						Next billing: {formatDate(subscription.next_payment_date)}
+					</span>
+				{/if}
+			</div>
 		</article>
 
 		<article class="card billing-notes">
@@ -214,7 +222,10 @@
 				<li>Prices are shown in USD for plan comparison.</li>
 				<li>The free tier is permanent for one live workflow; it is not a time-limited trial.</li>
 				<li>BYOK does not add a separate platform surcharge in the current lineup.</li>
-				<li>Enterprise packaging, procurement, SCIM, and private deployment stay on the sales-assisted path.</li>
+				<li>
+					Enterprise packaging, procurement, SCIM, and private deployment stay on the sales-assisted
+					path.
+				</li>
 			</ul>
 		</article>
 	</section>
@@ -223,10 +234,14 @@
 		<div class="billing-section-head">
 			<div>
 				<p class="billing-card__kicker">Plan utilization</p>
-				<h2 id="billing-usage-title" class="billing-section-head__title">Connection usage by provider</h2>
+				<h2 id="billing-usage-title" class="billing-section-head__title">
+					Connection usage by provider
+				</h2>
 			</div>
 			{#if data.usage}
-				<p class="billing-section-head__note">Snapshot generated {formatDate(data.usage.generated_at)}</p>
+				<p class="billing-section-head__note">
+					Snapshot generated {formatDate(data.usage.generated_at)}
+				</p>
 			{/if}
 		</div>
 
@@ -270,7 +285,8 @@
 		{:else}
 			<article class="card billing-usage-empty">
 				<p class="billing-card__copy">
-					A live connection-usage snapshot was not available. Plan comparison and checkout remain available.
+					A live connection-usage snapshot was not available. Plan comparison and checkout remain
+					available.
 				</p>
 			</article>
 		{/if}
@@ -280,7 +296,9 @@
 		<div class="billing-section-head">
 			<div>
 				<p class="billing-card__kicker">Upgrade paths</p>
-				<h2 id="billing-plans-title" class="billing-section-head__title">Available self-serve plans</h2>
+				<h2 id="billing-plans-title" class="billing-section-head__title">
+					Available self-serve plans
+				</h2>
 			</div>
 			<div class="billing-cycle-toggle" role="group" aria-label="Billing cycle">
 				<button
@@ -303,15 +321,17 @@
 		{#if !hasSelfServeUpgrade}
 			<article class="card billing-upgrade-note">
 				<p class="billing-card__copy">
-					You are already on the highest available self-serve tier. Use the enterprise lane for security,
-					procurement, or custom commercial review.
+					You are already on the highest available self-serve tier. Use the enterprise lane for
+					security, procurement, or custom commercial review.
 				</p>
 			</article>
 		{/if}
 
 		<div class="billing-plan-grid">
 			{#each visiblePlans as plan (plan.id)}
-				<article class={`card billing-plan-card ${plan.popular ? 'billing-plan-card--popular' : ''}`}>
+				<article
+					class={`card billing-plan-card ${plan.popular ? 'billing-plan-card--popular' : ''}`}
+				>
 					<div class="billing-plan-card__head">
 						<div>
 							<p class="billing-card__kicker">{getPlanBadge(plan)}</p>
@@ -364,8 +384,8 @@
 				<p class="billing-card__kicker">Enterprise lane</p>
 				<h3 class="billing-card__title">Security, procurement, and rollout review</h3>
 				<p class="billing-card__copy">
-					Use the sales-assisted lane when your workspace needs SCIM, procurement diligence,
-					private deployment, or complex rollout governance.
+					Use the sales-assisted lane when your workspace needs SCIM, procurement diligence, private
+					deployment, or complex rollout governance.
 				</p>
 				<ul class="billing-bullets">
 					<li>Security and identity review for SCIM and private deployment requirements</li>

@@ -57,10 +57,12 @@
 		<section class="public-page__section" aria-labelledby="docs-sections-title">
 			<div class="public-page__section-head">
 				<p class="public-page__eyebrow">Core guides</p>
-				<h2 id="docs-sections-title" class="public-page__section-title">Pick the documentation surface that matches the question</h2>
+				<h2 id="docs-sections-title" class="public-page__section-title">
+					Pick the documentation surface that matches the question
+				</h2>
 				<p class="public-page__section-subtitle">
-					Move from quick start to APIs, validation, resources, and policies without leaving the public
-					documentation flow.
+					Move from quick start to APIs, validation, resources, and policies without leaving the
+					public documentation flow.
 				</p>
 			</div>
 
@@ -103,7 +105,7 @@
 		</section>
 
 		<section class="public-page__section">
-				<div class="public-page__band public-page__band--accent">
+			<div class="public-page__band public-page__band--accent">
 				<div class="public-page__band-copy">
 					<p class="public-page__eyebrow">Repository docs</p>
 					<h2 class="public-page__section-title">Repository Docs</h2>

@@ -94,11 +94,12 @@ app/
 - Never commit secrets or credentials
 - Use `.env.example` as template
 - All AWS access uses STS AssumeRole (no long-lived credentials)
-- Report security vulnerabilities privately to security@valdrics.ai
+- Report security vulnerabilities privately to security@valdrics.com
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the [BSL 1.1](LICENSE).
+By contributing, you agree that your contributions will be licensed under the
+[Business Source License 1.1 (BUSL-1.1 / BSL 1.1)](LICENSE).
 
 ## Contributor License Agreement (CLA)
 

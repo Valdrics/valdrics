@@ -1,17 +1,12 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { page } from '$app/stores';
+	import { resolveSessionTenantId } from '$lib/auth/sessionTenant';
 	import { buildProductFunnelAttributionContext } from '$lib/funnel/productFunnelTelemetry';
 	import OnboardingPageViewBody from './OnboardingPageViewBody.svelte';
 	import { ensureOnboardedRequest } from './onboardingApi';
-	import {
-		proceedToVerifyFlow,
-		verifyAwsConnectionFlow
-	} from './onboardingFlowActions';
-	import {
-		connectDiscoveryCandidateFlow,
-		fetchSetupDataFlow
-	} from './onboardingSetupActions';
+	import { proceedToVerifyFlow, verifyAwsConnectionFlow } from './onboardingFlowActions';
+	import { connectDiscoveryCandidateFlow, fetchSetupDataFlow } from './onboardingSetupActions';
 	import {
 		applyCloudPlusVendorDefaults as applyCloudPlusVendorDefaultsHelper,
 		applyDiscoveryCandidateLocally as applyDiscoveryCandidateLocallyHelper,
@@ -52,16 +47,32 @@
 	} from './onboardingUiActions';
 	import './OnboardingPageViewContent.css';
 	let { data } = $props();
-	let currentStep = $state(0), selectedProvider: OnboardingProvider = $state('aws'); // 0: Select Provider, 1: Setup, 2: Verify, 3: Done
+	let currentStep = $state(0),
+		selectedProvider: OnboardingProvider = $state('aws'); // 0: Select Provider, 1: Setup, 2: Verify, 3: Done
 	let selectedTab: 'cloudformation' | 'terraform' = $state('cloudformation');
-	let externalId = $state(''), magicLink = $state(''), cloudformationYaml = $state(''), terraformHcl = $state('');
-	let roleArn = $state(''), awsAccountId = $state(''), isManagementAccount = $state(false), organizationId = $state('');
-	let azureSubscriptionId = $state(''), azureTenantId = $state(''), azureClientId = $state('');
-	let gcpProjectId = $state(''), gcpBillingProjectId = $state(''), gcpBillingDataset = $state(''), gcpBillingTable = $state('');
-	let cloudShellSnippet = $state(''), cloudPlusSampleFeed = $state('');
-	let cloudPlusName = $state(''), cloudPlusVendor = $state('');
+	let externalId = $state(''),
+		magicLink = $state(''),
+		cloudformationYaml = $state(''),
+		terraformHcl = $state('');
+	let roleArn = $state(''),
+		awsAccountId = $state(''),
+		isManagementAccount = $state(false),
+		organizationId = $state('');
+	let azureSubscriptionId = $state(''),
+		azureTenantId = $state(''),
+		azureClientId = $state('');
+	let gcpProjectId = $state(''),
+		gcpBillingProjectId = $state(''),
+		gcpBillingDataset = $state(''),
+		gcpBillingTable = $state('');
+	let cloudShellSnippet = $state(''),
+		cloudPlusSampleFeed = $state('');
+	let cloudPlusName = $state(''),
+		cloudPlusVendor = $state('');
 	let cloudPlusAuthMethod: CloudPlusAuthMethod = $state('manual');
-	let cloudPlusApiKey = $state(''), cloudPlusFeedInput = $state('[]'), cloudPlusConnectorConfigInput = $state('{}');
+	let cloudPlusApiKey = $state(''),
+		cloudPlusFeedInput = $state('[]'),
+		cloudPlusConnectorConfigInput = $state('{}');
 	let cloudPlusNativeConnectors = $state<NativeConnectorMeta[]>([]);
 	let cloudPlusManualFeedSchema = $state<ManualFeedSchema>({
 		required_fields: [],
@@ -69,12 +80,16 @@
 	});
 	let cloudPlusRequiredConfigValues = $state<Record<string, string>>({});
 	let cloudPlusConfigProvider = $state<CloudPlusProvider | null>(null);
-	let discoveryEmail = $state(''), discoveryDomain = $state('');
+	let discoveryEmail = $state(''),
+		discoveryDomain = $state('');
 	let discoveryIdpProvider: IdpProvider = $state('microsoft_365');
-	let discoveryCandidates = $state<DiscoveryCandidate[]>([]), discoveryWarnings = $state<string[]>([]);
-	let discoveryLoadingStageA = $state(false), discoveryLoadingStageB = $state(false);
+	let discoveryCandidates = $state<DiscoveryCandidate[]>([]),
+		discoveryWarnings = $state<string[]>([]);
+	let discoveryLoadingStageA = $state(false),
+		discoveryLoadingStageB = $state(false);
 	let discoveryActionCandidateId = $state<string | null>(null);
-	let discoveryError = $state(''), discoveryInfo = $state('');
+	let discoveryError = $state(''),
+		discoveryInfo = $state('');
 	$effect(() => {
 		if (discoveryEmail.trim().length > 0) {
 			return;
@@ -87,14 +102,23 @@
 			discoveryEmail = normalized;
 		}
 	});
-	let isLoading = $state(false), isVerifying = $state(false), error = $state(''), success = $state(false), copied = $state(false);
+	let isLoading = $state(false),
+		isVerifying = $state(false),
+		error = $state(''),
+		success = $state(false),
+		copied = $state(false);
 	const canUseGrowthFeatures = (): boolean => canUseGrowthFeaturesForTier(data?.subscription?.tier);
-	const canUseCloudPlusFeatures = (): boolean => canUseCloudPlusFeaturesForTier(data?.subscription?.tier);
+	const canUseCloudPlusFeatures = (): boolean =>
+		canUseCloudPlusFeaturesForTier(data?.subscription?.tier);
 	const canUseIdpDeepScan = (): boolean => canUseIdpDeepScanForTier(data?.subscription?.tier);
-	const applyDiscoveryCandidateLocally = (updated: DiscoveryCandidate): void =>
-		(discoveryCandidates = applyDiscoveryCandidateLocallyHelper(discoveryCandidates, updated));
-	const upsertDiscoveryCandidates = (candidates: DiscoveryCandidate[]): void =>
-		(discoveryCandidates = upsertDiscoveryCandidatesHelper(discoveryCandidates, candidates));
+	const resolveTenantId = (): string | undefined =>
+		resolveSessionTenantId({ session: data.session, user: data.user });
+	const applyDiscoveryCandidateLocally = (updated: DiscoveryCandidate): void => {
+		discoveryCandidates = applyDiscoveryCandidateLocallyHelper(discoveryCandidates, updated);
+	};
+	const upsertDiscoveryCandidates = (candidates: DiscoveryCandidate[]): void => {
+		discoveryCandidates = upsertDiscoveryCandidatesHelper(discoveryCandidates, candidates);
+	};
 	function applyDiscoveryFlowResult(result: {
 		info?: string;
 		domain: string;
@@ -102,8 +126,10 @@
 		candidates: DiscoveryCandidate[];
 	}): void {
 		if (!result.info) return;
-		discoveryDomain = result.domain; discoveryWarnings = result.warnings;
-		upsertDiscoveryCandidates(result.candidates); discoveryInfo = result.info;
+		discoveryDomain = result.domain;
+		discoveryWarnings = result.warnings;
+		upsertDiscoveryCandidates(result.candidates);
+		discoveryInfo = result.info;
 	}
 	async function runDiscoveryStageA(): Promise<void> {
 		await runOnboardingDiscoveryStageA({
@@ -144,9 +170,14 @@
 			setActionCandidateId: (value) => (discoveryActionCandidateId = value)
 		});
 	}
-	const ignoreDiscoveryCandidate = async (candidate: DiscoveryCandidate): Promise<void> => { const updated = await updateDiscoveryCandidateStatus(candidate, 'ignore'); if (updated) discoveryInfo = `${updated.provider} ignored.`; };
-	const markDiscoveryCandidateConnected = async (candidate: DiscoveryCandidate): Promise<void> => { const updated = await updateDiscoveryCandidateStatus(candidate, 'connected'); if (updated) discoveryInfo = `${updated.provider} marked as connected.`; };
-
+	const ignoreDiscoveryCandidate = async (candidate: DiscoveryCandidate): Promise<void> => {
+		const updated = await updateDiscoveryCandidateStatus(candidate, 'ignore');
+		if (updated) discoveryInfo = `${updated.provider} ignored.`;
+	};
+	const markDiscoveryCandidateConnected = async (candidate: DiscoveryCandidate): Promise<void> => {
+		const updated = await updateDiscoveryCandidateStatus(candidate, 'connected');
+		if (updated) discoveryInfo = `${updated.provider} marked as connected.`;
+	};
 	async function connectDiscoveryCandidate(candidate: DiscoveryCandidate): Promise<void> {
 		try {
 			const info = await connectDiscoveryCandidateFlow({
@@ -170,18 +201,30 @@
 			discoveryError = err.message;
 		}
 	}
-
 	const getSelectedNativeConnector = (): NativeConnectorMeta | null =>
 		getSelectedNativeConnectorHelper(cloudPlusVendor, cloudPlusNativeConnectors);
 	const getAvailableCloudPlusAuthMethods = (): CloudPlusAuthMethod[] =>
 		getAvailableCloudPlusAuthMethodsHelper(getSelectedNativeConnector());
 	function applyCloudPlusVendorDefaults(forceRecommendedAuth: boolean = false): void {
-		const nextState = applyCloudPlusVendorDefaultsHelper({ vendor: cloudPlusVendor, connectors: cloudPlusNativeConnectors, currentAuthMethod: cloudPlusAuthMethod, connectorConfigInput: cloudPlusConnectorConfigInput, requiredConfigValues: cloudPlusRequiredConfigValues, forceRecommendedAuth });
+		const nextState = applyCloudPlusVendorDefaultsHelper({
+			vendor: cloudPlusVendor,
+			connectors: cloudPlusNativeConnectors,
+			currentAuthMethod: cloudPlusAuthMethod,
+			connectorConfigInput: cloudPlusConnectorConfigInput,
+			requiredConfigValues: cloudPlusRequiredConfigValues,
+			forceRecommendedAuth
+		});
 		cloudPlusAuthMethod = nextState.authMethod;
 		cloudPlusRequiredConfigValues = nextState.requiredConfigValues;
 	}
-	const handleCloudPlusVendorInputChanged = (): void => (cloudPlusVendor = cloudPlusVendor.trim().toLowerCase(), applyCloudPlusVendorDefaults(false));
-	const chooseNativeCloudPlusVendor = (vendor: string): void => (cloudPlusVendor = vendor.trim().toLowerCase(), applyCloudPlusVendorDefaults(true));
+	const handleCloudPlusVendorInputChanged = (): void => (
+		(cloudPlusVendor = cloudPlusVendor.trim().toLowerCase()),
+		applyCloudPlusVendorDefaults(false)
+	);
+	const chooseNativeCloudPlusVendor = (vendor: string): void => (
+		(cloudPlusVendor = vendor.trim().toLowerCase()),
+		applyCloudPlusVendorDefaults(true)
+	);
 	function handleCloudPlusAuthMethodChanged(): void {
 		const supportedAuthMethods = getAvailableCloudPlusAuthMethods();
 		if (!supportedAuthMethods.includes(cloudPlusAuthMethod)) {
@@ -193,12 +236,12 @@
 	}
 	const isCloudPlusNativeAuthMethod = (): boolean =>
 		cloudPlusAuthMethod === 'api_key' || cloudPlusAuthMethod === 'oauth';
-	const setRequiredConfigField = (field: string, value: string): void =>
-		(cloudPlusRequiredConfigValues = { ...cloudPlusRequiredConfigValues, [field]: value });
+	const setRequiredConfigField = (field: string, value: string): void => {
+		cloudPlusRequiredConfigValues = { ...cloudPlusRequiredConfigValues, [field]: value };
+	};
 	const getRequiredConfigFieldValue = (field: string): string =>
 		cloudPlusRequiredConfigValues[field] ?? '';
 	const getAccessToken = async (): Promise<string | null> => data.session?.access_token ?? null;
-
 	async function ensureOnboarded() {
 		const token = await getAccessToken();
 		if (!token) {
@@ -218,7 +261,6 @@
 		}
 		return true;
 	}
-
 	async function fetchSetupData() {
 		isLoading = true;
 		error = '';
@@ -230,7 +272,21 @@
 				cloudPlusVendor,
 				cloudPlusConnectorConfigInput
 			});
-			({ externalId, magicLink, cloudformationYaml, terraformHcl, cloudShellSnippet, cloudPlusSampleFeed, cloudPlusFeedInput, cloudPlusNativeConnectors, cloudPlusManualFeedSchema, cloudPlusVendor, cloudPlusConnectorConfigInput, cloudPlusRequiredConfigValues, cloudPlusConfigProvider } = setup);
+			({
+				externalId,
+				magicLink,
+				cloudformationYaml,
+				terraformHcl,
+				cloudShellSnippet,
+				cloudPlusSampleFeed,
+				cloudPlusFeedInput,
+				cloudPlusNativeConnectors,
+				cloudPlusManualFeedSchema,
+				cloudPlusVendor,
+				cloudPlusConnectorConfigInput,
+				cloudPlusRequiredConfigValues,
+				cloudPlusConfigProvider
+			} = setup);
 			if (setup.shouldApplyCloudPlusVendorDefaults) {
 				applyCloudPlusVendorDefaults(true);
 			}
@@ -241,7 +297,6 @@
 			isLoading = false;
 		}
 	}
-
 	async function handleContinueToSetup() {
 		const accessError = getOnboardingSetupAccessError({
 			selectedProvider,
@@ -264,7 +319,6 @@
 		currentStep = 1;
 		await fetchSetupData();
 	}
-
 	async function copyTemplate() {
 		const { template } = getCloudPlusTemplateForTab({
 			selectedTab,
@@ -284,7 +338,6 @@
 		});
 		downloadOnboardingTemplate(template, filename);
 	}
-
 	const parseCloudPlusFeed = (): Array<Record<string, unknown>> =>
 		parseOnboardingCloudPlusFeed(cloudPlusFeedInput);
 	const parseCloudPlusConnectorConfig = (): Record<string, unknown> =>
@@ -294,7 +347,6 @@
 			isNativeAuthMethod: isCloudPlusNativeAuthMethod(),
 			requiredConfigValues: cloudPlusRequiredConfigValues
 		});
-
 	async function proceedToVerify() {
 		error = '';
 		isVerifying = true;
@@ -321,7 +373,7 @@
 			if (result.success) {
 				trackOnboardingConnectionVerified({
 					accessToken: data.session?.access_token,
-					tenantId: data.user?.tenant_id,
+					tenantId: resolveTenantId(),
 					url: $page.url,
 					currentTier: data.subscription?.tier,
 					persona: String(data?.profile?.persona ?? ''),
@@ -335,11 +387,9 @@
 			isVerifying = false;
 		}
 	}
-
 	async function verifyConnection() {
 		isVerifying = true;
 		error = '';
-
 		try {
 			await verifyAwsConnectionFlow({
 				getAccessToken,
@@ -354,7 +404,7 @@
 			currentStep = 3;
 			trackOnboardingConnectionVerified({
 				accessToken: data.session?.access_token,
-				tenantId: data.user?.tenant_id,
+				tenantId: resolveTenantId(),
 				url: $page.url,
 				currentTier: data.subscription?.tier,
 				persona: String(data?.profile?.persona ?? ''),
@@ -366,34 +416,81 @@
 			isVerifying = false;
 		}
 	}
-
 	const bodyProps = $derived({
-		data, error, success, copied, isLoading, isVerifying,
-		discoveryDomain, discoveryCandidates, discoveryWarnings, discoveryLoadingStageA, discoveryLoadingStageB,
-		discoveryActionCandidateId, discoveryError, discoveryInfo,
-		externalId, magicLink, cloudformationYaml, terraformHcl, cloudShellSnippet, cloudPlusSampleFeed,
-		cloudPlusNativeConnectors, cloudPlusManualFeedSchema,
-		canUseGrowthFeatures, canUseCloudPlusFeatures, canUseIdpDeepScan,
-		getProviderLabel, getDiscoveryCategoryLabel, formatDiscoveryConfidence,
-		runDiscoveryStageA, runDiscoveryStageB, connectDiscoveryCandidate,
-		ignoreDiscoveryCandidate, markDiscoveryCandidateConnected, handleContinueToSetup,
-		copyTemplate, downloadTemplate, handleCloudPlusVendorInputChanged, chooseNativeCloudPlusVendor,
-		handleCloudPlusAuthMethodChanged, getAvailableCloudPlusAuthMethods, isCloudPlusNativeAuthMethod,
-		setRequiredConfigField, getRequiredConfigFieldValue, getSelectedNativeConnector,
-		proceedToVerify, verifyConnection
+		data,
+		error,
+		success,
+		copied,
+		isLoading,
+		isVerifying,
+		discoveryDomain,
+		discoveryCandidates,
+		discoveryWarnings,
+		discoveryLoadingStageA,
+		discoveryLoadingStageB,
+		discoveryActionCandidateId,
+		discoveryError,
+		discoveryInfo,
+		externalId,
+		magicLink,
+		cloudformationYaml,
+		terraformHcl,
+		cloudShellSnippet,
+		cloudPlusSampleFeed,
+		cloudPlusNativeConnectors,
+		cloudPlusManualFeedSchema,
+		canUseGrowthFeatures,
+		canUseCloudPlusFeatures,
+		canUseIdpDeepScan,
+		getProviderLabel,
+		getDiscoveryCategoryLabel,
+		formatDiscoveryConfidence,
+		runDiscoveryStageA,
+		runDiscoveryStageB,
+		connectDiscoveryCandidate,
+		ignoreDiscoveryCandidate,
+		markDiscoveryCandidateConnected,
+		handleContinueToSetup,
+		copyTemplate,
+		downloadTemplate,
+		handleCloudPlusVendorInputChanged,
+		chooseNativeCloudPlusVendor,
+		handleCloudPlusAuthMethodChanged,
+		getAvailableCloudPlusAuthMethods,
+		isCloudPlusNativeAuthMethod,
+		setRequiredConfigField,
+		getRequiredConfigFieldValue,
+		getSelectedNativeConnector,
+		proceedToVerify,
+		verifyConnection
 	});
 </script>
 
 <svelte:head>
 	<title>Onboarding | Valdrics</title>
 </svelte:head>
-
 <OnboardingPageViewBody
 	{...bodyProps}
-	bind:currentStep bind:selectedProvider bind:selectedTab bind:discoveryEmail bind:discoveryIdpProvider
-	bind:roleArn bind:awsAccountId bind:isManagementAccount bind:organizationId
-	bind:azureSubscriptionId bind:azureTenantId bind:azureClientId
-	bind:gcpProjectId bind:gcpBillingProjectId bind:gcpBillingDataset bind:gcpBillingTable
-	bind:cloudPlusName bind:cloudPlusVendor bind:cloudPlusAuthMethod bind:cloudPlusApiKey
-	bind:cloudPlusFeedInput bind:cloudPlusConnectorConfigInput
+	bind:currentStep
+	bind:selectedProvider
+	bind:selectedTab
+	bind:discoveryEmail
+	bind:discoveryIdpProvider
+	bind:roleArn
+	bind:awsAccountId
+	bind:isManagementAccount
+	bind:organizationId
+	bind:azureSubscriptionId
+	bind:azureTenantId
+	bind:azureClientId
+	bind:gcpProjectId
+	bind:gcpBillingProjectId
+	bind:gcpBillingDataset
+	bind:gcpBillingTable
+	bind:cloudPlusName
+	bind:cloudPlusVendor
+	bind:cloudPlusAuthMethod
+	bind:cloudPlusApiKey
+	bind:cloudPlusFeedInput
+	bind:cloudPlusConnectorConfigInput
 />

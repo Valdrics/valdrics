@@ -6,8 +6,15 @@
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import { api } from '$lib/api';
+	import { resolveSessionTenantId } from '$lib/auth/sessionTenant';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { trackProductFunnelStage } from '$lib/funnel/productFunnelTelemetry';
+	import {
+		buildPublicEnterpriseHref,
+		buildPublicSalesHref,
+		buildPublicSignupHref,
+		resolvePublicBuyingMotion
+	} from '$lib/public/publicBuyingMotion';
 	import {
 		FREE_TIER_HIGHLIGHTS,
 		FREE_TIER_LIMIT_NOTE,
@@ -28,6 +35,27 @@
 	let upgrading = $state('');
 	let error = $state('');
 	let pricingViewTracked = $state(false);
+	let tenantId = $derived(resolveSessionTenantId({ session: data.session, user: data.user }));
+	let buyingMotion = $derived(resolvePublicBuyingMotion($page.url, 'self_serve_first'));
+	let pricingHeroEnterpriseHref = $derived(
+		buildPublicEnterpriseHref(base, $page.url, {
+			entry: 'pricing',
+			source: 'pricing_hero'
+		})
+	);
+	let pricingEnterprisePathHref = $derived(
+		buildPublicEnterpriseHref(base, $page.url, {
+			entry: 'pricing',
+			source: 'pricing_enterprise'
+		})
+	);
+	let pricingValidationBriefingHref = $derived(
+		buildPublicSalesHref(base, $page.url, {
+			entry: 'pricing',
+			source: 'pricing_enterprise',
+			intent: 'enterprise_briefing'
+		})
+	);
 
 	let plans = $derived<PricingPlan[]>(
 		mergePricingPlans(
@@ -36,7 +64,11 @@
 	);
 	let freePlan = $derived(plans.find((plan) => plan.id === 'free') ?? null);
 	let paidPlans = $derived(plans.filter((plan) => plan.id !== 'free'));
-	let currentTier = $derived(String(data.subscription?.tier ?? 'free').trim().toLowerCase());
+	let currentTier = $derived(
+		String(data.subscription?.tier ?? 'free')
+			.trim()
+			.toLowerCase()
+	);
 
 	$effect(() => {
 		if (pricingViewTracked || !data.user || !data.session?.access_token) {
@@ -46,7 +78,7 @@
 		void trackProductFunnelStage({
 			accessToken: data.session.access_token,
 			stage: 'pricing_viewed',
-			tenantId: data.user?.tenant_id,
+			tenantId,
 			url: $page.url,
 			currentTier,
 			persona: String(data.profile?.persona ?? ''),
@@ -84,7 +116,14 @@
 	}
 
 	function getSignupHref(planId: string): string {
-		return `${base}/auth/login?mode=signup&plan=${planId}&cycle=${billingCycle}`;
+		return buildPublicSignupHref(base, $page.url, {
+			entry: 'pricing',
+			source: `pricing_plan_${planId}`,
+			extraParams: {
+				plan: planId,
+				cycle: billingCycle
+			}
+		});
 	}
 
 	function getFreeTierHref(): string {
@@ -135,7 +174,7 @@
 			await trackProductFunnelStage({
 				accessToken: session.access_token,
 				stage: 'checkout_started',
-				tenantId: data.user?.tenant_id,
+				tenantId,
 				url: $page.url,
 				currentTier,
 				persona: String(data.profile?.persona ?? ''),
@@ -164,8 +203,13 @@
 	subtitle="Start on the permanent free tier, prove one governed workflow, and upgrade only when you need broader provider coverage, stronger owner routing, or finance-grade governance."
 >
 	{#snippet heroActions()}
-		<a href={getFreeTierHref()} class="btn btn-primary">Start Free</a>
-		<a href={`${base}/talk-to-sales`} class="btn btn-secondary">Talk to Sales</a>
+		{#if buyingMotion === 'enterprise_first'}
+			<a href={pricingHeroEnterpriseHref} class="btn btn-primary">Open Enterprise Path</a>
+			<a href={getFreeTierHref()} class="btn btn-secondary">Start Free Workspace</a>
+		{:else}
+			<a href={getFreeTierHref()} class="btn btn-primary">Start Free Workspace</a>
+			<a href={pricingHeroEnterpriseHref} class="btn btn-secondary">See Enterprise Path</a>
+		{/if}
 	{/snippet}
 
 	{#snippet heroMeta()}
@@ -200,7 +244,9 @@
 			<div class="pricing-cycle">
 				<div class="pricing-cycle__copy">
 					<p class="pricing-cycle__kicker">Billing cycle</p>
-					<p class="pricing-cycle__note">Annual billing lowers the effective monthly price on paid plans.</p>
+					<p class="pricing-cycle__note">
+						Annual billing lowers the effective monthly price on paid plans.
+					</p>
 				</div>
 				<div class="pricing-cycle__toggle" role="group" aria-label="Billing cycle">
 					<span class:active={billingCycle === 'monthly'}>Monthly</span>
@@ -364,13 +410,15 @@
 						Use the enterprise lane only when security or procurement needs a separate track
 					</h2>
 					<p class="public-page__section-subtitle">
-						Otherwise, start on Free, Starter, Growth, or Pro. Bring in sales when SCIM,
-						private deployment, procurement, or custom control requirements need their own buying path.
+						Otherwise, start on Free, Starter, Growth, or Pro. Bring in sales when SCIM, private
+						deployment, procurement, or custom control requirements need their own buying path.
 					</p>
 				</div>
 				<div class="public-page__actions-row">
-					<a href={`${base}/talk-to-sales`} class="btn btn-primary">Talk to Sales</a>
-					<a href={`${base}/enterprise`} class="btn btn-secondary">View Enterprise Overview</a>
+					<a href={pricingEnterprisePathHref} class="btn btn-primary">Open Enterprise Path</a>
+					<a href={pricingValidationBriefingHref} class="btn btn-secondary">
+						Request Validation Briefing
+					</a>
 				</div>
 				<div class="public-page__badge-cloud pricing-buying-notes">
 					{#each PRICING_BUYING_NOTES as item (item)}

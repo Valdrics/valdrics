@@ -1,280 +1,279 @@
-	.enterprise-shell {
-		position: relative;
-		max-width: 1180px;
-		margin: 0 auto;
-		padding: 2.5rem 1.5rem 4.5rem;
-		display: grid;
-		gap: 1.5rem;
-		overflow: hidden;
-	}
+.enterprise-shell {
+	position: relative;
+	max-width: 1180px;
+	margin: 0 auto;
+	padding: 2.5rem 1.5rem 4.5rem;
+	display: grid;
+	gap: 1.5rem;
+	overflow: hidden;
+}
 
-	.enterprise-bg-glow {
-		position: absolute;
-		pointer-events: none;
-		border-radius: 999px;
-		filter: blur(56px);
-		opacity: 0.5;
-		z-index: 0;
-	}
+.enterprise-bg-glow {
+	position: absolute;
+	pointer-events: none;
+	border-radius: 999px;
+	filter: blur(56px);
+	opacity: 0.5;
+	z-index: 0;
+}
 
-	.enterprise-bg-glow-a {
-		width: 22rem;
-		height: 22rem;
-		top: -7rem;
-		left: -8rem;
-		background: radial-gradient(circle, rgb(34 211 238 / 0.34), transparent 70%);
-	}
+.enterprise-bg-glow-a {
+	width: 22rem;
+	height: 22rem;
+	top: -7rem;
+	left: -8rem;
+	background: radial-gradient(circle, rgb(34 211 238 / 0.34), transparent 70%);
+}
 
-	.enterprise-bg-glow-b {
-		width: 24rem;
-		height: 24rem;
-		right: -9rem;
-		top: 11rem;
-		background: radial-gradient(circle, rgb(16 185 129 / 0.27), transparent 72%);
-	}
+.enterprise-bg-glow-b {
+	width: 24rem;
+	height: 24rem;
+	right: -9rem;
+	top: 11rem;
+	background: radial-gradient(circle, rgb(16 185 129 / 0.27), transparent 72%);
+}
 
-	.enterprise-bg-grid {
-		position: absolute;
-		inset: -14% -12% -8% -12%;
-		pointer-events: none;
-		background-image:
-			linear-gradient(rgb(34 211 238 / 0.14) 1px, transparent 1px),
-			linear-gradient(90deg, rgb(34 211 238 / 0.12) 1px, transparent 1px);
-		background-size: 56px 56px;
-		mask-image: radial-gradient(ellipse at 55% 35%, rgb(0 0 0 / 0.78), transparent 80%);
-		-webkit-mask-image: radial-gradient(ellipse at 55% 35%, rgb(0 0 0 / 0.78), transparent 80%);
-		opacity: 0.34;
-		z-index: 0;
-		animation: enterpriseGridDrift 18s linear infinite;
-	}
+.enterprise-bg-grid {
+	position: absolute;
+	inset: -14% -12% -8% -12%;
+	pointer-events: none;
+	background-image:
+		linear-gradient(rgb(34 211 238 / 0.14) 1px, transparent 1px),
+		linear-gradient(90deg, rgb(34 211 238 / 0.12) 1px, transparent 1px);
+	background-size: 56px 56px;
+	mask-image: radial-gradient(ellipse at 55% 35%, rgb(0 0 0 / 0.78), transparent 80%);
+	-webkit-mask-image: radial-gradient(ellipse at 55% 35%, rgb(0 0 0 / 0.78), transparent 80%);
+	opacity: 0.34;
+	z-index: 0;
+	animation: enterpriseGridDrift 18s linear infinite;
+}
 
-	.enterprise-bg-aurora {
-		position: absolute;
-		inset: -12% -18% auto -18%;
-		height: 68%;
-		pointer-events: none;
-		background:
-			radial-gradient(45% 36% at 18% 45%, rgb(34 211 238 / 0.2), transparent 70%),
-			radial-gradient(45% 38% at 80% 28%, rgb(16 185 129 / 0.14), transparent 72%),
-			radial-gradient(35% 28% at 52% 12%, rgb(79 70 229 / 0.11), transparent 78%);
-		filter: blur(2px);
-		opacity: 0.72;
-		z-index: 0;
-		animation: enterpriseAuroraShift 14s ease-in-out infinite alternate;
-	}
+.enterprise-bg-aurora {
+	position: absolute;
+	inset: -12% -18% auto -18%;
+	height: 68%;
+	pointer-events: none;
+	background:
+		radial-gradient(45% 36% at 18% 45%, rgb(34 211 238 / 0.2), transparent 70%),
+		radial-gradient(45% 38% at 80% 28%, rgb(16 185 129 / 0.14), transparent 72%),
+		radial-gradient(35% 28% at 52% 12%, rgb(79 70 229 / 0.11), transparent 78%);
+	filter: blur(2px);
+	opacity: 0.72;
+	z-index: 0;
+	animation: enterpriseAuroraShift 14s ease-in-out infinite alternate;
+}
 
-	.enterprise-signal-field {
-		position: absolute;
-		inset: -8% -9% auto -9%;
-		height: 36rem;
-		pointer-events: none;
-		z-index: 0;
-	}
+.enterprise-signal-field {
+	position: absolute;
+	inset: -8% -9% auto -9%;
+	height: 36rem;
+	pointer-events: none;
+	z-index: 0;
+}
 
-	.enterprise-signal-core {
-		position: absolute;
-		left: 50%;
-		top: 42%;
-		width: 15rem;
-		height: 15rem;
-		transform: translate(-50%, -50%);
-		border-radius: 999px;
-		display: grid;
-		place-items: center;
-		background: radial-gradient(circle, rgb(34 211 238 / 0.19), transparent 70%);
-		border: 1px solid rgb(34 211 238 / 0.24);
-		box-shadow:
-			0 0 90px rgb(34 211 238 / 0.19),
-			0 0 130px rgb(16 185 129 / 0.09);
-	}
+.enterprise-signal-core {
+	position: absolute;
+	left: 50%;
+	top: 42%;
+	width: 15rem;
+	height: 15rem;
+	transform: translate(-50%, -50%);
+	border-radius: 999px;
+	display: grid;
+	place-items: center;
+	background: radial-gradient(circle, rgb(34 211 238 / 0.19), transparent 70%);
+	border: 1px solid rgb(34 211 238 / 0.24);
+	box-shadow:
+		0 0 90px rgb(34 211 238 / 0.19),
+		0 0 130px rgb(16 185 129 / 0.09);
+}
 
-	.enterprise-signal-core::before,
-	.enterprise-signal-core::after {
-		content: '';
-		position: absolute;
-		border-radius: inherit;
-		pointer-events: none;
-	}
+.enterprise-signal-core::before,
+.enterprise-signal-core::after {
+	content: '';
+	position: absolute;
+	border-radius: inherit;
+	pointer-events: none;
+}
 
-	.enterprise-signal-core::before {
-		inset: -3rem;
-		background: conic-gradient(
-			from 0deg,
-			transparent 0deg 38deg,
-			rgb(34 211 238 / 0.5) 38deg 62deg,
-			transparent 62deg 156deg,
-			rgb(16 185 129 / 0.46) 156deg 188deg,
-			transparent 188deg 274deg,
-			rgb(79 70 229 / 0.4) 274deg 302deg,
-			transparent 302deg 360deg
-		);
-		filter: blur(0.55px);
-		opacity: 0.72;
-		animation: enterpriseSignalRotate 22s linear infinite;
-	}
+.enterprise-signal-core::before {
+	inset: -3rem;
+	background: conic-gradient(
+		from 0deg,
+		transparent 0deg 38deg,
+		rgb(34 211 238 / 0.5) 38deg 62deg,
+		transparent 62deg 156deg,
+		rgb(16 185 129 / 0.46) 156deg 188deg,
+		transparent 188deg 274deg,
+		rgb(79 70 229 / 0.4) 274deg 302deg,
+		transparent 302deg 360deg
+	);
+	filter: blur(0.55px);
+	opacity: 0.72;
+	animation: enterpriseSignalRotate 22s linear infinite;
+}
 
-	.enterprise-signal-core::after {
-		inset: -1rem;
-		border: 1px solid rgb(34 211 238 / 0.34);
-		opacity: 0.7;
-	}
+.enterprise-signal-core::after {
+	inset: -1rem;
+	border: 1px solid rgb(34 211 238 / 0.34);
+	opacity: 0.7;
+}
 
-	.enterprise-signal-core :global(svg) {
-		opacity: 0.28;
-		filter: saturate(135%);
-	}
+.enterprise-signal-core :global(svg) {
+	opacity: 0.28;
+	filter: saturate(135%);
+}
 
-	.enterprise-signal-ring {
-		position: absolute;
-		left: 50%;
-		top: 42%;
-		transform: translate(-50%, -50%);
-		border-radius: 999px;
-		mix-blend-mode: screen;
-	}
+.enterprise-signal-ring {
+	position: absolute;
+	left: 50%;
+	top: 42%;
+	transform: translate(-50%, -50%);
+	border-radius: 999px;
+	mix-blend-mode: screen;
+}
 
-	.enterprise-signal-ring-a {
-		width: 21rem;
-		height: 21rem;
-		border: 1.5px dashed rgb(34 211 238 / 0.36);
-		animation: enterpriseSignalRotate 24s linear infinite;
-	}
+.enterprise-signal-ring-a {
+	width: 21rem;
+	height: 21rem;
+	border: 1.5px dashed rgb(34 211 238 / 0.36);
+	animation: enterpriseSignalRotate 24s linear infinite;
+}
 
-	.enterprise-signal-ring-b {
-		width: 33rem;
-		height: 33rem;
-		border: 1.5px dashed rgb(16 185 129 / 0.31);
-		animation: enterpriseSignalRotateReverse 32s linear infinite;
-	}
+.enterprise-signal-ring-b {
+	width: 33rem;
+	height: 33rem;
+	border: 1.5px dashed rgb(16 185 129 / 0.31);
+	animation: enterpriseSignalRotateReverse 32s linear infinite;
+}
 
-	.enterprise-signal-ring-c {
-		width: 45rem;
-		height: 45rem;
-		border: 1px solid rgb(79 70 229 / 0.22);
-		animation: enterpriseSignalRotate 42s linear infinite;
-	}
+.enterprise-signal-ring-c {
+	width: 45rem;
+	height: 45rem;
+	border: 1px solid rgb(79 70 229 / 0.22);
+	animation: enterpriseSignalRotate 42s linear infinite;
+}
 
-	.enterprise-signal-line {
-		position: absolute;
-		height: 2px;
-		background: linear-gradient(90deg, transparent, rgb(34 211 238 / 0.7), transparent);
-		filter: drop-shadow(0 0 10px rgb(34 211 238 / 0.3));
-		transform-origin: left center;
-		animation: enterpriseSignalPulse 7s ease-in-out infinite;
-	}
+.enterprise-signal-line {
+	position: absolute;
+	height: 2px;
+	background: linear-gradient(90deg, transparent, rgb(34 211 238 / 0.7), transparent);
+	filter: drop-shadow(0 0 10px rgb(34 211 238 / 0.3));
+	transform-origin: left center;
+	animation: enterpriseSignalPulse 7s ease-in-out infinite;
+}
 
-	.enterprise-signal-line-a {
-		top: 24%;
-		left: 17%;
-		width: 32%;
-		transform: rotate(11deg);
-		animation-delay: 0.6s;
-	}
+.enterprise-signal-line-a {
+	top: 24%;
+	left: 17%;
+	width: 32%;
+	transform: rotate(11deg);
+	animation-delay: 0.6s;
+}
 
-	.enterprise-signal-line-b {
-		top: 54%;
-		right: 14%;
-		width: 34%;
-		transform: rotate(-16deg);
-		animation-delay: 1.7s;
-	}
+.enterprise-signal-line-b {
+	top: 54%;
+	right: 14%;
+	width: 34%;
+	transform: rotate(-16deg);
+	animation-delay: 1.7s;
+}
 
-	.enterprise-signal-line-c {
-		top: 72%;
-		left: 31%;
-		width: 22%;
-		transform: rotate(-36deg);
-		animation-delay: 3.1s;
-	}
+.enterprise-signal-line-c {
+	top: 72%;
+	left: 31%;
+	width: 22%;
+	transform: rotate(-36deg);
+	animation-delay: 3.1s;
+}
 
-	.enterprise-signal-node {
-		position: absolute;
-		width: 0.85rem;
-		height: 0.85rem;
-		border-radius: 999px;
-		background: rgb(34 211 238 / 0.9);
-		box-shadow: 0 0 20px rgb(34 211 238 / 0.65);
-		animation: enterpriseNodePulse 4.2s ease-in-out infinite;
-	}
+.enterprise-signal-node {
+	position: absolute;
+	width: 0.85rem;
+	height: 0.85rem;
+	border-radius: 999px;
+	background: rgb(34 211 238 / 0.9);
+	box-shadow: 0 0 20px rgb(34 211 238 / 0.65);
+	animation: enterpriseNodePulse 4.2s ease-in-out infinite;
+}
 
-	.enterprise-signal-node-a {
-		top: 20%;
-		left: 30%;
-	}
+.enterprise-signal-node-a {
+	top: 20%;
+	left: 30%;
+}
 
-	.enterprise-signal-node-b {
-		top: 30%;
-		right: 28%;
-		animation-delay: 0.9s;
-	}
+.enterprise-signal-node-b {
+	top: 30%;
+	right: 28%;
+	animation-delay: 0.9s;
+}
 
-	.enterprise-signal-node-c {
-		top: 57%;
-		left: 22%;
-		animation-delay: 1.8s;
-	}
+.enterprise-signal-node-c {
+	top: 57%;
+	left: 22%;
+	animation-delay: 1.8s;
+}
 
-	.enterprise-signal-node-d {
-		top: 66%;
-		right: 24%;
-		animation-delay: 2.4s;
-	}
+.enterprise-signal-node-d {
+	top: 66%;
+	right: 24%;
+	animation-delay: 2.4s;
+}
 
-	.enterprise-signal-node-e {
-		top: 80%;
-		left: 46%;
-		animation-delay: 3.2s;
-	}
+.enterprise-signal-node-e {
+	top: 80%;
+	left: 46%;
+	animation-delay: 3.2s;
+}
 
-	.enterprise-logo-orbit {
-		position: absolute;
-		display: grid;
-		place-items: center;
-		width: 10.8rem;
-		height: 10.8rem;
-		border-radius: 999px;
-		border: 1px solid rgb(34 211 238 / 0.26);
-		background: rgb(10 13 18 / 0.42);
-		box-shadow: 0 0 55px rgb(34 211 238 / 0.16);
-		pointer-events: none;
-		z-index: 0;
-	}
+.enterprise-logo-orbit {
+	position: absolute;
+	display: grid;
+	place-items: center;
+	width: 10.8rem;
+	height: 10.8rem;
+	border-radius: 999px;
+	border: 1px solid rgb(34 211 238 / 0.26);
+	background: rgb(10 13 18 / 0.42);
+	box-shadow: 0 0 55px rgb(34 211 238 / 0.16);
+	pointer-events: none;
+	z-index: 0;
+}
 
-	.enterprise-logo-orbit :global(svg) {
-		opacity: 0.5;
-	}
+.enterprise-logo-orbit :global(svg) {
+	opacity: 0.5;
+}
 
-	.enterprise-logo-orbit::before,
-	.enterprise-logo-orbit::after {
-		content: '';
-		position: absolute;
-		inset: -0.55rem;
-		border-radius: inherit;
-		border: 1px dashed rgb(34 211 238 / 0.2);
-	}
+.enterprise-logo-orbit::before,
+.enterprise-logo-orbit::after {
+	content: '';
+	position: absolute;
+	inset: -0.55rem;
+	border-radius: inherit;
+	border: 1px dashed rgb(34 211 238 / 0.2);
+}
 
-	.enterprise-logo-orbit::after {
-		inset: -1.8rem;
-		border-style: solid;
-		border-color: rgb(16 185 129 / 0.2);
-		opacity: 0.8;
-	}
+.enterprise-logo-orbit::after {
+	inset: -1.8rem;
+	border-style: solid;
+	border-color: rgb(16 185 129 / 0.2);
+	opacity: 0.8;
+}
 
-	.enterprise-logo-orbit-a {
-		top: 3%;
-		right: 1.5%;
-		animation: enterpriseLogoFloatA 13s ease-in-out infinite;
-	}
+.enterprise-logo-orbit-a {
+	top: 3%;
+	right: 1.5%;
+	animation: enterpriseLogoFloatA 13s ease-in-out infinite;
+}
 
-	.enterprise-logo-orbit-b {
-		top: 28%;
-		left: -3.8rem;
-		animation: enterpriseLogoFloatB 15s ease-in-out infinite;
-	}
+.enterprise-logo-orbit-b {
+	top: 28%;
+	left: -3.8rem;
+	animation: enterpriseLogoFloatB 15s ease-in-out infinite;
+}
 
-	.enterprise-logo-orbit-c {
-		bottom: 4%;
-		right: -3.3rem;
-		animation: enterpriseLogoFloatC 14s ease-in-out infinite;
-	}
-
+.enterprise-logo-orbit-c {
+	bottom: 4%;
+	right: -3.3rem;
+	animation: enterpriseLogoFloatC 14s ease-in-out infinite;
+}

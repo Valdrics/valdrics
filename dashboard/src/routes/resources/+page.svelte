@@ -1,11 +1,30 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { page } from '$app/stores';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import { PUBLIC_EXTENDED_CONTACT_CHANNELS } from '$lib/landing/publicNav';
 	import { listPublicContent } from '$lib/content/publicContent';
+	import {
+		buildPublicEnterpriseHref,
+		buildPublicSignupHref,
+		resolvePublicBuyingMotion
+	} from '$lib/public/publicBuyingMotion';
 
 	const resources = listPublicContent('resources');
+	let buyingMotion = $derived(resolvePublicBuyingMotion($page.url, 'self_serve_first'));
+	let startFreeHref = $derived(
+		buildPublicSignupHref(base, $page.url, {
+			entry: 'resources',
+			source: 'resource_hub'
+		})
+	);
+	let enterprisePathHref = $derived(
+		buildPublicEnterpriseHref(base, $page.url, {
+			entry: 'resources',
+			source: 'resource_hub'
+		})
+	);
 
 	const heroHighlights = [
 		{
@@ -38,12 +57,13 @@
 	heroVariant="narrow"
 >
 	{#snippet heroActions()}
-		<a href={`${base}/auth/login?intent=resource_signup&entry=resources`} class="btn btn-primary">
-			Start Free
-		</a>
-		<a href={`${base}/talk-to-sales?entry=resources&source=resource_hub`} class="btn btn-secondary">
-			Talk to Sales
-		</a>
+		{#if buyingMotion === 'enterprise_first'}
+			<a href={enterprisePathHref} class="btn btn-primary">Open Enterprise Path</a>
+			<a href={startFreeHref} class="btn btn-secondary">Start Free Workspace</a>
+		{:else}
+			<a href={startFreeHref} class="btn btn-primary">Start Free Workspace</a>
+			<a href={enterprisePathHref} class="btn btn-secondary">See Enterprise Path</a>
+		{/if}
 		<a href={`${base}/insights`} class="btn btn-secondary">Open Insights</a>
 	{/snippet}
 
@@ -60,7 +80,9 @@
 		<section class="public-page__section" aria-labelledby="resources-library-title">
 			<div class="public-page__section-head">
 				<p class="public-page__eyebrow">Library</p>
-				<h2 id="resources-library-title" class="public-page__section-title">Use the right asset for the buying moment</h2>
+				<h2 id="resources-library-title" class="public-page__section-title">
+					Use the right asset for the buying moment
+				</h2>
 				<p class="public-page__section-subtitle">
 					Each asset is tuned for a specific stage: self-serve evaluation, team rollout alignment,
 					or formal diligence.
@@ -69,22 +91,24 @@
 
 			<div class="public-page__grid public-page__grid--3">
 				{#each resources as resource (resource.slug)}
-						<article
-							class={`public-page__card ${
-								resource.slug === 'enterprise-governance-overview'
-									? 'public-page__card--accent public-page__card--featured'
-									: resource.slug === 'greenops-decision-framework'
-										? 'public-page__card--dark'
-										: resource.slug === 'executive-one-pager'
-											? 'public-page__card--featured'
-											: ''
-							}`}
-						>
+					<article
+						class={`public-page__card ${
+							resource.slug === 'enterprise-governance-overview'
+								? 'public-page__card--accent public-page__card--featured'
+								: resource.slug === 'greenops-decision-framework'
+									? 'public-page__card--dark'
+									: resource.slug === 'executive-one-pager'
+										? 'public-page__card--featured'
+										: ''
+						}`}
+					>
 						<p class="public-page__card-kicker">{resource.kicker}</p>
 						<h2 class="public-page__card-title">{resource.title}</h2>
 						<p class="public-page__card-copy">{resource.summary}</p>
 						<div class="public-page__actions-row">
-							<a href={`${base}/resources/${resource.slug}`} class="btn btn-secondary">Open Resource</a>
+							<a href={`${base}/resources/${resource.slug}`} class="btn btn-secondary"
+								>Open Resource</a
+							>
 						</div>
 					</article>
 				{/each}
@@ -92,7 +116,7 @@
 		</section>
 
 		<section class="public-page__section" aria-labelledby="resources-contact-title">
-				<div class="public-page__band public-page__band--dark">
+			<div class="public-page__band public-page__band--dark">
 				<div class="public-page__band-copy">
 					<p class="public-page__eyebrow">Contact Directory</p>
 					<h2 id="resources-contact-title" class="public-page__section-title">Contact Directory</h2>

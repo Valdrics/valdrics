@@ -38,9 +38,9 @@
 		{/if}
 	</div>
 	<p class="text-xs text-ink-400">
-		Route policy and remediation events into external CI runbooks using tenant-scoped
-		credentials. This automation lane starts on Pro because it creates external tickets,
-		dispatches, and approval activity.
+		Route policy and remediation events into external CI runbooks using tenant-scoped credentials.
+		This automation lane starts on Pro because it creates external tickets, dispatches, and approval
+		activity.
 	</p>
 
 	{#if !isProTier}
@@ -123,7 +123,9 @@
 			type="checkbox"
 			bind:checked={settings.clear_workflow_github_token}
 			class="toggle"
-			disabled={!settings.workflow_github_enabled || !settings.workflow_has_github_token || !isProTier}
+			disabled={!settings.workflow_github_enabled ||
+				!settings.workflow_has_github_token ||
+				!isProTier}
 		/>
 		<span>Clear stored GitHub token</span>
 	</label>

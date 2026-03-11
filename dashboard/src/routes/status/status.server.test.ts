@@ -6,7 +6,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('$lib/fetchWithTimeout', async () => {
-	const actual = await vi.importActual<typeof import('$lib/fetchWithTimeout')>('$lib/fetchWithTimeout');
+	const actual =
+		await vi.importActual<typeof import('$lib/fetchWithTimeout')>('$lib/fetchWithTimeout');
 	return {
 		...actual,
 		fetchWithTimeout: mocks.fetchWithTimeout
@@ -89,7 +90,9 @@ describe('status server load', () => {
 
 		expect(result.source).toBe('live');
 		expect(result.summaryLabel).toBe('Incident detected');
-		expect(result.components.find((component) => component.name === 'Database')?.statusLabel).toBe('Unavailable');
+		expect(result.components.find((component) => component.name === 'Database')?.statusLabel).toBe(
+			'Unavailable'
+		);
 	});
 
 	it('falls back cleanly when the health fetch fails', async () => {

@@ -116,7 +116,7 @@ describe('public layout mobile menu', () => {
 
 		await waitFor(() => {
 			const active = document.activeElement as HTMLElement | null;
-			expect(active?.textContent?.trim()).toMatch(/talk to sales/i);
+			expect(active?.textContent?.trim()).toMatch(/enterprise path/i);
 		});
 
 		await fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
@@ -128,7 +128,7 @@ describe('public layout mobile menu', () => {
 		await fireEvent.keyDown(window, { key: 'Tab' });
 		await waitFor(() => {
 			const active = document.activeElement as HTMLElement | null;
-			expect(active?.textContent?.trim()).toMatch(/talk to sales/i);
+			expect(active?.textContent?.trim()).toMatch(/enterprise path/i);
 		});
 
 		await fireEvent.keyDown(window, { key: 'Escape' });
@@ -161,22 +161,20 @@ describe('public layout mobile menu', () => {
 	it('keeps desktop conversion actions in the public header', () => {
 		renderPublicLayout();
 
-		expect(screen.getAllByRole('link', { name: /^talk to sales$/i }).length).toBeGreaterThan(0);
+		expect(screen.getAllByRole('link', { name: /^enterprise path$/i }).length).toBeGreaterThan(0);
 		expect(screen.getAllByRole('link', { name: /^start free$/i }).length).toBeGreaterThan(0);
 	});
 
 	it('surfaces concise conversion-safe contact channels in footer', () => {
 		renderPublicLayout();
 
-		expect(screen.getAllByRole('link', { name: /sales@valdrics\.com/i }).length).toBeGreaterThan(
-			0
-		);
+		expect(screen.getAllByRole('link', { name: /sales@valdrics\.com/i }).length).toBeGreaterThan(0);
 		expect(screen.getAllByRole('link', { name: /support@valdrics\.com/i }).length).toBeGreaterThan(
 			0
 		);
-		expect(
-			screen.getAllByRole('link', { name: /security@valdrics\.com/i }).length
-		).toBeGreaterThan(0);
+		expect(screen.getAllByRole('link', { name: /security@valdrics\.com/i }).length).toBeGreaterThan(
+			0
+		);
 		expect(screen.queryByRole('link', { name: /enterprise@valdrics\.com/i })).toBeNull();
 		expect(screen.queryByRole('link', { name: /billing@valdrics\.com/i })).toBeNull();
 		expect(screen.queryByRole('link', { name: /hello@valdrics\.com/i })).toBeNull();

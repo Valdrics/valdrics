@@ -238,7 +238,12 @@
 	position: absolute;
 	inset: 0 0 auto 0;
 	height: 3px;
-	background: linear-gradient(90deg, rgb(18 158 192 / 0.24), rgb(18 158 192 / 0.96), rgb(16 185 129 / 0.62));
+	background: linear-gradient(
+		90deg,
+		rgb(18 158 192 / 0.24),
+		rgb(18 158 192 / 0.96),
+		rgb(16 185 129 / 0.62)
+	);
 }
 
 .pricing-plan-card--popular .pricing-plan-price {

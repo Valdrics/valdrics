@@ -3,16 +3,21 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 		kind: 'resources',
 		slug: 'enterprise-governance-overview',
 		title: 'Enterprise Governance Overview',
-		summary: 'Understand the enterprise buying lane across governance, procurement, rollout design, and operating controls.',
+		summary:
+			'Understand the enterprise buying lane across governance, procurement, rollout design, and operating controls.',
 		kicker: 'Resource',
 		seoTitle: 'Enterprise Governance Overview',
-		seoDescription: 'Review the enterprise governance lane for Valdrics, including procurement, security review, and rollout expectations.',
+		seoDescription:
+			'Review the enterprise governance lane for Valdrics, including procurement, security review, and rollout expectations.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'evaluate',
 		readingMinutes: 4,
 		audiences: ['procurement', 'security', 'executive'],
-		primaryCta: { label: 'Open Enterprise Page', href: '/enterprise' },
-		secondaryCta: { label: 'Talk to Sales', href: '/talk-to-sales' },
+		primaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
+		secondaryCta: {
+			label: 'Request Validation Briefing',
+			href: '/talk-to-sales?intent=enterprise_briefing'
+		},
 		sections: [
 			{
 				title: 'When to use the enterprise lane',
@@ -48,10 +53,12 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 		kind: 'resources',
 		slug: 'cloud-waste-review-checklist',
 		title: 'Cloud Waste Review Checklist',
-		summary: 'Run a weekly 30-minute operating review that moves material spend issues into named ownership and explicit action.',
+		summary:
+			'Run a weekly 30-minute operating review that moves material spend issues into named ownership and explicit action.',
 		kicker: 'Checklist',
 		seoTitle: 'Cloud Waste Review Checklist',
-		seoDescription: 'Use this cloud waste review checklist to run a weekly cross-functional spend review without ad hoc escalation.',
+		seoDescription:
+			'Use this cloud waste review checklist to run a weekly cross-functional spend review without ad hoc escalation.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'learn',
 		readingMinutes: 5,
@@ -93,10 +100,12 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 		kind: 'resources',
 		slug: 'greenops-decision-framework',
 		title: 'GreenOps Decision Framework',
-		summary: 'Balance cost, carbon, and reliability with one reviewable decision path instead of disconnected sustainability reporting.',
+		summary:
+			'Balance cost, carbon, and reliability with one reviewable decision path instead of disconnected sustainability reporting.',
 		kicker: 'Guide',
 		seoTitle: 'GreenOps Decision Framework',
-		seoDescription: 'Use a GreenOps decision framework that balances cost, carbon, and reliability in one reviewable operating loop.',
+		seoDescription:
+			'Use a GreenOps decision framework that balances cost, carbon, and reliability in one reviewable operating loop.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'learn',
 		readingMinutes: 6,
@@ -122,11 +131,7 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 					'The framework should show who owns the decision, what guardrails apply, and what evidence remains afterward.',
 					'That gives platform and leadership teams one narrative instead of multiple competing reports.'
 				],
-				bullets: [
-					'Named owner',
-					'Clear decision gate',
-					'Recorded outcome'
-				]
+				bullets: ['Named owner', 'Clear decision gate', 'Recorded outcome']
 			}
 		],
 		related: [
@@ -138,10 +143,12 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 		kind: 'resources',
 		slug: 'saas-license-governance-starter-pack',
 		title: 'SaaS and License Governance Starter Pack',
-		summary: 'Start software renewal and license-rightsizing reviews with owner routing, approval context, and a cleaner record for finance review.',
+		summary:
+			'Start software renewal and license-rightsizing reviews with owner routing, approval context, and a cleaner record for finance review.',
 		kicker: 'Template',
 		seoTitle: 'SaaS and License Governance Starter Pack',
-		seoDescription: 'Use a SaaS and license governance starter pack for software renewals, owner routing, and finance-ready decision context.',
+		seoDescription:
+			'Use a SaaS and license governance starter pack for software renewals, owner routing, and finance-ready decision context.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'evaluate',
 		readingMinutes: 5,
@@ -183,17 +190,27 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 		kind: 'resources',
 		slug: 'executive-one-pager',
 		title: 'Executive One-Pager',
-		summary: 'Use the one-pager when leadership, finance, or procurement needs the short version of the operating model and rollout path.',
+		summary:
+			'Use the one-pager when leadership, finance, or procurement needs the short version of the operating model and rollout path.',
 		kicker: 'Collateral',
 		seoTitle: 'Executive One-Pager',
-		seoDescription: 'Download the Valdrics executive one-pager for finance, engineering, and procurement alignment.',
+		seoDescription:
+			'Download the Valdrics executive one-pager for finance, engineering, and procurement alignment.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'evaluate',
 		readingMinutes: 3,
 		audiences: ['executive', 'finance', 'procurement'],
-		primaryCta: { label: 'Download One-Pager', href: '/resources/valdrics-enterprise-one-pager.md' },
-		secondaryCta: { label: 'Open Enterprise Page', href: '/enterprise' },
-		downloads: [{ label: 'Executive One-Pager (Markdown)', href: '/resources/valdrics-enterprise-one-pager.md' }],
+		primaryCta: {
+			label: 'Download One-Pager',
+			href: '/resources/valdrics-enterprise-one-pager.md'
+		},
+		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
+		downloads: [
+			{
+				label: 'Executive One-Pager (Markdown)',
+				href: '/resources/valdrics-enterprise-one-pager.md'
+			}
+		],
 		sections: [
 			{
 				title: 'When to use it',
@@ -201,11 +218,7 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 					'Use the one-pager when a stakeholder needs the product, rollout, and governance story quickly without reading a deeper packet.',
 					'It works best as a pre-read before a diligence or pricing conversation.'
 				],
-				bullets: [
-					'Leadership pre-read',
-					'Procurement overview',
-					'Internal alignment note'
-				]
+				bullets: ['Leadership pre-read', 'Procurement overview', 'Internal alignment note']
 			},
 			{
 				title: 'What it should answer',
@@ -213,11 +226,7 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 					'The one-pager should answer what Valdrics coordinates, how teams start, and why the operating model is different from a pure visibility tool.',
 					'It should not try to carry the full technical validation burden on its own.'
 				],
-				bullets: [
-					'What the product is',
-					'Who it is for',
-					'How a first rollout usually starts'
-				]
+				bullets: ['What the product is', 'Who it is for', 'How a first rollout usually starts']
 			}
 		],
 		related: [
@@ -229,17 +238,21 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 		kind: 'resources',
 		slug: 'roi-assumptions',
 		title: 'ROI Assumptions Worksheet',
-		summary: 'Review the planning assumptions behind the simulator so finance and engineering can pressure-test the modeled range before procurement review.',
+		summary:
+			'Review the planning assumptions behind the simulator so finance and engineering can pressure-test the modeled range before procurement review.',
 		kicker: 'Worksheet',
 		seoTitle: 'ROI Assumptions Worksheet',
-		seoDescription: 'Download the ROI assumptions worksheet used in the Valdrics simulator and planning discussions.',
+		seoDescription:
+			'Download the ROI assumptions worksheet used in the Valdrics simulator and planning discussions.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'validate',
 		readingMinutes: 3,
 		audiences: ['finance', 'executive'],
 		primaryCta: { label: 'Download Worksheet', href: '/resources/valdrics-roi-assumptions.csv' },
 		secondaryCta: { label: 'Open Pricing', href: '/pricing' },
-		downloads: [{ label: 'ROI Assumptions Worksheet (CSV)', href: '/resources/valdrics-roi-assumptions.csv' }],
+		downloads: [
+			{ label: 'ROI Assumptions Worksheet (CSV)', href: '/resources/valdrics-roi-assumptions.csv' }
+		],
 		sections: [
 			{
 				title: 'What this worksheet is for',
@@ -275,17 +288,27 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 		kind: 'resources',
 		slug: 'global-finops-compliance-workbook',
 		title: 'Global FinOps Compliance Workbook',
-		summary: 'Use the workbook when diligence needs a buyer-friendly checklist that connects controls, operations, and rollout assumptions.',
+		summary:
+			'Use the workbook when diligence needs a buyer-friendly checklist that connects controls, operations, and rollout assumptions.',
 		kicker: 'Workbook',
 		seoTitle: 'Global FinOps Compliance Workbook',
-		seoDescription: 'Download the Valdrics compliance workbook for security, procurement, and governance review.',
+		seoDescription:
+			'Download the Valdrics compliance workbook for security, procurement, and governance review.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'validate',
 		readingMinutes: 4,
 		audiences: ['security', 'procurement', 'finance'],
-		primaryCta: { label: 'Download Workbook', href: '/resources/global-finops-compliance-workbook.md' },
-		secondaryCta: { label: 'Talk to Sales', href: '/talk-to-sales' },
-		downloads: [{ label: 'Compliance Workbook (Markdown)', href: '/resources/global-finops-compliance-workbook.md' }],
+		primaryCta: {
+			label: 'Download Workbook',
+			href: '/resources/global-finops-compliance-workbook.md'
+		},
+		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
+		downloads: [
+			{
+				label: 'Compliance Workbook (Markdown)',
+				href: '/resources/global-finops-compliance-workbook.md'
+			}
+		],
 		sections: [
 			{
 				title: 'Why this workbook exists',

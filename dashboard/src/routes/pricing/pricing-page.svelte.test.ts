@@ -49,12 +49,16 @@ describe('pricing page public messaging', () => {
 			}
 		});
 
-		expect(screen.getByRole('heading', { level: 1, name: /simple, transparent pricing/i })).toBeTruthy();
+		expect(
+			screen.getByRole('heading', { level: 1, name: /simple, transparent pricing/i })
+		).toBeTruthy();
 		expect(screen.getByText(/^Start on the permanent free tier,/i)).toBeTruthy();
-		expect(screen.getByRole('heading', { name: /^free tier for your first savings workflow$/i })).toBeTruthy();
-		expect(screen.getByRole('link', { name: /start on free tier/i }).getAttribute('href')).toContain(
-			'/auth/login?mode=signup&plan=free'
-		);
+		expect(
+			screen.getByRole('heading', { name: /^free tier for your first savings workflow$/i })
+		).toBeTruthy();
+		expect(
+			screen.getByRole('link', { name: /start on free tier/i }).getAttribute('href')
+		).toContain('plan=free');
 		expect(screen.getByRole('heading', { name: /^starter$/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /^growth$/i })).toBeTruthy();
 		expect(screen.getByRole('heading', { name: /^pro$/i })).toBeTruthy();
@@ -64,11 +68,23 @@ describe('pricing page public messaging', () => {
 		expect(screen.getAllByText(/^Best for$/i).length).toBeGreaterThanOrEqual(4);
 		expect(screen.getAllByText(/^Why teams upgrade$/i).length).toBeGreaterThanOrEqual(4);
 		expect(
-			screen.getByText(/one team needs daily review cadence, initial azure\/gcp visibility, and stronger owner routing/i)
+			screen.getByText(
+				/one team needs daily review cadence, initial azure\/gcp visibility, and stronger owner routing/i
+			)
 		).toBeTruthy();
-		expect((document.body.textContent || '').includes(`$49/mo starting price. ${starterPlan?.story?.note}`)).toBe(true);
-		expect((document.body.textContent || '').includes(`$149/mo starting price. ${growthPlan?.story?.note}`)).toBe(true);
-		expect((document.body.textContent || '').includes(`$299/mo starting price. ${proPlan?.story?.note}`)).toBe(true);
+		expect(
+			(document.body.textContent || '').includes(
+				`$49/mo starting price. ${starterPlan?.story?.note}`
+			)
+		).toBe(true);
+		expect(
+			(document.body.textContent || '').includes(
+				`$149/mo starting price. ${growthPlan?.story?.note}`
+			)
+		).toBe(true);
+		expect(
+			(document.body.textContent || '').includes(`$299/mo starting price. ${proPlan?.story?.note}`)
+		).toBe(true);
 		expect(screen.getByText(growthPlan?.story?.whyUpgrade ?? '')).toBeTruthy();
 		const growthPlanCard = screen.getByRole('heading', { name: /^growth$/i }).closest('article');
 		expect(growthPlanCard?.className).toContain('pricing-plan-card--popular');
@@ -79,15 +95,23 @@ describe('pricing page public messaging', () => {
 			})
 		).toBeTruthy();
 		expect(
-			screen.getByText(/bring in sales when scim, private deployment, procurement, or custom control requirements/i)
+			screen.getByText(
+				/bring in sales when scim, private deployment, procurement, or custom control requirements/i
+			)
 		).toBeTruthy();
 		expect(screen.getByText(/prices are shown in usd for easy plan comparison/i)).toBeTruthy();
-		expect(screen.getByText(/the permanent free tier does not require a checkout session/i)).toBeTruthy();
-
-		const salesCta = screen.getAllByRole('link', { name: /talk to sales/i });
-		expect(salesCta.length).toBeGreaterThan(0);
 		expect(
-			screen.getByRole('link', { name: /view enterprise overview/i }).getAttribute('href')
-		).toBe('/enterprise');
+			screen.getByText(/the permanent free tier does not require a checkout session/i)
+		).toBeTruthy();
+
+		expect(
+			screen.getByRole('link', { name: /see enterprise path/i }).getAttribute('href') || ''
+		).toContain('/enterprise?');
+		expect(
+			screen.getByRole('link', { name: /open enterprise path/i }).getAttribute('href') || ''
+		).toContain('/enterprise?');
+		expect(
+			screen.getByRole('link', { name: /request validation briefing/i }).getAttribute('href') || ''
+		).toContain('/talk-to-sales?');
 	});
 });

@@ -66,94 +66,94 @@ test.describe('Landing visual snapshots', () => {
 
 if (runExpandedPublicVisuals) {
 	test.describe('Public route visual snapshots', () => {
-	test.describe('Desktop', () => {
-		test.use({ viewport: { width: 1440, height: 900 } });
+		test.describe('Desktop', () => {
+			test.use({ viewport: { width: 1440, height: 900 } });
 
-		test('core public routes stay visually stable', async ({ page }) => {
-			await prepareStablePublicPage(page, '/docs');
-			await expect(page.locator('.public-page')).toHaveScreenshot('public-docs-desktop.png', {
-				animations: 'disabled',
-				caret: 'hide'
+			test('core public routes stay visually stable', async ({ page }) => {
+				await prepareStablePublicPage(page, '/docs');
+				await expect(page.locator('.public-page')).toHaveScreenshot('public-docs-desktop.png', {
+					animations: 'disabled',
+					caret: 'hide'
+				});
+
+				await prepareStablePublicPage(page, '/docs/quick-start-workspace');
+				await expect(page.locator('.public-article-page')).toHaveScreenshot(
+					'public-doc-article-desktop.png',
+					{
+						animations: 'disabled',
+						caret: 'hide'
+					}
+				);
+
+				await prepareStablePublicPage(page, '/resources');
+				await expect(page.locator('.public-page')).toHaveScreenshot(
+					'public-resources-desktop.png',
+					{
+						animations: 'disabled',
+						caret: 'hide'
+					}
+				);
+
+				await prepareStablePublicPage(page, '/proof');
+				await expect(page.locator('.public-page')).toHaveScreenshot('public-proof-desktop.png', {
+					animations: 'disabled',
+					caret: 'hide'
+				});
+
+				await prepareStablePublicPage(page, '/enterprise');
+				await expect(page.locator('.enterprise-shell')).toHaveScreenshot(
+					'public-enterprise-desktop.png',
+					{
+						animations: 'disabled',
+						caret: 'hide'
+					}
+				);
+
+				await prepareStablePublicPage(page, '/talk-to-sales');
+				await expect(page.locator('.public-page')).toHaveScreenshot(
+					'public-talk-to-sales-desktop.png',
+					{
+						animations: 'disabled',
+						caret: 'hide'
+					}
+				);
 			});
-
-			await prepareStablePublicPage(page, '/docs/quick-start-workspace');
-			await expect(page.locator('.public-article-page')).toHaveScreenshot(
-				'public-doc-article-desktop.png',
-				{
-					animations: 'disabled',
-					caret: 'hide'
-				}
-			);
-
-			await prepareStablePublicPage(page, '/resources');
-			await expect(page.locator('.public-page')).toHaveScreenshot(
-				'public-resources-desktop.png',
-				{
-					animations: 'disabled',
-					caret: 'hide'
-				}
-			);
-
-			await prepareStablePublicPage(page, '/proof');
-			await expect(page.locator('.public-page')).toHaveScreenshot('public-proof-desktop.png', {
-				animations: 'disabled',
-				caret: 'hide'
-			});
-
-			await prepareStablePublicPage(page, '/enterprise');
-			await expect(page.locator('.enterprise-shell')).toHaveScreenshot(
-				'public-enterprise-desktop.png',
-				{
-					animations: 'disabled',
-					caret: 'hide'
-				}
-			);
-
-			await prepareStablePublicPage(page, '/talk-to-sales');
-			await expect(page.locator('.public-page')).toHaveScreenshot(
-				'public-talk-to-sales-desktop.png',
-				{
-					animations: 'disabled',
-					caret: 'hide'
-				}
-			);
 		});
-	});
 
-	test.describe('Mobile', () => {
-		test.use({ viewport: { width: 390, height: 844 } });
+		test.describe('Mobile', () => {
+			test.use({ viewport: { width: 390, height: 844 } });
 
-		test('core public routes stay visually stable', async ({ page }) => {
-			await prepareStablePublicPage(page, '/docs');
-			await expect(page.locator('.public-page')).toHaveScreenshot('public-docs-mobile.png', {
-				animations: 'disabled',
-				caret: 'hide'
-			});
-
-			await prepareStablePublicPage(page, '/docs/quick-start-workspace');
-			await expect(page.locator('.public-article-page')).toHaveScreenshot(
-				'public-doc-article-mobile.png',
-				{
+			test('core public routes stay visually stable', async ({ page }) => {
+				await prepareStablePublicPage(page, '/docs');
+				await expect(page.locator('.public-page')).toHaveScreenshot('public-docs-mobile.png', {
 					animations: 'disabled',
 					caret: 'hide'
-				}
-			);
+				});
 
-			await prepareStablePublicPage(page, '/proof');
-			await expect(page.locator('.public-page')).toHaveScreenshot('public-proof-mobile.png', {
-				animations: 'disabled',
-				caret: 'hide'
-			});
+				await prepareStablePublicPage(page, '/docs/quick-start-workspace');
+				await expect(page.locator('.public-article-page')).toHaveScreenshot(
+					'public-doc-article-mobile.png',
+					{
+						animations: 'disabled',
+						caret: 'hide'
+					}
+				);
 
-			await prepareStablePublicPage(page, '/talk-to-sales');
-			await expect(page.locator('.public-page')).toHaveScreenshot(
-				'public-talk-to-sales-mobile.png',
-				{
+				await prepareStablePublicPage(page, '/proof');
+				await expect(page.locator('.public-page')).toHaveScreenshot('public-proof-mobile.png', {
 					animations: 'disabled',
 					caret: 'hide'
-				}
-			);
+				});
+
+				await prepareStablePublicPage(page, '/talk-to-sales');
+				await expect(page.locator('.public-page')).toHaveScreenshot(
+					'public-talk-to-sales-mobile.png',
+					{
+						animations: 'disabled',
+						caret: 'hide'
+					}
+				);
+			});
 		});
-	});
 	});
 }

@@ -239,7 +239,10 @@ export function buildAcceptanceRuns(
 				existing.suite = item;
 			} else {
 				const previousSuiteTs = Date.parse(existing.suite.event_timestamp);
-				if (Number.isFinite(eventTs) && (!Number.isFinite(previousSuiteTs) || eventTs > previousSuiteTs)) {
+				if (
+					Number.isFinite(eventTs) &&
+					(!Number.isFinite(previousSuiteTs) || eventTs > previousSuiteTs)
+				) {
 					existing.suite = item;
 				}
 			}

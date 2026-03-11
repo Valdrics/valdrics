@@ -35,9 +35,7 @@
 						</span>
 					{/if}
 				</div>
-				<p class="text-ink-400 text-sm mt-2">
-					Combined Scope 2 (Operational) & Scope 3 (Embodied)
-				</p>
+				<p class="text-ink-400 text-sm mt-2">Combined Scope 2 (Operational) & Scope 3 (Embodied)</p>
 			</div>
 
 			{#if carbonData}
@@ -91,7 +89,9 @@
 
 	<div class="glass-panel col-span-2">
 		<div class="flex items-center justify-between mb-4">
-			<h3 class="text-lg font-semibold text-white flex items-center gap-2">📊 Monthly Carbon Budget</h3>
+			<h3 class="text-lg font-semibold text-white flex items-center gap-2">
+				📊 Monthly Carbon Budget
+			</h3>
 			{#if budgetData}
 				<span
 					class="badge"

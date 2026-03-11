@@ -36,7 +36,9 @@ interface FetchSetupFlowResult {
 	shouldApplyCloudPlusVendorDefaults: boolean;
 }
 
-export async function fetchSetupDataFlow(input: FetchSetupFlowInput): Promise<FetchSetupFlowResult> {
+export async function fetchSetupDataFlow(
+	input: FetchSetupFlowInput
+): Promise<FetchSetupFlowResult> {
 	const token = await input.getAccessToken();
 	if (!token) {
 		throw new Error('Please log in first');
@@ -66,7 +68,9 @@ export async function fetchSetupDataFlow(input: FetchSetupFlowInput): Promise<Fe
 			externalId: typeof responseData.external_id === 'string' ? responseData.external_id : '',
 			magicLink: typeof responseData.magic_link === 'string' ? responseData.magic_link : '',
 			cloudformationYaml:
-				typeof responseData.cloudformation_yaml === 'string' ? responseData.cloudformation_yaml : '',
+				typeof responseData.cloudformation_yaml === 'string'
+					? responseData.cloudformation_yaml
+					: '',
 			terraformHcl: typeof responseData.terraform_hcl === 'string' ? responseData.terraform_hcl : ''
 		};
 	}
@@ -103,7 +107,9 @@ export async function fetchSetupDataFlow(input: FetchSetupFlowInput): Promise<Fe
 				? providerDefaults[providerKey].config
 				: input.cloudPlusConnectorConfigInput,
 		cloudPlusRequiredConfigValues:
-			providerSwitched || !input.cloudPlusConnectorConfigInput.trim() ? {} : defaults.cloudPlusRequiredConfigValues,
+			providerSwitched || !input.cloudPlusConnectorConfigInput.trim()
+				? {}
+				: defaults.cloudPlusRequiredConfigValues,
 		cloudPlusConfigProvider: providerKey,
 		shouldApplyCloudPlusVendorDefaults: true
 	};

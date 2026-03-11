@@ -58,7 +58,11 @@
 	const upgradePrompt = getUpgradePrompt('pro', 'enforcement controls');
 </script>
 
-<div class="card stagger-enter relative" class:opacity-60={!proPlus} class:pointer-events-none={!proPlus}>
+<div
+	class="card stagger-enter relative"
+	class:opacity-60={!proPlus}
+	class:pointer-events-none={!proPlus}
+>
 	<div class="flex items-center justify-between mb-3">
 		<h2 class="text-lg font-semibold flex items-center gap-2">
 			<span>🛡️</span> Enforcement Control Plane
@@ -69,7 +73,9 @@
 	</div>
 
 	{#if !proPlus}
-		<div class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center">
+		<div
+			class="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-ink-950/55 px-6 text-center"
+		>
 			<div class="max-w-md space-y-3 pointer-events-auto">
 				<h3 class="text-lg font-semibold text-white">{upgradePrompt.heading}</h3>
 				<p class="text-sm text-ink-300">{upgradePrompt.body}</p>

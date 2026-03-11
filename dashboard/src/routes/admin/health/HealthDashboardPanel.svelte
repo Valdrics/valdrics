@@ -67,11 +67,20 @@
 	<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 		<div>
 			<h1 class="text-2xl font-bold mb-1">Internal Health Dashboard</h1>
-			<p class="text-ink-400 text-sm">Operational metrics pulled from live governance telemetry for internal operators.</p>
+			<p class="text-ink-400 text-sm">
+				Operational metrics pulled from live governance telemetry for internal operators.
+			</p>
 		</div>
 		<div class="flex items-center gap-2">
-			<span class={statusBadgeClass(dashboard.system.status)}>{dashboard.system.status.toUpperCase()}</span>
-			<button type="button" class="btn btn-secondary text-xs" onclick={onRefresh} disabled={refreshing}>
+			<span class={statusBadgeClass(dashboard.system.status)}
+				>{dashboard.system.status.toUpperCase()}</span
+			>
+			<button
+				type="button"
+				class="btn btn-secondary text-xs"
+				onclick={onRefresh}
+				disabled={refreshing}
+			>
 				<RefreshCw class="h-3.5 w-3.5" />
 				{refreshing ? 'Refreshing...' : 'Refresh'}
 			</button>
@@ -97,15 +106,21 @@
 				<Server class="h-4 w-4 text-ink-400" />
 			</div>
 			<p class="text-3xl font-bold text-accent-400">{dashboard.job_queue.running_jobs}</p>
-			<p class="text-xs text-danger-400 mt-1">{dashboard.job_queue.failed_last_24h} failed in last 24h</p>
+			<p class="text-xs text-danger-400 mt-1">
+				{dashboard.job_queue.failed_last_24h} failed in last 24h
+			</p>
 		</div>
 		<div class="card card-stat">
 			<div class="flex items-center justify-between mb-2">
 				<p class="text-xs text-ink-400 uppercase tracking-wide">LLM Cost (24h)</p>
 				<Wallet class="h-4 w-4 text-ink-400" />
 			</div>
-			<p class="text-3xl font-bold text-warning-400">{formatUsd(dashboard.llm_usage.estimated_cost_24h)}</p>
-			<p class="text-xs text-ink-500 mt-1">{dashboard.llm_usage.total_requests_24h.toLocaleString()} requests</p>
+			<p class="text-3xl font-bold text-warning-400">
+				{formatUsd(dashboard.llm_usage.estimated_cost_24h)}
+			</p>
+			<p class="text-xs text-ink-500 mt-1">
+				{dashboard.llm_usage.total_requests_24h.toLocaleString()} requests
+			</p>
 		</div>
 		<div class="card card-stat">
 			<div class="flex items-center justify-between mb-2">
@@ -113,7 +128,8 @@
 				<Cloud class="h-4 w-4 text-ink-400" />
 			</div>
 			<p class="text-3xl font-bold text-success-400">
-				{dashboard.cloud_connections.active_connections}/{dashboard.cloud_connections.total_connections}
+				{dashboard.cloud_connections.active_connections}/{dashboard.cloud_connections
+					.total_connections}
 			</p>
 			<p class="text-xs text-ink-500 mt-1">
 				AWS {dashboard.cloud_connections.providers?.aws?.active_connections ?? 0}/
@@ -133,7 +149,9 @@
 				{dashboard.cloud_plus_connections.active_connections}/{dashboard.cloud_plus_connections
 					.total_connections}
 			</p>
-			<p class="text-xs text-ink-500 mt-1">{dashboard.cloud_plus_connections.errored_connections} errored</p>
+			<p class="text-xs text-ink-500 mt-1">
+				{dashboard.cloud_plus_connections.errored_connections} errored
+			</p>
 		</div>
 	</div>
 
@@ -204,11 +222,15 @@
 			</div>
 			<div class="frosted-glass rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">Completed</p>
-				<p class="text-xl font-bold text-success-400">{dashboard.license_governance.requests_completed_24h}</p>
+				<p class="text-xl font-bold text-success-400">
+					{dashboard.license_governance.requests_completed_24h}
+				</p>
 			</div>
 			<div class="frosted-glass rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">Failed</p>
-				<p class="text-xl font-bold text-danger-400">{dashboard.license_governance.requests_failed_24h}</p>
+				<p class="text-xl font-bold text-danger-400">
+					{dashboard.license_governance.requests_failed_24h}
+				</p>
 			</div>
 		</div>
 		<div class="space-y-2 text-sm">
@@ -264,7 +286,9 @@
 		<div class="grid gap-4 lg:grid-cols-4">
 			<div class="frosted-glass rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">7d signup → connection</p>
-				<p class="text-xl font-bold">{formatPercent(dashboard.landing_funnel.weekly_current.signup_to_connection_rate)}</p>
+				<p class="text-xl font-bold">
+					{formatPercent(dashboard.landing_funnel.weekly_current.signup_to_connection_rate)}
+				</p>
 				<p class="text-xs text-ink-500 mt-1">
 					{formatRateDelta(dashboard.landing_funnel.weekly_delta.signup_to_connection_rate)}
 				</p>
@@ -282,14 +306,16 @@
 				<p class="text-ink-400 text-xs uppercase">7d PQL</p>
 				<p class="text-xl font-bold">{dashboard.landing_funnel.weekly_current.pql_tenants}</p>
 				<p class="text-xs text-ink-500 mt-1">
-					Δ {dashboard.landing_funnel.weekly_delta.pql_tenants > 0 ? '+' : ''}{dashboard.landing_funnel.weekly_delta.pql_tenants}
+					Δ {dashboard.landing_funnel.weekly_delta.pql_tenants > 0 ? '+' : ''}{dashboard
+						.landing_funnel.weekly_delta.pql_tenants}
 				</p>
 			</div>
 			<div class="frosted-glass rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">7d paid activations</p>
 				<p class="text-xl font-bold">{dashboard.landing_funnel.weekly_current.paid_tenants}</p>
 				<p class="text-xs text-ink-500 mt-1">
-					Δ {dashboard.landing_funnel.weekly_delta.paid_tenants > 0 ? '+' : ''}{dashboard.landing_funnel.weekly_delta.paid_tenants}
+					Δ {dashboard.landing_funnel.weekly_delta.paid_tenants > 0 ? '+' : ''}{dashboard
+						.landing_funnel.weekly_delta.paid_tenants}
 				</p>
 			</div>
 		</div>
@@ -305,7 +331,9 @@
 					</div>
 					<p class="text-sm text-ink-300 mt-3">{alert.message}</p>
 					<p class="text-xs text-ink-500 mt-2">
-						Floor {formatPercent(alert.threshold_rate)} · Previous {formatPercent(alert.previous_rate)} · Delta {formatRateDelta(alert.weekly_delta)}
+						Floor {formatPercent(alert.threshold_rate)} · Previous {formatPercent(
+							alert.previous_rate
+						)} · Delta {formatRateDelta(alert.weekly_delta)}
 					</p>
 					<p class="text-xs text-ink-500 mt-1">
 						{alert.current_numerator}/{alert.current_denominator} tenants in the current week

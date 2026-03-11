@@ -1,10 +1,34 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { page } from '$app/stores';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
+	import {
+		appendPublicAttribution,
+		buildPublicSalesHref,
+		buildPublicSignupHref
+	} from '$lib/public/publicBuyingMotion';
 	import './enterprise-page.css';
 
-	const enterpriseIntakeHref = `${base}/talk-to-sales?intent=enterprise_briefing&entry=enterprise`;
+	let enterpriseIntakeHref = $derived(
+		buildPublicSalesHref(base, $page.url, {
+			entry: 'enterprise',
+			source: 'enterprise_lane',
+			intent: 'enterprise_briefing'
+		})
+	);
+	let enterpriseStartFreeHref = $derived(
+		buildPublicSignupHref(base, $page.url, {
+			entry: 'enterprise',
+			source: 'enterprise_workspace_preview'
+		})
+	);
+	let enterprisePricingHref = $derived(
+		appendPublicAttribution(`${base}/pricing`, $page.url, {
+			entry: 'enterprise',
+			source: 'enterprise_pricing'
+		})
+	);
 	const enterpriseMailHref =
 		'mailto:enterprise@valdrics.com?cc=sales@valdrics.com&subject=Valdrics%20Enterprise%20Evaluation&body=Organization%20name%3A%0AStakeholders%3A%0ACloud%2FSaaS%20scope%3A%0ATarget%20timeline%3A';
 
@@ -79,11 +103,11 @@
 			and a formal enterprise diligence lane for security, risk, procurement, and executive review.
 		</p>
 		<div class="enterprise-hero-cta">
-			<a href={enterpriseIntakeHref} class="btn btn-primary pulse-glow">Request Enterprise Briefing</a>
-			<a href={`${base}/talk-to-sales`} class="btn btn-secondary">Talk to Sales</a>
-			<a href={`${base}/auth/login?intent=enterprise_preview`} class="btn btn-secondary"
-				>Start Free Workspace</a
+			<a href={enterpriseIntakeHref} class="btn btn-primary pulse-glow"
+				>Request Enterprise Briefing</a
 			>
+			<a href={enterpriseStartFreeHref} class="btn btn-secondary">Start Free Workspace</a>
+			<a href={enterprisePricingHref} class="btn btn-secondary">View Pricing</a>
 		</div>
 		<p class="enterprise-cta-note">
 			Validation briefing is ungated. No login required. Prefer direct email?
@@ -129,14 +153,17 @@
 				<li>Run ROI and remediation loops directly in your workspace.</li>
 				<li>Expand governance depth as teams and spend surface grow.</li>
 			</ul>
-			<a href={`${base}/pricing`} class="btn btn-secondary">View Plans</a>
+			<a href={enterprisePricingHref} class="btn btn-secondary">View Plans</a>
 		</article>
 		<article class="glass-panel enterprise-track-card enterprise-track-card-featured">
 			<p class="enterprise-kicker">Enterprise Track</p>
 			<h3>Formal diligence and procurement workflows</h3>
 			<ul>
 				<li>Coordinate security, legal, procurement, and finance sign-off.</li>
-				<li>Review governance artifacts, SCIM, and deployment controls before full production activation.</li>
+				<li>
+					Review governance artifacts, SCIM, and deployment controls before full production
+					activation.
+				</li>
 				<li>Operate a staged rollout with explicit control checkpoints.</li>
 			</ul>
 			<a href={enterpriseIntakeHref} class="btn btn-primary">Open Enterprise Intake</a>
@@ -148,8 +175,8 @@
 			<p class="enterprise-kicker">Procurement Readiness Pack</p>
 			<h2>Use externally framed diligence artifacts</h2>
 			<p>
-				Package your internal review quickly with buyer-facing artifacts covering governance controls,
-				access posture, rollout risk, and commercial readiness assumptions.
+				Package your internal review quickly with buyer-facing artifacts covering governance
+				controls, access posture, rollout risk, and commercial readiness assumptions.
 			</p>
 		</div>
 		<div class="enterprise-proof-actions">

@@ -36,7 +36,10 @@ describe('talk-to-sales page', () => {
 		cleanup();
 		getTurnstileTokenMock.mockReset();
 		getTurnstileTokenMock.mockResolvedValue(null);
-		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ ok: true, accepted: true, inquiryId: 'inq-1' })));
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue(jsonResponse({ ok: true, accepted: true, inquiryId: 'inq-1' }))
+		);
 	});
 
 	afterEach(() => {
@@ -55,15 +58,15 @@ describe('talk-to-sales page', () => {
 		expect(screen.getByLabelText(/work email/i)).toBeTruthy();
 		expect(screen.getByLabelText(/company/i)).toBeTruthy();
 		expect(screen.getByRole('button', { name: /send inquiry/i })).toBeTruthy();
-		expect(screen.getByRole('link', { name: /email instead/i }).getAttribute('href') || '').toContain(
-			'mailto:enterprise@valdrics.com'
-		);
+		expect(
+			screen.getByRole('link', { name: /email instead/i }).getAttribute('href') || ''
+		).toContain('mailto:enterprise@valdrics.com');
 	});
 
 	it('submits inquiries and shows inline success state', async () => {
-		const fetchMock = vi.fn().mockResolvedValue(
-			jsonResponse({ ok: true, accepted: true, inquiryId: 'inq-42' })
-		);
+		const fetchMock = vi
+			.fn()
+			.mockResolvedValue(jsonResponse({ ok: true, accepted: true, inquiryId: 'inq-42' }));
 		vi.stubGlobal('fetch', fetchMock);
 		getTurnstileTokenMock.mockResolvedValue('turnstile-token');
 

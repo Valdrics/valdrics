@@ -25,8 +25,8 @@ describe('Landing component decomposition', () => {
 				heroTitle: 'Control every dollar in your cloud and software stack.',
 				heroSubtitle: 'From signal to owner and approved action in one loop.',
 				primaryCtaLabel: 'Start Free Workspace',
-				secondaryCtaLabel: 'See Pricing',
-				secondaryCtaHref: '/pricing?entry=hero_secondary',
+				secondaryCtaLabel: 'See Enterprise Path',
+				secondaryCtaHref: '/enterprise?source=hero_secondary',
 				primaryCtaHref: '/auth/login?intent=engineering_control',
 				onPrimaryCta,
 				onSecondaryCta
@@ -35,7 +35,7 @@ describe('Landing component decomposition', () => {
 
 		expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
 		await fireEvent.click(screen.getByRole('link', { name: /start free workspace/i }));
-		await fireEvent.click(screen.getByRole('link', { name: /see pricing/i }));
+		await fireEvent.click(screen.getByRole('link', { name: /see enterprise path/i }));
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
 		expect(screen.getByText(/cloud \+ saas \+ software in one control layer/i)).toBeTruthy();
@@ -179,7 +179,8 @@ describe('Landing component decomposition', () => {
 		const view = render(LandingTrustSection, {
 			props: {
 				enterprisePathHref: '/enterprise?source=trust_enterprise',
-				requestValidationBriefingHref: '/talk-to-sales?source=trust_validation',
+				requestValidationBriefingHref:
+					'/talk-to-sales?source=trust_validation&intent=request_validation_briefing',
 				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
 				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
 				onTrackCta
@@ -209,7 +210,8 @@ describe('Landing component decomposition', () => {
 		const view = render(LandingTrustSection, {
 			props: {
 				enterprisePathHref: '/enterprise?source=trust_enterprise',
-				requestValidationBriefingHref: '/talk-to-sales?source=trust_validation',
+				requestValidationBriefingHref:
+					'/talk-to-sales?source=trust_validation&intent=request_validation_briefing',
 				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
 				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
 				onTrackCta
@@ -240,7 +242,8 @@ describe('Landing component decomposition', () => {
 			const trust = render(LandingTrustSection, {
 				props: {
 					enterprisePathHref: '/enterprise?source=trust_enterprise',
-					requestValidationBriefingHref: '/talk-to-sales?source=trust_validation',
+					requestValidationBriefingHref:
+						'/talk-to-sales?source=trust_validation&intent=request_validation_briefing',
 					onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
 					globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
 					onTrackCta: vi.fn()

@@ -24,7 +24,15 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     )
     _write(
         tmp_path / "docs/CAPACITY_PLAN.md",
-        "sole supported production scale path\nmanaged-platform preview/reference surface\nAWS RDS profile\nkoyeb-worker.yaml\n",
+        "sole supported production scale path\nmanaged-platform preview/reference surface\nAWS RDS profile\nkoyeb-worker.yaml\ndocs/architecture/tiering-2026.md\n",
+    )
+    _write(
+        tmp_path / "docs/roadmap.md",
+        "active planning document\nreports/roadmap/\nCurrent Focus\nbootstrap-only sqlite dev\nmanaged bundle verification\n",
+    )
+    _write(
+        tmp_path / "docs/architecture/tiering-2026.md",
+        "Permanent public proof lane\ndashboard/src/lib/pricing/publicPlans.ts\napp/shared/core/pricing.py\n",
     )
     _write(
         tmp_path / "docs/ROLLBACK_PLAN.md",
@@ -48,7 +56,7 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     )
     _write(
         tmp_path / "docs/runbooks/production_env_checklist.md",
-        "API_URL=https://api.example.com\nFRONTEND_URL=https://app.example.com\nSENTRY_DSN=https://...\nOTEL_EXPORTER_OTLP_ENDPOINT=https://collector:4317\nENFORCEMENT_APPROVAL_TOKEN_SECRET=...\nENFORCEMENT_EXPORT_SIGNING_SECRET=...\nINTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>\nEXPOSE_API_DOCUMENTATION_PUBLICLY=false\ngenerate_managed_runtime_env.py\ngenerate_managed_migration_env.py\ngenerate_managed_deployment_artifacts.py\n--env-file .runtime/production.env\n--env-file .runtime/production.migrate.env\nset -a && source .runtime/production.migrate.env && uv run alembic upgrade head\n",
+        "API_URL=https://api.example.com\nFRONTEND_URL=https://app.example.com\nSENTRY_DSN=https://...\nOTEL_EXPORTER_OTLP_ENDPOINT=https://collector:4317\nENFORCEMENT_APPROVAL_TOKEN_SECRET=...\nENFORCEMENT_EXPORT_SIGNING_SECRET=...\nINTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>\nEXPOSE_API_DOCUMENTATION_PUBLICLY=false\ngenerate_managed_runtime_env.py\ngenerate_managed_migration_env.py\ngenerate_managed_deployment_artifacts.py\nverify_managed_deployment_bundle.py\nrun_public_frontend_quality_gate.py\ndeployment.report.json\n--env-file .runtime/production.env\n--env-file .runtime/production.migrate.env\nset -a && source .runtime/production.migrate.env && uv run alembic upgrade head\n",
     )
     _write(
         tmp_path / "docs/integrations/workflow_automation.md",
@@ -99,6 +107,14 @@ def test_verify_contracts_reports_missing_and_forbidden_phrases(tmp_path: Path) 
             required_phrases=("AWS RDS profile",),
         ),
         DocumentationContract(
+            path="docs/roadmap.md",
+            required_phrases=("Current Focus",),
+        ),
+        DocumentationContract(
+            path="docs/architecture/tiering-2026.md",
+            required_phrases=("dashboard/src/lib/pricing/publicPlans.ts",),
+        ),
+        DocumentationContract(
             path="docs/ROLLBACK_PLAN.md",
             required_phrases=("ENABLE_SCHEDULER=false",),
         ),
@@ -127,6 +143,8 @@ def test_verify_contracts_reports_missing_and_forbidden_phrases(tmp_path: Path) 
                 "ENFORCEMENT_EXPORT_SIGNING_SECRET=...",
                 "generate_managed_migration_env.py",
                 "generate_managed_deployment_artifacts.py",
+                "verify_managed_deployment_bundle.py",
+                "run_public_frontend_quality_gate.py",
             ),
         ),
         DocumentationContract(

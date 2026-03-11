@@ -11,6 +11,7 @@ import {
 	type LandingAttribution
 } from './landingFunnel';
 import { emitLandingTelemetry } from './landingTelemetry';
+import type { LandingTelemetryContext } from './landingTelemetry';
 import { buildLandingTelemetryContext, isLandingSignupIntent } from './landingHeroTelemetry';
 
 interface TelemetryStateAccess {
@@ -38,13 +39,13 @@ interface TelemetryStateAccess {
 }
 
 export interface LandingHeroTelemetryController {
-	buildContext: (stage?: FunnelStage) => Parameters<typeof emitLandingTelemetry>[3];
+	buildContext: (stage?: FunnelStage) => LandingTelemetryContext;
 	initialize: () => void;
 	emitSafe: (
 		name: string,
 		section: string,
 		value?: string,
-		context?: Parameters<typeof emitLandingTelemetry>[3]
+		context?: LandingTelemetryContext
 	) => void;
 	setConsent: (accepted: boolean) => void;
 	markEngaged: () => void;
@@ -73,7 +74,7 @@ export function createLandingHeroTelemetryController(
 		name: string,
 		section: string,
 		value?: string,
-		context?: Parameters<typeof emitLandingTelemetry>[3]
+		context?: LandingTelemetryContext
 	): void => {
 		if (!access.getTelemetryEnabled()) return;
 		emitLandingTelemetry(name, section, value, context);

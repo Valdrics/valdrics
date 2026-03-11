@@ -1,10 +1,29 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import { page } from '$app/stores';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import { listPublicContent } from '$lib/content/publicContent';
+	import {
+		buildPublicEnterpriseHref,
+		buildPublicSignupHref,
+		resolvePublicBuyingMotion
+	} from '$lib/public/publicBuyingMotion';
 
 	const proofEntries = listPublicContent('proof');
+	let buyingMotion = $derived(resolvePublicBuyingMotion($page.url, 'enterprise_first'));
+	let startFreeHref = $derived(
+		buildPublicSignupHref(base, $page.url, {
+			entry: 'proof',
+			source: 'proof_pack'
+		})
+	);
+	let enterprisePathHref = $derived(
+		buildPublicEnterpriseHref(base, $page.url, {
+			entry: 'proof',
+			source: 'proof_pack'
+		})
+	);
 
 	const heroHighlights = [
 		{
@@ -36,9 +55,19 @@
 	subtitle="This page consolidates high-signal proof categories used during evaluation cycles across leadership, security, finance, and platform teams."
 >
 	{#snippet heroActions()}
-		<a href={`${base}/docs`} class="btn btn-primary">Documentation</a>
-		<a href={`${base}/docs/api`} class="btn btn-secondary">API Reference</a>
-		<a href={`${base}/`} class="btn btn-secondary">Back to Landing</a>
+		{#if buyingMotion === 'enterprise_first'}
+			<a href={enterprisePathHref} class="btn btn-primary">Open Enterprise Path</a>
+			<a href={`${base}/docs/technical-validation`} class="btn btn-secondary">
+				Open Technical Validation
+			</a>
+			<a href={startFreeHref} class="btn btn-secondary">Start Free Workspace</a>
+		{:else}
+			<a href={startFreeHref} class="btn btn-primary">Start Free Workspace</a>
+			<a href={enterprisePathHref} class="btn btn-secondary">See Enterprise Path</a>
+			<a href={`${base}/docs/technical-validation`} class="btn btn-secondary">
+				Open Technical Validation
+			</a>
+		{/if}
 	{/snippet}
 
 	{#snippet heroMeta()}
@@ -54,7 +83,9 @@
 		<section class="public-page__section" aria-labelledby="proof-categories-title">
 			<div class="public-page__section-head">
 				<p class="public-page__eyebrow">Proof categories</p>
-				<h2 id="proof-categories-title" class="public-page__section-title">Review the evidence surface by buying concern</h2>
+				<h2 id="proof-categories-title" class="public-page__section-title">
+					Review the evidence surface by buying concern
+				</h2>
 				<p class="public-page__section-subtitle">
 					Each card below groups the public proof surface by the question buyers usually ask.
 				</p>
@@ -86,20 +117,22 @@
 		</section>
 
 		<section class="public-page__section">
-				<div class="public-page__band public-page__band--dark">
+			<div class="public-page__band public-page__band--dark">
 				<div class="public-page__band-copy">
 					<p class="public-page__eyebrow">Next validation surfaces</p>
-					<h2 class="public-page__section-title">Use the next layer of documentation only when you need it</h2>
+					<h2 class="public-page__section-title">
+						Use the next layer of documentation only when you need it
+					</h2>
 					<p class="public-page__section-subtitle">
-						Move from proof categories into product and API detail only when the buyer asks for deeper
-						validation.
+						Move from proof categories into product and API detail only when the buyer asks for
+						deeper validation.
 					</p>
 				</div>
 				<div class="public-page__actions-row">
+					<a href={enterprisePathHref} class="btn btn-primary">Open Enterprise Path</a>
 					<a href={`${base}/docs`} class="btn btn-secondary">Documentation</a>
 					<a href={`${base}/docs/api`} class="btn btn-secondary">API Reference</a>
-					<a href={`${base}/pricing`} class="btn btn-secondary">Pricing</a>
-					<a href={`${base}/`} class="btn btn-primary">Back to Landing</a>
+					<a href={startFreeHref} class="btn btn-secondary">Start Free Workspace</a>
 				</div>
 			</div>
 		</section>

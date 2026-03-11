@@ -9,7 +9,11 @@ type PublicRoute = {
 };
 
 const PUBLIC_ROUTES: readonly PublicRoute[] = [
-	{ path: '/', mainHeading: /control|waste|margin risk/i },
+	{
+		path: '/',
+		mainHeading:
+			/turn cloud, saas, and software spend into governed action|move from spend visibility to owner-routed action|control cost-changing actions with approvals|protect margin with one governed system/i
+	},
 	{ path: '/docs', mainHeading: /documentation/i },
 	{ path: '/docs/quick-start-workspace', mainHeading: /quick start a valdrics workspace/i },
 	{ path: '/docs/technical-validation', mainHeading: /public capability validation summary/i },
@@ -17,10 +21,16 @@ const PUBLIC_ROUTES: readonly PublicRoute[] = [
 	{ path: '/resources', mainHeading: /resources/i },
 	{ path: '/resources/executive-one-pager', mainHeading: /executive one-pager/i },
 	{ path: '/insights', mainHeading: /insights/i },
-	{ path: '/insights/from-alert-to-approved-action', mainHeading: /from alert to approved action/i },
+	{
+		path: '/insights/from-alert-to-approved-action',
+		mainHeading: /from alert to approved action/i
+	},
 	{ path: '/proof', mainHeading: /executive and technical proof for buyer diligence/i },
 	{ path: '/proof/safe-access-model', mainHeading: /safe access model/i },
-	{ path: '/enterprise', mainHeading: /control cloud and software economics with procurement-grade confidence/i },
+	{
+		path: '/enterprise',
+		mainHeading: /control cloud and software economics with procurement-grade confidence/i
+	},
 	{ path: '/talk-to-sales', mainHeading: /talk to sales/i },
 	{ path: '/auth/login' },
 	{ path: '/privacy' },

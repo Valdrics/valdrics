@@ -182,8 +182,8 @@
 
 				<div id="signal-map-summary" class="sr-only">
 					Approval chain summary for {activeSnapshot.label}: {activeSnapshot.headline}
-					{activeSnapshot.decisionSummary} This view shows one decision record moving through scoped
-					signals, checks, approvals, and recorded outcomes.
+					{activeSnapshot.decisionSummary} This view shows one decision record moving through scoped signals,
+					checks, approvals, and recorded outcomes.
 				</div>
 			</div>
 		</div>

@@ -60,7 +60,7 @@ export const load: PageServerLoad = async ({ fetch, setHeaders }) => {
 				? 'The automated health summary timed out before it completed.'
 				: isLocalBackendOrigin(backendOrigin)
 					? `The local API at ${backendOrigin} is unavailable. Start the backend or update the backend origin configuration.`
-				: 'The automated health summary is temporarily unavailable.';
+					: 'The automated health summary is temporarily unavailable.';
 		return buildFallbackStatusSnapshot(reason);
 	}
 };

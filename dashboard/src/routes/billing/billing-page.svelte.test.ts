@@ -40,16 +40,30 @@ describe('billing page plan messaging', () => {
 		});
 
 		expect(screen.getByRole('heading', { level: 1, name: /subscription and usage/i })).toBeTruthy();
-		expect((document.body.textContent || '').includes(`$49/mo starting price. ${starterPlan?.story?.note}`)).toBe(true);
-		expect((document.body.textContent || '').includes(`$149/mo starting price. ${growthPlan?.story?.note}`)).toBe(true);
-		expect((document.body.textContent || '').includes(`$299/mo starting price. ${proPlan?.story?.note}`)).toBe(true);
+		expect(
+			(document.body.textContent || '').includes(
+				`$49/mo starting price. ${starterPlan?.story?.note}`
+			)
+		).toBe(true);
+		expect(
+			(document.body.textContent || '').includes(
+				`$149/mo starting price. ${growthPlan?.story?.note}`
+			)
+		).toBe(true);
+		expect(
+			(document.body.textContent || '').includes(`$299/mo starting price. ${proPlan?.story?.note}`)
+		).toBe(true);
 		expect(screen.getAllByText(/^Best for$/i).length).toBeGreaterThanOrEqual(4);
 		expect(screen.getAllByText(/^Why teams upgrade$/i).length).toBeGreaterThanOrEqual(4);
 		expect(
-			screen.getByText(/cross-functional teams need full aws, azure, and gcp coverage with owner routing/i)
+			screen.getByText(
+				/cross-functional teams need full aws, azure, and gcp coverage with owner routing/i
+			)
 		).toBeTruthy();
 		expect(
-			screen.getByText(/move to the enterprise lane only when scim, private deployment, procurement review/i)
+			screen.getByText(
+				/move to the enterprise lane only when scim, private deployment, procurement review/i
+			)
 		).toBeTruthy();
 		const growthPlanCard = screen.getByRole('heading', { name: /^growth$/i }).closest('article');
 		expect(growthPlanCard?.className).toContain('billing-plan-card--popular');

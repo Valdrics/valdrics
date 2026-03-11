@@ -57,11 +57,6 @@
       "preferred_max_lines": 500
     },
     {
-      "path": "app/tasks/scheduler_maintenance_ops.py",
-      "lines": 502,
-      "preferred_max_lines": 500
-    },
-    {
       "path": "app/tasks/scheduler_tasks.py",
       "lines": 576,
       "preferred_max_lines": 500

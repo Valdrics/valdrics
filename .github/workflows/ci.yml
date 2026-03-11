@@ -90,21 +90,21 @@ jobs:
           SLACK_CHANNEL_ID: ""
           JIRA_BASE_URL: ""
           GITHUB_ACTIONS_TOKEN: ""
-          CORS_ORIGINS: "[\"https://dashboard.example.com\"]"
+          CORS_ORIGINS: "[\"https://app.validation.example.com\"]"
           SENTRY_DSN: "https://example@sentry.io/1"
           OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
           FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK: "true"
           FORECASTER_BREAK_GLASS_REASON: "CI preflight while prophet is not bundled."
         run: |
           export FORECASTER_BREAK_GLASS_EXPIRES_AT="$(python - <<'PY'
-from datetime import datetime, timedelta, timezone
-print(
-    (datetime.now(timezone.utc) + timedelta(hours=4))
-    .replace(microsecond=0)
-    .isoformat()
-    .replace('+00:00', 'Z')
-)
-PY
+          from datetime import datetime, timedelta, timezone
+          print(
+              (datetime.now(timezone.utc) + timedelta(hours=4))
+              .replace(microsecond=0)
+              .isoformat()
+              .replace('+00:00', 'Z')
+          )
+          PY
           )"
           uv run python scripts/validate_runtime_env.py --environment production
 

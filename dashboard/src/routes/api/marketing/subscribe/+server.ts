@@ -71,7 +71,9 @@ export const POST: RequestHandler = async ({ request, fetch }) => {
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify(body)
 		});
-		const responsePayload = await response.json().catch(() => ({ ok: false, error: 'delivery_failed' }));
+		const responsePayload = await response
+			.json()
+			.catch(() => ({ ok: false, error: 'delivery_failed' }));
 		if (!response.ok) {
 			if (response.status === 422) {
 				return json({ ok: false, error: 'invalid_payload' }, { status: 400 });

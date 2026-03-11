@@ -34,8 +34,7 @@
 	const canonicalUrl = $derived(resolveCanonicalUrl($page.url));
 	const imageUrl = $derived(resolvePublicMetaImage($page.url, assets));
 	const effectiveOgType = $derived(
-		ogType ??
-			(contentEntry ? (contentEntry.kind === 'proof' ? 'website' : 'article') : 'website')
+		ogType ?? (contentEntry ? (contentEntry.kind === 'proof' ? 'website' : 'article') : 'website')
 	);
 	const structuredData = $derived.by(() => {
 		if (contentEntry) {
@@ -58,10 +57,8 @@
 	const DOMPurify = typeof window === 'undefined' ? null : createDOMPurify(window);
 	const structuredDataJson = $derived(
 		structuredData.map((value) =>
-			JSON.stringify(value)
-				.replaceAll('<', '\\u003c')
-				.replaceAll('</script', '<\\/script')
-			)
+			JSON.stringify(value).replaceAll('<', '\\u003c').replaceAll('</script', '<\\/script')
+		)
 	);
 	const structuredDataMarkup = $derived(
 		structuredDataJson.map((value) => {

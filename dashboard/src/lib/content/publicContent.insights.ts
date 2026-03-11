@@ -3,10 +3,12 @@ export const RAW_PUBLIC_CONTENT_INSIGHTS = [
 		kind: 'insights',
 		slug: 'why-detection-without-ownership-fails',
 		title: 'Why Detection Without Ownership Fails',
-		summary: 'Overspend still compounds when a signal appears on time but no one owns the next move clearly enough to act.',
+		summary:
+			'Overspend still compounds when a signal appears on time but no one owns the next move clearly enough to act.',
 		kicker: 'Insight',
 		seoTitle: 'Why Detection Without Ownership Fails',
-		seoDescription: 'Understand why spend detection alone does not prevent waste when ownership and approval are still ambiguous.',
+		seoDescription:
+			'Understand why spend detection alone does not prevent waste when ownership and approval are still ambiguous.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'learn',
 		readingMinutes: 6,
@@ -48,10 +50,12 @@ export const RAW_PUBLIC_CONTENT_INSIGHTS = [
 		kind: 'insights',
 		slug: 'how-to-run-a-weekly-waste-review',
 		title: 'How to Run a Weekly Waste Review',
-		summary: 'A weekly review works best when it is short, owner-driven, and focused on moving decisions forward rather than reciting KPIs.',
+		summary:
+			'A weekly review works best when it is short, owner-driven, and focused on moving decisions forward rather than reciting KPIs.',
 		kicker: 'Insight',
 		seoTitle: 'How to Run a Weekly Waste Review',
-		seoDescription: 'Run a weekly waste review that keeps engineering and finance aligned on priority issues and next actions.',
+		seoDescription:
+			'Run a weekly waste review that keeps engineering and finance aligned on priority issues and next actions.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'learn',
 		readingMinutes: 5,
@@ -93,16 +97,18 @@ export const RAW_PUBLIC_CONTENT_INSIGHTS = [
 		kind: 'insights',
 		slug: 'from-alert-to-approved-action',
 		title: 'From Alert to Approved Action',
-		summary: 'The real conversion point is when an issue becomes an approved action path, not when a chart turns red.',
+		summary:
+			'The real conversion point is when an issue becomes an approved action path, not when a chart turns red.',
 		kicker: 'Insight',
 		seoTitle: 'From Alert to Approved Action',
-		seoDescription: 'Move from alert to approved action with explicit owner routing, checks, and recorded outcomes.',
+		seoDescription:
+			'Move from alert to approved action with explicit owner routing, checks, and recorded outcomes.',
 		updatedAt: '2026-03-09T00:00:00.000Z',
 		stage: 'evaluate',
 		readingMinutes: 6,
 		audiences: ['engineering', 'finance', 'procurement'],
 		primaryCta: { label: 'See the Decision Loop', href: '/#signal-map' },
-		secondaryCta: { label: 'Talk to Sales', href: '/talk-to-sales' },
+		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
 		sections: [
 			{
 				title: 'Where the commercial story changes',
@@ -110,12 +116,7 @@ export const RAW_PUBLIC_CONTENT_INSIGHTS = [
 					'Commodity tools usually stop at alerting or recommendations. The stronger operating story begins when the issue becomes a controlled action path.',
 					'That is where finance and engineering start trusting the system as a decision layer rather than another reporting screen.'
 				],
-				bullets: [
-					'Signal scoped',
-					'Checks applied',
-					'Approval routed',
-					'Outcome recorded'
-				]
+				bullets: ['Signal scoped', 'Checks applied', 'Approval routed', 'Outcome recorded']
 			},
 			{
 				title: 'Why this matters in evaluation',
