@@ -30,6 +30,8 @@ describe('resources page contact directory', () => {
 		expect(screen.getByRole('link', { name: /sales@valdrics\.com/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /support@valdrics\.com/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /security@valdrics\.com/i })).toBeTruthy();
+		expect(screen.getByRole('link', { name: /licensing@valdrics\.com/i })).toBeTruthy();
+		expect(screen.getByRole('link', { name: /legal@valdrics\.com/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /billing@valdrics\.com/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /privacy@valdrics\.com/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /hello@valdrics\.com/i })).toBeTruthy();

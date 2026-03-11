@@ -8,18 +8,27 @@
 	let {
 		onTrackCta,
 		enterprisePathHref,
+		aboutHref,
+		docsHref,
+		statusHref,
 		requestValidationBriefingHref,
 		onePagerHref,
 		globalComplianceWorkbookHref = `${base}/resources/global-finops-compliance-workbook.md`
 	}: {
 		onTrackCta: (
 			value:
+				| 'about_review'
+				| 'docs_review'
+				| 'status_review'
 				| 'enterprise_review'
 				| 'request_validation_briefing'
 				| 'download_executive_one_pager'
 				| 'download_global_compliance_workbook'
 		) => void;
 		enterprisePathHref: string;
+		aboutHref: string;
+		docsHref: string;
+		statusHref: string;
 		requestValidationBriefingHref: string;
 		onePagerHref: string;
 		globalComplianceWorkbookHref?: string;
@@ -37,6 +46,37 @@
 			Concrete control evidence, buyer-ready materials, and a clear handoff for procurement,
 			security, and rollout review.
 		</p>
+	</div>
+
+	<div class="landing-proof-state-grid">
+		<article class="glass-panel landing-proof-state-card">
+			<p class="landing-proof-k">Current proof status</p>
+			<h3 class="landing-h3">Prelaunch, with honest public review surfaces</h3>
+			<p class="landing-p">
+				Valdrics does not publish customer logos or case studies yet. Current public proof comes
+				from transparent pricing, design-partner-informed workflow content, the proof pack,
+				technical docs, and the live status/resources surface.
+			</p>
+		</article>
+		<article class="glass-panel landing-proof-state-card">
+			<p class="landing-proof-k">About and direct review</p>
+			<h3 class="landing-h3">Buyers can review the company and product before onboarding</h3>
+			<p class="landing-p">
+				Use the public about page, docs, proof pack, and status surface to understand how
+				Valdrics is built and how early evaluation works before procurement or source access.
+			</p>
+			<div class="landing-proof-state-links">
+				<a href={aboutHref} class="landing-cta-link" onclick={() => onTrackCta('about_review')}
+					>About Valdrics</a
+				>
+				<a href={docsHref} class="landing-cta-link" onclick={() => onTrackCta('docs_review')}
+					>Open Docs</a
+				>
+				<a href={statusHref} class="landing-cta-link" onclick={() => onTrackCta('status_review')}
+					>View Status</a
+				>
+			</div>
+		</article>
 	</div>
 
 	<div

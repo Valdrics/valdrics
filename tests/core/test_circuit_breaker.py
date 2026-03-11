@@ -78,6 +78,17 @@ class TestCircuitBreakerState:
             assert result1 == 1
             assert result2 == 2
 
+    @pytest.mark.asyncio
+    async def test_memory_fallback_incr_float(self):
+        with patch("app.shared.remediation.circuit_breaker.settings.REDIS_URL", None):
+            state = CircuitBreakerState("tenant-fallback-incr-float", redis_client=None)
+
+            result1 = await state.incr_float("daily_savings_usd", 1.5)
+            result2 = await state.incr_float("daily_savings_usd", 2.25)
+
+            assert result1 == 1.5
+            assert result2 == 3.75
+
 
 class TestCircuitBreaker:
     """Test CircuitBreaker class."""

@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch
 from starlette.responses import Response
+import structlog
 from app.shared.core.middleware import (
     InternalMetricsAccessMiddleware,
     RequestIDMiddleware,
@@ -97,6 +98,28 @@ async def test_request_id_middleware_replaces_invalid_client_value():
 
 
 @pytest.mark.asyncio
+async def test_request_id_middleware_preserves_existing_contextvars():
+    async def call_next(request):
+        assert hasattr(request.state, "request_id")
+        context = structlog.contextvars.get_contextvars()
+        assert context["trace_id"] == "trace-123"
+        return Response("ok")
+
+    middleware = RequestIDMiddleware(MagicMock())
+
+    request = MagicMock()
+    request.headers = {}
+    request.state = MagicMock()
+
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(trace_id="trace-123")
+    try:
+        await middleware.dispatch(request, call_next)
+    finally:
+        structlog.contextvars.clear_contextvars()
+
+
+@pytest.mark.asyncio
 async def test_trusted_proxy_headers_middleware_normalizes_client_and_scheme():
     async def call_next(request):
         assert request.client is not None
@@ -190,3 +213,33 @@ async def test_internal_metrics_access_middleware_allows_authenticated_public_re
         response = await middleware.dispatch(request, call_next)
 
     assert response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_internal_metrics_access_middleware_blocks_private_network_without_token_when_configured():
+    async def call_next(request):
+        return Response("ok")
+
+    middleware = InternalMetricsAccessMiddleware(MagicMock())
+
+    with patch("app.shared.core.middleware.get_settings") as mock_settings:
+        mock_settings.return_value.TESTING = False
+        mock_settings.return_value.ENVIRONMENT = "production"
+        mock_settings.return_value.INTERNAL_METRICS_AUTH_TOKEN = "x" * 40
+
+        from fastapi import Request
+
+        request = Request(
+            {
+                "type": "http",
+                "scheme": "https",
+                "method": "GET",
+                "path": "/_internal/metrics",
+                "headers": [],
+                "client": ("10.0.0.8", 44321),
+            }
+        )
+
+        response = await middleware.dispatch(request, call_next)
+
+    assert response.status_code == 404

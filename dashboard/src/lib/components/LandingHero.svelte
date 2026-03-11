@@ -30,6 +30,7 @@
 	} from '$lib/landing/landingHeroActions';
 	import { mountLandingHeroBrowserRuntime } from '$lib/landing/landingHeroBrowserRuntime';
 	import { createLandingHeroTelemetryBridge } from '$lib/landing/landingHeroTelemetryBridge';
+	import { appendPublicAttribution } from '$lib/public/publicBuyingMotion';
 	import {
 		calculateLandingHeroScenarioMetrics,
 		formatLandingHeroCurrencyAmount,
@@ -111,17 +112,20 @@
 		experiments.ctaVariant === 'book_briefing' ? 'Book Executive Briefing' : 'Start Free Workspace'
 	);
 	let secondaryCtaLabel = $derived(
-		experiments.ctaVariant === 'book_briefing' ? 'Start Free Workspace' : 'See Enterprise Path'
+		experiments.ctaVariant === 'book_briefing' ? 'Start Free Workspace' : 'See Pricing'
 	);
 	let secondaryCtaHref = $derived(
 		experiments.ctaVariant === 'book_briefing'
 			? buildSignupHref(heroContext.primaryIntent, { source: 'hero_secondary' })
-			: buildEnterpriseReviewHref('hero_secondary')
+			: buildPublicPath(`${base}/pricing`, 'hero_secondary')
 	);
 	let roiPlannerHref = $derived(buildSignupHref('roi_assessment', { source: 'simulator' }));
 	let requestValidationBriefingHref = $derived(
 			buildTalkToSalesHref('trust_validation', 'request_validation_briefing')
 		),
+		aboutHref = $derived(buildPublicPath(`${base}/about`, 'trust_about')),
+		docsHref = $derived(buildPublicPath(`${base}/docs`, 'trust_docs')),
+		statusHref = $derived(buildPublicPath(`${base}/status`, 'trust_status')),
 		plansEnterpriseHref = $derived(buildEnterpriseReviewHref('plans_enterprise')),
 		trustEnterpriseHref = $derived(buildEnterpriseReviewHref('trust_enterprise'));
 	let showBackToTop = $derived(landingScrollProgressPct >= 8),
@@ -138,7 +142,7 @@
 		buildSignupHref('free_tier', { plan: 'free', source: 'free_tier' })
 	);
 	let secondaryCtaTelemetryValue = $derived(
-		experiments.ctaVariant === 'book_briefing' ? 'start_free' : 'enterprise_review'
+		experiments.ctaVariant === 'book_briefing' ? 'start_free' : 'see_pricing'
 	);
 	let includeExperimentQueryParams = $derived(shouldIncludeExperimentQueryParams($page.url, false));
 	let shouldRotateSnapshots = $derived(
@@ -285,6 +289,13 @@
 			utm: attribution.utm
 		});
 	}
+	function buildPublicPath(path: string, source: string): string {
+		return appendPublicAttribution(path, $page.url, {
+			entry: 'landing',
+			source,
+			persona: activeBuyerRole.id
+		});
+	}
 	function buildEnterpriseReviewHref(source: string): string {
 		return buildLandingHeroSalesPath({
 			path: ENTERPRISE_PATH,
@@ -402,6 +413,9 @@
 	{buildPlanCtaHref}
 	{plansEnterpriseHref}
 	{trustEnterpriseHref}
+	{aboutHref}
+	{docsHref}
+	{statusHref}
 	{requestValidationBriefingHref}
 	onePagerHref={ONE_PAGER_HREF}
 	subscribeApiPath={SUBSCRIBE_API_PATH}

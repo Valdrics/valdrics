@@ -5,7 +5,7 @@ from threading import Lock
 from typing import Optional
 import structlog
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from app.shared.core.constants import AWS_SUPPORTED_REGIONS
 from app.shared.core.config_validation import (
     validate_all_config as _validate_all_config_impl,
@@ -33,8 +33,16 @@ def get_settings() -> "Settings":
     # Require explicit configuration via environment / .env for all non-test runs.
     return Settings()
 
-SETTINGS_RELOAD_CACHE_REFRESH_RECOVERABLE_EXCEPTIONS = (ImportError, AttributeError, RuntimeError, TypeError, ValueError)
+SETTINGS_RELOAD_CACHE_REFRESH_RECOVERABLE_EXCEPTIONS = (
+    ImportError,
+    AttributeError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+)
 _settings_reload_lock = Lock()
+
+
 def reload_settings_from_environment() -> "Settings":
     """
     Atomically refresh the cached settings from current environment values.
@@ -53,6 +61,9 @@ def reload_settings_from_environment() -> "Settings":
             from app.shared.core.security import EncryptionKeyManager
 
             EncryptionKeyManager.clear_key_caches(warm=True)
+            from app.models._encryption import clear_encryption_key_cache
+
+            clear_encryption_key_cache()
         except SETTINGS_RELOAD_CACHE_REFRESH_RECOVERABLE_EXCEPTIONS as cache_exc:  # pragma: no cover - defensive path
             logger.warning("settings_reload_cache_refresh_failed", error=str(cache_exc))
         logger.debug("settings_reload_completed")
@@ -120,75 +131,6 @@ class Settings(BaseSettings):
     TRUSTED_PROXY_CIDRS: list[str] = []
     SSE_MAX_CONNECTIONS_PER_TENANT: int = 5
     SSE_POLL_INTERVAL_SECONDS: int = 3
-
-    @model_validator(mode="after")
-    def validate_all_config(self) -> "Settings":
-        """
-        PRODUCTION-GRADE: Centralized validation orchestrator.
-        Groups validation by concern for clarity and specificity.
-        """
-        _validate_all_config_impl(
-            self,
-            env_production=ENV_PRODUCTION,
-            env_staging=ENV_STAGING,
-        )
-        return self
-
-    def _validate_core_secrets(self) -> None:
-        """Validate critical security primitives (SEC-01/SEC-02/SEC-06)."""
-        _validate_core_secrets_impl(self)
-
-    def _validate_database_config(self) -> None:
-        """Validate database and cache connectivity settings."""
-        _validate_database_config_impl(self, is_production=self.is_production)
-
-    def _validate_llm_config(self) -> None:
-        """Validate LLM provider key posture and abuse bounds."""
-        _validate_llm_config_impl(self, is_production=self.is_production)
-
-    def _validate_billing_config(self) -> None:
-        """Validate billing/provider credentials and webhook allowlist."""
-        _validate_billing_config_impl(self, is_production=self.is_production)
-
-    def _validate_turnstile_config(self) -> None:
-        """Validate Turnstile anti-bot controls for public/auth surfaces."""
-        _validate_turnstile_config_impl(
-            self,
-            env_production=ENV_PRODUCTION,
-            env_staging=ENV_STAGING,
-        )
-
-    def _validate_integration_config(self) -> None:
-        """Validate SaaS integration strict-mode constraints."""
-        _validate_integration_config_impl(self, is_production=self.is_production)
-
-    def _validate_environment_safety(self) -> None:
-        """Validate network and deployment safety (SEC-A1/SEC-A2)."""
-        _validate_environment_safety_impl(
-            self,
-            env_production=ENV_PRODUCTION,
-            env_staging=ENV_STAGING,
-        )
-
-    def _validate_observability_config(self) -> None:
-        """Validate observability sink posture for strict environments."""
-        _validate_observability_config_impl(
-            self,
-            env_production=ENV_PRODUCTION,
-            env_staging=ENV_STAGING,
-        )
-
-    def _validate_remediation_guardrails(self) -> None:
-        """Validate remediation kill-switch and scope guardrails."""
-        _validate_remediation_guardrails_impl(
-            self,
-            env_production=ENV_PRODUCTION,
-            env_staging=ENV_STAGING,
-        )
-
-    def _validate_enforcement_guardrails(self) -> None:
-        """Validate enforcement gate runtime safety controls."""
-        _validate_enforcement_guardrails_impl(self)
 
     # AWS Credentials
     AWS_ACCESS_KEY_ID: Optional[str] = None
@@ -485,6 +427,85 @@ class Settings(BaseSettings):
     AZURE_MONITOR_ESTIMATED_COST_PER_CALL_USD: float = 0.0
     # Bound export window size to keep CSV export queries predictable.
     FOCUS_EXPORT_MAX_DAYS: int = 366
+
+    @field_validator("ENVIRONMENT", mode="before")
+    @classmethod
+    def _normalize_environment(cls, value: object) -> str:
+        normalized = str(value or "").strip().lower()
+        allowed = {"production", "staging", "development", "local", "test"}
+        if normalized not in allowed:
+            allowed_text = ", ".join(sorted(allowed))
+            raise ValueError(f"ENVIRONMENT must be one of: {allowed_text}")
+        return normalized
+
+    @model_validator(mode="after")
+    def validate_all_config(self) -> "Settings":
+        """
+        PRODUCTION-GRADE: Centralized validation orchestrator.
+        Groups validation by concern for clarity and specificity.
+        """
+        _validate_all_config_impl(
+            self,
+            env_production=ENV_PRODUCTION,
+            env_staging=ENV_STAGING,
+        )
+        return self
+
+    def _validate_core_secrets(self) -> None:
+        """Validate critical security primitives (SEC-01/SEC-02/SEC-06)."""
+        _validate_core_secrets_impl(self)
+
+    def _validate_database_config(self) -> None:
+        """Validate database and cache connectivity settings."""
+        _validate_database_config_impl(self, is_production=self.is_production)
+
+    def _validate_llm_config(self) -> None:
+        """Validate LLM provider key posture and abuse bounds."""
+        _validate_llm_config_impl(self, is_production=self.is_production)
+
+    def _validate_billing_config(self) -> None:
+        """Validate billing/provider credentials and webhook allowlist."""
+        _validate_billing_config_impl(self, is_production=self.is_production)
+
+    def _validate_turnstile_config(self) -> None:
+        """Validate Turnstile anti-bot controls for public/auth surfaces."""
+        _validate_turnstile_config_impl(
+            self,
+            env_production=ENV_PRODUCTION,
+            env_staging=ENV_STAGING,
+        )
+
+    def _validate_integration_config(self) -> None:
+        """Validate SaaS integration strict-mode constraints."""
+        _validate_integration_config_impl(self, is_production=self.is_production)
+
+    def _validate_environment_safety(self) -> None:
+        """Validate network and deployment safety (SEC-A1/SEC-A2)."""
+        _validate_environment_safety_impl(
+            self,
+            env_production=ENV_PRODUCTION,
+            env_staging=ENV_STAGING,
+        )
+
+    def _validate_observability_config(self) -> None:
+        """Validate observability sink posture for strict environments."""
+        _validate_observability_config_impl(
+            self,
+            env_production=ENV_PRODUCTION,
+            env_staging=ENV_STAGING,
+        )
+
+    def _validate_remediation_guardrails(self) -> None:
+        """Validate remediation kill-switch and scope guardrails."""
+        _validate_remediation_guardrails_impl(
+            self,
+            env_production=ENV_PRODUCTION,
+            env_staging=ENV_STAGING,
+        )
+
+    def _validate_enforcement_guardrails(self) -> None:
+        """Validate enforcement gate runtime safety controls."""
+        _validate_enforcement_guardrails_impl(self)
 
     model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True)
 

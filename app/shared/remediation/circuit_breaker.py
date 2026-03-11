@@ -80,6 +80,15 @@ class CircuitBreakerState:
         self._memory_state[key] = new_val
         return new_val
 
+    async def incr_float(self, key: str, amount: float) -> float:
+        if self.redis:
+            return cast(float, await self.redis.incrbyfloat(self.prefix + key, amount))
+
+        current = float(self._memory_state.get(key, 0.0))
+        new_val = current + float(amount)
+        self._memory_state[key] = new_val
+        return new_val
+
     async def delete(self, key: str) -> None:
         if self.redis:
             await self.redis.delete(self.prefix + key)
@@ -177,8 +186,7 @@ class CircuitBreaker:
 
         # Track savings (daily budget)
         await self._reset_daily_budget_if_needed()
-        current_savings = await self.state.get("daily_savings_usd", 0.0)
-        await self.state.set("daily_savings_usd", current_savings + savings)
+        await self.state.incr_float("daily_savings_usd", savings)
 
     async def record_failure(self, error: str) -> None:
         if self.backend_unavailable_reason:

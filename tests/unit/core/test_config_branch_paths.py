@@ -86,17 +86,27 @@ def test_reload_settings_from_environment_success_and_cache_warm() -> None:
     logger = MagicMock()
 
     fake_security_module = types.ModuleType("app.shared.core.security")
+    fake_encryption_module = types.ModuleType("app.models._encryption")
 
     class _KeyManager:
         clear_key_caches = MagicMock()
 
+    clear_encryption_key_cache = MagicMock()
+
     fake_security_module.EncryptionKeyManager = _KeyManager
+    fake_encryption_module.clear_encryption_key_cache = clear_encryption_key_cache
 
     with (
         patch("app.shared.core.config.get_settings", return_value=current),
         patch("app.shared.core.config.Settings", return_value=refreshed),
         patch("app.shared.core.config.structlog.get_logger", return_value=logger),
-        patch.dict("sys.modules", {"app.shared.core.security": fake_security_module}),
+        patch.dict(
+            "sys.modules",
+            {
+                "app.shared.core.security": fake_security_module,
+                "app.models._encryption": fake_encryption_module,
+            },
+        ),
     ):
         result = reload_settings_from_environment()
 
@@ -104,6 +114,7 @@ def test_reload_settings_from_environment_success_and_cache_warm() -> None:
     assert current.APP_NAME == "new-name"
     assert current.ENVIRONMENT == "production"
     _KeyManager.clear_key_caches.assert_called_once_with(warm=True)
+    clear_encryption_key_cache.assert_called_once_with()
     logger.debug.assert_any_call("settings_reload_started")
     logger.debug.assert_any_call("settings_reload_completed")
 
@@ -116,6 +127,7 @@ def test_reload_settings_from_environment_logs_warning_when_cache_refresh_fails(
     logger = MagicMock()
 
     fake_security_module = types.ModuleType("app.shared.core.security")
+    fake_encryption_module = types.ModuleType("app.models._encryption")
 
     class _KeyManager:
         @staticmethod
@@ -124,18 +136,32 @@ def test_reload_settings_from_environment_logs_warning_when_cache_refresh_fails(
             raise RuntimeError("cache warm failure")
 
     fake_security_module.EncryptionKeyManager = _KeyManager
+    fake_encryption_module.clear_encryption_key_cache = MagicMock()
 
     with (
         patch("app.shared.core.config.get_settings", return_value=current),
         patch("app.shared.core.config.Settings", return_value=refreshed),
         patch("app.shared.core.config.structlog.get_logger", return_value=logger),
-        patch.dict("sys.modules", {"app.shared.core.security": fake_security_module}),
+        patch.dict(
+            "sys.modules",
+            {
+                "app.shared.core.security": fake_security_module,
+                "app.models._encryption": fake_encryption_module,
+            },
+        ),
     ):
         result = reload_settings_from_environment()
 
     assert result is current
     assert current.APP_NAME == "new-name"
     logger.warning.assert_called_once()
+
+
+def test_environment_validator_normalizes_and_rejects_invalid_values() -> None:
+    assert Settings._normalize_environment("Production") == "production"
+
+    with pytest.raises(ValueError, match="ENVIRONMENT must be one of"):
+        Settings._normalize_environment("prod-preview")
 
 
 def test_config_core_secret_validator_branch_paths() -> None:

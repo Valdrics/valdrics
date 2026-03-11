@@ -58,10 +58,10 @@ describe('LandingHero', () => {
 		expect(
 			heroView.getByText(/turns cost, usage, and policy signals into owner-routed approvals/i)
 		).toBeTruthy();
-		const secondaryCta = heroView.getByRole('link', { name: /see enterprise path/i });
+		const secondaryCta = heroView.getByRole('link', { name: /see pricing/i });
 		expect(secondaryCta).toBeTruthy();
 		const secondaryHref = secondaryCta?.getAttribute('href') || '';
-		expect(secondaryHref).toContain('/enterprise?');
+		expect(secondaryHref).toContain('/pricing?');
 		expect(secondaryHref).toContain('source=hero_secondary');
 		if (secondaryCta) {
 			await fireEvent.click(secondaryCta);
@@ -196,6 +196,19 @@ describe('LandingHero', () => {
 		const trustSection = document.querySelector('#trust');
 		expect(trustSection).toBeTruthy();
 		const trustView = within(trustSection as HTMLElement);
+		expect(trustView.getByText(/prelaunch, with honest public review surfaces/i)).toBeTruthy();
+		expect(
+			trustView.getByText(/buyers can review the company and product before onboarding/i)
+		).toBeTruthy();
+		expect(trustView.getByRole('link', { name: /about valdrics/i }).getAttribute('href')).toContain(
+			'/about?'
+		);
+		expect(trustView.getByRole('link', { name: /^open docs$/i }).getAttribute('href')).toContain(
+			'/docs?'
+		);
+		expect(trustView.getByRole('link', { name: /view status/i }).getAttribute('href')).toContain(
+			'/status?'
+		);
 		const enterprisePathLink = trustView.getByRole('link', {
 			name: /^open enterprise path$/i
 		});

@@ -2,19 +2,14 @@ from __future__ import annotations
 
 import ipaddress
 from typing import Any
+import structlog
 
 from fastapi import Request
+from app.shared.core.bools import coerce_bool
 
 TRUSTED_PROXY_HEADER_RECOVERABLE_EXCEPTIONS = (TypeError, ValueError, AttributeError)
 _FORWARDED_PROTO_ALLOWLIST = {"http", "https"}
-
-
-def _as_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return False
+logger = structlog.get_logger()
 
 
 def _trusted_proxy_networks(
@@ -33,6 +28,7 @@ def _trusted_proxy_networks(
         try:
             networks.append(ipaddress.ip_network(cidr, strict=False))
         except ValueError:
+            logger.warning("invalid_trusted_proxy_cidr_ignored", cidr=cidr)
             continue
     return networks
 
@@ -45,7 +41,7 @@ def _fallback_client_host(request: Request) -> str:
 
 def _trusted_proxy_context(request: Request, settings_obj: Any) -> tuple[bool, str]:
     fallback = _fallback_client_host(request)
-    if not _as_bool(getattr(settings_obj, "TRUST_PROXY_HEADERS", False)):
+    if not coerce_bool(getattr(settings_obj, "TRUST_PROXY_HEADERS", False)):
         return False, fallback
 
     networks = _trusted_proxy_networks(settings_obj)

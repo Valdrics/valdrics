@@ -25,8 +25,8 @@ describe('Landing component decomposition', () => {
 				heroTitle: 'Control every dollar in your cloud and software stack.',
 				heroSubtitle: 'From signal to owner and approved action in one loop.',
 				primaryCtaLabel: 'Start Free Workspace',
-				secondaryCtaLabel: 'See Enterprise Path',
-				secondaryCtaHref: '/enterprise?source=hero_secondary',
+				secondaryCtaLabel: 'See Pricing',
+				secondaryCtaHref: '/pricing?source=hero_secondary',
 				primaryCtaHref: '/auth/login?intent=engineering_control',
 				onPrimaryCta,
 				onSecondaryCta
@@ -35,7 +35,7 @@ describe('Landing component decomposition', () => {
 
 		expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
 		await fireEvent.click(screen.getByRole('link', { name: /start free workspace/i }));
-		await fireEvent.click(screen.getByRole('link', { name: /see enterprise path/i }));
+		await fireEvent.click(screen.getByRole('link', { name: /see pricing/i }));
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
 		expect(screen.getByText(/cloud \+ saas \+ software in one control layer/i)).toBeTruthy();
@@ -241,6 +241,9 @@ describe('Landing component decomposition', () => {
 		try {
 			const trust = render(LandingTrustSection, {
 				props: {
+					aboutHref: '/about?source=trust_about',
+					docsHref: '/docs?source=trust_docs',
+					statusHref: '/status?source=trust_status',
 					enterprisePathHref: '/enterprise?source=trust_enterprise',
 					requestValidationBriefingHref:
 						'/talk-to-sales?source=trust_validation&intent=request_validation_briefing',
@@ -260,6 +263,9 @@ describe('Landing component decomposition', () => {
 			expect(
 				trustView.getByText(/the first controlled workflow lands without a services-heavy rollout/i)
 			).toBeTruthy();
+			expect(trustView.getByRole('link', { name: /about valdrics/i })).toBeTruthy();
+			expect(trustView.getByRole('link', { name: /^open docs$/i })).toBeTruthy();
+			expect(trustView.getByRole('link', { name: /view status/i })).toBeTruthy();
 			expect(trustView.queryByRole('button', { name: /next comment/i })).toBeNull();
 			expect(trustView.queryByRole('button', { name: /show comment/i })).toBeNull();
 			expect(fetchMock).not.toHaveBeenCalled();

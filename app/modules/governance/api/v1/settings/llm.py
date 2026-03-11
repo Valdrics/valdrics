@@ -231,10 +231,10 @@ async def get_llm_models(
     _current_user: CurrentUser = Depends(get_current_user_with_db_context),
 ) -> dict[str, list[str]]:
     """Returns available LLM providers and models."""
-    from app.shared.llm.pricing_data import LLM_PRICING
+    from app.shared.llm.pricing_data import get_llm_pricing_snapshot
 
     result = {}
-    for provider, models in LLM_PRICING.items():
+    for provider, models in get_llm_pricing_snapshot().items():
         result[provider] = list(models.keys())
 
     return result

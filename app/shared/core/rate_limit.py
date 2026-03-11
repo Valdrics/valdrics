@@ -19,6 +19,7 @@ from app.shared.core.proxy_headers import resolve_client_ip
 
 __all__ = [
     "get_limiter",
+    "reset_rate_limit_runtime",
     "setup_rate_limiting",
     "rate_limit",
     "global_rate_limit",
@@ -137,6 +138,15 @@ def get_redis_client() -> Redis | None:
         redis_from_url = cast(Callable[..., Redis], from_url)
         _redis_client = redis_from_url(settings.REDIS_URL, decode_responses=True)
     return _redis_client
+
+
+async def reset_rate_limit_runtime() -> None:
+    global _limiter, _redis_client
+    redis_client = _redis_client
+    _limiter = None
+    _redis_client = None
+    if redis_client is not None:
+        await redis_client.aclose()
 
 
 def setup_rate_limiting(app: FastAPI) -> None:

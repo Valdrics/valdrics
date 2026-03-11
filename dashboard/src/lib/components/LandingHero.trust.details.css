@@ -29,6 +29,32 @@
 	grid-template-columns: 1fr;
 	gap: var(--space-4);
 }
+.landing-proof-state-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: var(--space-4);
+	margin-bottom: 1rem;
+}
+@media (min-width: 900px) {
+	.landing-proof-state-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+.landing-proof-state-card {
+	display: grid;
+	gap: 0.55rem;
+	text-align: left;
+	border-color: rgb(255 255 255 / 0.14);
+	background:
+		linear-gradient(155deg, rgb(8 14 22 / 0.9), rgb(13 22 34 / 0.82)),
+		radial-gradient(circle at top right, rgb(6 182 212 / 0.14), transparent 36%);
+}
+.landing-proof-state-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.55rem 0.9rem;
+	align-items: center;
+}
 @media (min-width: 900px) {
 	.landing-evidence-grid {
 		grid-template-columns: repeat(3, minmax(0, 1fr));

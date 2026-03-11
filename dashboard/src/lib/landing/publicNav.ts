@@ -38,6 +38,7 @@ export const PUBLIC_MOBILE_LINKS: readonly PublicNavLink[] = Object.freeze([
 ]);
 
 export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze([
+	{ href: '/about', label: 'About' },
 	{ href: '/docs', label: 'Documentation' },
 	{ href: '/docs/api', label: 'API Reference' },
 	{ href: '/resources', label: 'Resources' },
@@ -81,6 +82,8 @@ export const PUBLIC_EXTENDED_CONTACT_CHANNELS: readonly PublicContactChannel[] =
 	{ label: 'Sales', email: 'sales@valdrics.com', href: 'mailto:sales@valdrics.com' },
 	{ label: 'Support', email: 'support@valdrics.com', href: 'mailto:support@valdrics.com' },
 	{ label: 'Security', email: 'security@valdrics.com', href: 'mailto:security@valdrics.com' },
+	{ label: 'Licensing', email: 'licensing@valdrics.com', href: 'mailto:licensing@valdrics.com' },
+	{ label: 'Legal', email: 'legal@valdrics.com', href: 'mailto:legal@valdrics.com' },
 	{ label: 'Billing', email: 'billing@valdrics.com', href: 'mailto:billing@valdrics.com' },
 	{ label: 'Privacy', email: 'privacy@valdrics.com', href: 'mailto:privacy@valdrics.com' },
 	{ label: 'General', email: 'hello@valdrics.com', href: 'mailto:hello@valdrics.com' },

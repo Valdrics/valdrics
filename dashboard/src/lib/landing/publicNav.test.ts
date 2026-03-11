@@ -64,6 +64,7 @@ describe('publicNav', () => {
 	});
 
 	it('keeps proof, enterprise, docs, and pricing routes surfaced consistently', () => {
+		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/about')).toBe(true);
 		expect(PUBLIC_RESOURCES_DROPDOWN_LINKS.some((link) => link.href === '/proof')).toBe(true);
 		expect(PUBLIC_FOOTER_LINKS.some((link) => link.href === '/proof')).toBe(true);
 		expect(PUBLIC_PRIMARY_LINKS.some((link) => link.href === '/pricing')).toBe(true);

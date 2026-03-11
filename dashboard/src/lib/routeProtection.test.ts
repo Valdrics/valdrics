@@ -30,6 +30,7 @@ describe('isPublicPath', () => {
 	it('treats legal pages as public', () => {
 		expect(isPublicPath('/terms')).toBe(true);
 		expect(isPublicPath('/privacy')).toBe(true);
+		expect(isPublicPath('/about')).toBe(true);
 	});
 
 	it('treats docs and status routes as public', () => {

@@ -118,9 +118,14 @@ def test_local_compose_bootstraps_postgres_and_redis_for_offline_dev() -> None:
     assert services["redis"]["image"] == "redis:7.2.5-alpine"
 
     pg_env = services["postgres"]["environment"]
+    pg_ports = services["postgres"]["ports"]
     assert "POSTGRES_DB=${POSTGRES_DB:-valdrics}" in pg_env
     assert "POSTGRES_USER=${POSTGRES_USER:-postgres}" in pg_env
-    assert "POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-local-dev-change-me}" in pg_env
+    assert (
+        "POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-valdrics-local-dev-only-change-before-sharing}"
+        in pg_env
+    )
+    assert "127.0.0.1:5432:5432" in pg_ports
 
     api_env_files = services["api"]["env_file"]
     assert ".env" in api_env_files
@@ -133,12 +138,18 @@ def test_local_compose_bootstraps_postgres_and_redis_for_offline_dev() -> None:
 
 def test_backend_dockerfile_healthcheck_uses_curl_liveness_probe() -> None:
     dockerfile_text = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8").lower()
+    entrypoint_text = (REPO_ROOT / "scripts/docker-entrypoint.sh").read_text(
+        encoding="utf-8"
+    ).lower()
 
     assert "healthcheck" in dockerfile_text
     assert "/health/live" in dockerfile_text
     assert "curl --fail --silent --show-error" in dockerfile_text
     assert "urllib.request" not in dockerfile_text
     assert "procps" in dockerfile_text
+    assert 'cmd ["/bin/sh", "/app/scripts/docker-entrypoint.sh"]' in dockerfile_text
+    assert "validate_runtime_dependencies" in entrypoint_text
+    assert "uvicorn app.main:app" in entrypoint_text
 
 
 def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults() -> None:

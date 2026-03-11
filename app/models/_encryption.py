@@ -1,5 +1,5 @@
 """
-Centralized lazy encryption key resolver for ORM column definitions.
+Centralized encryption key resolver for ORM column definitions.
 
 StringEncryptedType accepts a callable for the `key` parameter, which is
 evaluated at encrypt/decrypt time rather than at import time. This decouples
@@ -8,6 +8,7 @@ model imports from the ENCRYPTION_KEY environment variable, enabling:
 - Tests to import models without requiring ENCRYPTION_KEY
 - Tooling and scripts to introspect models without full environment setup
 - Fail-fast at first actual encryption operation, not at import
+- Runtime key rotation via settings reload without a process restart
 
 Usage in models:
     from app.models._encryption import get_encryption_key
@@ -17,22 +18,16 @@ Usage in models:
     )
 """
 
-from typing import Optional
-
-_cached_key: Optional[str] = None
-
 
 def get_encryption_key() -> str:
     """
     Lazily resolve the encryption key from settings.
 
-    The result is cached after the first call to avoid repeated config lookups
-    on every column access. Raises RuntimeError if ENCRYPTION_KEY is not set.
+    We intentionally do not keep a second module-level raw key cache here.
+    ``get_settings()`` is already cached centrally, and avoiding a duplicate raw
+    key cache keeps ORM encryption aligned with runtime settings reloads and key
+    rotation behavior.
     """
-    global _cached_key
-    if _cached_key is not None:
-        return _cached_key
-
     from app.shared.core.config import get_settings
 
     settings = get_settings()
@@ -42,15 +37,14 @@ def get_encryption_key() -> str:
             "ENCRYPTION_KEY not set. Cannot perform encryption operations. "
             "Set the ENCRYPTION_KEY environment variable before accessing encrypted data."
         )
-    _cached_key = key
-    return _cached_key
+    return key
 
 
 def clear_encryption_key_cache() -> None:
     """
-    Clear the cached encryption key.
+    Compatibility hook for config reload and tests.
 
-    Useful for testing or key rotation scenarios.
+    ORM encryption now resolves directly against the cached settings object, so
+    there is no longer a second module-level raw key cache to clear here.
     """
-    global _cached_key
-    _cached_key = None
+    return None

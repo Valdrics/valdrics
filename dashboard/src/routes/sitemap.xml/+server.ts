@@ -9,6 +9,7 @@ type SitemapEntry = {
 
 const PUBLIC_ENTRIES: SitemapEntry[] = [
 	{ path: '/', changefreq: 'weekly', priority: 1.0 },
+	{ path: '/about', changefreq: 'monthly', priority: 0.7 },
 	{ path: '/docs', changefreq: 'weekly', priority: 0.8 },
 	{ path: '/docs/api', changefreq: 'weekly', priority: 0.7 },
 	{ path: '/docs/technical-validation', changefreq: 'weekly', priority: 0.7 },

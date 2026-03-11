@@ -5,7 +5,7 @@ Centrally handles exception classification, structured logging,
 and OpenTelemetry span recording to ensure 100% observability.
 """
 
-from typing import Optional
+from typing import Any, Dict, Optional
 import structlog
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -130,7 +130,6 @@ def handle_exception(
         details=valdrics_exc.details,
     )
 
-    from typing import Optional, Dict, Any
     response_details: Optional[Dict[str, Any]] = valdrics_exc.details
     if is_prod and valdrics_exc.code not in safe_codes:
         response_details = None

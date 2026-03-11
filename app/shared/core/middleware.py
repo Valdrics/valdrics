@@ -124,11 +124,13 @@ class InternalMetricsAccessMiddleware(BaseHTTPMiddleware):
             getattr(settings, "INTERNAL_METRICS_AUTH_TOKEN", "") or ""
         ).strip()
         supplied_token = str(request.headers.get(INTERNAL_METRICS_TOKEN_HEADER, "") or "").strip()
-        if configured_token and supplied_token and secrets.compare_digest(
-            supplied_token,
-            configured_token,
-        ):
-            return await call_next(request)
+        if configured_token:
+            if supplied_token and secrets.compare_digest(
+                supplied_token,
+                configured_token,
+            ):
+                return await call_next(request)
+            return PlainTextResponse("Not Found", status_code=404)
 
         if _request_from_private_network(request):
             return await call_next(request)
@@ -170,7 +172,15 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         request.state.request_id = request_id
 
         # Log injection via contextvars (supported by structlog)
+        existing_context = structlog.contextvars.get_contextvars()
         structlog.contextvars.clear_contextvars()
+        preserved_context = {
+            key: value
+            for key, value in existing_context.items()
+            if key != "request_id"
+        }
+        if preserved_context:
+            structlog.contextvars.bind_contextvars(**preserved_context)
         structlog.contextvars.bind_contextvars(request_id=request_id)
 
         response = await call_next(request)

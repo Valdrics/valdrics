@@ -67,6 +67,9 @@
 		buildPlanCtaHref,
 		plansEnterpriseHref,
 		trustEnterpriseHref,
+		aboutHref,
+		docsHref,
+		statusHref,
 		requestValidationBriefingHref,
 		onePagerHref,
 		subscribeApiPath,
@@ -142,6 +145,9 @@
 		buildPlanCtaHref: (planId: string) => string;
 		plansEnterpriseHref: string;
 		trustEnterpriseHref: string;
+		aboutHref: string;
+		docsHref: string;
+		statusHref: string;
 		requestValidationBriefingHref: string;
 		onePagerHref: string;
 		subscribeApiPath: string;
@@ -299,6 +305,9 @@
 		<LandingTrustSection
 			onTrackCta={(value) => onTrackCta('cta_click', 'trust', value)}
 			enterprisePathHref={trustEnterpriseHref}
+			{aboutHref}
+			{docsHref}
+			{statusHref}
 			{requestValidationBriefingHref}
 			{onePagerHref}
 		/>
