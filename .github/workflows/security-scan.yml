@@ -256,6 +256,7 @@ jobs:
         with:
           target: "http://localhost:3000"
           cmd_options: "-a -j -m 5 -T 60"
+          allow_issue_writing: false
 
       - name: Tear down ephemeral QA stack
         if: always()
