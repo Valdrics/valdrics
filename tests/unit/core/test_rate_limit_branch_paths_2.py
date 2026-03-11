@@ -99,6 +99,22 @@ def test_get_redis_client_recreates_client_when_event_loop_changes() -> None:
         assert client is second_client
 
 
+@pytest.mark.asyncio
+async def test_reset_rate_limit_runtime_clears_singletons_and_closes_client() -> None:
+    redis_client = AsyncMock()
+    limiter = MagicMock()
+
+    with (
+        patch("app.shared.core.rate_limit._redis_client", redis_client),
+        patch("app.shared.core.rate_limit._limiter", limiter),
+    ):
+        await rl.reset_rate_limit_runtime()
+        assert rl._redis_client is None
+        assert rl._limiter is None
+
+    redis_client.aclose.assert_awaited_once()
+
+
 def test_analysis_limit_returns_original_function_during_testing() -> None:
     def sample() -> str:
         return "ok"

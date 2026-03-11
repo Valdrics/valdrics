@@ -12,6 +12,7 @@ import { env as publicEnv } from '$env/dynamic/public';
 import { env } from '$env/dynamic/private';
 import type { Handle } from '@sveltejs/kit';
 import type { Session, User } from '@supabase/supabase-js';
+import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { serverLogger } from '$lib/logging/server';
 import { isPublicPath } from '$lib/routeProtection';
 import { canUseE2EAuthBypass, shouldUseSecureCookies } from '$lib/serverSecurity';
@@ -21,7 +22,7 @@ const E2E_AUTH_HEADER = 'x-valdrics-e2e-auth';
 function buildE2EBypassAuth(): { session: Session; user: User } {
 	const now = Math.floor(Date.now() / 1000);
 	const user = {
-		id: '00000000-0000-4000-8000-000000000001',
+		id: randomUUID(),
 		aud: 'authenticated',
 		role: 'authenticated',
 		email: 'e2e@valdrics.test',
@@ -36,8 +37,8 @@ function buildE2EBypassAuth(): { session: Session; user: User } {
 	} as unknown as User;
 
 	const session = {
-		access_token: 'e2e-access-token',
-		refresh_token: 'e2e-refresh-token',
+		access_token: randomBytes(32).toString('hex'),
+		refresh_token: randomBytes(32).toString('hex'),
 		expires_in: 3600,
 		expires_at: now + 3600,
 		token_type: 'bearer',
@@ -45,6 +46,22 @@ function buildE2EBypassAuth(): { session: Session; user: User } {
 	} as unknown as Session;
 
 	return { session, user };
+}
+
+function hasMatchingE2ESecret(provided: string | null, expected: string): boolean {
+	const providedValue = String(provided || '').trim();
+	const expectedValue = String(expected || '').trim();
+	if (!providedValue || !expectedValue) {
+		return false;
+	}
+
+	const providedBytes = Buffer.from(providedValue, 'utf8');
+	const expectedBytes = Buffer.from(expectedValue, 'utf8');
+	if (providedBytes.length !== expectedBytes.length) {
+		return false;
+	}
+
+	return timingSafeEqual(providedBytes, expectedBytes);
 }
 
 export const handle: Handle = async ({ event, resolve }) => {
@@ -97,7 +114,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		if (canUseBypass) {
 			const provided = event.request.headers.get(E2E_AUTH_HEADER);
 			const expected = String(env.E2E_AUTH_SECRET || '').trim();
-			if (provided && expected && provided === expected) {
+			if (hasMatchingE2ESecret(provided, expected)) {
 				return buildE2EBypassAuth();
 			}
 		}

@@ -293,7 +293,7 @@ class AutonomousRemediationEngine:
 
         Returns a stable summary contract used by governance job handlers.
         """
-        del credentials
+        _ = credentials
         mode = "autonomous" if self.auto_pilot_enabled else "dry_run"
         connection_filter = self._coerce_uuid(connection_id)
         try:

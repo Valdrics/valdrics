@@ -27,10 +27,10 @@ class _DummyAsyncCM:
 
 
 def test_bool_and_url_helpers() -> None:
-    assert session_mod._as_bool(True) is True
-    assert session_mod._as_bool(" YES ") is True
-    assert session_mod._as_bool("no") is False
-    assert session_mod._as_bool(1) is False
+    assert session_mod.coerce_bool(True) is True
+    assert session_mod.coerce_bool(" YES ") is True
+    assert session_mod.coerce_bool("no") is False
+    assert session_mod.coerce_bool(1) is False
 
     assert session_mod._normalize_db_url("postgresql://h/db") == "postgresql+asyncpg://h/db"
     assert session_mod._normalize_db_url("sqlite:///x") == "sqlite:///x"
@@ -675,6 +675,31 @@ def test_enforce_audit_log_immutability_allows_flagged_system_retention_delete()
 
     assert stmt == "DELETE FROM system_audit_logs WHERE success = false"
     assert params == {"x": 1}
+
+
+def test_enforce_audit_log_immutability_blocks_schema_qualified_and_cte_mutations() -> None:
+    conn = MagicMock()
+    conn.info = {}
+
+    with pytest.raises(ValdricsException, match="immutable"):
+        session_mod.enforce_audit_log_immutability(
+            conn,
+            None,
+            "UPDATE public.audit_logs SET success = true",
+            {},
+            None,
+            False,
+        )
+
+    with pytest.raises(ValdricsException, match="retention purge path"):
+        session_mod.enforce_audit_log_immutability(
+            conn,
+            None,
+            "WITH doomed AS (DELETE FROM public.audit_logs WHERE success = false RETURNING id) SELECT * FROM doomed",
+            {},
+            None,
+            False,
+        )
 
 
 @pytest.mark.asyncio

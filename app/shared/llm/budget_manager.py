@@ -19,7 +19,7 @@ from app.shared.core.exceptions import (  # noqa: F401
     BudgetExceededError,
     LLMFairUseExceededError,
 )
-from app.shared.llm.pricing_data import LLM_PRICING
+from app.shared.llm.pricing_data import get_provider_pricing
 from app.shared.llm.pricing_data import ProviderCost
 from app.shared.core.cache import get_cache_service  # noqa: F401
 from app.shared.core.config import get_settings  # noqa: F401
@@ -107,7 +107,7 @@ class LLMBudgetManager:
         Estimate LLM request cost in USD using shared pricing data.
         """
         # Find pricing data for provider and model
-        provider_data = LLM_PRICING.get(provider, {})
+        provider_data = get_provider_pricing(provider)
         pricing = provider_data.get(model)
 
         # PRODUCTION: Fallback to provider default if model is unknown

@@ -80,6 +80,11 @@ def test_generate_managed_deployment_artifacts_outputs_platform_ready_bundle(
     assert report["runtime_validation_blockers"] == []
     assert api_manifest["name"] == "valdrics-api"
     assert worker_manifest["name"] == "valdrics-worker"
+    assert worker_manifest["definition"]["command"][0:3] == [
+        "celery",
+        "-A",
+        "app.shared.core.celery_app:celery_app",
+    ]
 
     api_env = {item["name"]: item.get("secret") or item.get("value") for item in api_manifest["definition"]["env"]}
     worker_env = {item["name"]: item.get("secret") or item.get("value") for item in worker_manifest["definition"]["env"]}

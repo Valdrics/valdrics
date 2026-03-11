@@ -86,17 +86,27 @@ def test_reload_settings_from_environment_success_and_cache_warm() -> None:
     logger = MagicMock()
 
     fake_security_module = types.ModuleType("app.shared.core.security")
+    fake_encryption_module = types.ModuleType("app.models._encryption")
 
     class _KeyManager:
         clear_key_caches = MagicMock()
 
+    clear_encryption_key_cache = MagicMock()
+
     fake_security_module.EncryptionKeyManager = _KeyManager
+    fake_encryption_module.clear_encryption_key_cache = clear_encryption_key_cache
 
     with (
         patch("app.shared.core.config.get_settings", return_value=current),
         patch("app.shared.core.config.Settings", return_value=refreshed),
         patch("app.shared.core.config.structlog.get_logger", return_value=logger),
-        patch.dict("sys.modules", {"app.shared.core.security": fake_security_module}),
+        patch.dict(
+            "sys.modules",
+            {
+                "app.shared.core.security": fake_security_module,
+                "app.models._encryption": fake_encryption_module,
+            },
+        ),
     ):
         result = reload_settings_from_environment()
 
@@ -104,6 +114,7 @@ def test_reload_settings_from_environment_success_and_cache_warm() -> None:
     assert current.APP_NAME == "new-name"
     assert current.ENVIRONMENT == "production"
     _KeyManager.clear_key_caches.assert_called_once_with(warm=True)
+    clear_encryption_key_cache.assert_called_once_with()
     logger.debug.assert_any_call("settings_reload_started")
     logger.debug.assert_any_call("settings_reload_completed")
 
@@ -116,6 +127,7 @@ def test_reload_settings_from_environment_logs_warning_when_cache_refresh_fails(
     logger = MagicMock()
 
     fake_security_module = types.ModuleType("app.shared.core.security")
+    fake_encryption_module = types.ModuleType("app.models._encryption")
 
     class _KeyManager:
         @staticmethod
@@ -124,18 +136,32 @@ def test_reload_settings_from_environment_logs_warning_when_cache_refresh_fails(
             raise RuntimeError("cache warm failure")
 
     fake_security_module.EncryptionKeyManager = _KeyManager
+    fake_encryption_module.clear_encryption_key_cache = MagicMock()
 
     with (
         patch("app.shared.core.config.get_settings", return_value=current),
         patch("app.shared.core.config.Settings", return_value=refreshed),
         patch("app.shared.core.config.structlog.get_logger", return_value=logger),
-        patch.dict("sys.modules", {"app.shared.core.security": fake_security_module}),
+        patch.dict(
+            "sys.modules",
+            {
+                "app.shared.core.security": fake_security_module,
+                "app.models._encryption": fake_encryption_module,
+            },
+        ),
     ):
         result = reload_settings_from_environment()
 
     assert result is current
     assert current.APP_NAME == "new-name"
     logger.warning.assert_called_once()
+
+
+def test_environment_validator_normalizes_and_rejects_invalid_values() -> None:
+    assert Settings._normalize_environment("Production") == "production"
+
+    with pytest.raises(ValueError, match="ENVIRONMENT must be one of"):
+        Settings._normalize_environment("prod-preview")
 
 
 def test_config_core_secret_validator_branch_paths() -> None:
@@ -165,7 +191,7 @@ def test_config_database_validator_branch_paths() -> None:
     s = _settings()
     s.ENVIRONMENT = ENV_PRODUCTION
     s.DATABASE_URL = None
-    with pytest.raises(ValueError, match="DATABASE_URL is required in production"):
+    with pytest.raises(ValueError, match="DATABASE_URL is required in staging/production"):
         s._validate_database_config()
 
     s = _settings()
@@ -336,6 +362,13 @@ def test_config_environment_safety_branch_paths() -> None:
         s._validate_environment_safety()
 
     s = _settings()
+    s.ENVIRONMENT = ENV_STAGING
+    s.CORS_ORIGINS = ["https://app.example.com"]
+    s.API_URL = "https://REPLACE_WITH_API_DOMAIN"
+    with pytest.raises(ValueError, match="API_URL contains unresolved placeholder values."):
+        s._validate_environment_safety()
+
+    s = _settings()
     s.ENVIRONMENT = ENV_PRODUCTION
     s.TRUST_PROXY_HEADERS = True
     s.TRUSTED_PROXY_CIDRS = []
@@ -344,6 +377,49 @@ def test_config_environment_safety_branch_paths() -> None:
         match="TRUSTED_PROXY_CIDRS must be configured when TRUST_PROXY_HEADERS=true",
     ):
         s._validate_environment_safety()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.DATABASE_URL = (
+        "postgresql+asyncpg://REPLACE_WITH_DB_USER:"
+        "REPLACE_WITH_DB_PASSWORD@REPLACE_WITH_DB_HOST:5432/postgres"
+    )
+    with pytest.raises(ValueError, match="DATABASE_URL contains unresolved placeholder values."):
+        s._validate_database_config()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_STAGING
+    s.SUPABASE_JWT_SECRET = "REPLACE_WITH_SUPABASE_JWT_SECRET_MINIMUM_32_CHARS_VALUE"
+    with pytest.raises(
+        ValueError,
+        match="SUPABASE_JWT_SECRET contains unresolved placeholder values.",
+    ):
+        s._validate_core_secrets()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.PAYSTACK_SECRET_KEY = "sk_live_REPLACE_WITH_PAYSTACK_SECRET_KEY"
+    s.PAYSTACK_PUBLIC_KEY = "pk_live_REPLACE_WITH_PAYSTACK_PUBLIC_KEY"
+    with pytest.raises(
+        ValueError,
+        match="PAYSTACK_SECRET_KEY contains unresolved placeholder values.",
+    ):
+        s._validate_billing_config()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.OTEL_EXPORTER_OTLP_ENDPOINT = "https://REPLACE_WITH_OTEL_COLLECTOR:4317"
+    with pytest.raises(
+        ValueError,
+        match="OTEL_EXPORTER_OTLP_ENDPOINT contains unresolved placeholder values.",
+    ):
+        s._validate_observability_config()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.GROQ_API_KEY = "REPLACE_WITH_GROQ_API_KEY"
+    with pytest.raises(ValueError, match="GROQ_API_KEY contains unresolved placeholder values."):
+        s._validate_llm_config()
 
 
 @pytest.mark.parametrize(

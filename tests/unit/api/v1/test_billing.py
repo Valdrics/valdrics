@@ -234,7 +234,7 @@ async def test_cancel_subscription_success(
 ) -> None:
     mock_billing = mock_billing_service_class.return_value
     mock_billing.cancel_subscription = AsyncMock()
-    response = await cancel_subscription(mock_user, mock_db)
+    response = await cancel_subscription(MagicMock(), mock_user, mock_db)
     assert response == {"status": "cancelled"}
 
 
@@ -248,7 +248,7 @@ async def test_update_exchange_rate(mock_db: AsyncMock, mock_user: MagicMock) ->
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute.return_value = mock_result
 
-    response = await update_exchange_rate(req, mock_user, mock_db)
+    response = await update_exchange_rate(MagicMock(), req, mock_user, mock_db)
     assert response["rate"] == 1500.0
     mock_db.commit.assert_called_once()
 
@@ -269,7 +269,7 @@ async def test_get_exchange_rate(mock_db: AsyncMock, mock_user: MagicMock) -> No
     mock_result.scalar_one_or_none.return_value = mock_rate
     mock_db.execute.return_value = mock_result
 
-    response = await get_exchange_rate(mock_user, mock_db)
+    response = await get_exchange_rate(MagicMock(), mock_user, mock_db)
     assert response["rate"] == 1450.0
     assert response["is_official_provider"] is False
     assert response["billing_safe"] is False

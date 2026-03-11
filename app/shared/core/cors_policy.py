@@ -13,12 +13,38 @@ def resolve_cors_allowed_origins(
     *,
     allow_credentials: bool,
 ) -> list[str]:
-    normalized = [origin.strip() for origin in cors_origins if origin.strip()]
+    normalized = [
+        _normalize_origin(origin)
+        for origin in cors_origins
+        if str(origin or "").strip()
+    ]
     if allow_credentials and "*" in normalized:
         raise InvalidCorsConfiguration(
             "CORS_ORIGINS must not include '*' when allow_credentials=True."
         )
     return normalized
+
+
+def _normalize_origin(origin: str) -> str:
+    candidate = str(origin or "").strip()
+    if candidate == "*":
+        return candidate
+
+    parsed = urlparse(candidate)
+    if not parsed.scheme or not parsed.netloc:
+        return candidate
+
+    scheme = parsed.scheme.lower()
+    hostname = str(parsed.hostname or "").lower()
+    if not hostname:
+        return candidate
+
+    if parsed.port is None:
+        netloc = hostname
+    else:
+        netloc = f"{hostname}:{parsed.port}"
+
+    return f"{scheme}://{netloc}"
 
 
 def _validate_strict_origin(origin: str) -> str:

@@ -298,8 +298,6 @@ def _koyeb_manifest(values: dict[str, str], *, environment: str, component: str)
         ]
     else:
         manifest["definition"]["command"] = [
-            "uv",
-            "run",
             "celery",
             "-A",
             "app.shared.core.celery_app:celery_app",

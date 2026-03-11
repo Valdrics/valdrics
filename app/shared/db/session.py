@@ -24,6 +24,7 @@ from app.shared.core.config import get_settings
 from app.shared.core.constants import RLS_EXEMPT_TABLES
 from app.shared.core.exceptions import ValdricsException
 from app.shared.core.ops_metrics import RLS_CONTEXT_MISSING, RLS_ENFORCEMENT_LATENCY
+from app.shared.core.bools import coerce_bool
 from app.shared.db.session_context_ops import (
     backend_from_url as _backend_from_url_impl,
     clear_session_tenant_context as _clear_session_tenant_context_impl,
@@ -47,22 +48,21 @@ settings = get_settings()
 _RLS_EXEMPT_TABLE_PATTERN = re.compile(
     r"\b(" + "|".join(re.escape(table.lower()) for table in RLS_EXEMPT_TABLES) + r")\b"
 )
-_AUDIT_LOG_TABLE_PATTERN = re.compile(r"\baudit_logs(?:_[a-z0-9_]+)?\b")
-_AUDIT_LOG_UPDATE_PATTERN = re.compile(
-    r"\bupdate\s+(?:only\s+)?audit_logs(?:_[a-z0-9_]+)?\b"
+_AUDIT_LOG_TABLE_PATTERN = re.compile(r"\b(?:[a-z0-9_]+\.)?audit_logs(?:_[a-z0-9_]+)?\b")
+_AUDIT_LOG_DIRECT_DELETE_PATTERN = re.compile(
+    r"\bdelete\s+from\s+(?:only\s+)?(?:[a-z0-9_]+\.)?audit_logs(?:_[a-z0-9_]+)?\b"
 )
-_AUDIT_LOG_DELETE_PATTERN = re.compile(
-    r"\bdelete\s+from\s+(?:only\s+)?audit_logs(?:_[a-z0-9_]+)?\b"
-)
-_SYSTEM_AUDIT_LOG_TABLE_PATTERN = re.compile(r"\bsystem_audit_logs\b")
+_SYSTEM_AUDIT_LOG_TABLE_PATTERN = re.compile(r"\b(?:[a-z0-9_]+\.)?system_audit_logs\b")
 _SYSTEM_AUDIT_LOG_UPDATE_PATTERN = re.compile(
-    r"\bupdate\s+(?:only\s+)?system_audit_logs\b"
+    r"\bupdate\s+(?:only\s+)?(?:[a-z0-9_]+\.)?system_audit_logs\b"
 )
 _SYSTEM_AUDIT_LOG_DELETE_PATTERN = re.compile(
-    r"\bdelete\s+from\s+(?:only\s+)?system_audit_logs\b"
+    r"\bdelete\s+from\s+(?:only\s+)?(?:[a-z0-9_]+\.)?system_audit_logs\b"
 )
 _AUDIT_LOG_RETENTION_DELETE_FLAG = "allow_audit_log_retention_purge"
 _SYSTEM_AUDIT_LOG_RETENTION_DELETE_FLAG = "allow_system_audit_log_retention_purge"
+_SQL_DELETE_PATTERN = re.compile(r"\bdelete\b")
+_SQL_UPDATE_PATTERN = re.compile(r"\bupdate\b")
 
 
 @dataclass(slots=True)
@@ -80,8 +80,6 @@ SESSION_INTROSPECTION_ERRORS = (AttributeError, TypeError, RuntimeError)
 DB_OPERATION_RECOVERABLE_ERRORS = (
     SQLAlchemyError,
     RuntimeError,
-    TypeError,
-    ValueError,
     OSError,
 )
 RLS_METRIC_RECOVERABLE_ERRORS = (TypeError, ValueError, RuntimeError)
@@ -105,14 +103,6 @@ class GuardedAsyncSession(AsyncSession):
             raise
 
 
-def _as_bool(value: Any) -> bool:
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return False
-
-
 def _normalize_db_url(raw_url: str) -> str:
     url = (raw_url or "").strip()
     if url.startswith("postgresql://"):
@@ -122,11 +112,11 @@ def _normalize_db_url(raw_url: str) -> str:
 
 def _resolve_effective_url(settings_obj: Any) -> tuple[str, bool, bool]:
     db_url = _normalize_db_url(str(getattr(settings_obj, "DATABASE_URL", "") or ""))
-    allow_test_database_url = _as_bool(
+    allow_test_database_url = coerce_bool(
         getattr(settings_obj, "ALLOW_TEST_DATABASE_URL", False)
     )
-    use_null_pool = _as_bool(getattr(settings_obj, "DB_USE_NULL_POOL", False))
-    external_pooler = _as_bool(getattr(settings_obj, "DB_EXTERNAL_POOLER", False))
+    use_null_pool = coerce_bool(getattr(settings_obj, "DB_USE_NULL_POOL", False))
+    external_pooler = coerce_bool(getattr(settings_obj, "DB_EXTERNAL_POOLER", False))
 
     effective_url = db_url
     is_testing = bool(getattr(settings_obj, "TESTING", False))
@@ -431,7 +421,7 @@ def enforce_audit_log_immutability(
     _executemany: bool,
 ) -> tuple[str, Any]:
     stmt_lower = statement.lower()
-    if _AUDIT_LOG_UPDATE_PATTERN.search(stmt_lower):
+    if _AUDIT_LOG_TABLE_PATTERN.search(stmt_lower) and _SQL_UPDATE_PATTERN.search(stmt_lower):
         raise ValdricsException(
             message="audit_logs entries are immutable and cannot be updated",
             code="audit_logs_update_forbidden",
@@ -442,8 +432,10 @@ def enforce_audit_log_immutability(
             },
         )
 
-    if _AUDIT_LOG_DELETE_PATTERN.search(stmt_lower):
-        if bool(conn.info.get(_AUDIT_LOG_RETENTION_DELETE_FLAG, False)):
+    if _AUDIT_LOG_TABLE_PATTERN.search(stmt_lower) and _SQL_DELETE_PATTERN.search(stmt_lower):
+        if _AUDIT_LOG_DIRECT_DELETE_PATTERN.search(stmt_lower) and bool(
+            conn.info.get(_AUDIT_LOG_RETENTION_DELETE_FLAG, False)
+        ):
             return statement, parameters
         raise ValdricsException(
             message="audit_logs deletes are reserved for the retention purge path",
@@ -455,7 +447,9 @@ def enforce_audit_log_immutability(
             },
         )
 
-    if _SYSTEM_AUDIT_LOG_UPDATE_PATTERN.search(stmt_lower):
+    if _SYSTEM_AUDIT_LOG_TABLE_PATTERN.search(stmt_lower) and _SQL_UPDATE_PATTERN.search(
+        stmt_lower
+    ):
         raise ValdricsException(
             message="system_audit_logs entries are immutable and cannot be updated",
             code="system_audit_logs_update_forbidden",

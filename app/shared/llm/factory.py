@@ -3,7 +3,7 @@ from enum import Enum
 from langchain_core.language_models.chat_models import BaseChatModel
 import structlog
 from app.shared.core.config import get_settings
-from .pricing_data import LLM_PRICING
+from .pricing_data import get_provider_pricing
 
 logger = structlog.get_logger()
 
@@ -124,7 +124,7 @@ class LLMFactory:
     def estimate_cost(provider: str, input_tokens: int, output_tokens: int) -> float:
         """Estimate cost for a provider call in USD."""
         # Use 'default' model pricing for the provider
-        provider_data = LLM_PRICING.get(provider, {})
+        provider_data = get_provider_pricing(provider)
         costs = provider_data.get("default")
 
         if not costs:

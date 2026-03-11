@@ -28,6 +28,7 @@ describe('sitemap.xml route', () => {
 
 		expect(response.status).toBe(200);
 		const xml = await response.text();
+		expect(xml).toContain('https://example.com/about');
 		expect(xml).toContain('https://example.com/docs');
 		expect(xml).toContain('https://example.com/docs/api');
 		expect(xml).toContain('https://example.com/docs/technical-validation');

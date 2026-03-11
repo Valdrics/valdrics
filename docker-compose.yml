@@ -3,11 +3,11 @@ services:
     image: postgres:16.8-alpine
     container_name: valdrics-postgres
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-valdrics}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-local-dev-change-me}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-valdrics-local-dev-only-change-before-sharing}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:

@@ -283,11 +283,14 @@ async def create_checkout(
 
 
 @router.post("/cancel")
+@auth_limit
 async def cancel_subscription(
+    request: Request,
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, str]:
     """Cancel current subscription."""
+    del request
     try:
         from app.modules.billing.domain.billing.paystack_billing import BillingService
 
@@ -337,7 +340,9 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
 
 
 @router.post("/admin/rates")
+@auth_limit
 async def update_exchange_rate(
+    _request: Request,
     request: ExchangeRateUpdate,
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
@@ -351,11 +356,14 @@ async def update_exchange_rate(
 
 
 @router.get("/admin/rates")
+@auth_limit
 async def get_exchange_rate(
+    request: Request,
     user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Get current exchange rate with billing safety health flags."""
+    del request
     return await load_exchange_rate_health(db, logger=logger)
 
 

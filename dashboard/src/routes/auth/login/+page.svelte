@@ -28,7 +28,15 @@
 	let intentLabel = $derived<string | null>(describePublicIntent(authContext.intent));
 	let personaLabel = $derived<string | null>(describePublicPersona(authContext.persona));
 
-	const supabase = createSupabaseBrowserClient();
+	function getSupabaseClient() {
+		try {
+			return createSupabaseBrowserClient();
+		} catch {
+			throw new Error(
+				'Authentication is not configured for this environment. Contact support if this should be enabled.'
+			);
+		}
+	}
 
 	$effect(() => {
 		mode = authContext.mode;
@@ -82,6 +90,7 @@
 		success = '';
 
 		try {
+			const supabase = getSupabaseClient();
 			if (mode === 'login') {
 				emitAuthEvent('auth_password_submit', 'login');
 				const { error: authError } = await supabase.auth.signInWithPassword({
@@ -120,6 +129,7 @@
 		error = '';
 		success = '';
 		try {
+			const supabase = getSupabaseClient();
 			const normalizedEmail = email.trim().toLowerCase();
 			if (!normalizedEmail) {
 				throw new Error('Enter your work email to continue.');
@@ -147,6 +157,7 @@
 		error = '';
 		success = '';
 		try {
+			const supabase = getSupabaseClient();
 			if (!email.trim()) {
 				throw new Error('Enter your work email to continue with SSO.');
 			}

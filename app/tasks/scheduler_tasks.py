@@ -1,5 +1,7 @@
+import atexit
 import asyncio
 from typing import Any, AsyncGenerator, ContextManager, Coroutine, Sequence, cast
+from threading import Lock
 import structlog
 from celery import shared_task
 from app.shared.db.session import async_session_maker, mark_session_system_context
@@ -14,7 +16,6 @@ from datetime import datetime, timezone, timedelta
 import sqlalchemy as sa
 from app.models.tenant import Tenant
 from app.models.background_job import BackgroundJob, JobStatus, JobType
-from sqlalchemy.dialects.postgresql import insert
 from app.modules.governance.domain.scheduler.metrics import (
     SCHEDULER_JOB_RUNS,
     SCHEDULER_JOB_DURATION,
@@ -68,6 +69,8 @@ SCHEDULER_RECOVERABLE_ERRORS = (
     SQLAlchemyError,
 )
 _coerce_positive_limit = _coerce_positive_limit_impl
+_scheduler_async_runner: asyncio.Runner | None = None
+_scheduler_async_runner_lock = Lock()
 
 
 async def _load_active_remediation_connections(
@@ -113,13 +116,64 @@ async def _open_db_session() -> AsyncGenerator[AsyncSession, None]:
     ) as session:
         yield session
 
+
+def _resolve_insert_dialect_name(db: AsyncSession | None = None) -> str:
+    bind = getattr(db, "bind", None)
+    dialect_name = str(getattr(getattr(bind, "dialect", None), "name", "") or "").lower()
+    return dialect_name or "postgresql"
+
+
+def _background_job_insert_statement(
+    db: AsyncSession | None,
+    values: list[dict[str, Any]],
+) -> Any:
+    dialect_name = _resolve_insert_dialect_name(db)
+    if dialect_name == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        return sqlite_insert(BackgroundJob).values(values).on_conflict_do_nothing(
+            index_elements=["deduplication_key"]
+        )
+
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    return pg_insert(BackgroundJob).values(values).on_conflict_do_nothing(
+        index_elements=["deduplication_key"]
+    )
+
+
+def _background_job_insert_fn(model: Any) -> Any:
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    return pg_insert(model)
+
+
+def _get_scheduler_async_runner() -> asyncio.Runner:
+    global _scheduler_async_runner
+    with _scheduler_async_runner_lock:
+        if _scheduler_async_runner is None:
+            _scheduler_async_runner = asyncio.Runner()
+        return _scheduler_async_runner
+
+
+def close_scheduler_async_runner() -> None:
+    global _scheduler_async_runner
+    with _scheduler_async_runner_lock:
+        if _scheduler_async_runner is not None:
+            _scheduler_async_runner.close()
+            _scheduler_async_runner = None
+
+
+atexit.register(close_scheduler_async_runner)
+
 # Helper to run async code in sync Celery task
 def run_async(task_or_coro: Any, *args: Any, **kwargs: Any) -> Any:
+    runner = _get_scheduler_async_runner()
     if asyncio.iscoroutine(task_or_coro) or inspect.isawaitable(task_or_coro):
-        return asyncio.run(cast(Coroutine[Any, Any, Any], task_or_coro))
+        return runner.run(cast(Coroutine[Any, Any, Any], task_or_coro))
 
     if callable(task_or_coro):
-        return asyncio.run(task_or_coro(*args, **kwargs))
+        return runner.run(task_or_coro(*args, **kwargs))
 
     raise TypeError("run_async expects an awaitable or a callable async function")
 
@@ -250,13 +304,7 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                             ):
                                 for i in range(0, len(jobs_to_insert), 500):
                                     chunk = jobs_to_insert[i:i+500]
-                                    stmt = (
-                                        insert(BackgroundJob)
-                                        .values(chunk)
-                                        .on_conflict_do_nothing(
-                                            index_elements=["deduplication_key"]
-                                        )
-                                    )
+                                    stmt = _background_job_insert_statement(db, chunk)
                                     result_proxy = await db.execute(stmt)
 
                                     if hasattr(result_proxy, "rowcount"):
@@ -332,7 +380,7 @@ async def _remediation_sweep_logic() -> None:
         background_job_model=BackgroundJob,
         job_type=JobType,
         job_status=JobStatus,
-        insert_fn=insert,
+        insert_fn=_background_job_insert_fn,
         scheduler_job_runs=SCHEDULER_JOB_RUNS,
         scheduler_job_duration=SCHEDULER_JOB_DURATION,
         datetime_cls=datetime,
@@ -363,7 +411,7 @@ async def _billing_sweep_logic() -> None:
         scheduler_job_duration=SCHEDULER_JOB_DURATION,
         background_jobs_enqueued=BACKGROUND_JOBS_ENQUEUED,
         sa=sa,
-        insert=insert,
+        insert=_background_job_insert_fn,
         background_job_model=BackgroundJob,
         job_status=JobStatus,
         job_type=JobType,
@@ -389,7 +437,7 @@ async def _acceptance_sweep_logic() -> None:
         scheduler_job_duration=SCHEDULER_JOB_DURATION,
         background_jobs_enqueued=BACKGROUND_JOBS_ENQUEUED,
         sa=sa,
-        insert=insert,
+        insert=_background_job_insert_fn,
         tenant_model=Tenant,
         background_job_model=BackgroundJob,
         job_status=JobStatus,
@@ -536,7 +584,7 @@ async def _enforcement_reconciliation_sweep_logic() -> None:
         scheduler_job_duration=SCHEDULER_JOB_DURATION,
         background_jobs_enqueued=BACKGROUND_JOBS_ENQUEUED,
         sa=sa,
-        insert=insert,
+        insert=_background_job_insert_fn,
         tenant_model=Tenant,
         background_job_model=BackgroundJob,
         job_status=JobStatus,

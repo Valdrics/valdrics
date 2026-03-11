@@ -78,11 +78,18 @@ jobs:
 
       # Python Dependencies SBOM
       - name: Generate Python SBOM (CycloneDX)
-        uses: CycloneDX/gh-python-generate-sbom@39fe80937489538e12de5a7b427e078649ec44bb # v2
-        with:
-          input: ./pyproject.toml
-          output: ./sbom/valdrics-python-sbom.json
-          format: json
+        shell: bash
+        run: |
+          set -euo pipefail
+          CYCLONEDX_VENV="${RUNNER_TEMP}/cyclonedx-venv"
+          python -m venv "${CYCLONEDX_VENV}"
+          "${CYCLONEDX_VENV}/bin/pip" install --upgrade pip
+          "${CYCLONEDX_VENV}/bin/pip" install "cyclonedx-bom==7.2.2"
+          "${CYCLONEDX_VENV}/bin/cyclonedx-py" environment ./.venv/bin/python \
+            --pyproject ./pyproject.toml \
+            --output-reproducible \
+            --of JSON \
+            -o ./sbom/valdrics-python-sbom.json
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -106,11 +113,14 @@ jobs:
           output-file: ./sbom/valdrics-container-sbom.json
       
       # Vulnerability Scan
-      - name: Scan SBOM for Vulnerabilities (Grype)
+      # Blocking container vulnerability enforcement lives in `security-scan.yml`
+      # and `ci.yml` via Trivy. Keep Grype here for supply-chain evidence without
+      # introducing a second conflicting release gate with a different database.
+      - name: Scan SBOM for Vulnerabilities (Grype report)
         uses: anchore/scan-action@869c549e657a088dc0441b08ce4fc0ecdac2bb65 # v5
         with:
           sbom: ./sbom/valdrics-container-sbom.json
-          fail-build: true
+          fail-build: false
           severity-cutoff: high
 
       - name: Generate supply-chain provenance manifest

@@ -300,6 +300,117 @@ def test_verify_attestations_rejects_empty_verification_results(
         )
 
 
+def test_verify_attestations_retries_transient_failures_then_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "sbom.json"
+    _write(artifact, '{"a":1}')
+    calls = {"count": 0}
+    sleep_delays: list[float] = []
+
+    def _fake_run(
+        cmd: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        calls["count"] += 1
+        if calls["count"] < 3:
+            return subprocess.CompletedProcess(
+                args=cmd,
+                returncode=1,
+                stdout="",
+                stderr='Error: verifying with issuer "sigstore.dev"',
+            )
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout='[{"verificationResult":{"verifiedTimestamps":[]}}]',
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations.check_gh_cli_version",
+        lambda: MIN_GH_VERSION,
+    )
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations._resolve_gh_executable",
+        lambda: "gh",
+    )
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations.subprocess.run",
+        _fake_run,
+    )
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations.time.sleep",
+        lambda seconds: sleep_delays.append(seconds),
+    )
+
+    exit_code = verify_attestations(
+        repo="acme/valdrics",
+        signer_workflow=".github/workflows/sbom.yml",
+        artifacts=(artifact,),
+        dry_run=False,
+    )
+
+    assert exit_code == 0
+    assert calls["count"] == 3
+    assert sleep_delays == [2.0, 4.0]
+
+
+def test_verify_attestations_raises_after_transient_retry_budget_exhausted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = tmp_path / "sbom.json"
+    _write(artifact, '{"a":1}')
+    sleep_delays: list[float] = []
+
+    def _fake_run(
+        cmd: list[str],
+        *,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=1,
+            stdout="",
+            stderr='Error: verifying with issuer "sigstore.dev"',
+        )
+
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations.check_gh_cli_version",
+        lambda: MIN_GH_VERSION,
+    )
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations._resolve_gh_executable",
+        lambda: "gh",
+    )
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations.subprocess.run",
+        _fake_run,
+    )
+    monkeypatch.setattr(
+        "scripts.verify_supply_chain_attestations.time.sleep",
+        lambda seconds: sleep_delays.append(seconds),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="Attestation verification failed for .*verifying with issuer",
+    ):
+        verify_attestations(
+            repo="acme/valdrics",
+            signer_workflow=".github/workflows/sbom.yml",
+            artifacts=(artifact,),
+            dry_run=False,
+        )
+
+    assert sleep_delays == [2.0, 4.0, 8.0]
+
+
 def test_main_dry_run_succeeds(tmp_path: Path) -> None:
     artifact = tmp_path / "sbom.json"
     _write(artifact, '{"a":1}')

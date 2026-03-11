@@ -1,9 +1,12 @@
-from typing import Any, Optional
-import structlog
 import math
+from threading import Lock
+from typing import Any, Optional
+
+import structlog
 from sqlalchemy.exc import SQLAlchemyError
 
 logger = structlog.get_logger()
+_LLM_PRICING_LOCK = Lock()
 LLM_PRICING_REFRESH_RECOVERABLE_EXCEPTIONS = (
     SQLAlchemyError,
     RuntimeError,
@@ -60,6 +63,35 @@ LLM_PRICING: dict[str, dict[str, ProviderCost]] = {
 }
 
 
+def _clone_pricing_table(
+    pricing_table: dict[str, dict[str, ProviderCost]],
+) -> dict[str, dict[str, ProviderCost]]:
+    return {
+        provider: {model: _clone_provider_cost(cost) for model, cost in models.items()}
+        for provider, models in pricing_table.items()
+    }
+
+
+def get_llm_pricing_snapshot() -> dict[str, dict[str, ProviderCost]]:
+    with _LLM_PRICING_LOCK:
+        return _clone_pricing_table(LLM_PRICING)
+
+
+def get_provider_pricing(provider: str) -> dict[str, ProviderCost]:
+    normalized_provider = _normalize_key(provider) or ""
+    with _LLM_PRICING_LOCK:
+        provider_data = LLM_PRICING.get(normalized_provider, {})
+        return {model: _clone_provider_cost(cost) for model, cost in provider_data.items()}
+
+
+def _clone_provider_cost(cost: ProviderCost) -> ProviderCost:
+    return ProviderCost(
+        input=float(cost["input"]),
+        output=float(cost["output"]),
+        free_tier_tokens=int(cost.get("free_tier_tokens", 0)),
+    )
+
+
 def _normalize_key(value: Optional[str]) -> Optional[str]:
     if value is None:
         return None
@@ -114,8 +146,8 @@ async def refresh_llm_pricing(db_session: Any = None) -> None:
         if not pricing_records:
             return
 
-        # Clear existing dynamic entries (keep default fallbacks if desired)
-        # For safety, we only update/add what we find in the DB
+        updated_pricing = _clone_pricing_table(LLM_PRICING)
+
         for record in pricing_records:
             provider = _normalize_key(getattr(record, "provider", None))
             model = _normalize_key(getattr(record, "model", None))
@@ -151,16 +183,20 @@ async def refresh_llm_pricing(db_session: Any = None) -> None:
             if free_tier_tokens < 0:
                 free_tier_tokens = 0
 
-            if provider not in LLM_PRICING:
-                LLM_PRICING[provider] = {}
+            if provider not in updated_pricing:
+                updated_pricing[provider] = {}
 
-            LLM_PRICING[provider][model] = ProviderCost(
+            updated_pricing[provider][model] = ProviderCost(
                 input=input_cost, output=output_cost, free_tier_tokens=free_tier_tokens
             )
 
             # Update default if explicitly provided or missing.
-            if model == "default" or "default" not in LLM_PRICING[provider]:
-                LLM_PRICING[provider]["default"] = LLM_PRICING[provider][model]
+            if model == "default" or "default" not in updated_pricing[provider]:
+                updated_pricing[provider]["default"] = updated_pricing[provider][model]
+
+        with _LLM_PRICING_LOCK:
+            LLM_PRICING.clear()
+            LLM_PRICING.update(updated_pricing)
 
     except LLM_PRICING_REFRESH_RECOVERABLE_EXCEPTIONS as e:
         # Fail open but emit audit log for observability

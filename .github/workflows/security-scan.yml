@@ -30,6 +30,7 @@ permissions:
 env:
   PYTHON_VERSION: "3.12"
   UV_VERSION: "0.9.21"
+  TRIVY_IMAGE: "docker.io/aquasec/trivy:0.65.0"
 
 jobs:
   security-scan:
@@ -110,27 +111,50 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Prepare Trivy cache
+        run: mkdir -p .cache/trivy
+
       - name: Run Trivy vulnerability scanner (Backend)
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
-        with:
-          image-ref: 'valdrics-backend:${{ github.sha }}'
-          format: 'sarif'
-          output: 'trivy-backend-results.sarif'
-          exit-code: '1'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/work" \
+            -v "$PWD/.cache/trivy:/root/.cache/trivy" \
+            -w /work \
+            -e TRIVY_CACHE_DIR=/root/.cache/trivy \
+            "${TRIVY_IMAGE}" image \
+            --scanners vuln \
+            --ignore-unfixed \
+            --vuln-type os,library \
+            --severity CRITICAL,HIGH \
+            --format sarif \
+            --skip-version-check \
+            --output /work/trivy-backend-results.sarif \
+            --exit-code 1 \
+            valdrics-backend:${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner (Dashboard)
-        uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8 # 0.33.1
-        with:
-          image-ref: 'valdrics-dashboard:${{ github.sha }}'
-          format: 'sarif'
-          output: 'trivy-dashboard-results.sarif'
-          exit-code: '1'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL,HIGH'
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$PWD:/work" \
+            -v "$PWD/.cache/trivy:/root/.cache/trivy" \
+            -w /work \
+            -e TRIVY_CACHE_DIR=/root/.cache/trivy \
+            "${TRIVY_IMAGE}" image \
+            --scanners vuln \
+            --ignore-unfixed \
+            --vuln-type os,library \
+            --severity CRITICAL,HIGH \
+            --format sarif \
+            --skip-version-check \
+            --output /work/trivy-dashboard-results.sarif \
+            --exit-code 1 \
+            valdrics-dashboard:${{ github.sha }}
 
       - name: Upload Backend Trivy results to GitHub Security
         uses: github/codeql-action/upload-sarif@0d579ffd059c29b07949a3cce3983f0780820c98 # v4
@@ -171,6 +195,7 @@ jobs:
               "DEBUG": "False",
               "CSRF_SECRET_KEY": "dast_csrf_secret_key_2026_0123456789abcdef",
               "ENCRYPTION_KEY": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+              "GRAFANA_PASSWORD": "dast_grafana_admin_password_2026_0123456789abcdef",
               "KDF_SALT": base64.b64encode(b"12345678901234567890123456789012").decode(),
               "SUPABASE_JWT_SECRET": "dast_supabase_jwt_secret_2026_0123456789abcdef",
               "ADMIN_API_KEY": "dast_admin_api_key_2026_0123456789abcdef",
@@ -231,6 +256,7 @@ jobs:
         with:
           target: "http://localhost:3000"
           cmd_options: "-a -j -m 5 -T 60"
+          allow_issue_writing: false
 
       - name: Tear down ephemeral QA stack
         if: always()

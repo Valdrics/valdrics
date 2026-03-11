@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from app.shared.core.config_validation_placeholders import require_no_managed_placeholder
+
 
 def _normalize_environment(value: object) -> str:
     return str(value or "").strip().lower()
@@ -22,6 +24,7 @@ def validate_observability_config(
     otlp_endpoint = str(
         getattr(settings_obj, "OTEL_EXPORTER_OTLP_ENDPOINT", "") or ""
     ).strip()
+    require_no_managed_placeholder(otlp_endpoint, name="OTEL_EXPORTER_OTLP_ENDPOINT")
     if otlp_endpoint and not otlp_endpoint.startswith(("http://", "https://")):
         raise ValueError(
             "OTEL_EXPORTER_OTLP_ENDPOINT must use an explicit http:// or https:// URL."
@@ -33,6 +36,7 @@ def validate_observability_config(
         )
 
     sentry_dsn = str(getattr(settings_obj, "SENTRY_DSN", "") or "").strip()
+    require_no_managed_placeholder(sentry_dsn, name="SENTRY_DSN")
     if sentry_dsn and not sentry_dsn.startswith(("http://", "https://")):
         raise ValueError("SENTRY_DSN must use an explicit http:// or https:// URL.")
 

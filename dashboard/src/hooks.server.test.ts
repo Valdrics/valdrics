@@ -49,9 +49,12 @@ vi.mock('$lib/logging/server', () => ({
 
 import { handle } from './hooks.server';
 
-function createEvent(url: string): Parameters<typeof handle>[0]['event'] {
+function createEvent(
+	url: string,
+	headers: Record<string, string> = {}
+): Parameters<typeof handle>[0]['event'] {
 	return {
-		request: new Request(url),
+		request: new Request(url, { headers }),
 		url: new URL(url),
 		cookies: {
 			get: vi.fn(),
@@ -73,6 +76,7 @@ describe('hooks.server handle', () => {
 		mocks.serverLogger.error.mockReset();
 		mocks.serverLogger.warn.mockReset();
 		mocks.serverLogger.info.mockReset();
+		mocks.privateEnv.E2E_AUTH_SECRET = '';
 		mocks.canUseE2EAuthBypass.mockReturnValue(false);
 		mocks.shouldUseSecureCookies.mockReturnValue(true);
 	});
@@ -171,5 +175,40 @@ describe('hooks.server handle', () => {
 			'supabase_session_resolution_failed',
 			expect.objectContaining({ error: 'dns failure' })
 		);
+	});
+
+	it('uses constant-time bypass matching and builds non-static e2e sessions', async () => {
+		mocks.isPublicPath.mockReturnValue(true);
+		mocks.canUseE2EAuthBypass.mockReturnValue(true);
+		mocks.privateEnv.E2E_AUTH_SECRET = 'test-shared-secret';
+		mocks.createServerClient.mockReturnValue({
+			auth: {
+				getSession: vi.fn(),
+				getUser: vi.fn()
+			}
+		});
+
+		const event = createEvent('https://example.com/', {
+			'x-valdrics-e2e-auth': 'test-shared-secret'
+		});
+		const resolve = vi.fn(
+			async () =>
+				new Response('<html></html>', {
+					status: 200,
+					headers: { 'content-type': 'text/html' }
+				})
+		);
+
+		await handle({
+			event,
+			resolve
+		} as Parameters<typeof handle>[0]);
+
+		const sessionResult = await event.locals.safeGetSession();
+		expect(sessionResult.user?.id).toMatch(
+			/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+		);
+		expect(sessionResult.session?.access_token).toMatch(/^[0-9a-f]{64}$/i);
+		expect(sessionResult.session?.refresh_token).toMatch(/^[0-9a-f]{64}$/i);
 	});
 });

@@ -22,8 +22,6 @@ definition:
   instance_type: micro
 
   command:
-    - uv
-    - run
     - celery
     - -A
     - app.shared.core.celery_app:celery_app
