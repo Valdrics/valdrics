@@ -145,7 +145,10 @@ async def test_budget_alert_logic():
     with patch(
         "app.modules.notifications.domain.get_tenant_slack_service",
         new_callable=AsyncMock,
-    ) as mock_get_tenant_slack:
+    ) as mock_get_tenant_slack, patch(
+        "app.shared.llm.budget_manager.audit_log",
+        new=AsyncMock(return_value=None),
+    ):
         mock_instance = AsyncMock()
         mock_get_tenant_slack.return_value = mock_instance
 

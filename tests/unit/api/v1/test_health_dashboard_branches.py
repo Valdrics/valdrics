@@ -18,6 +18,11 @@ from app.modules.governance.api.v1.health_dashboard import (
     LicenseGovernanceHealth,
     TenantMetrics,
 )
+from app.modules.governance.api.v1.health_dashboard_models import (
+    LandingFunnelHealth,
+    LandingFunnelWeeklyDelta,
+    LandingFunnelWindowSummary,
+)
 from app.shared.core.pricing import PricingTier
 
 
@@ -390,6 +395,13 @@ async def test_dashboard_cache_decode_failure_falls_back_to_fresh_payload() -> N
             completion_rate_percent=0.0,
             failure_rate_percent=0.0,
             avg_time_to_complete_hours=None,
+        ))
+    ), patch.object(
+        hd, "_get_landing_funnel_health", new=AsyncMock(return_value=LandingFunnelHealth(
+            weekly_current=LandingFunnelWindowSummary(),
+            weekly_previous=LandingFunnelWindowSummary(),
+            weekly_delta=LandingFunnelWeeklyDelta(),
+            alerts=[],
         ))
     ), patch.object(hd.logger, "warning") as warning_mock:
         payload = await hd.get_investor_health_dashboard(user, db)

@@ -46,7 +46,13 @@ async def test_fair_use_per_minute_denial_is_429() -> None:
         LLM_FAIR_USE_CONCURRENCY_LEASE_TTL_SECONDS=180,
     )
 
-    with patch("app.shared.llm.budget_manager.get_settings", return_value=settings):
+    with patch(
+        "app.shared.llm.budget_manager.get_settings",
+        return_value=settings,
+    ), patch(
+        "app.shared.llm.budget_manager.audit_log",
+        new=AsyncMock(return_value=None),
+    ):
         with pytest.raises(LLMFairUseExceededError) as exc:
             await LLMBudgetManager._enforce_fair_use_guards(
                 tenant_id=tenant_id,
@@ -78,6 +84,10 @@ async def test_fair_use_concurrency_guard_local_fallback() -> None:
         patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
         patch(
             "app.shared.llm.budget_manager.get_cache_service", return_value=cache_stub
+        ),
+        patch(
+            "app.shared.llm.budget_manager.audit_log",
+            new=AsyncMock(return_value=None),
         ),
     ):
         db_first = AsyncMock()

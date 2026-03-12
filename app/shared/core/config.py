@@ -147,7 +147,7 @@ class Settings(BaseSettings):
 
     # Security
     CORS_ORIGINS: list[str] = []  # Empty by default - restricted in prod
-    FRONTEND_URL: str = "http://localhost:5173"  # Used for billing callbacks
+    FRONTEND_URL: str = "http://localhost:5174"  # Used for billing callbacks
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4o"  # High performance for complex analysis
 

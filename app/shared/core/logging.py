@@ -243,13 +243,6 @@ async def audit_log_async(
         audit_log(event, str(user_id or "system"), str(tenant_id), details)
         return tenant_entry
 
-    if isolated and db is not None and not isinstance(db, AsyncSession):
-        entry = await _write(db)
-        commit_fn = getattr(db, "commit", None)
-        if callable(commit_fn):
-            await maybe_await(commit_fn())
-        return entry
-
     if isolated:
         from app.shared.db.session import (
             async_session_maker,

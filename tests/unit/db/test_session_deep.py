@@ -131,7 +131,7 @@ class TestSessionDeep:
             import app.shared.db.session
             importlib.reload(app.shared.db.session)
 
-    def test_ssl_config_require_prod_fail(self):
+    def test_ssl_config_require_prod_uses_verified_system_trust(self):
         import app.shared.db.session as session_module
 
         mock_settings = MagicMock()
@@ -144,8 +144,25 @@ class TestSessionDeep:
         mock_settings.DB_USE_NULL_POOL = False
         mock_settings.DB_EXTERNAL_POOLER = False
 
-        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
-            with pytest.raises(
-                ValueError, match="DB_SSL_CA_CERT_PATH is mandatory"
-            ):
-                session_module._build_db_runtime()
+        ssl_ctx = MagicMock()
+        fake_engine = MagicMock()
+        fake_session_factory = MagicMock()
+        with (
+            patch("app.shared.db.session.get_settings", return_value=mock_settings),
+            patch(
+                "app.shared.db.connect_args.ssl.create_default_context",
+                return_value=ssl_ctx,
+            ),
+            patch("app.shared.db.session.create_async_engine", return_value=fake_engine),
+            patch(
+                "app.shared.db.session.async_sessionmaker",
+                return_value=fake_session_factory,
+            ),
+            patch("app.shared.db.session._register_engine_event_listeners"),
+        ):
+            runtime = session_module._build_db_runtime()
+
+        assert runtime.engine is fake_engine
+        assert runtime.session_maker is fake_session_factory
+        assert ssl_ctx.verify_mode == session_module.ssl.CERT_REQUIRED
+        assert ssl_ctx.check_hostname is True

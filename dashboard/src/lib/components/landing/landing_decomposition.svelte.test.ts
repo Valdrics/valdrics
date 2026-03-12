@@ -178,6 +178,9 @@ describe('Landing component decomposition', () => {
 		const onTrackCta = vi.fn();
 		const view = render(LandingTrustSection, {
 			props: {
+				aboutHref: '/about?source=trust_about',
+				docsHref: '/docs?source=trust_docs',
+				statusHref: '/status?source=trust_status',
 				enterprisePathHref: '/enterprise?source=trust_enterprise',
 				requestValidationBriefingHref:
 					'/talk-to-sales?source=trust_validation&intent=request_validation_briefing',
@@ -209,6 +212,9 @@ describe('Landing component decomposition', () => {
 		const onTrackCta = vi.fn();
 		const view = render(LandingTrustSection, {
 			props: {
+				aboutHref: '/about?source=trust_about',
+				docsHref: '/docs?source=trust_docs',
+				statusHref: '/status?source=trust_status',
 				enterprisePathHref: '/enterprise?source=trust_enterprise',
 				requestValidationBriefingHref:
 					'/talk-to-sales?source=trust_validation&intent=request_validation_briefing',

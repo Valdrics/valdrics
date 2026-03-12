@@ -478,7 +478,7 @@ class TestSettingsValidation:
             assert settings.LLM_PROVIDER == "groq"
             assert settings.OPENAI_API_KEY is None
             assert settings.CORS_ORIGINS == []
-            assert settings.FRONTEND_URL == "http://localhost:5173"
+            assert settings.FRONTEND_URL == "http://localhost:5174"
             assert settings.ADMIN_API_KEY is None
 
     def test_settings_saas_strict_integrations_blocks_env_integration_config_in_production(
