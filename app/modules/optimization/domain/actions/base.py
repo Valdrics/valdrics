@@ -133,3 +133,16 @@ class BaseRemediationAction(ABC):
                 action_taken=action_name,
                 error_message=str(e)
             )
+        except Exception as e:
+            logger.error(
+                "remediation_action_unexpected_failure",
+                resource_id=resource_id,
+                action=action_name,
+                error=str(e),
+            )
+            return ExecutionResult(
+                status=ExecutionStatus.FAILED,
+                resource_id=resource_id,
+                action_taken=action_name,
+                error_message=str(e),
+            )

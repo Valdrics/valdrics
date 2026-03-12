@@ -1,17 +1,12 @@
-import jwt
 from uuid import UUID
-from datetime import datetime, timezone, timedelta
-from app.shared.core.config import get_settings
+from datetime import timedelta
 
-settings = get_settings()
+from app.shared.core.auth import create_access_token
 
 
 def create_test_token(user_id: UUID, email: str):
     """Generate a valid test JWT for Supabase authentication."""
-    payload = {
-        "sub": str(user_id),
-        "email": email,
-        "aud": "authenticated",  # Match Supabase default aud
-        "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
-    }
-    return jwt.encode(payload, settings.SUPABASE_JWT_SECRET, algorithm="HS256")
+    return create_access_token(
+        {"sub": str(user_id), "email": email},
+        expires_delta=timedelta(hours=1),
+    )

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/valdrics_icon.png" alt="Valdrics" width="200" />
+  <img src="assets/valdrics_icon1.png" alt="Valdrics" width="200" />
 </p>
 
 <h1 align="center">Valdrics</h1>
@@ -32,12 +32,12 @@
 ## 💸 The Problem
 
 > **"We're spending $47,000/month on AWS... and I can't explain where 30% of it goes."**  
-> — *Every engineering manager at some point*
+> — _Every engineering manager at some point_
 
 Here's what the industry knows but rarely admits:
 
-- **$164 billion** in cloud spend was wasted in 2024. *(Flexera State of the Cloud Report)*
-- **30-35%** of cloud resources are idle, orphaned, or oversized. *(Gartner)*
+- **$164 billion** in cloud spend was wasted in 2024. _(Flexera State of the Cloud Report)_
+- **30-35%** of cloud resources are idle, orphaned, or oversized. _(Gartner)_
 - The average company has **no idea** what a developer spin-up costs until the monthly invoice arrives.
 
 And it's not just money. Every idle EC2 instance, every orphan EBS volume, every forgotten load balancer is **burning electricity** and **emitting CO₂** for absolutely nothing.
@@ -54,7 +54,7 @@ Graphs give you... more questions.
 
 **Valdrics transforms raw cost data into actionable value intelligence.**
 
-It connects to your cloud, uncovers waste, explains spend behavior, and gives you *exactly* what to do—with receipts.
+It connects to your cloud, uncovers waste, explains spend behavior, and gives you _exactly_ what to do—with receipts.
 
 <p align="center">
   <img src="https://img.shields.io/badge/Turn_Spend_Into-Business_Value-blueviolet?style=for-the-badge" alt="Turn Spend Into Business Value" />
@@ -69,7 +69,6 @@ It connects to your cloud, uncovers waste, explains spend behavior, and gives yo
 
 > [!TIP]
 > **Zero API Costs for Your AWS Account**: Valdrics uses [AWS CUR](https://docs.aws.amazon.com/cur/latest/userguide/what-is-cur.html) and [Resource Explorer 2](https://docs.aws.amazon.com/resource-explorer/latest/userguide/welcome.html) instead of expensive APIs like Cost Explorer ($0.01/request). Your AWS bill from Valdrics scans is **~$0.00/month**.
-
 
 ```
               ┌──────────────────┐
@@ -103,15 +102,16 @@ It connects to your cloud, uncovers waste, explains spend behavior, and gives yo
 ## ✨ Features
 
 ### 🧟 **Deep Zombie Detection**
-Not just "idle EC2." We find *everything*:
 
-| Category | What We Hunt | Precision Signals |
-|----------|--------------|-------------------|
-| **Compute** | Idle EC2, Azure VMs, GCP Instances | **GPU Hunting** (P/G/Nvidia), **Owner Attribution** |
-| **Storage** | Orphan EBS, Managed Disks, Snapshots | **Creator Attribution**, Age-based decay |
-| **Network** | Unallocated IPs, Orphan LBs, NAT GWs | **Association Tracking** |
-| **Data** | Idle RDS, Redshift, GCP SQL | **Connection Activity** |
-| **Registry** | Stale ECR, ACR, GCR Images | **Pull Frequency** |
+Not just "idle EC2." We find _everything_:
+
+| Category     | What We Hunt                         | Precision Signals                                   |
+| ------------ | ------------------------------------ | --------------------------------------------------- |
+| **Compute**  | Idle EC2, Azure VMs, GCP Instances   | **GPU Hunting** (P/G/Nvidia), **Owner Attribution** |
+| **Storage**  | Orphan EBS, Managed Disks, Snapshots | **Creator Attribution**, Age-based decay            |
+| **Network**  | Unallocated IPs, Orphan LBs, NAT GWs | **Association Tracking**                            |
+| **Data**     | Idle RDS, Redshift, GCP SQL          | **Connection Activity**                             |
+| **Registry** | Stale ECR, ACR, GCR Images           | **Pull Frequency**                                  |
 
 **11 detection plugins + Multi-Cloud Parity (AWS, Azure, GCP).**
 
@@ -119,12 +119,13 @@ Not just "idle EC2." We find *everything*:
 
 ### 🧠 **AI That Actually Thinks**
 
-Other tools use static rules: *"CPU < 10% for 7 days = zombie."*
+Other tools use static rules: _"CPU < 10% for 7 days = zombie."_
 
-Valdrics asks: *"Why did RDS costs spike 47% on Tuesday?"*  
-And answers: *"Because Staging-DB-04 was left running after the load test. Estimated waste: $312/month."*
+Valdrics asks: _"Why did RDS costs spike 47% on Tuesday?"_  
+And answers: _"Because Staging-DB-04 was left running after the load test. Estimated waste: $312/month."_
 
 **Powered by your choice of:**
+
 - OpenAI (GPT-4o, GPT-4o-mini)
 - Anthropic (Claude 3.5 Sonnet)
 - Google (Gemini 2.0 Flash)
@@ -179,7 +180,7 @@ We're paranoid, so you don't have to be:
 
 - **Zero-Trust Architecture** — We assume IAM roles via STS. No long-lived credentials.
 - **Read-Only by Default** — Our CloudFormation/Terraform templates grant only `Describe*` and `Get*` permissions.
-- **Human-in-the-Loop** — The AI recommends; *you* approve the action.
+- **Human-in-the-Loop** — The AI recommends; _you_ approve the action.
 - **GitOps-First Remediation** — Generate professional Terraform plans (`state rm` and `removed` blocks) to decommission resources via your existing CI/CD.
 - **Audit Trail** — Every remediation request is logged with who requested, who approved, and when.
 
@@ -188,6 +189,7 @@ We're paranoid, so you don't have to be:
 ## 🚀 Get Started
 
 ### Prerequisites
+
 - Docker & Docker Compose
 - An AWS account with:
   - AWS CUR configured to deliver Parquet reports to S3
@@ -196,6 +198,7 @@ We're paranoid, so you don't have to be:
 - An LLM API key (OpenAI, Anthropic, Google, or Groq)
 
 ### Runtime Dependency Policy (Prod/Staging)
+
 - `tiktoken` is required for accurate token accounting and LLM budget enforcement.
 - If `SENTRY_DSN` is configured, `sentry-sdk` is required.
 - `prophet` is required by default in staging/production.
@@ -223,6 +226,7 @@ make bootstrap-local-db
 `.env.dev` is local-only, runs with `TESTING=false`, and must not be used in staging/production.
 
 For the Postgres/Redis docker path, edit `.env` and add:
+
 ```env
 DATABASE_URL=postgresql+asyncpg://...
 OPENAI_API_KEY=sk-...  # or GROQ_API_KEY, etc.
@@ -249,7 +253,7 @@ docker-compose up -d
 ### 3. Open the Dashboard
 
 - **API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Dashboard:** [http://localhost:5173](http://localhost:5173)
+- **Dashboard:** [http://localhost:5174](http://localhost:5174)
 
 ### 4. Connect Your AWS Account
 
@@ -259,15 +263,15 @@ The dashboard will guide you through deploying our read-only IAM role via CloudF
 
 ## 📊 Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| **Backend** | Python 3.12, FastAPI, Pydantic v2, SQLAlchemy (async) |
-| **Frontend** | SvelteKit (Svelte 5 Runes), TailwindCSS v4, Shadcn-Svelte |
-| **Database** | PostgreSQL (managed or self-hosted), Supabase-compatible auth flows |
-| **LLM** | LangChain, OpenAI, Anthropic, Google Genai, Groq |
-| **Infra** | Docker, Kubernetes (Helm), GitHub Actions, Prometheus |
-| **Observability** | OpenTelemetry, Grafana Dashboards, Prometheus Metrics |
-| **GreenOps** | CodeCarbon integration |
+| Layer             | Technology                                                          |
+| ----------------- | ------------------------------------------------------------------- |
+| **Backend**       | Python 3.12, FastAPI, Pydantic v2, SQLAlchemy (async)               |
+| **Frontend**      | SvelteKit (Svelte 5 Runes), TailwindCSS v4, Shadcn-Svelte           |
+| **Database**      | PostgreSQL (managed or self-hosted), Supabase-compatible auth flows |
+| **LLM**           | LangChain, OpenAI, Anthropic, Google Genai, Groq                    |
+| **Infra**         | Docker, Kubernetes (Helm), GitHub Actions, Prometheus               |
+| **Observability** | OpenTelemetry, Grafana Dashboards, Prometheus Metrics               |
+| **GreenOps**      | CodeCarbon integration                                              |
 
 ---
 
@@ -276,6 +280,7 @@ The dashboard will guide you through deploying our read-only IAM role via CloudF
 Valdrics includes production-ready infrastructure components:
 
 ### Kubernetes Deployment
+
 ```bash
 # Deploy with Helm
 helm install valdrics helm/valdrics/ \
@@ -287,14 +292,16 @@ helm install valdrics helm/valdrics/ -f my-values.yaml
 ```
 
 ### Pre-configured Components
-| Component | Location | Description |
-|-----------|----------|-------------|
-| **Helm Chart** | `helm/valdrics/` | Full K8s deployment (HPA, Ingress, Service) |
-| **Grafana Dashboards** | `grafana/dashboards/` | API Overview + FinOps metrics |
-| **Load Tests** | `loadtest/` | k6 + Locust performance tests |
-| **SBOM Generation** | `.github/workflows/sbom.yml` | CycloneDX + vulnerability scanning |
+
+| Component              | Location                     | Description                                 |
+| ---------------------- | ---------------------------- | ------------------------------------------- |
+| **Helm Chart**         | `helm/valdrics/`             | Full K8s deployment (HPA, Ingress, Service) |
+| **Grafana Dashboards** | `grafana/dashboards/`        | API Overview + FinOps metrics               |
+| **Load Tests**         | `loadtest/`                  | k6 + Locust performance tests               |
+| **SBOM Generation**    | `.github/workflows/sbom.yml` | CycloneDX + vulnerability scanning          |
 
 ### CI/CD Pipeline
+
 - ✅ **Linting**: Ruff + MyPy
 - ✅ **Testing**: Pytest with coverage
 - ✅ **Security**: Bandit (SAST), Trivy (containers), TruffleHog (secrets)
@@ -308,6 +315,7 @@ helm install valdrics helm/valdrics/ -f my-values.yaml
 We're in **active development**. Here's where we are:
 
 ### ✅ Done
+
 - [x] Multi-tenant AWS onboarding (CloudFormation + Terraform)
 - [x] 11 zombie detection plugins
 - [x] Multi-LLM analysis (OpenAI, Claude, Gemini, Groq)
@@ -320,11 +328,13 @@ We're in **active development**. Here's where we are:
 - [x] **ActiveOps** (Autonomous Remediation Engine)
 
 ### 🔨 In Progress
+
 - [ ] FinOps-as-Code (GitHub Action to preview cost changes on PRs)
 - [ ] Real-time WebSocket updates
 - [ ] Production deployment profile hardening and capacity validation
 
 ### 🔮 Coming Soon
+
 - [ ] ClickHouse migration (for 100M+ scaling)
 - [ ] Stripe billing & usage metering
 - [ ] Virtual tagging (LLM infers team ownership)
@@ -346,6 +356,7 @@ Public source availability does not change the license terms.
 See [LICENSE](LICENSE) for full terms.
 
 Additional policy docs:
+
 - [Licensing FAQ](docs/licensing.md#licensing-faq)
 - [Commercial Licensing](COMMERCIAL_LICENSE.md)
 - [Trademark Policy](TRADEMARK_POLICY.md)
@@ -359,8 +370,6 @@ Additional policy docs:
 ## 🤝 Contributing
 
 We welcome contributions! Please read our [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
-
-
 
 ---
 

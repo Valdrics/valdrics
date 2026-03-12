@@ -1,11 +1,9 @@
 import pytest
-import jwt
 import json
 import hmac
 from unittest.mock import patch
 import hashlib
-from uuid import uuid4, UUID
-from datetime import datetime, timezone, timedelta
+from uuid import uuid4
 from httpx import AsyncClient
 import respx
 from sqlalchemy import select
@@ -18,19 +16,9 @@ from app.modules.billing.domain.billing.paystack_billing import (
     SubscriptionStatus,
 )
 from app.modules.billing.domain.billing.webhook_retry import process_paystack_webhook
+from tests.utils import create_test_token
 
 settings = get_settings()
-
-
-def create_test_token(user_id: UUID, email: str):
-    payload = {
-        "sub": str(user_id),
-        "email": email,
-        "aud": "authenticated",  # Match Supabase default aud
-        "iss": str(getattr(settings, "SUPABASE_JWT_ISSUER", "supabase") or "supabase"),
-        "exp": int((datetime.now(timezone.utc) + timedelta(hours=1)).timestamp()),
-    }
-    return jwt.encode(payload, settings.SUPABASE_JWT_SECRET, algorithm="HS256")
 
 
 def generate_paystack_signature(payload: bytes, secret: str) -> str:

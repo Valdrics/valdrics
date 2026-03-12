@@ -388,7 +388,7 @@ class JobProcessor:
 
         tracer = get_tracer(__name__)
 
-        if self._job_status_value(job) != JobStatus.RUNNING.value:
+        if self._job_status_value(job.status) != JobStatus.RUNNING.value:
             job.status = JobStatus.RUNNING.value
             job.started_at = datetime.now(timezone.utc)
             job.attempts = int(job.attempts or 0) + 1

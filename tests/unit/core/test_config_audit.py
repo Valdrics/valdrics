@@ -9,6 +9,10 @@ FAKE_ENCRYPTION_KEY = "k" * 32
 FAKE_KDF_SALT = "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="
 FAKE_PAYSTACK_SECRET_KEY = "example_paystack_secret_TEST_KEY_NOT_REAL_1234567890"
 FAKE_PAYSTACK_PUBLIC_KEY = "example_paystack_public_TEST_KEY_NOT_REAL_1234567890"
+FAKE_API_URL = "https://api.example.com"
+FAKE_FRONTEND_URL = "https://app.example.com"
+FAKE_ENFORCEMENT_APPROVAL_SECRET = "a" * 48
+FAKE_ENFORCEMENT_EXPORT_SECRET = "e" * 48
 
 
 @pytest.fixture(autouse=True)
@@ -106,6 +110,9 @@ def test_settings_admin_key_env_validation():
                 ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
                 KDF_SALT=FAKE_KDF_SALT,
                 ADMIN_API_KEY=None,  # Force it to None
+                ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+                ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
+                _env_file=None,
             )
         assert "ADMIN_API_KEY must be >= 32 chars" in str(exc.value)
 
@@ -157,6 +164,9 @@ def test_settings_is_production_property():
             TESTING=False,
             SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
             DATABASE_URL="postgresql://host/db",
+            API_URL=FAKE_API_URL,
+            FRONTEND_URL=FAKE_FRONTEND_URL,
+            CORS_ORIGINS=[FAKE_FRONTEND_URL],
             CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
             ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
             KDF_SALT=FAKE_KDF_SALT,
@@ -167,6 +177,8 @@ def test_settings_is_production_property():
             ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
             REDIS_URL="redis://localhost:6379",
             DB_SSL_MODE="require",
+            ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
+            ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
             _env_file=None,
         )
         assert s_prod.is_production is True
