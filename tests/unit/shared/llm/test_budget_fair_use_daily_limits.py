@@ -82,6 +82,7 @@ async def test_enforce_daily_analysis_limit_enforces_system_cap() -> None:
             "app.shared.llm.budget_fair_use.count_requests_in_window",
             new=AsyncMock(side_effect=[0, 1]),
         ),
+        patch("app.shared.llm.budget_manager.audit_log"),
     ):
         with pytest.raises(BudgetExceededError) as exc:
             await budget_fair_use.enforce_daily_analysis_limit(
@@ -102,6 +103,7 @@ async def test_enforce_daily_analysis_limit_enforces_system_cap() -> None:
             "app.shared.llm.budget_fair_use.count_requests_in_window",
             new=AsyncMock(return_value=2),
         ),
+        patch("app.shared.llm.budget_manager.audit_log"),
     ):
         with pytest.raises(BudgetExceededError):
             await budget_fair_use.enforce_daily_analysis_limit(DummyManager, tenant_id, db)
