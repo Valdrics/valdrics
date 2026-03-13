@@ -1,5 +1,4 @@
 import uuid
-from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -170,7 +169,9 @@ async def test_update_profile_user_not_found(async_client: AsyncClient, db, app)
 
 
 @pytest.mark.asyncio
-async def test_update_profile_audit_uses_forwarded_ip(async_client: AsyncClient, db, app):
+async def test_update_profile_audit_uses_resolved_client_ip(
+    async_client: AsyncClient, db, app
+):
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
 
@@ -199,17 +200,12 @@ async def test_update_profile_audit_uses_forwarded_ip(async_client: AsyncClient,
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
         with patch(
-            "app.modules.governance.api.v1.settings.profile.get_settings",
-            return_value=SimpleNamespace(
-                TRUST_PROXY_HEADERS=True,
-                TRUSTED_PROXY_CIDRS=["127.0.0.1/32"],
-                TRUSTED_PROXY_HOPS=2,
-            ),
+            "app.modules.governance.api.v1.settings.profile.resolve_client_ip",
+            return_value="198.51.100.10",
         ):
             response = await async_client.put(
                 "/api/v1/settings/profile",
                 json={"persona": "finance"},
-                headers={"X-Forwarded-For": "198.51.100.10, 203.0.113.9"},
             )
         assert response.status_code == 200
 

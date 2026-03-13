@@ -127,9 +127,9 @@ def test_performance_gate_supports_reuse_and_ci_automation() -> None:
     assert 'TESTING: "false"' in perf_text
     assert 'API_URL: "https://api.staging.valdrics.example"' in perf_text
     assert 'FRONTEND_URL: "https://dashboard.staging.valdrics.example"' in perf_text
-    assert "postgres:16.8-alpine" in perf_text
-    assert "redis:7.2.5-alpine" in perf_text
-    assert "otel/opentelemetry-collector:0.145.0" in perf_text
+    assert "postgres:16.13-alpine" in perf_text
+    assert "redis:7.2.13-alpine" in perf_text
+    assert "otel/opentelemetry-collector:0.147.0" in perf_text
     assert "Wait for OTEL Collector" in perf_text
     assert "uv run python scripts/validate_runtime_env.py --environment staging" in perf_text
     assert "uv run alembic upgrade head" in perf_text
@@ -151,7 +151,7 @@ def test_strict_runtime_preflight_is_hermetic_and_explicit_in_workflows() -> Non
     assert 'OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"' in ci_text
     assert 'API_URL: "https://api.staging.valdrics.example"' in dr_text
     assert 'FRONTEND_URL: "https://dashboard.staging.valdrics.example"' in dr_text
-    assert "otel/opentelemetry-collector:0.145.0" in dr_text
+    assert "otel/opentelemetry-collector:0.147.0" in dr_text
     assert "Wait for OTEL Collector" in dr_text
     assert "uv run python scripts/validate_runtime_env.py --environment staging" in dr_text
 
@@ -173,8 +173,19 @@ def test_ci_workflow_pins_tflint_setup_version() -> None:
     ci_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
 
     assert "tflint_version: latest" not in ci_text
-    assert "tflint_version: v0.60.0" in ci_text
+    assert "tflint_version: v0.61.0" in ci_text
 
+
+
+
+def test_cla_workflow_uses_in_repo_python_implementation() -> None:
+    text = (REPO_ROOT / '.github/workflows/cla.yml').read_text(encoding='utf-8')
+
+    assert 'contributor-assistant/github-action' not in text
+    assert 'python3 scripts/cla_assistant.py' in text
+    assert 'CLA_SIGNATURES_BRANCH: cla-signatures' in text
+    assert 'statuses: write' in text
+    assert 'issues: write' in text
 
 def test_critical_workflows_use_immutable_action_shas_and_fixed_runner_images() -> None:
     uses_pattern = re.compile(

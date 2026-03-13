@@ -34,8 +34,7 @@
 	const proUpgradePrompt = getUpgradePrompt('pro', 'Cloud+ connectors');
 	const idpDeepScanPrompt = getUpgradePrompt('pro', 'IdP deep scan');
 	const selectedProviderUpgradePrompt = $derived(
-		(selectedProvider === 'azure' || selectedProvider === 'gcp') &&
-		!canUseMultiCloudFeatures()
+		(selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseMultiCloudFeatures()
 			? starterUpgradePrompt
 			: (selectedProvider === 'saas' || selectedProvider === 'license') &&
 				  !canUseCloudPlusFeatures()

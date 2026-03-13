@@ -4,10 +4,7 @@
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import { PUBLIC_EXTENDED_CONTACT_CHANNELS } from '$lib/landing/publicNav';
-	import {
-		appendPublicAttribution,
-		buildPublicSignupHref
-	} from '$lib/public/publicBuyingMotion';
+	import { appendPublicAttribution, buildPublicSignupHref } from '$lib/public/publicBuyingMotion';
 
 	let startFreeHref = $derived(
 		buildPublicSignupHref(base, $page.url, {
@@ -61,7 +58,8 @@
 	description="About Valdrics: what the platform is, how evaluation works today, and which public review surfaces are available before broader rollout."
 	pageType="WebPage"
 	pageSection="About"
-	keywords={['about valdrics', 'prelaunch', 'evaluation path', 'spend governance']}/>
+	keywords={['about valdrics', 'prelaunch', 'evaluation path', 'spend governance']}
+/>
 
 <PublicMarketingPage
 	kicker="About Valdrics"
@@ -93,8 +91,8 @@
 				</h2>
 				<p class="public-page__section-subtitle">
 					Valdrics is not positioned as another cost dashboard. The platform is built to move a
-					spend issue from signal, to owner, to approval, to recorded proof across cloud, SaaS,
-					and software environments.
+					spend issue from signal, to owner, to approval, to recorded proof across cloud, SaaS, and
+					software environments.
 				</p>
 			</div>
 			<div class="public-page__grid public-page__grid--3">

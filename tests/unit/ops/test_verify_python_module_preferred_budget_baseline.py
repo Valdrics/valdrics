@@ -54,6 +54,7 @@ def test_main_roundtrip_write_and_verify(tmp_path: Path) -> None:
     assert write_exit == 0
 
     payload = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert payload["root"] == "."
     assert payload["breaches"][0]["path"] == "app/large.py"
 
     verify_exit = main(

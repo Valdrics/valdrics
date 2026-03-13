@@ -11,7 +11,7 @@ LABEL org.opencontainers.image.licenses="BUSL-1.1"
 
 WORKDIR /app
 
-ARG UV_VERSION=0.9.21
+ARG UV_VERSION=0.10.9
 
 # Install uv for fast dependency management
 ENV UV_LINK_MODE=copy \

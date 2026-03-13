@@ -37,7 +37,7 @@ permissions:
 
 env:
   PYTHON_VERSION: "3.12"
-  UV_VERSION: "0.9.21"
+  UV_VERSION: "0.10.9"
 
 jobs:
   failover:
@@ -46,7 +46,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout Code
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Setup Python
         uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
@@ -54,7 +54,7 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Setup uv
-        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82 # v7.5.0
         with:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
@@ -85,7 +85,7 @@ jobs:
           ${{ inputs.dry_run == 'true' && '--dry-run' || '' }}
 
       - name: Upload Failover Evidence
-        uses: actions/upload-artifact@50769540e7f4bd5e21e526ee35c689e35e0d6874 # v4
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: regional-failover-evidence
           path: regional-failover-evidence.json
