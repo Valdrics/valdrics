@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Literal
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse, PlainTextResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -21,6 +21,7 @@ from app.models.sso_domain_mapping import SsoDomainMapping
 from app.modules.governance.api.v1.public_marketing import (
     router as marketing_router,
 )
+from app.shared.connections.aws import AWSConnectionService
 from app.shared.core.pricing import FeatureFlag, is_feature_enabled, normalize_tier
 from app.shared.lead_gen.assessment import FreeAssessmentService
 from app.shared.core.rate_limit import auth_limit, rate_limit
@@ -263,6 +264,33 @@ async def get_csrf_token(request: Request) -> JSONResponse:
     response = JSONResponse(content={"csrf_token": token})
     csrf.set_csrf_cookie(signed_token, response)
     return response
+
+
+@router.get("/templates/aws/valdrics-role.yaml")
+@rate_limit("30/minute")
+async def get_public_aws_setup_template(request: Request) -> Response:
+    """Serve the release-owned AWS CloudFormation template used by onboarding."""
+    try:
+        template = AWSConnectionService.get_cloudformation_template_yaml()
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="AWS setup templates are not available in the current runtime.",
+        ) from exc
+
+    etag = hashlib.sha256(template.encode("utf-8")).hexdigest()
+    headers = {
+        "Cache-Control": "public, max-age=300",
+        "ETag": etag,
+        "X-Content-Type-Options": "nosniff",
+    }
+    if request.headers.get("if-none-match", "").strip() == etag:
+        return Response(status_code=304, headers=headers)
+    return PlainTextResponse(
+        content=template,
+        media_type="application/x-yaml",
+        headers=headers,
+    )
 
 
 @router.post("/assessment", response_model=None)

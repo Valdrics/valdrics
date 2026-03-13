@@ -1,8 +1,10 @@
 from functools import lru_cache
 from pathlib import Path
+import re
 import tempfile
 from threading import Lock
 from typing import Optional
+from urllib.parse import urlparse
 import structlog
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator, model_validator
@@ -139,9 +141,11 @@ class Settings(BaseSettings):
     AWS_ENDPOINT_URL: Optional[str] = (
         None  # Added for local testing (MotoServer/LocalStack)
     )
+    AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN: Optional[str] = None
 
-    # CloudFormation Template (Configurable for S3/GitHub)
-    CLOUDFORMATION_TEMPLATE_URL: str = "https://raw.githubusercontent.com/valdrics/valdrics/main/cloudformation/valdrics-role.yaml"
+    # Optional override for a publicly reachable CloudFormation template URL.
+    # When empty, onboarding derives a release-owned public API URL from API_URL.
+    CLOUDFORMATION_TEMPLATE_URL: str = ""
 
     # Reload trigger: 2026-01-14
 
@@ -437,6 +441,41 @@ class Settings(BaseSettings):
             allowed_text = ", ".join(sorted(allowed))
             raise ValueError(f"ENVIRONMENT must be one of: {allowed_text}")
         return normalized
+
+    @field_validator("AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN", mode="before")
+    @classmethod
+    def _normalize_aws_assume_role_trust_principal_arn(
+        cls, value: object
+    ) -> str | None:
+        normalized = str(value or "").strip()
+        if not normalized:
+            return None
+        arn_pattern = re.compile(
+            r"^arn:(aws|aws-us-gov|aws-cn):iam::\d{12}:(root|role\/[\w+=,.@\-_/]+|user\/[\w+=,.@\-_/]+)$"
+        )
+        if not arn_pattern.fullmatch(normalized):
+            raise ValueError(
+                "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN must be an IAM principal ARN "
+                "(role, user, or account root)."
+            )
+        return normalized
+
+    @field_validator("CLOUDFORMATION_TEMPLATE_URL", mode="before")
+    @classmethod
+    def _normalize_cloudformation_template_url(cls, value: object) -> str:
+        normalized = str(value or "").strip()
+        if not normalized:
+            return ""
+        parsed = urlparse(normalized)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise ValueError("CLOUDFORMATION_TEMPLATE_URL must be an explicit http(s) URL.")
+        if parsed.username or parsed.password:
+            raise ValueError("CLOUDFORMATION_TEMPLATE_URL must not include credentials.")
+        if parsed.query or parsed.fragment:
+            raise ValueError(
+                "CLOUDFORMATION_TEMPLATE_URL must not include query strings or fragments."
+            )
+        return normalized.rstrip("/")
 
     @model_validator(mode="after")
     def validate_all_config(self) -> "Settings":

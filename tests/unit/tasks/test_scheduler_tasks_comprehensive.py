@@ -180,6 +180,14 @@ async def test_maintenance_sweep_success(mock_db):
                 "app.modules.reporting.domain.carbon_factors.CarbonFactorService.auto_activate_latest",
                 new_callable=AsyncMock,
             ) as mock_auto_activate,
+            patch(
+                "app.shared.core.cloud_pricing_data.sync_supported_aws_pricing",
+                new=AsyncMock(return_value=0),
+            ) as mock_sync_supported_aws_pricing,
+            patch(
+                "app.shared.core.cloud_pricing_data.refresh_cloud_resource_pricing",
+                new=AsyncMock(return_value=0),
+            ) as mock_refresh_cloud_resource_pricing,
         ):
             mock_persist = MagicMock()
             mock_persist.finalize_batch = AsyncMock(
@@ -203,6 +211,8 @@ async def test_maintenance_sweep_success(mock_db):
             mock_persist.finalize_batch.assert_called_with(days_ago=2)
             mock_agg.refresh_materialized_view.assert_called_with(mock_db)
             mock_auto_activate.assert_awaited_once()
+            mock_sync_supported_aws_pricing.assert_awaited_once()
+            mock_refresh_cloud_resource_pricing.assert_awaited_once()
             mock_maintenance.create_future_partitions.assert_awaited_once_with(
                 months_ahead=3
             )
@@ -236,6 +246,14 @@ async def test_maintenance_archive_logging(mock_db):
                 patch(
                     "app.tasks.scheduler_tasks.CostAggregator.refresh_materialized_view",
                     new=_fake_refresh_materialized_view,
+                ),
+                patch(
+                    "app.shared.core.cloud_pricing_data.sync_supported_aws_pricing",
+                    new=AsyncMock(return_value=0),
+                ),
+                patch(
+                    "app.shared.core.cloud_pricing_data.refresh_cloud_resource_pricing",
+                    new=AsyncMock(return_value=0),
                 ),
                 patch(
                     "app.shared.core.maintenance.PartitionMaintenanceService.create_future_partitions",
@@ -283,6 +301,14 @@ async def test_maintenance_carbon_factor_refresh_failure_is_logged(mock_db):
                     "app.modules.reporting.domain.carbon_factors.CarbonFactorService.auto_activate_latest",
                     new_callable=AsyncMock,
                 ) as mock_auto_activate,
+                patch(
+                    "app.shared.core.cloud_pricing_data.sync_supported_aws_pricing",
+                    new=AsyncMock(return_value=0),
+                ),
+                patch(
+                    "app.shared.core.cloud_pricing_data.refresh_cloud_resource_pricing",
+                    new=AsyncMock(return_value=0),
+                ),
                 patch(
                     "app.shared.core.maintenance.PartitionMaintenanceService.create_future_partitions",
                     new_callable=AsyncMock,

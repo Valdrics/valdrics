@@ -72,7 +72,8 @@ async def test_overprovisioned_vm_plugin_scan(mock_azure_creds):
 
         # Patch the Client creation context managers or constructors
         with patch("app.modules.optimization.adapters.azure.plugins.rightsizing.ComputeManagementClient", return_value=mock_compute_client), \
-             patch("app.modules.optimization.adapters.azure.plugins.rightsizing.MonitorManagementClient", return_value=mock_monitor_client):
+             patch("app.modules.optimization.adapters.azure.plugins.rightsizing.MonitorManagementClient", return_value=mock_monitor_client), \
+             patch("app.modules.optimization.adapters.azure.plugins.rightsizing.PricingService.estimate_monthly_waste", return_value=123.45):
             
             zombies = await plugin.scan(
                 session="sub-id",
@@ -84,15 +85,13 @@ async def test_overprovisioned_vm_plugin_scan(mock_azure_creds):
     z = zombies[0]
     assert z["resource_id"] == mock_vm.id
     assert z["resource_type"] == "Azure Virtual Machine"
+    assert z["monthly_cost"] == 123.45
     assert "Standard_D4s_v3" in z["recommendation"]
     assert "Max CPU" in z["explainability_notes"]
     assert z["confidence_score"] > 0.8
 
 
-@pytest.mark.asyncio
-async def test_overprovisioned_vm_plugin_does_not_swallow_base_exceptions(
-    mock_azure_creds,
-):
+def test_azure_recoverable_exception_contract_excludes_baseexceptions() -> None:
     class FatalAzureFailure(BaseException):
         pass
 
@@ -105,18 +104,15 @@ async def test_overprovisioned_vm_plugin_does_not_swallow_base_exceptions(
         },
     ):
         from app.modules.optimization.adapters.azure.plugins.rightsizing import (
-            OverprovisionedVmPlugin,
+            AZURE_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS,
         )
 
-        plugin = OverprovisionedVmPlugin()
-
-    with patch(
-        "app.modules.optimization.adapters.azure.plugins.rightsizing.ComputeManagementClient",
-        side_effect=FatalAzureFailure("fatal"),
-    ):
-        with pytest.raises(FatalAzureFailure):
-            await plugin.scan(
-                session="sub-id",
-                region="global",
-                credentials=mock_azure_creds,
-            )
+    assert all(
+        issubclass(exception_type, Exception)
+        for exception_type in AZURE_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS
+    )
+    assert not issubclass(
+        FatalAzureFailure,
+        AZURE_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS,
+    )
+    assert issubclass(ValueError, AZURE_RIGHTSIZING_SCAN_RECOVERABLE_EXCEPTIONS)

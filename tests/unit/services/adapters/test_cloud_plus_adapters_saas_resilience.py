@@ -32,21 +32,21 @@ async def test_saas_get_json_error_paths_and_discover_resources() -> None:
         ]
     )
     with patch(
-        "app.shared.adapters.saas.httpx.AsyncClient", return_value=http_error_client
+        "app.shared.adapters.saas.get_http_client", return_value=http_error_client
     ):
         with pytest.raises(Exception):
             await adapter._get_json("https://example.invalid", headers={})
 
     invalid_json_client = _FakeAsyncClient([_InvalidJSONResponse({})])
     with patch(
-        "app.shared.adapters.saas.httpx.AsyncClient", return_value=invalid_json_client
+        "app.shared.adapters.saas.get_http_client", return_value=invalid_json_client
     ):
         with pytest.raises(Exception):
             await adapter._get_json("https://example.invalid", headers={})
 
     non_dict_client = _FakeAsyncClient([_FakeResponse([])])  # type: ignore[list-item]
     with patch(
-        "app.shared.adapters.saas.httpx.AsyncClient", return_value=non_dict_client
+        "app.shared.adapters.saas.get_http_client", return_value=non_dict_client
     ):
         with pytest.raises(Exception):
             await adapter._get_json("https://example.invalid", headers={})
@@ -67,7 +67,7 @@ async def test_saas_get_json_retries_retryable_status() -> None:
             _FakeResponse({"data": []}, status_code=200),
         ]
     )
-    with patch("app.shared.adapters.saas.httpx.AsyncClient", return_value=fake_client):
+    with patch("app.shared.adapters.saas.get_http_client", return_value=fake_client):
         payload = await adapter._get_json("https://example.invalid", headers={})
 
     assert payload == {"data": []}
@@ -135,7 +135,7 @@ async def test_saas_stream_stripe_invalid_payload_raises() -> None:
     adapter = SaaSAdapter(conn)
 
     fake_client = _FakeAsyncClient([_FakeResponse({"data": {"not": "list"}})])
-    with patch("app.shared.adapters.saas.httpx.AsyncClient", return_value=fake_client):
+    with patch("app.shared.adapters.saas.get_http_client", return_value=fake_client):
         with pytest.raises(ExternalAPIError):
             await anext(
                 adapter._stream_stripe_cost_and_usage(
@@ -155,7 +155,7 @@ async def test_saas_stream_salesforce_invalid_payload_raises() -> None:
     adapter = SaaSAdapter(conn)
 
     fake_client = _FakeAsyncClient([_FakeResponse({"records": {"bad": "shape"}})])
-    with patch("app.shared.adapters.saas.httpx.AsyncClient", return_value=fake_client):
+    with patch("app.shared.adapters.saas.get_http_client", return_value=fake_client):
         with pytest.raises(ExternalAPIError):
             await anext(
                 adapter._stream_salesforce_cost_and_usage(
@@ -176,14 +176,14 @@ async def test_saas_get_json_retry_branches() -> None:
         [_http_status_error(500), _FakeResponse({"ok": True})]
     )
     with patch(
-        "app.shared.adapters.saas.httpx.AsyncClient", return_value=retry_then_success
+        "app.shared.adapters.saas.get_http_client", return_value=retry_then_success
     ):
         payload = await adapter._get_json("https://example.invalid", headers={})
     assert payload == {"ok": True}
 
     non_retryable = _FakeAsyncClient([_http_status_error(401)])
     with patch(
-        "app.shared.adapters.saas.httpx.AsyncClient", return_value=non_retryable
+        "app.shared.adapters.saas.get_http_client", return_value=non_retryable
     ):
         with pytest.raises(ExternalAPIError):
             await adapter._get_json("https://example.invalid", headers={})
@@ -192,7 +192,7 @@ async def test_saas_get_json_retry_branches() -> None:
         [httpx.ConnectError("connect"), _FakeResponse({"ok": True})]
     )
     with patch(
-        "app.shared.adapters.saas.httpx.AsyncClient", return_value=transport_retry
+        "app.shared.adapters.saas.get_http_client", return_value=transport_retry
     ):
         payload = await adapter._get_json("https://example.invalid", headers={})
     assert payload == {"ok": True}
@@ -201,7 +201,7 @@ async def test_saas_get_json_retry_branches() -> None:
         [httpx.ConnectError("c1"), httpx.ConnectError("c2"), httpx.ConnectError("c3")]
     )
     with patch(
-        "app.shared.adapters.saas.httpx.AsyncClient", return_value=transport_fail
+        "app.shared.adapters.saas.get_http_client", return_value=transport_fail
     ):
         with pytest.raises(ExternalAPIError):
             await adapter._get_json("https://example.invalid", headers={})

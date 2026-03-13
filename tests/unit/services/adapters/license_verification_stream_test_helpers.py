@@ -34,9 +34,9 @@ class FakeGetClient:
         return None
 
     async def get(  # type: ignore[no-untyped-def]
-        self, url: str, *, headers=None, params=None
+        self, url: str, *, headers=None, params=None, timeout=None, **kwargs
     ) -> httpx.Response:
-        _ = url, headers, params
+        _ = url, headers, params, timeout, kwargs
         return self._response
 
 
@@ -71,8 +71,10 @@ class FakeAsyncClient:
         _ = exc_type, exc, tb
         return False
 
-    async def get(self, _url: str, *, headers=None, params=None):  # type: ignore[no-untyped-def]
-        _ = headers, params
+    async def get(  # type: ignore[no-untyped-def]
+        self, _url: str, *, headers=None, params=None, timeout=None, **kwargs
+    ):
+        _ = headers, params, timeout, kwargs
         if not self.responses:
             raise AssertionError("No fake responses configured")
         item = self.responses.pop(0)

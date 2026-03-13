@@ -1,6 +1,8 @@
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import uuid4
+from app.models.aws_connection import AWSConnection
 from app.modules.optimization.domain.service import ZombieService
 from app.shared.core.pricing import PricingTier
 
@@ -40,24 +42,51 @@ async def test_zombie_service_field_masking_starter():
 
         mock_detector = MagicMock()
         mock_detector.scan_all = AsyncMock(return_value={"idle_instances": mock_items})
+        mock_detector.get_credentials = AsyncMock(
+            return_value={"AccessKeyId": "AK", "SecretAccessKey": "SK"}
+        )
         mock_detector.provider_name = "aws"
 
-        with patch(
-            "app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector",
-            return_value=mock_detector,
+        with (
+            patch(
+                "app.modules.optimization.domain.service.ZombieDetectorFactory",
+                new=SimpleNamespace(
+                    get_detector=lambda *_args, **_kwargs: mock_detector
+                ),
+            ),
+            patch(
+                "app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery"
+            ) as mock_region_discovery,
         ):
+            mock_region_discovery.return_value.get_enabled_regions = AsyncMock(
+                return_value=["us-east-1"]
+            )
             # We need to have at least one connection to trigger the loop
-            connection = MagicMock()
+            connection = MagicMock(spec=AWSConnection)
+            connection.id = uuid4()
             connection.tenant_id = tenant_id
+            connection.name = "Prod-AWS"
+            connection.provider = "aws"
+            connection.region = "us-east-1"
+            connection.aws_account_id = "123456789012"
+            connection.role_arn = "arn:aws:iam::123456789012:role/Valdrics"
+            connection.external_id = "external-id"
+            connection.cur_bucket_name = "cur-bucket"
+            connection.cur_report_name = "cur-report"
+            connection.cur_prefix = "cur-prefix"
 
             mock_result_aws = MagicMock()
             mock_result_aws.scalars.return_value.all.return_value = [connection]
             mock_result_empty = MagicMock()
             mock_result_empty.scalars.return_value.all.return_value = []
 
-            # 3 calls: AWS, Azure, GCP. Only return connection for AWS.
+            # 7 calls: AWS, Azure, GCP, SaaS, License, Platform, Hybrid.
             db.execute.side_effect = [
                 mock_result_aws,
+                mock_result_empty,
+                mock_result_empty,
+                mock_result_empty,
+                mock_result_empty,
                 mock_result_empty,
                 mock_result_empty,
             ]
@@ -89,16 +118,33 @@ async def test_zombie_service_no_masking_pro():
     ) as mock_tier:
         mock_tier.return_value = PricingTier.PRO
 
-        connection = MagicMock()
+        connection = MagicMock(spec=AWSConnection)
+        connection.id = uuid4()
         connection.tenant_id = tenant_id
+        connection.name = "Prod-AWS"
+        connection.provider = "aws"
+        connection.region = "us-east-1"
+        connection.aws_account_id = "123456789012"
+        connection.role_arn = "arn:aws:iam::123456789012:role/Valdrics"
+        connection.external_id = "external-id"
+        connection.cur_bucket_name = "cur-bucket"
+        connection.cur_report_name = "cur-report"
+        connection.cur_prefix = "cur-prefix"
 
         mock_result_aws = MagicMock()
         mock_result_aws.scalars.return_value.all.return_value = [connection]
         mock_result_empty = MagicMock()
         mock_result_empty.scalars.return_value.all.return_value = []
 
-        # 3 calls: AWS, Azure, GCP
-        db.execute.side_effect = [mock_result_aws, mock_result_empty, mock_result_empty]
+        db.execute.side_effect = [
+            mock_result_aws,
+            mock_result_empty,
+            mock_result_empty,
+            mock_result_empty,
+            mock_result_empty,
+            mock_result_empty,
+            mock_result_empty,
+        ]
 
         mock_items = [
             {"id": "res-1", "monthly_cost": 100, "owner": "real-owner", "is_gpu": True}
@@ -106,12 +152,25 @@ async def test_zombie_service_no_masking_pro():
 
         mock_detector = MagicMock()
         mock_detector.scan_all = AsyncMock(return_value={"idle_instances": mock_items})
+        mock_detector.get_credentials = AsyncMock(
+            return_value={"AccessKeyId": "AK", "SecretAccessKey": "SK"}
+        )
         mock_detector.provider_name = "aws"
 
-        with patch(
-            "app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector",
-            return_value=mock_detector,
+        with (
+            patch(
+                "app.modules.optimization.domain.service.ZombieDetectorFactory",
+                new=SimpleNamespace(
+                    get_detector=lambda *_args, **_kwargs: mock_detector
+                ),
+            ),
+            patch(
+                "app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery"
+            ) as mock_region_discovery,
         ):
+            mock_region_discovery.return_value.get_enabled_regions = AsyncMock(
+                return_value=["us-east-1"]
+            )
             service = ZombieService(db)
             with patch(
                 "app.shared.core.notifications.NotificationDispatcher.notify_zombies",

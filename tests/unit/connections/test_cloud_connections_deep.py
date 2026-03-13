@@ -198,9 +198,24 @@ class TestCloudConnectionsDeep:
             assert res["message"] == "GCP service account key disabled"
 
     def test_aws_setup_templates(self):
-        templates = AWSConnectionService.get_setup_templates("ext-123")
+        with patch(
+            "app.shared.connections.aws.get_settings",
+            return_value=MagicMock(
+                API_URL="https://api.valdrics.test",
+                AWS_DEFAULT_REGION="us-east-1",
+                AWS_SUPPORTED_REGIONS=["us-east-1"],
+                AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=(
+                    "arn:aws:iam::123456789012:role/ValdricsControlPlane"
+                ),
+                CLOUDFORMATION_TEMPLATE_URL="",
+            ),
+        ):
+            templates = AWSConnectionService.get_setup_templates("ext-123")
+
         assert templates["external_id"] == "ext-123"
-        assert "valdrics-role" in templates["cloudformation_yaml"]
+        assert "__VALDRICS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN__" not in templates["cloudformation_yaml"]
+        assert "arn:aws:iam::123456789012:role/ValdricsControlPlane" in templates["cloudformation_yaml"]
+        assert "%2Fapi%2Fv1%2Fpublic%2Ftemplates%2Faws%2Fvaldrics-role.yaml" in templates["magic_link"]
         assert "valdrics/aws-connection" in templates["terraform_hcl"]
 
     def test_aws_build_verification_adapter_resolves_global_region(self):

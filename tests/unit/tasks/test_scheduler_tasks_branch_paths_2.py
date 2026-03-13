@@ -577,6 +577,14 @@ async def test_maintenance_sweep_realized_savings_success_with_sync_carbon_commi
             "app.modules.reporting.domain.carbon_factors.CarbonFactorService.auto_activate_latest",
             new=AsyncMock(return_value={"status": "activated", "active_factor_set_id": "a1", "candidate_factor_set_id": "c1"}),
         ),
+        patch(
+            "app.shared.core.cloud_pricing_data.sync_supported_aws_pricing",
+            new=AsyncMock(return_value=0),
+        ),
+        patch(
+            "app.shared.core.cloud_pricing_data.refresh_cloud_resource_pricing",
+            new=AsyncMock(return_value=0),
+        ),
         patch("app.modules.reporting.domain.realized_savings.RealizedSavingsService") as mock_realized_cls,
         patch("app.shared.core.maintenance.PartitionMaintenanceService") as mock_maintenance_cls,
     ):
@@ -615,6 +623,14 @@ async def test_maintenance_sweep_realized_savings_query_failure_and_sync_rollbac
         patch(
             "app.modules.reporting.domain.carbon_factors.CarbonFactorService.auto_activate_latest",
             new=AsyncMock(side_effect=RuntimeError("factor refresh failed")),
+        ),
+        patch(
+            "app.shared.core.cloud_pricing_data.sync_supported_aws_pricing",
+            new=AsyncMock(return_value=0),
+        ),
+        patch(
+            "app.shared.core.cloud_pricing_data.refresh_cloud_resource_pricing",
+            new=AsyncMock(return_value=0),
         ),
         patch("app.shared.core.maintenance.PartitionMaintenanceService") as mock_maintenance_cls,
         patch("app.tasks.scheduler_tasks.logger") as mock_logger,

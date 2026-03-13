@@ -38,7 +38,7 @@ def test_daily_finops_scan_error_handling(mock_run_cohort, mock_logger):
     from app.tasks.scheduler_tasks import daily_finops_scan
 
     # Make the second call fail
-    mock_run_cohort.delay.side_effect = [None, Exception("Queue Full"), None]
+    mock_run_cohort.delay.side_effect = [None, RuntimeError("Queue Full"), None]
 
     # Execute (should not raise exception)
     daily_finops_scan()

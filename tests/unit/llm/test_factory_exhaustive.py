@@ -53,15 +53,14 @@ class TestFactoryExhaustive:
 
         # Test with a provider that exists
         with patch(
-            "app.shared.llm.factory.LLM_PRICING",
-            {"test_prov": {"default": MagicMock(input=0.15, output=0.60)}},
+            "app.shared.llm.factory.get_provider_pricing",
+            return_value={"default": MagicMock(input=0.15, output=0.60)},
         ):
             # 1M input, 1M output -> 0.15 + 0.60 = 0.75
             cost = LLMFactory.estimate_cost("test_prov", 1_000_000, 1_000_000)
             assert cost == 0.75
-
-            # Test empty provider
-            assert LLMFactory.estimate_cost("unknown", 100, 100) == 0.0
+        # Test empty provider
+        assert LLMFactory.estimate_cost("unknown", 100, 100) == 0.0
 
     def test_create_unsupported_provider(self):
         """Test create with unsupported provider (line 164)."""

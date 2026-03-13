@@ -6,7 +6,39 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.shared.core.async_utils import maybe_await
+
+IDENTITY_AUDIT_WRITE_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
+
+
+async def _write_identity_audit_or_raise(
+    *,
+    audit: Any,
+    db: AsyncSession,
+    logger: Any,
+    tenant_id: Any,
+    failure_event: str,
+    failure_detail: str,
+    **kwargs: Any,
+) -> None:
+    try:
+        await audit.log(**kwargs)
+    except IDENTITY_AUDIT_WRITE_RECOVERABLE_EXCEPTIONS as exc:
+        await maybe_await(db.rollback())
+        logger.exception(failure_event, tenant_id=str(tenant_id))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=failure_detail,
+        ) from exc
 
 
 def build_identity_response_payload(identity: Any) -> dict[str, Any]:
@@ -176,7 +208,13 @@ async def update_identity_settings_route(
         tenant_id=cast(UUID, current_user.tenant_id),
         correlation_id=str(uuid4()),
     )
-    await audit.log(
+    await _write_identity_audit_or_raise(
+        audit=audit,
+        db=db,
+        logger=logger,
+        tenant_id=current_user.tenant_id,
+        failure_event="identity_settings_audit_failed",
+        failure_detail="Failed to persist identity settings audit event.",
         event_type=audit_event_type.IDENTITY_SETTINGS_UPDATED,
         actor_id=current_user.id,
         actor_email=current_user.email,
@@ -270,7 +308,13 @@ async def rotate_scim_token_route(
         tenant_id=cast(UUID, current_user.tenant_id),
         correlation_id=str(uuid4()),
     )
-    await audit.log(
+    await _write_identity_audit_or_raise(
+        audit=audit,
+        db=db,
+        logger=logger,
+        tenant_id=current_user.tenant_id,
+        failure_event="identity_scim_token_audit_failed",
+        failure_detail="Failed to persist SCIM token audit event.",
         event_type=audit_event_type.SCIM_TOKEN_ROTATED,
         actor_id=current_user.id,
         actor_email=current_user.email,

@@ -80,6 +80,9 @@ def test_generate_managed_runtime_env_generates_internal_secrets_and_reports_unr
     assert values["EXPOSE_API_DOCUMENTATION_PUBLICLY"] == "false"
     assert values["API_URL"] == "https://REPLACE_WITH_API_DOMAIN"
     assert values["DATABASE_URL"].startswith("postgresql+asyncpg://REPLACE_WITH_DB_USER")
+    assert values["AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN"].startswith(
+        "arn:aws:iam::123456789012:role/REPLACE_WITH_"
+    )
     assert values["PAYSTACK_SECRET_KEY"].startswith("sk_live_")
     assert values["PAYSTACK_PUBLIC_KEY"].startswith("pk_live_")
     assert values["GROQ_API_KEY"] == "REPLACE_WITH_GROQ_API_KEY"
@@ -92,8 +95,10 @@ def test_generate_managed_runtime_env_generates_internal_secrets_and_reports_unr
     assert report["environment"] == "production"
     assert report_payload["validation_ready"] is False
     assert "API_URL" in report_payload["required_operator_input_keys"]
+    assert "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN" in report_payload["required_operator_input_keys"]
     assert "GROQ_API_KEY" in report_payload["required_operator_input_keys"]
     assert "DATABASE_URL" in report_payload["unresolved_external_keys"]
+    assert "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN" in report_payload["unresolved_external_keys"]
     assert "GROQ_API_KEY" in report_payload["unresolved_external_keys"]
     assert "SUPABASE_URL" in report_payload["declared_external_placeholders"]
     assert "SUPABASE_URL" in report_payload["declared_but_not_runtime_required"]
@@ -147,6 +152,9 @@ def test_generate_managed_runtime_env_respects_overrides_and_is_shell_source_saf
         redis_url="redis://redis.example.com:6379/0",
         supabase_url="https://example.supabase.co",
         supabase_jwt_secret="x" * 40,
+        aws_assume_role_trust_principal_arn=(
+            "arn:aws:iam::123456789012:role/ValdricsControlPlane"
+        ),
         llm_provider="openai",
         llm_api_key="sk-test-openai-key",
         paystack_secret_key="sk_live_test_paystack_key",
@@ -167,6 +175,10 @@ def test_generate_managed_runtime_env_respects_overrides_and_is_shell_source_saf
 
     assert values["LLM_PROVIDER"] == "openai"
     assert values["OPENAI_API_KEY"] == "sk-test-openai-key"
+    assert (
+        values["AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN"]
+        == "arn:aws:iam::123456789012:role/ValdricsControlPlane"
+    )
     assert sourced.stdout == '["https://app.staging.example.com"]'
     assert values["TRUSTED_PROXY_CIDRS"] == '["203.0.113.10/32"]'
     assert "OPENAI_API_KEY" in report_payload["required_operator_input_keys"]
@@ -222,6 +234,9 @@ def test_generate_managed_runtime_env_can_satisfy_strict_runtime_validator(
         redis_url="redis://redis.example.com:6379/0",
         supabase_url="https://example.supabase.co",
         supabase_jwt_secret="x" * 40,
+        aws_assume_role_trust_principal_arn=(
+            "arn:aws:iam::123456789012:role/ValdricsControlPlane"
+        ),
         llm_provider="groq",
         llm_api_key="testing-groq-runtime-key",
         paystack_secret_key="sk_live_runtime_paystack_key",

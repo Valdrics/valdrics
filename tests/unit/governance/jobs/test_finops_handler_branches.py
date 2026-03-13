@@ -64,12 +64,12 @@ async def test_execute_skips_when_no_connections() -> None:
     handler = FinOpsAnalysisHandler()
     job = MagicMock(tenant_id=uuid4(), payload={})
     db = MagicMock()
-    empty = _scalar_result([])
-    db.execute = AsyncMock(
-        side_effect=[empty, empty, empty, empty, empty, empty, empty]
-    )
 
-    result = await handler.execute(job, db)
+    with patch(
+        "app.modules.governance.domain.jobs.handlers.finops.list_tenant_connections",
+        new=AsyncMock(return_value=[]),
+    ):
+        result = await handler.execute(job, db)
     assert result == {"status": "skipped", "reason": "no_connections"}
 
 
@@ -79,27 +79,8 @@ async def test_execute_non_aws_path_and_exception_continue() -> None:
     job = MagicMock(tenant_id=uuid4(), payload={})
     db = MagicMock()
 
-    aws_empty = _scalar_result([])
     azure_conn = MagicMock(provider="azure")
     gcp_conn = MagicMock(provider="gcp")
-    azure_result = _scalar_result([azure_conn])
-    gcp_result = _scalar_result([gcp_conn])
-    saas_empty = _scalar_result([])
-    license_empty = _scalar_result([])
-    platform_empty = _scalar_result([])
-    hybrid_empty = _scalar_result([])
-    db.execute = AsyncMock(
-        side_effect=[
-            aws_empty,
-            azure_result,
-            gcp_result,
-            saas_empty,
-            license_empty,
-            platform_empty,
-            hybrid_empty,
-        ]
-    )
-
     azure_adapter = MagicMock()
     azure_adapter.get_cost_and_usage = AsyncMock(
         return_value=[
@@ -124,8 +105,20 @@ async def test_execute_non_aws_path_and_exception_continue() -> None:
 
     with (
         patch(
-            "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory.get_adapter",
+            "app.modules.governance.domain.jobs.handlers.finops.list_tenant_connections",
+            new=AsyncMock(return_value=[azure_conn, gcp_conn]),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.resolve_provider_from_connection",
+            side_effect=["azure", "gcp"],
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.get_adapter_for_connection",
             side_effect=[azure_adapter, gcp_adapter],
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.fetch_daily_costs_if_supported",
+            new=AsyncMock(return_value=None),
         ),
         patch(
             "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",
@@ -158,24 +151,29 @@ async def test_execute_skips_when_no_analysis_payloads() -> None:
     db = MagicMock()
 
     aws_conn = MagicMock(provider="aws")
-    aws_result = _scalar_result([aws_conn])
-    empty = _scalar_result([])
-    db.execute = AsyncMock(
-        side_effect=[aws_result, empty, empty, empty, empty, empty, empty]
-    )
-
     usage_summary = MagicMock()
     usage_summary.records = [MagicMock()]
     aws_adapter = MagicMock()
-    aws_adapter.get_daily_costs = AsyncMock(return_value=usage_summary)
 
     analyzer = MagicMock()
     analyzer.analyze = AsyncMock(return_value="non-dict-result")
 
     with (
         patch(
-            "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory.get_adapter",
+            "app.modules.governance.domain.jobs.handlers.finops.list_tenant_connections",
+            new=AsyncMock(return_value=[aws_conn]),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.resolve_provider_from_connection",
+            return_value="aws",
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.get_adapter_for_connection",
             return_value=aws_adapter,
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.fetch_daily_costs_if_supported",
+            new=AsyncMock(return_value=usage_summary),
         ),
         patch(
             "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",

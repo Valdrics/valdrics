@@ -1,5 +1,5 @@
-export function canUseGrowthFeaturesForTier(tier: string | null | undefined): boolean {
-	return ['growth', 'pro', 'enterprise'].includes(tier ?? '');
+export function canUseMultiCloudFeaturesForTier(tier: string | null | undefined): boolean {
+	return ['starter', 'growth', 'pro', 'enterprise'].includes(tier ?? '');
 }
 
 export function canUseCloudPlusFeaturesForTier(tier: string | null | undefined): boolean {

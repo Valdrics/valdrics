@@ -1,7 +1,9 @@
 from enum import Enum
 from datetime import datetime, timezone
 from typing import cast
+
 from app.models.tenant import Tenant
+from app.shared.core.datetime_ops import as_utc_datetime
 
 
 class TenantCohort(str, Enum):
@@ -50,7 +52,7 @@ def get_tenant_cohort(
 
     # Check for dormancy (inactive > 7 days)
     if last_active:
-        days_inactive = (datetime.now(timezone.utc) - last_active).days
+        days_inactive = (datetime.now(timezone.utc) - as_utc_datetime(last_active)).days
         if days_inactive >= 7:
             return TenantCohort.DORMANT
 

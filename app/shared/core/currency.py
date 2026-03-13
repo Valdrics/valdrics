@@ -173,7 +173,15 @@ class ExchangeRateService:
                 if self.db is None:
                     # Internal lifecycle writes are best-effort for cache hygiene.
                     return
-                # Caller-owned session must decide retry/rollback policy.
+                try:
+                    await session.rollback()
+                except EXCHANGE_RATE_DB_RECOVERABLE_ERRORS as rollback_exc:
+                    logger.warning(
+                        "exchange_rate_db_rollback_failed",
+                        currency=to_currency,
+                        provider=provider,
+                        error=str(rollback_exc),
+                    )
                 raise
 
     async def _read_redis_rate(

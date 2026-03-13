@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -26,12 +27,14 @@ async def test_scan_for_tenant_includes_platform_and_hybrid_connections() -> Non
     platform_conn.name = "Shared Platform"
     platform_conn.provider = "platform"
     platform_conn.tenant_id = tenant_id
+    platform_conn.region = "global"
 
     hybrid_conn = MagicMock()
     hybrid_conn.id = uuid4()
     hybrid_conn.name = "Private OpenStack"
     hybrid_conn.provider = "hybrid"
     hybrid_conn.tenant_id = tenant_id
+    hybrid_conn.region = "global"
 
     empty = _result_with_rows([])
     platform_result = _result_with_rows([platform_conn])
@@ -76,8 +79,8 @@ async def test_scan_for_tenant_includes_platform_and_hybrid_connections() -> Non
 
     with (
         patch(
-            "app.modules.optimization.domain.service.ZombieDetectorFactory.get_detector",
-            side_effect=detector_side_effect,
+            "app.modules.optimization.domain.service.ZombieDetectorFactory",
+            new=SimpleNamespace(get_detector=detector_side_effect),
         ),
         patch(
             "app.shared.core.pricing.get_tenant_tier",

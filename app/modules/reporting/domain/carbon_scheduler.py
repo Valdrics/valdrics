@@ -108,7 +108,7 @@ WATTTIME_REGION_COORDS = {
 }
 
 
-def validate_carbon_data_freshness() -> bool:
+def validate_carbon_data_freshness(*, strict: bool = True) -> bool:
     """
     BE-CARBON-1: Validate that carbon intensity data is fresh.
     Raises CarbonDataStaleError if data is outdated.
@@ -119,13 +119,20 @@ def validate_carbon_data_freshness() -> bool:
 
     if age > _CARBON_DATA_MAX_AGE_DAYS:
         error_msg = f"Carbon intensity data is {age} days old (max: {_CARBON_DATA_MAX_AGE_DAYS}). Update REGION_CARBON_PROFILES."
-        logger.error(
+        log_kwargs = {
+            "last_updated": _CARBON_DATA_LAST_UPDATED.isoformat(),
+            "age_days": age,
+            "max_age_days": _CARBON_DATA_MAX_AGE_DAYS,
+        }
+        if strict:
+            logger.error("carbon_data_stale", **log_kwargs)
+            raise ValueError(error_msg)
+        logger.warning(
             "carbon_data_stale",
-            last_updated=_CARBON_DATA_LAST_UPDATED.isoformat(),
-            age_days=age,
-            max_age_days=_CARBON_DATA_MAX_AGE_DAYS,
+            fallback_mode="static_profile_degraded_read",
+            **log_kwargs,
         )
-        raise ValueError(error_msg)
+        return False
 
     return True
 
@@ -165,7 +172,7 @@ class CarbonAwareScheduler:
             return CarbonIntensity.MEDIUM  # Unknown = medium
 
         # BE-CARBON-1: Ensure data is fresh
-        validate_carbon_data_freshness()
+        validate_carbon_data_freshness(strict=False)
 
         # Logic for real-time calculation would go here if API key is present
         # For now, we simulate current intensity based on current UTC hour
@@ -224,7 +231,7 @@ class CarbonAwareScheduler:
         Fallback: High-fidelity diurnal simulation.
         """
         # BE-CARBON-1: Ensure data is fresh
-        validate_carbon_data_freshness()
+        validate_carbon_data_freshness(strict=False)
 
         profile = REGION_CARBON_PROFILES.get(region)
         if not profile:

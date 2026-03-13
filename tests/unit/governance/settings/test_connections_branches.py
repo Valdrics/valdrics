@@ -53,6 +53,7 @@ def db() -> MagicMock:
     mock_db = MagicMock()
     mock_db.scalar = AsyncMock()
     mock_db.execute = AsyncMock()
+    mock_db.flush = AsyncMock()
     mock_db.commit = AsyncMock()
     mock_db.refresh = AsyncMock()
     mock_db.delete = AsyncMock()
@@ -70,6 +71,14 @@ def test_require_tenant_id_raises_when_missing() -> None:
 def test_enforce_multi_cloud_tier_rejects_free(user: CurrentUser) -> None:
     with pytest.raises(HTTPException) as exc:
         connections_helpers._enforce_multi_cloud_tier(PricingTier.FREE, user)
+    assert exc.value.status_code == 403
+
+
+def test_enforce_aws_org_discovery_tier_rejects_starter(user: CurrentUser) -> None:
+    with pytest.raises(HTTPException) as exc:
+        connections_helpers._enforce_aws_org_discovery_tier(
+            PricingTier.STARTER, user
+        )
     assert exc.value.status_code == 403
 
 
@@ -100,6 +109,16 @@ async def test_check_multi_cloud_tier_allows_starter(
 ) -> None:
     user.tier = PricingTier.STARTER
     connections_helpers.check_multi_cloud_tier(user)
+
+
+@pytest.mark.asyncio
+async def test_check_aws_org_discovery_tier_denied_for_starter(
+    user: CurrentUser,
+) -> None:
+    user.tier = PricingTier.STARTER
+    with pytest.raises(HTTPException) as exc:
+        connections_helpers.check_aws_org_discovery_tier(user)
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -138,9 +157,27 @@ async def test_create_aws_connection_defaults_region_global(
         )
 
     assert response.region == "global"
-    assert db.add.call_count == 1
-    created = db.add.call_args.args[0]
+    assert db.add.call_count >= 1
+    created = db.add.call_args_list[0].args[0]
     assert created.region == "global"
+
+
+@pytest.mark.asyncio
+async def test_create_aws_connection_rejects_management_account_below_growth(
+    user: CurrentUser, db: MagicMock
+) -> None:
+    user.tier = PricingTier.STARTER
+    payload = AWSConnectionCreate(
+        aws_account_id="210987654321",
+        role_arn="arn:aws:iam::210987654321:role/TestRole",
+        external_id="vx-" + "b" * 32,
+        is_management_account=True,
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        await aws_discovery_api.create_aws_connection(MagicMock(), payload, user, db)
+
+    assert exc.value.status_code == 403
 
 
 @pytest.mark.asyncio

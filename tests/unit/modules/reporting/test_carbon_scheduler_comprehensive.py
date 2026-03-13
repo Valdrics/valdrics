@@ -13,6 +13,7 @@ from app.modules.reporting.domain.carbon_scheduler import (
     CarbonIntensity,
     RegionCarbonProfile,
     REGION_CARBON_PROFILES,
+    validate_carbon_data_freshness,
 )
 
 
@@ -49,6 +50,20 @@ class TestCarbonAwareSchedulerInitialization:
         )
 
         assert scheduler._use_static_data is False
+
+    def test_validate_carbon_data_freshness_strict_raises_when_static_data_is_stale(self):
+        with pytest.raises(ValueError, match="Carbon intensity data is"):
+            validate_carbon_data_freshness()
+
+    @pytest.mark.asyncio
+    async def test_scheduler_degrades_reads_when_static_data_is_stale(self):
+        scheduler = CarbonAwareScheduler()
+
+        intensity = await scheduler.get_region_intensity("us-east-1")
+        forecast = await scheduler.get_intensity_forecast("us-east-1", hours=2)
+
+        assert isinstance(intensity, CarbonIntensity)
+        assert len(forecast) == 2
 
 
 class TestCarbonRegionIntensity:

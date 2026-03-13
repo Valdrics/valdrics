@@ -27,6 +27,7 @@ from app.shared.connections.organizations import OrganizationsDiscoveryService
 from app.modules.governance.api.v1.settings.connections_helpers import (
     _enforce_connection_limit,
     _require_tenant_id,
+    check_aws_org_discovery_tier,
     check_idp_deep_scan_tier,
 )
 from app.modules.governance.api.v1.settings.connections_setup_snippets import (
@@ -85,6 +86,8 @@ async def create_aws_connection(
     db: AsyncSession = Depends(get_db),
 ) -> AWSConnection:
     tenant_id = _require_tenant_id(current_user)
+    if data.is_management_account:
+        check_aws_org_discovery_tier(current_user)
 
     existing = await db.scalar(
         select(AWSConnection.id).where(
@@ -202,6 +205,7 @@ async def sync_aws_org(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     tenant_id = _require_tenant_id(current_user)
+    check_aws_org_discovery_tier(current_user)
     result = await db.execute(
         select(AWSConnection).where(
             AWSConnection.id == connection_id, AWSConnection.tenant_id == tenant_id
@@ -221,6 +225,7 @@ async def list_discovered_accounts(
     db: AsyncSession = Depends(get_db),
 ) -> list[DiscoveredAccount]:
     tenant_id = _require_tenant_id(current_user)
+    check_aws_org_discovery_tier(current_user)
 
     res = await db.execute(
         select(AWSConnection.id).where(
@@ -246,7 +251,7 @@ async def link_discovered_account(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     tenant_id = _require_tenant_id(current_user)
-    plan = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
+    plan = check_aws_org_discovery_tier(current_user)
 
     stmt = (
         select(DiscoveredAccount, AWSConnection)

@@ -94,17 +94,28 @@ async def test_create_gcp_connection_workload_identity_verification_failure(
 
 
 @pytest.mark.asyncio
-async def test_verify_gcp_connection_denied_on_free(ac, db, override_auth, auth_user):
+async def test_verify_gcp_connection_success_on_starter(
+    ac, db, override_auth, auth_user
+):
     tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.FREE.value
+    tenant.plan = PricingTier.STARTER.value
     await db.commit()
+    auth_user.tier = PricingTier.STARTER
 
-    conn = GCPConnection(tenant_id=auth_user.tenant_id, name="g", project_id="p")
+    conn = GCPConnection(
+        tenant_id=auth_user.tenant_id,
+        name="g",
+        project_id="proj-valid-123",
+    )
     db.add(conn)
     await db.commit()
 
-    resp = await ac.post(f"/api/v1/settings/connections/gcp/{conn.id}/verify")
-    assert resp.status_code == 403
+    with patch(
+        "app.shared.connections.gcp.GCPConnectionService.verify_connection"
+    ) as mock_verify:
+        mock_verify.return_value = {"status": "verified"}
+        resp = await ac.post(f"/api/v1/settings/connections/gcp/{conn.id}/verify")
+    assert resp.status_code == 200
 
 
 @pytest.mark.asyncio

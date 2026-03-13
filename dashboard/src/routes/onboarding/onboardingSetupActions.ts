@@ -117,7 +117,7 @@ export async function fetchSetupDataFlow(
 
 interface ConnectDiscoveryCandidateFlowInput {
 	candidate: DiscoveryCandidate;
-	canUseGrowthFeatures: boolean;
+	canUseMultiCloudFeatures: boolean;
 	canUseCloudPlusFeatures: boolean;
 	updateDiscoveryCandidateStatus: (
 		candidate: DiscoveryCandidate,
@@ -144,8 +144,8 @@ export async function connectDiscoveryCandidateFlow(
 		);
 	}
 
-	if ((provider === 'azure' || provider === 'gcp') && !input.canUseGrowthFeatures) {
-		throw new Error(`${getProviderLabel(provider)} onboarding requires Growth tier or higher.`);
+	if ((provider === 'azure' || provider === 'gcp') && !input.canUseMultiCloudFeatures) {
+		throw new Error(`${getProviderLabel(provider)} onboarding requires Starter tier or higher.`);
 	}
 	if ((provider === 'saas' || provider === 'license') && !input.canUseCloudPlusFeatures) {
 		throw new Error(`${getProviderLabel(provider)} onboarding requires Pro tier or higher.`);

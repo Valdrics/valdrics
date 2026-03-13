@@ -1,10 +1,13 @@
+from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 from uuid import UUID
-from sqlalchemy.ext.asyncio import AsyncSession
+
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
-from typing import Any
+from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
+
 from app.models.aws_connection import AWSConnection
 from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
@@ -22,6 +25,11 @@ AWS_CONNECTION_VERIFY_RECOVERABLE_EXCEPTIONS = (
     KeyError,
     LookupError,
 )
+_CLOUDFORMATION_TEMPLATE_PATH = (
+    Path(__file__).resolve().parents[3] / "cloudformation" / "valdrics-role.yaml"
+)
+_CLOUDFORMATION_PUBLIC_PATH = "/api/v1/public/templates/aws/valdrics-role.yaml"
+_TRUST_PRINCIPAL_TOKEN = "__VALDRICS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN__"
 
 
 class AWSConnectionService:
@@ -38,31 +46,80 @@ class AWSConnectionService:
         return MultiTenantAWSAdapter(map_aws_connection_to_credentials(connection))
 
     @staticmethod
-    def get_setup_templates(external_id: str) -> dict[str, Any]:
-        """
-        Returns CloudFormation and Terraform snippets for provisioning the Valdrics role.
-        """
-        settings = get_settings()
-        template_url = str(getattr(settings, "CLOUDFORMATION_TEMPLATE_URL", "") or "").strip()
-        if not template_url:
-            raise RuntimeError("CLOUDFORMATION_TEMPLATE_URL must be configured for AWS setup templates")
-
-        configured_region = str(getattr(settings, "AWS_DEFAULT_REGION", "") or "").strip()
+    def _resolve_cloudformation_console_region(settings_obj: Any) -> str:
+        configured_region = str(
+            getattr(settings_obj, "AWS_DEFAULT_REGION", "") or ""
+        ).strip()
         supported_regions = {
             str(region).strip()
-            for region in getattr(settings, "AWS_SUPPORTED_REGIONS", [])
+            for region in getattr(settings_obj, "AWS_SUPPORTED_REGIONS", [])
             if str(region).strip()
         }
         if configured_region and (
             not supported_regions or configured_region in supported_regions
         ):
-            console_region = configured_region
-        else:
-            console_region = "us-east-1"
+            return configured_region
+        return "us-east-1"
+
+    @staticmethod
+    def _resolve_assume_role_trust_principal_arn(settings_obj: Any) -> str:
+        principal_arn = str(
+            getattr(settings_obj, "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN", "") or ""
+        ).strip()
+        if not principal_arn:
+            raise RuntimeError(
+                "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN must be configured for AWS setup templates"
+            )
+        return principal_arn
+
+    @staticmethod
+    def get_cloudformation_template_yaml() -> str:
+        """Return the release-owned CloudFormation template with injected trust principal."""
+        settings = get_settings()
+        principal_arn = AWSConnectionService._resolve_assume_role_trust_principal_arn(
+            settings
+        )
+        if not _CLOUDFORMATION_TEMPLATE_PATH.exists():
+            raise RuntimeError(
+                "AWS setup template file is missing from the application release bundle"
+            )
+        template = _CLOUDFORMATION_TEMPLATE_PATH.read_text(encoding="utf-8")
+        if _TRUST_PRINCIPAL_TOKEN not in template:
+            raise RuntimeError(
+                "AWS setup template is missing the trust principal injection token"
+            )
+        return template.replace(_TRUST_PRINCIPAL_TOKEN, principal_arn, 1)
+
+    @staticmethod
+    def get_cloudformation_template_url() -> str:
+        """Return the public URL used by CloudFormation launch links."""
+        settings = get_settings()
+        configured = str(
+            getattr(settings, "CLOUDFORMATION_TEMPLATE_URL", "") or ""
+        ).strip()
+        if configured:
+            return configured
+        api_url = str(getattr(settings, "API_URL", "") or "").strip()
+        if not api_url:
+            raise RuntimeError(
+                "API_URL must be configured to derive the public AWS setup template URL"
+            )
+        return f"{api_url.rstrip('/')}{_CLOUDFORMATION_PUBLIC_PATH}"
+
+    @staticmethod
+    def get_setup_templates(external_id: str) -> dict[str, Any]:
+        """
+        Returns CloudFormation and Terraform snippets for provisioning the Valdrics role.
+        """
+        settings = get_settings()
+        template_url = AWSConnectionService.get_cloudformation_template_url()
+        console_region = AWSConnectionService._resolve_cloudformation_console_region(
+            settings
+        )
         encoded_template_url = quote(template_url, safe="")
         return {
             "external_id": external_id,
-            "cloudformation_yaml": template_url,
+            "cloudformation_yaml": AWSConnectionService.get_cloudformation_template_yaml(),
             "terraform_hcl": f'module "valdrics_connection" {{ source = "valdrics/aws-connection" external_id = "{external_id}" }}',
             "magic_link": (
                 "https://console.aws.amazon.com/cloudformation/home"

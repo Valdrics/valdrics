@@ -392,30 +392,24 @@ async def test_finops_analysis_handler_success(mock_db, sample_job):
     handler = FinOpsAnalysisHandler()
 
     mock_conn = MagicMock(provider="aws")
-    aws_result = MagicMock()
-    aws_result.scalars.return_value.all.return_value = [mock_conn]
-    empty_result = MagicMock()
-    empty_result.scalars.return_value.all.return_value = []
-    mock_db.execute = AsyncMock(
-        side_effect=[
-            aws_result,  # AWS
-            empty_result,  # Azure
-            empty_result,  # GCP
-            empty_result,  # SaaS
-            empty_result,  # License
-            empty_result,  # Platform
-            empty_result,  # Hybrid
-        ]
-    )
+    usage_summary = MagicMock()
+    usage_summary.records = [MagicMock()]
 
-    with patch(
-        "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory"
-    ) as mock_factory:
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.list_tenant_connections",
+            new=AsyncMock(return_value=[mock_conn]),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.get_adapter_for_connection"
+        ) as mock_get_adapter,
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.fetch_daily_costs_if_supported",
+            new=AsyncMock(return_value=usage_summary),
+        ),
+    ):
         mock_adapter = MagicMock()
-        usage_summary = MagicMock()
-        usage_summary.records = [MagicMock()]
-        mock_adapter.get_daily_costs = AsyncMock(return_value=usage_summary)
-        mock_factory.get_adapter.return_value = mock_adapter
+        mock_get_adapter.return_value = mock_adapter
 
         with patch(
             "app.modules.governance.domain.jobs.handlers.finops.FinOpsAnalyzer"
@@ -452,30 +446,24 @@ async def test_finops_analysis_handler_propagates_actor_context(mock_db, sample_
     }
 
     mock_conn = MagicMock(provider="aws")
-    aws_result = MagicMock()
-    aws_result.scalars.return_value.all.return_value = [mock_conn]
-    empty_result = MagicMock()
-    empty_result.scalars.return_value.all.return_value = []
-    mock_db.execute = AsyncMock(
-        side_effect=[
-            aws_result,
-            empty_result,
-            empty_result,
-            empty_result,
-            empty_result,
-            empty_result,
-            empty_result,
-        ]
-    )
+    usage_summary = MagicMock()
+    usage_summary.records = [MagicMock()]
 
-    with patch(
-        "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory"
-    ) as mock_factory:
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.list_tenant_connections",
+            new=AsyncMock(return_value=[mock_conn]),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.get_adapter_for_connection"
+        ) as mock_get_adapter,
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.fetch_daily_costs_if_supported",
+            new=AsyncMock(return_value=usage_summary),
+        ),
+    ):
         mock_adapter = MagicMock()
-        usage_summary = MagicMock()
-        usage_summary.records = [MagicMock()]
-        mock_adapter.get_daily_costs = AsyncMock(return_value=usage_summary)
-        mock_factory.get_adapter.return_value = mock_adapter
+        mock_get_adapter.return_value = mock_adapter
 
         with patch(
             "app.modules.governance.domain.jobs.handlers.finops.FinOpsAnalyzer"
@@ -514,8 +502,8 @@ async def test_finops_analysis_handler_continues_on_recoverable_provider_failure
             new=AsyncMock(return_value=[conn_failed, conn_ok]),
         ),
         patch(
-            "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory"
-        ) as mock_factory,
+            "app.modules.governance.domain.jobs.handlers.finops.get_adapter_for_connection"
+        ) as mock_get_adapter,
         patch(
             "app.modules.governance.domain.jobs.handlers.finops.fetch_daily_costs_if_supported",
             new=AsyncMock(return_value=usage_summary),
@@ -535,7 +523,7 @@ async def test_finops_analysis_handler_continues_on_recoverable_provider_failure
         ) as mock_logger,
     ):
         mock_adapter_ok = MagicMock()
-        mock_factory.get_adapter.side_effect = [
+        mock_get_adapter.side_effect = [
             RuntimeError("adapter unavailable"),
             mock_adapter_ok,
         ]
@@ -567,14 +555,14 @@ async def test_finops_analysis_handler_does_not_swallow_fatal_provider_failures(
             new=AsyncMock(return_value=[conn]),
         ),
         patch(
-            "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory"
-        ) as mock_factory,
+            "app.modules.governance.domain.jobs.handlers.finops.get_adapter_for_connection"
+        ) as mock_get_adapter,
         patch(
             "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",
             return_value=MagicMock(),
         ),
     ):
-        mock_factory.get_adapter.side_effect = _FatalTestSignal()
+        mock_get_adapter.side_effect = _FatalTestSignal()
         with pytest.raises(_FatalTestSignal):
             await handler.execute(sample_job, mock_db)
 
@@ -592,8 +580,8 @@ async def test_finops_analysis_handler_marks_failed_when_all_providers_fail(
             new=AsyncMock(return_value=[conn]),
         ),
         patch(
-            "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory"
-        ) as mock_factory,
+            "app.modules.governance.domain.jobs.handlers.finops.get_adapter_for_connection"
+        ) as mock_get_adapter,
         patch(
             "app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create",
             return_value=MagicMock(),
@@ -602,7 +590,7 @@ async def test_finops_analysis_handler_marks_failed_when_all_providers_fail(
             "app.modules.governance.domain.jobs.handlers.finops.FINOPS_PROVIDER_FAILURES_TOTAL"
         ),
     ):
-        mock_factory.get_adapter.side_effect = RuntimeError("adapter unavailable")
+        mock_get_adapter.side_effect = RuntimeError("adapter unavailable")
         result = await handler.execute(sample_job, mock_db)
 
     assert result["status"] == "failed"

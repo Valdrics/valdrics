@@ -53,8 +53,24 @@ class _FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb) -> bool:  # type: ignore[no-untyped-def]
         return False
 
-    async def get(self, url: str, headers=None, params=None):  # type: ignore[no-untyped-def]
-        self.calls.append({"method": "GET", "url": url, "headers": headers, "params": params})
+    async def get(  # type: ignore[no-untyped-def]
+        self,
+        url: str,
+        headers=None,
+        params=None,
+        timeout=None,
+        **kwargs,
+    ):
+        self.calls.append(
+            {
+                "method": "GET",
+                "url": url,
+                "headers": headers,
+                "params": params,
+                "timeout": timeout,
+                **kwargs,
+            }
+        )
         if not self.responses:
             raise AssertionError("No fake responses configured")
         item = self.responses.pop(0)
@@ -62,7 +78,16 @@ class _FakeAsyncClient:
             raise item
         return item
 
-    async def post(self, url: str, headers=None, params=None, json=None, auth=None):  # type: ignore[no-untyped-def]
+    async def post(  # type: ignore[no-untyped-def]
+        self,
+        url: str,
+        headers=None,
+        params=None,
+        json=None,
+        auth=None,
+        timeout=None,
+        **kwargs,
+    ):
         self.calls.append(
             {
                 "method": "POST",
@@ -71,6 +96,8 @@ class _FakeAsyncClient:
                 "params": params,
                 "json": json,
                 "auth": auth,
+                "timeout": timeout,
+                **kwargs,
             }
         )
         if not self.responses:
@@ -179,12 +206,14 @@ async def test_hybrid_openstack_token_error_paths() -> None:
     )
 
     bad_status = _FakeAsyncClient([_FakeResponse({}, status_code=401)])
-    with patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=bad_status):
+    with patch("app.shared.adapters.hybrid.get_http_client", return_value=bad_status):
         with pytest.raises(ExternalAPIError, match="token request failed"):
             await adapter._get_openstack_token()
 
     missing_header = _FakeAsyncClient([_FakeResponse({}, headers={})])
-    with patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=missing_header):
+    with patch(
+        "app.shared.adapters.hybrid.get_http_client", return_value=missing_header
+    ):
         with pytest.raises(ExternalAPIError, match="missing X-Subject-Token"):
             await adapter._get_openstack_token()
 
@@ -270,12 +299,16 @@ async def test_hybrid_vmware_session_verify_and_stream_error_paths() -> None:
     )
 
     invalid_json_client = _FakeAsyncClient([_InvalidJSONResponse({})])
-    with patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=invalid_json_client):
+    with patch(
+        "app.shared.adapters.hybrid.get_http_client", return_value=invalid_json_client
+    ):
         with pytest.raises(ExternalAPIError, match="invalid JSON"):
             await adapter._get_vmware_session_id()
 
     missing_value_client = _FakeAsyncClient([_FakeResponse({"value": ""})])
-    with patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=missing_value_client):
+    with patch(
+        "app.shared.adapters.hybrid.get_http_client", return_value=missing_value_client
+    ):
         with pytest.raises(ExternalAPIError, match="missing session id"):
             await adapter._get_vmware_session_id()
 
@@ -378,24 +411,24 @@ async def test_hybrid_get_json_retry_and_error_branches() -> None:
     adapter = HybridAdapter(_conn(vendor="ledger", auth_method="api_key"))
 
     retry_then_ok = _FakeAsyncClient([_http_status_error(500), _FakeResponse({"ok": True})])
-    with patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=retry_then_ok):
+    with patch("app.shared.adapters.hybrid.get_http_client", return_value=retry_then_ok):
         payload = await adapter._get_json("https://example.invalid", headers={})
     assert payload == {"ok": True}
 
     non_retry = _FakeAsyncClient([_http_status_error(401)])
-    with patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=non_retry):
+    with patch("app.shared.adapters.hybrid.get_http_client", return_value=non_retry):
         with pytest.raises(ExternalAPIError, match="status 401"):
             await adapter._get_json("https://example.invalid", headers={})
 
     bad_json = _FakeAsyncClient([_InvalidJSONResponse({})])
-    with patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=bad_json):
+    with patch("app.shared.adapters.hybrid.get_http_client", return_value=bad_json):
         with pytest.raises(ExternalAPIError, match="invalid JSON"):
             await adapter._get_json("https://example.invalid", headers={})
 
     transport_fail = _FakeAsyncClient(
         [httpx.ConnectError("c1"), httpx.ConnectError("c2"), httpx.ConnectError("c3")]
     )
-    with patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=transport_fail):
+    with patch("app.shared.adapters.hybrid.get_http_client", return_value=transport_fail):
         with pytest.raises(ExternalAPIError, match="request failed"):
             await adapter._get_json("https://example.invalid", headers={})
 
@@ -578,7 +611,7 @@ async def test_hybrid_openstack_vmware_and_ledger_success_branches() -> None:
         [_FakeResponse({}, headers={"X-Subject-Token": " token-123 "})]
     )
     with patch(
-        "app.shared.adapters.hybrid.httpx.AsyncClient",
+        "app.shared.adapters.hybrid.get_http_client",
         return_value=openstack_token_client,
     ):
         token = await openstack._get_openstack_token()
@@ -791,7 +824,7 @@ async def test_hybrid_get_json_fallthrough_raises_last_error_branch() -> None:
     adapter = HybridAdapter(_conn(vendor="ledger", auth_method="api_key"))
     transport_fail = _FakeAsyncClient([httpx.ConnectError("c1"), httpx.ConnectError("c2")])
     with (
-        patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=transport_fail),
+        patch("app.shared.adapters.hybrid.get_http_client", return_value=transport_fail),
         patch("app.shared.adapters.http_retry.range", return_value=[1, 2]),
     ):
         with pytest.raises(ExternalAPIError, match="Hybrid request failed:"):
@@ -838,12 +871,14 @@ async def test_hybrid_vmware_session_http_error_success_and_stream_invalid_shape
     )
 
     http_error_client = _FakeAsyncClient([_FakeResponse({}, status_code=401)])
-    with patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=http_error_client):
+    with patch(
+        "app.shared.adapters.hybrid.get_http_client", return_value=http_error_client
+    ):
         with pytest.raises(ExternalAPIError, match="session creation failed"):
             await adapter._get_vmware_session_id()
 
     ok_client = _FakeAsyncClient([_FakeResponse({"value": "sid-1"})])
-    with patch("app.shared.adapters.hybrid.httpx.AsyncClient", return_value=ok_client):
+    with patch("app.shared.adapters.hybrid.get_http_client", return_value=ok_client):
         session_id = await adapter._get_vmware_session_id()
     assert session_id == "sid-1"
 

@@ -71,7 +71,7 @@ async def test_license_adapter_native_microsoft_365_costs() -> None:
     )
     adapter = LicenseAdapter(conn)
     with patch(
-        "app.shared.adapters.license.httpx.AsyncClient", return_value=fake_client
+        "app.shared.adapters.license.get_http_client", return_value=fake_client
     ):
         rows = await adapter.get_cost_and_usage(
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -199,7 +199,7 @@ async def test_license_native_uses_prepaid_fallback_and_default_price() -> None:
 
     adapter = LicenseAdapter(conn)
     with patch(
-        "app.shared.adapters.license.httpx.AsyncClient", return_value=fake_client
+        "app.shared.adapters.license.get_http_client", return_value=fake_client
     ):
         rows = await adapter.get_cost_and_usage(
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),

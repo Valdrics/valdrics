@@ -20,6 +20,7 @@ from app.models.remediation import (
 from app.models.unit_economics_settings import UnitEconomicsSettings
 from app.shared.core.async_utils import maybe_await
 from app.shared.core.connection_state import is_connection_active
+from app.shared.core.datetime_ops import as_utc_datetime
 
 from .costs_models import (
     AcceptanceKpiMetric,
@@ -228,18 +229,28 @@ async def compute_ingestion_sla_metrics(
 
     for job in jobs:
         total_jobs += 1
+        completed_at = (
+            as_utc_datetime(job.completed_at)
+            if isinstance(job.completed_at, datetime)
+            else None
+        )
+        started_at = (
+            as_utc_datetime(job.started_at)
+            if isinstance(job.started_at, datetime)
+            else None
+        )
         if job.status == JobStatus.COMPLETED.value:
             successful_jobs += 1
         if job.status in {JobStatus.FAILED.value, JobStatus.DEAD_LETTER.value}:
             failed_jobs += 1
 
-        if job.completed_at and (
-            latest_completed_at_dt is None or job.completed_at > latest_completed_at_dt
+        if completed_at and (
+            latest_completed_at_dt is None or completed_at > latest_completed_at_dt
         ):
-            latest_completed_at_dt = job.completed_at
+            latest_completed_at_dt = completed_at
 
-        if job.started_at and job.completed_at:
-            duration = (job.completed_at - job.started_at).total_seconds()
+        if started_at and completed_at:
+            duration = (completed_at - started_at).total_seconds()
             if duration >= 0:
                 duration_samples.append(duration)
 

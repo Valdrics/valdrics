@@ -75,6 +75,12 @@ class TestGetTenantCohort:
         last_active = datetime.now(timezone.utc) - timedelta(days=6)
         assert get_tenant_cohort(tenant, last_active) == TenantCohort.ACTIVE
 
+    def test_naive_last_active_is_treated_as_utc(self):
+        """Naive activity timestamps should not break dormancy classification."""
+        tenant = self._make_tenant("growth")
+        last_active = datetime.now() - timedelta(days=8)
+        assert get_tenant_cohort(tenant, last_active) == TenantCohort.DORMANT
+
     def test_high_value_not_affected_by_dormancy(self):
         """Enterprise/Pro should be HIGH_VALUE even if inactive."""
         tenant = self._make_tenant("enterprise")

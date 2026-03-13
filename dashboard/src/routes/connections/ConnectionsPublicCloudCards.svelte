@@ -14,7 +14,10 @@
 		deleteConnection
 	} = $props();
 
-	const growthUpgradePrompt = getUpgradePrompt('growth', 'Azure and GCP coverage');
+	const canUseMultiCloudFeatures = $derived(
+		['starter', 'growth', 'pro', 'enterprise'].includes(data?.subscription?.tier ?? '')
+	);
+	const starterUpgradePrompt = getUpgradePrompt('starter', 'Azure and GCP coverage');
 </script>
 
 <!-- AWS -->
@@ -151,15 +154,19 @@
 		<p class="text-xs text-ink-400 mb-6">
 			Connect via Workload Identity Federation for secret-less security.
 		</p>
-		<div class="flex flex-col gap-2">
-			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">
-				{growthUpgradePrompt.cta}
-			</a>
-			<span class="badge badge-warning text-xs w-full justify-center"
-				>{growthUpgradePrompt.badge}</span
-			>
-			<p class="text-[11px] leading-relaxed text-ink-500">{growthUpgradePrompt.body}</p>
-		</div>
+		{#if canUseMultiCloudFeatures}
+			<a href={`${base}/onboarding`} class="btn btn-primary text-xs w-full">Connect Azure</a>
+		{:else}
+			<div class="flex flex-col gap-2">
+				<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">
+					{starterUpgradePrompt.cta}
+				</a>
+				<span class="badge badge-warning text-xs w-full justify-center"
+					>{starterUpgradePrompt.badge}</span
+				>
+				<p class="text-[11px] leading-relaxed text-ink-500">{starterUpgradePrompt.body}</p>
+			</div>
+		{/if}
 	{/if}
 </div>
 
@@ -221,14 +228,18 @@
 		</a>
 	{:else if !loadingGCP}
 		<p class="text-xs text-ink-400 mb-6">Seamless integration using GCP Workload Identity pools.</p>
-		<div class="flex flex-col gap-2">
-			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">
-				{growthUpgradePrompt.cta}
-			</a>
-			<span class="badge badge-warning text-xs w-full justify-center"
-				>{growthUpgradePrompt.badge}</span
-			>
-			<p class="text-[11px] leading-relaxed text-ink-500">{growthUpgradePrompt.body}</p>
-		</div>
+		{#if canUseMultiCloudFeatures}
+			<a href={`${base}/onboarding`} class="btn btn-primary text-xs w-full">Connect GCP</a>
+		{:else}
+			<div class="flex flex-col gap-2">
+				<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">
+					{starterUpgradePrompt.cta}
+				</a>
+				<span class="badge badge-warning text-xs w-full justify-center"
+					>{starterUpgradePrompt.badge}</span
+				>
+				<p class="text-[11px] leading-relaxed text-ink-500">{starterUpgradePrompt.body}</p>
+			</div>
+		{/if}
 	{/if}
 </div>

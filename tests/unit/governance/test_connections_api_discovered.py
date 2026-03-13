@@ -15,8 +15,7 @@ pytest_plugins = ("tests.unit.governance.connections_api_fixtures",)
 
 @pytest.mark.asyncio
 async def test_link_discovered_account(ac, db, override_auth, auth_user):
-    # Free tier only allows 1 AWS account; org discovery + link needs a higher tier.
-    auth_user.tier = PricingTier.STARTER
+    auth_user.tier = PricingTier.GROWTH
     # 1. Create management connection
     mgmt = AWSConnection(
         tenant_id=auth_user.tenant_id,
@@ -55,6 +54,7 @@ async def test_link_discovered_account(ac, db, override_auth, auth_user):
 
 @pytest.mark.asyncio
 async def test_link_discovered_account_idempotent(ac, db, override_auth, auth_user):
+    auth_user.tier = PricingTier.GROWTH
     # 1. Management connection
     mgmt = AWSConnection(
         tenant_id=auth_user.tenant_id,
@@ -98,6 +98,7 @@ async def test_link_discovered_account_idempotent(ac, db, override_auth, auth_us
 
 @pytest.mark.asyncio
 async def test_link_discovered_account_not_authorized(ac, db, override_auth, auth_user):
+    auth_user.tier = PricingTier.GROWTH
     other_tenant = Tenant(id=uuid4(), name="Other", plan=PricingTier.GROWTH.value)
     db.add(other_tenant)
     await db.commit()
@@ -127,7 +128,8 @@ async def test_link_discovered_account_not_authorized(ac, db, override_auth, aut
 
 
 @pytest.mark.asyncio
-async def test_list_discovered_accounts_empty(ac, override_auth):
+async def test_list_discovered_accounts_empty(ac, override_auth, auth_user):
+    auth_user.tier = PricingTier.GROWTH
     resp = await ac.get("/api/v1/settings/connections/aws/discovered")
     assert resp.status_code == 200
     assert resp.json() == []
@@ -135,6 +137,7 @@ async def test_list_discovered_accounts_empty(ac, override_auth):
 
 @pytest.mark.asyncio
 async def test_list_discovered_accounts_sorted(ac, db, override_auth, auth_user):
+    auth_user.tier = PricingTier.GROWTH
     mgmt = AWSConnection(
         tenant_id=auth_user.tenant_id,
         aws_account_id="222233334444",
@@ -167,3 +170,19 @@ async def test_list_discovered_accounts_sorted(ac, db, override_auth, auth_user)
     assert resp.status_code == 200
     data = resp.json()
     assert data[0]["account_id"] == "222200002222"
+
+
+@pytest.mark.asyncio
+async def test_list_discovered_accounts_requires_growth(ac, override_auth, auth_user):
+    auth_user.tier = PricingTier.STARTER
+
+    resp = await ac.get("/api/v1/settings/connections/aws/discovered")
+
+    assert resp.status_code == 403
+    payload = resp.json()
+    detail = payload.get("detail")
+    if detail is None and isinstance(payload.get("error"), dict):
+        detail = payload["error"].get("message")
+    if detail is None:
+        detail = str(payload.get("error") or payload)
+    assert "requires 'Growth' plan or higher" in detail

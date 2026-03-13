@@ -256,6 +256,37 @@ async def test_compute_ingestion_sla_metrics_with_jobs_and_durations() -> None:
 
 
 @pytest.mark.asyncio
+async def test_compute_ingestion_sla_metrics_normalizes_naive_job_timestamps() -> None:
+    now = datetime.now(timezone.utc)
+    naive_started = datetime(2026, 2, 1, 9, 0, 0)
+    naive_completed = datetime(2026, 2, 1, 9, 5, 0)
+    jobs = [
+        SimpleNamespace(
+            status=JobStatus.COMPLETED.value,
+            created_at=now - timedelta(hours=1),
+            started_at=naive_started,
+            completed_at=naive_completed,
+            result={"ingested": 3},
+        )
+    ]
+
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_scalars_result(jobs))
+
+    out = await costs_metrics.compute_ingestion_sla_metrics(
+        db=db,
+        tenant_id=uuid4(),
+        window_hours=6,
+        target_success_rate_percent=10.0,
+    )
+
+    assert out.success_rate_percent == 100.0
+    assert out.avg_duration_seconds == 300.0
+    assert out.p95_duration_seconds == 300.0
+    assert out.latest_completed_at == naive_completed.replace(tzinfo=timezone.utc).isoformat()
+
+
+@pytest.mark.asyncio
 async def test_compute_ingestion_sla_metrics_empty_window_defaults() -> None:
     db = MagicMock()
     db.execute = AsyncMock(return_value=_scalars_result([]))

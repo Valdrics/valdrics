@@ -102,6 +102,8 @@ class PlatformAdapter(PlatformNativeConnectorMixin, BaseAdapter):
             raise ExternalAPIError("Missing API token for platform native connector")
         if isinstance(token, SecretStr):
             resolved = token.get_secret_value()
+        elif hasattr(token, "get_secret_value"):
+            resolved = token.get_secret_value()
         elif isinstance(token, str):
             resolved = token
         else:
@@ -115,6 +117,8 @@ class PlatformAdapter(PlatformNativeConnectorMixin, BaseAdapter):
         if token is None:
             raise ExternalAPIError("Missing API secret for platform native connector")
         if isinstance(token, SecretStr):
+            resolved = token.get_secret_value()
+        elif hasattr(token, "get_secret_value"):
             resolved = token.get_secret_value()
         elif isinstance(token, str):
             resolved = token

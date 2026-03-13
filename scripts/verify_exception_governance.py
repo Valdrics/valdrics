@@ -15,6 +15,14 @@ DEFAULT_ROOTS: tuple[Path, ...] = (Path("app"), Path("scripts"))
 DEFAULT_BASELINE_PATH = Path("docs/ops/evidence/exception_governance_baseline.json")
 
 
+def _normalize_site_path(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(Path.cwd().resolve()).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
 @dataclass(frozen=True)
 class ExceptionSite:
     path: str
@@ -76,7 +84,7 @@ def collect_exception_sites(*, roots: tuple[Path, ...]) -> tuple[ExceptionSite, 
                     continue
                 sites.append(
                     ExceptionSite(
-                        path=path.as_posix(),
+                        path=_normalize_site_path(path),
                         line=int(node.lineno),
                         kind=kind,
                     )
@@ -222,4 +230,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

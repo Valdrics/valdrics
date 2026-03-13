@@ -26,6 +26,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 import structlog
 
 from app.models._encryption import get_encryption_key
+from app.shared.core.async_utils import maybe_await
 from app.shared.db.base import Base, get_partition_args
 from sqlalchemy_utils import StringEncryptedType
 from sqlalchemy_utils.types.encrypted.encrypted_type import AesEngine
@@ -405,7 +406,7 @@ class AuditLogger(_AuditLoggerBase):
         # AsyncSession.add is sync, but AsyncMock-based tests may return awaitables.
         if inspect.isawaitable(add_result):
             await add_result
-        await self.db.flush()
+        await maybe_await(cast(Any, self.db).flush())
 
         # Also log to structured logger for real-time monitoring
         logger.info(
@@ -471,7 +472,7 @@ class SystemAuditLogger(_AuditLoggerBase):
         add_result = cast(Any, self.db).add(entry)
         if inspect.isawaitable(add_result):
             await add_result
-        await self.db.flush()
+        await maybe_await(cast(Any, self.db).flush())
 
         logger.info(
             "system_audit_event",

@@ -4,7 +4,7 @@ Connection setup snippet endpoints (provider onboarding templates/instructions).
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.models.aws_connection import AWSConnection
 from app.schemas.connections import TemplateResponse
@@ -26,7 +26,13 @@ async def get_aws_setup_templates(
     """Get CloudFormation/Terraform templates and Magic Link for AWS setup."""
     _require_tenant_id(current_user)
     external_id = AWSConnection.generate_external_id()
-    templates = AWSConnectionService.get_setup_templates(external_id)
+    try:
+        templates = AWSConnectionService.get_setup_templates(external_id)
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="AWS setup templates are not available in the current runtime.",
+        ) from exc
     return TemplateResponse(**templates)
 
 

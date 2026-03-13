@@ -20,18 +20,6 @@ class _SecretLike:
         return self._value
 
 
-class _AsyncClientCtx:
-    def __init__(self, client: object) -> None:
-        self._client = client
-
-    async def __aenter__(self) -> object:
-        return self._client
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        del exc_type, exc_val, exc_tb
-        return None
-
-
 def _response(*, status_code: int, payload: object) -> object:
     return SimpleNamespace(status_code=status_code, json=lambda: payload)
 
@@ -69,7 +57,10 @@ async def test_github_unused_seat_plugin_member_filter_and_parse_error_branches(
         return parse_map[raw]
 
     with (
-        patch("httpx.AsyncClient", return_value=_AsyncClientCtx(client)),
+        patch(
+            "app.modules.optimization.adapters.saas.plugins.api.get_http_client",
+            return_value=client,
+        ),
         patch(
             "app.modules.optimization.adapters.saas.plugins.api.parse_timestamp",
             side_effect=_parse_timestamp,
@@ -94,7 +85,10 @@ async def test_github_unused_seat_plugin_non_200_logs_warning_and_returns_empty(
     client.get.return_value = _response(status_code=403, payload={"message": "forbidden"})
 
     with (
-        patch("httpx.AsyncClient", return_value=_AsyncClientCtx(client)),
+        patch(
+            "app.modules.optimization.adapters.saas.plugins.api.get_http_client",
+            return_value=client,
+        ),
         patch("app.modules.optimization.adapters.saas.plugins.api.logger.warning") as warning,
     ):
         rows = await plugin.scan(
@@ -114,7 +108,10 @@ async def test_github_unused_seat_plugin_uses_connector_config_fallback() -> Non
     client = AsyncMock()
     client.get.return_value = _response(status_code=403, payload={"message": "forbidden"})
 
-    with patch("httpx.AsyncClient", return_value=_AsyncClientCtx(client)):
+    with patch(
+        "app.modules.optimization.adapters.saas.plugins.api.get_http_client",
+        return_value=client,
+    ):
         rows = await plugin.scan(
             session=None,
             region="global",
@@ -133,7 +130,10 @@ async def test_github_unused_seat_plugin_non_list_members_payload_returns_empty(
     client = AsyncMock()
     client.get.return_value = _response(status_code=200, payload={"value": "not-a-list"})
 
-    with patch("httpx.AsyncClient", return_value=_AsyncClientCtx(client)):
+    with patch(
+        "app.modules.optimization.adapters.saas.plugins.api.get_http_client",
+        return_value=client,
+    ):
         rows = await plugin.scan(
             session=None,
             region="global",
@@ -160,7 +160,10 @@ async def test_github_unused_seat_plugin_logs_outer_exception() -> None:
     plugin = GitHubUnusedSeatPlugin()
 
     with (
-        patch("httpx.AsyncClient", side_effect=RuntimeError("boom")),
+        patch(
+            "app.modules.optimization.adapters.saas.plugins.api.get_http_client",
+            side_effect=RuntimeError("boom"),
+        ),
         patch("app.modules.optimization.adapters.saas.plugins.api.logger.error") as error,
     ):
         rows = await plugin.scan(

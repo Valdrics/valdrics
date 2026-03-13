@@ -262,7 +262,13 @@ async def test_llm_get_update_and_models_paths(
 
     with patch(
         "app.shared.llm.pricing_data.LLM_PRICING",
-        {"groq": {"m1": {}, "m2": {}}, "openai": {"o1": {}}},
+        {
+            "groq": {
+                "m1": {"input": 0.1, "output": 0.2},
+                "m2": {"input": 0.3, "output": 0.4},
+            },
+            "openai": {"o1": {"input": 1.0, "output": 2.0}},
+        },
     ):
         models = await llm.get_llm_models()
     assert models["groq"] == ["m1", "m2"]

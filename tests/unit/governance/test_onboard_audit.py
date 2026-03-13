@@ -84,7 +84,7 @@ async def test_onboard_success(mock_db, current_user):
 
     request_obj = Request(scope=scope)
 
-    with patch("app.modules.governance.api.v1.settings.onboard.audit_log"):
+    with patch("app.modules.governance.api.v1.settings.onboard.durable_audit_log"):
         with patch("app.shared.core.rate_limit.get_limiter") as mock_limiter:
             mock_limiter.return_value.limit.return_value = lambda x: x
 

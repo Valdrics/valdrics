@@ -86,6 +86,17 @@ def test_ci_workflow_has_enterprise_tdd_quality_gate_job() -> None:
     assert "scripts/run_enterprise_tdd_gate.py" in text
 
 
+def test_ci_workflow_shards_backend_pytest_and_combines_coverage() -> None:
+    text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+
+    assert "pytest:" in text
+    assert "Backend Pytest Shard ${{ matrix.shard_id }}" in text
+    assert "backend-coverage-${{ matrix.shard_id }}" in text
+    assert "pattern: backend-coverage-*" in text
+    assert "merge-multiple: true" in text
+    assert "coverage combine reports/coverage/shards" in text
+
+
 def test_workflows_pin_uv_bootstrap_version() -> None:
     workflow_paths = (
         REPO_ROOT / ".github/workflows/ci.yml",

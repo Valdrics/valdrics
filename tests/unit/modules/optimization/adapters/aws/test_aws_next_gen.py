@@ -3,6 +3,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 import sys
 
+from app.modules.reporting.domain.pricing.service import PricingQuote
+
 # -----------------------------------------------------------------------------
 # Test: IdleOpenSearchPlugin
 # -----------------------------------------------------------------------------
@@ -131,8 +133,18 @@ async def test_idle_opensearch_plugin_uses_pricing_service(mock_aws_creds):
         )
 
         with patch(
-            "app.modules.optimization.adapters.aws.plugins.search.PricingService.estimate_monthly_waste",
-            return_value=42.0,
+            "app.modules.optimization.adapters.aws.plugins.search.PricingService.estimate_monthly_waste_quote",
+            return_value=PricingQuote(
+                provider="aws",
+                resource_type="opensearch",
+                resource_size="t3.small.search",
+                requested_region="us-east-1",
+                effective_region="us-east-1",
+                hourly_rate_usd=0.0,
+                monthly_cost_usd=42.0,
+                source="unit-test",
+                pricing_metadata={"pricing_confidence": "catalog_exact"},
+            ),
         ) as estimate:
             zombies = await plugin.scan(
                 session=mock_session,

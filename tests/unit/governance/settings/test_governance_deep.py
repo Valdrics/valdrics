@@ -86,6 +86,7 @@ async def test_connections_settings_lifecycle(
         response = await async_client.post("/api/v1/settings/connections/aws/setup")
         assert response.status_code == 200
         assert "cloudformation_yaml" in response.json()
+        assert "AWSTemplateFormatVersion" in response.json()["cloudformation_yaml"]
 
         # Check Azure setup snippet
         response = await async_client.post("/api/v1/settings/connections/azure/setup")

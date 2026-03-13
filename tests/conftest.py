@@ -31,6 +31,10 @@ os.environ.setdefault(
 os.environ.setdefault("ENCRYPTION_KEY", "32-byte-long-test-encryption-key")
 os.environ.setdefault("CSRF_SECRET_KEY", "test-csrf-secret-key-at-least-32-bytes")
 os.environ.setdefault("KDF_SALT", "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=")
+os.environ.setdefault(
+    "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN",
+    "arn:aws:iam::000000000000:role/ValdricsTestControlPlane",
+)
 os.environ.setdefault("DB_SSL_MODE", "disable")
 os.environ.setdefault("is_production", "false")
 # Keep test startup deterministic even when local .env contains non-boolean DEBUG strings.
@@ -506,6 +510,18 @@ def clean_dependency_overrides(app):
     # We yield first, so the test runs. Then we clear overrides.
     yield
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def reset_shared_http_clients():
+    """Reset shared HTTP client singletons between tests to avoid loop/state bleed."""
+    from app.shared.core.http import close_http_client
+
+    await close_http_client()
+    try:
+        yield
+    finally:
+        await close_http_client()
 
 
 @pytest.fixture(autouse=True)

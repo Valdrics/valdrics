@@ -162,9 +162,15 @@ async def test_execute_approved_triggers_grace_period(mock_db, tenant_id):
         return_value=mock_safety,
     ):
         # Mock audit logger
-        with patch(
-            "app.modules.optimization.domain.remediation.AuditLogger"
-        ) as mock_audit:
+        with (
+            patch(
+                "app.modules.optimization.domain.remediation.AuditLogger"
+            ) as mock_audit,
+            patch(
+                "app.modules.governance.domain.jobs.processor.enqueue_job",
+                new=AsyncMock(),
+            ),
+        ):
             mock_audit.return_value.log = AsyncMock()
 
             # Execute

@@ -57,6 +57,19 @@ async def test_aws_setup_templates(ac, override_auth):
 
 
 @pytest.mark.asyncio
+async def test_aws_setup_templates_returns_503_when_runtime_is_misconfigured(
+    ac, override_auth
+):
+    with patch(
+        "app.shared.connections.aws.AWSConnectionService.get_setup_templates",
+        side_effect=RuntimeError("missing trust principal"),
+    ):
+        resp = await ac.post("/api/v1/settings/connections/aws/setup")
+
+    assert resp.status_code == 503
+
+
+@pytest.mark.asyncio
 async def test_cloud_plus_setup_templates(ac, override_auth):
     saas = await ac.post("/api/v1/settings/connections/saas/setup")
     assert saas.status_code == 200
@@ -87,6 +100,7 @@ async def test_cloud_plus_setup_templates(ac, override_auth):
 
 @pytest.mark.asyncio
 async def test_create_aws_connection(ac, override_auth, auth_user, db):
+    auth_user.tier = PricingTier.GROWTH
     payload = {
         "aws_account_id": "123456789012",
         "role_arn": "arn:aws:iam::123456789012:role/Valdrics",
@@ -101,6 +115,32 @@ async def test_create_aws_connection(ac, override_auth, auth_user, db):
     assert data["aws_account_id"] == "123456789012"
     assert "id" in data
     assert "created_at" in data
+
+
+@pytest.mark.asyncio
+async def test_create_management_aws_connection_requires_growth(
+    ac, override_auth, auth_user
+):
+    auth_user.tier = PricingTier.STARTER
+    payload = {
+        "aws_account_id": "123456789012",
+        "role_arn": "arn:aws:iam::123456789012:role/Valdrics",
+        "external_id": "vx-12345678901234567890123456789012",
+        "region": "us-east-1",
+        "is_management_account": True,
+        "organization_id": "o-123",
+    }
+
+    resp = await ac.post("/api/v1/settings/connections/aws", json=payload)
+
+    assert resp.status_code == 403
+    payload = resp.json()
+    detail = payload.get("detail")
+    if detail is None and isinstance(payload.get("error"), dict):
+        detail = payload["error"].get("message")
+    if detail is None:
+        detail = str(payload.get("error") or payload)
+    assert "requires 'Growth' plan or higher" in detail
 
 
 @pytest.mark.asyncio
@@ -143,6 +183,7 @@ async def test_duplicate_aws_connection(ac, db, override_auth, auth_user):
 
 @pytest.mark.asyncio
 async def test_sync_aws_org(ac, db, override_auth, auth_user):
+    auth_user.tier = PricingTier.GROWTH
     # Create management account
     conn = AWSConnection(
         tenant_id=auth_user.tenant_id,
@@ -166,6 +207,7 @@ async def test_sync_aws_org(ac, db, override_auth, auth_user):
 
 @pytest.mark.asyncio
 async def test_sync_aws_org_not_management(ac, db, override_auth, auth_user):
+    auth_user.tier = PricingTier.GROWTH
     # Standard connection (not management)
     conn = AWSConnection(
         tenant_id=auth_user.tenant_id,

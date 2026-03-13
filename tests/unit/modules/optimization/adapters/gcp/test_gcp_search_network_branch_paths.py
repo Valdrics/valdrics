@@ -154,7 +154,7 @@ async def test_gcp_vector_search_plugin_branches_no_creds_and_budget_exhaustion_
         ),
         patch("app.modules.optimization.adapters.gcp.plugins.search.logger.warning") as warning,
     ):
-        rows = await plugin.scan("proj-1", "us-central1", credentials={})
+        rows = await plugin.scan("proj-1", "us-central1", credentials=None)
     assert rows == []
     warning.assert_called_once()
 
@@ -177,7 +177,7 @@ async def test_gcp_vector_search_plugin_branches_no_creds_and_budget_exhaustion_
             new=AsyncMock(return_value=True),
         ),
     ):
-        rows = await plugin.scan("proj-1", "us-central1", credentials={})
+        rows = await plugin.scan("proj-1", "us-central1", credentials=None)
     assert rows == []
 
     monitor_client.list_time_series.return_value = [SimpleNamespace(points=[])]
@@ -199,16 +199,16 @@ async def test_gcp_vector_search_plugin_branches_no_creds_and_budget_exhaustion_
             new=AsyncMock(return_value=True),
         ),
     ):
-        rows = await plugin.scan("proj-1", "us-central1", credentials={})
+        rows = await plugin.scan("proj-1", "us-central1", credentials=None)
     assert len(rows) == 1
 
     with (
         patch(
             "app.modules.optimization.adapters.gcp.plugins.search.aiplatform_v1.IndexEndpointServiceClient",
-            side_effect=RuntimeError("boom"),
+            side_effect=ValueError("boom"),
         ),
         patch("app.modules.optimization.adapters.gcp.plugins.search.logger.error") as error,
     ):
-        rows = await plugin.scan("proj-1", "us-central1", credentials={})
+        rows = await plugin.scan("proj-1", "us-central1", credentials=None)
     assert rows == []
     error.assert_called_once()

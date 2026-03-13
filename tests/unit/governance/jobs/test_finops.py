@@ -11,26 +11,23 @@ async def test_finops_analysis_handler():
     job = MagicMock(tenant_id=uuid4(), payload={})
     db = MagicMock()
     aws_conn = MagicMock(id=uuid4(), provider="aws")
-    aws_result = MagicMock()
-    aws_result.scalars.return_value.all.return_value = [aws_conn]
-    empty_result = MagicMock()
-    empty_result.scalars.return_value.all.return_value = []
-    db.execute = AsyncMock(
-        side_effect=[
-            aws_result,  # AWS
-            empty_result,  # Azure
-            empty_result,  # GCP
-            empty_result,  # SaaS
-            empty_result,  # License
-            empty_result,  # Platform
-            empty_result,  # Hybrid
-        ]
-    )
 
     with (
         patch(
-            "app.modules.governance.domain.jobs.handlers.finops.AdapterFactory"
-        ) as mock_factory,
+            "app.modules.governance.domain.jobs.handlers.finops.list_tenant_connections",
+            new=AsyncMock(return_value=[aws_conn]),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.resolve_provider_from_connection",
+            return_value="aws",
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.get_adapter_for_connection"
+        ) as mock_get_adapter,
+        patch(
+            "app.modules.governance.domain.jobs.handlers.finops.fetch_daily_costs_if_supported",
+            new=AsyncMock(),
+        ) as mock_fetch_daily_costs,
         patch("app.modules.governance.domain.jobs.handlers.finops.LLMFactory.create"),
         patch(
             "app.modules.governance.domain.jobs.handlers.finops.FinOpsAnalyzer"
@@ -39,8 +36,8 @@ async def test_finops_analysis_handler():
         adapter = MagicMock()
         usage_summary = MagicMock()
         usage_summary.records = [MagicMock()]
-        adapter.get_daily_costs = AsyncMock(return_value=usage_summary)
-        mock_factory.get_adapter.return_value = adapter
+        mock_get_adapter.return_value = adapter
+        mock_fetch_daily_costs.return_value = usage_summary
 
         analyzer = MockAnalyzer.return_value
         analyzer.analyze = AsyncMock(

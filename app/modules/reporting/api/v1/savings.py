@@ -56,6 +56,27 @@ def _require_tenant_id(user: CurrentUser) -> UUID:
     return user.tenant_id
 
 
+def _query_default(value: Any) -> Any:
+    default = getattr(value, "default", value)
+    return value if default is ... else default
+
+
+def _coerce_query_int(value: Any) -> int:
+    candidate = _query_default(value)
+    if isinstance(candidate, bool):
+        return int(candidate)
+    return int(candidate)
+
+
+def _coerce_query_bool(value: Any) -> bool:
+    candidate = _query_default(value)
+    if isinstance(candidate, bool):
+        return candidate
+    if isinstance(candidate, str):
+        return candidate.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(candidate)
+
+
 @router.get("/proof", response_model=SavingsProofResponse)
 async def get_savings_proof(
     start_date: date = Query(default_factory=lambda: date.today() - timedelta(days=30)),
@@ -112,6 +133,7 @@ async def get_savings_proof_drilldown(
     tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     normalized_provider = provider.strip().lower() if provider else None
     service = SavingsProofService(db)
+    normalized_limit = _coerce_query_int(limit)
     try:
         payload = await service.drilldown(
             tenant_id=tenant_id,
@@ -120,7 +142,7 @@ async def get_savings_proof_drilldown(
             end_date=end_date,
             provider=normalized_provider,
             dimension=dimension,
-            limit=int(limit),
+            limit=normalized_limit,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -166,6 +188,12 @@ async def compute_realized_savings(
     tenant_id = _require_tenant_id(current_user)
     if start_date > end_date:
         raise HTTPException(status_code=400, detail="start_date must be <= end_date")
+    normalized_baseline_days = _coerce_query_int(baseline_days)
+    normalized_measurement_days = _coerce_query_int(measurement_days)
+    normalized_gap_days = _coerce_query_int(gap_days)
+    normalized_monthly_multiplier_days = _coerce_query_int(monthly_multiplier_days)
+    normalized_limit = _coerce_query_int(limit)
+    normalized_require_final = _coerce_query_bool(require_final)
 
     window_start = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
     window_end = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
@@ -177,8 +205,11 @@ async def compute_realized_savings(
         RemediationRequest.executed_at >= window_start,
         RemediationRequest.executed_at <= window_end,
     ).order_by(RemediationRequest.executed_at.desc(), RemediationRequest.created_at.desc())
-    stmt = stmt.limit(int(limit))
-    remediations = list((await db.execute(stmt)).scalars())
+    stmt = stmt.limit(normalized_limit)
+    scalar_result = (await db.execute(stmt)).scalars()
+    remediations = list(
+        scalar_result.all() if hasattr(scalar_result, "all") else scalar_result
+    )
 
     service = RealizedSavingsService(db)
     computed = 0
@@ -189,11 +220,11 @@ async def compute_realized_savings(
             event = await service.compute_for_request(
                 tenant_id=tenant_id,
                 request=request,
-                baseline_days=int(baseline_days),
-                measurement_days=int(measurement_days),
-                gap_days=int(gap_days),
-                monthly_multiplier_days=int(monthly_multiplier_days),
-                require_final=bool(require_final),
+                baseline_days=normalized_baseline_days,
+                measurement_days=normalized_measurement_days,
+                gap_days=normalized_gap_days,
+                monthly_multiplier_days=normalized_monthly_multiplier_days,
+                require_final=normalized_require_final,
             )
             if event is None:
                 skipped += 1
@@ -257,6 +288,7 @@ async def list_realized_savings_events(
     tenant_id = _require_tenant_id(current_user)
     if start_date > end_date:
         raise HTTPException(status_code=400, detail="start_date must be <= end_date")
+    normalized_limit = _coerce_query_int(limit)
 
     window_start = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
     window_end = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
@@ -278,12 +310,13 @@ async def list_realized_savings_events(
             RealizedSavingsEvent.realized_monthly_savings_usd.desc(),
             RealizedSavingsEvent.computed_at.desc(),
         )
-        .limit(int(limit))
+        .limit(normalized_limit)
     )
     if normalized_provider:
         stmt = stmt.where(RealizedSavingsEvent.provider == normalized_provider)
 
-    rows = list(await db.execute(stmt))
+    execute_result = await db.execute(stmt)
+    rows = list(execute_result.all() if hasattr(execute_result, "all") else execute_result)
     events: list[RealizedSavingsEventResponse] = []
     for event, executed_at in rows:
         events.append(
