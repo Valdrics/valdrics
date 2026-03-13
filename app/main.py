@@ -32,6 +32,7 @@ from app.shared.core.cors_policy import (
     InvalidCorsConfiguration,
     resolve_cors_allowed_origins,
 )
+from app.shared.core.runtime_paths import STATIC_DIR
 from app.shared.core.logging import setup_logging
 from app.shared.core.middleware import (
     InternalMetricsAccessMiddleware,
@@ -358,7 +359,7 @@ async def scim_error_handler(_request: Request, exc: ScimError) -> JSONResponse:
 setup_rate_limiting(valdrics_app)
 
 # Serve static files for local Swagger UI
-valdrics_app.mount("/static", StaticFiles(directory="app/static"), name="static")
+valdrics_app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 @valdrics_app.get("/docs", include_in_schema=False)
 async def custom_swagger_ui_html() -> Any:

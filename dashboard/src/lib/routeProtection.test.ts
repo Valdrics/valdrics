@@ -45,6 +45,8 @@ describe('isPublicPath', () => {
 		expect(isPublicPath('/resources/valdrics-enterprise-one-pager.md')).toBe(true);
 		expect(isPublicPath('/enterprise')).toBe(true);
 		expect(isPublicPath('/talk-to-sales')).toBe(true);
+		expect(isPublicPath('/api/edge/health/live')).toBe(true);
+		expect(isPublicPath('/api/geo/currency')).toBe(true);
 		expect(isPublicPath('/api/marketing/subscribe')).toBe(true);
 		expect(isPublicPath('/api/marketing/customer-comments')).toBe(true);
 	});

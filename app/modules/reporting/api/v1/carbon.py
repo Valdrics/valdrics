@@ -306,15 +306,25 @@ async def get_carbon_intensity_forecast(
         electricitymaps_key=settings.ELECTRICITY_MAPS_API_KEY,
     )
 
-    forecast, current_intensity = await asyncio.gather(
-        scheduler.get_intensity_forecast(region_hint, forecast_hours),
-        scheduler.get_region_intensity(region_hint),
+    (forecast, forecast_source), (
+        current_intensity,
+        current_intensity_source,
+    ) = await asyncio.gather(
+        scheduler.get_intensity_forecast_with_source(region_hint, forecast_hours),
+        scheduler.get_region_intensity_with_source(region_hint),
+    )
+    overall_source = (
+        forecast_source
+        if forecast_source == current_intensity_source
+        else "mixed"
     )
     payload = {
         "region": region_hint,
         "current_intensity": current_intensity,
         "forecast": forecast,
-        "source": "api" if not scheduler._use_static_data else "simulation",
+        "source": overall_source,
+        "forecast_source": forecast_source,
+        "current_intensity_source": current_intensity_source,
     }
     await _store_cached_payload(cache_key, payload, ttl=CARBON_INTENSITY_CACHE_TTL)
     return payload

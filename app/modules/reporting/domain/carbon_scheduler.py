@@ -94,9 +94,9 @@ REGION_CARBON_PROFILES = {
 _CARBON_DATA_LAST_UPDATED = datetime(2026, 2, 8, tzinfo=timezone.utc)
 _CARBON_DATA_MAX_AGE_DAYS = 30  # Data older than this should trigger a warning
 
-# Representative coordinates for WattTime forecasting by AWS region
+# Representative coordinates for live provider lookups by AWS region.
 # Keep in sync with REGION_CARBON_PROFILES coverage.
-WATTTIME_REGION_COORDS = {
+REGION_COORDS = {
     "us-east-1": (38.03, -78.48),  # Virginia, USA
     "us-west-2": (45.52, -122.67),  # Oregon, USA
     "ca-central-1": (45.50, -73.56),  # Quebec, Canada
@@ -106,6 +106,7 @@ WATTTIME_REGION_COORDS = {
     "ap-south-1": (19.07, 72.88),  # Mumbai, India
     "af-south-1": (-33.92, 18.42),  # Cape Town, South Africa
 }
+WATTTIME_REGION_COORDS = REGION_COORDS
 
 
 def validate_carbon_data_freshness(*, strict: bool = True) -> bool:
@@ -166,29 +167,69 @@ class CarbonAwareScheduler:
         self._use_static_data = not (wattime_key or electricitymaps_key)
 
     async def get_region_intensity(self, region: str) -> CarbonIntensity:
+        intensity, _source = await self.get_region_intensity_with_source(region)
+        return intensity
+
+    async def get_region_intensity_with_source(
+        self, region: str
+    ) -> tuple[CarbonIntensity, str]:
         """Get current carbon intensity for a region."""
         profile = REGION_CARBON_PROFILES.get(region)
         if not profile:
-            return CarbonIntensity.MEDIUM  # Unknown = medium
+            return CarbonIntensity.MEDIUM, "simulation"  # Unknown = medium
 
         # BE-CARBON-1: Ensure data is fresh
         validate_carbon_data_freshness(strict=False)
 
-        # Logic for real-time calculation would go here if API key is present
-        # For now, we simulate current intensity based on current UTC hour
+        if self.wattime_key:
+            provider_intensity = await self._fetch_wattime_current_intensity(region)
+            if provider_intensity is not None:
+                return self._classify_intensity(provider_intensity), "api"
+
+        if self.electricitymaps_key:
+            provider_intensity = await self._fetch_emap_current_intensity(region)
+            if provider_intensity is not None:
+                return self._classify_intensity(provider_intensity), "api"
+
         now_hour = datetime.now(timezone.utc).hour
         intensity = self._simulate_intensity(profile, now_hour)
+        return self._classify_intensity(intensity), "simulation"
 
+    async def get_intensity_forecast_with_source(
+        self, region: str, hours: int = 24
+    ) -> tuple[List[Dict[str, Any]], str]:
+        """
+        Generates a carbon intensity forecast and returns the data provenance.
+        """
+        # BE-CARBON-1: Ensure data is fresh
+        validate_carbon_data_freshness(strict=False)
+
+        profile = REGION_CARBON_PROFILES.get(region)
+        if not profile:
+            return [], "simulation"
+
+        if self.wattime_key:
+            forecast = await self._fetch_wattime_forecast(region, hours)
+            if forecast:
+                return forecast, "api"
+
+        if self.electricitymaps_key:
+            forecast = await self._fetch_emap_forecast(region, hours)
+            if forecast:
+                return forecast, "api"
+
+        return self._build_simulated_forecast(profile, hours), "simulation"
+
+    def _classify_intensity(self, intensity: float) -> CarbonIntensity:
         if intensity < 100:
             return CarbonIntensity.VERY_LOW
-        elif intensity < 200:
+        if intensity < 200:
             return CarbonIntensity.LOW
-        elif intensity < 400:
+        if intensity < 400:
             return CarbonIntensity.MEDIUM
-        elif intensity < 600:
+        if intensity < 600:
             return CarbonIntensity.HIGH
-        else:
-            return CarbonIntensity.VERY_HIGH
+        return CarbonIntensity.VERY_HIGH
 
     def _simulate_intensity(self, profile: RegionCarbonProfile, hour_utc: int) -> float:
         """Simulates carbon intensity for a specific hour using a sine wave for solar/wind."""
@@ -230,19 +271,12 @@ class CarbonAwareScheduler:
         Production-ready: Will call WattTime (MOER) or Electricity Maps (Average) if API keys are available.
         Fallback: High-fidelity diurnal simulation.
         """
-        # BE-CARBON-1: Ensure data is fresh
-        validate_carbon_data_freshness(strict=False)
+        forecast, _source = await self.get_intensity_forecast_with_source(region, hours)
+        return forecast
 
-        profile = REGION_CARBON_PROFILES.get(region)
-        if not profile:
-            return []
-
-        if self.wattime_key:
-            return await self._fetch_wattime_forecast(region, hours)
-
-        if self.electricitymaps_key:
-            return await self._fetch_emap_forecast(region, hours)
-
+    def _build_simulated_forecast(
+        self, profile: RegionCarbonProfile, hours: int
+    ) -> List[Dict[str, Any]]:
         forecast = []
         from datetime import timedelta
 
@@ -278,6 +312,12 @@ class CarbonAwareScheduler:
     def _get_avg_intensity(self, profile: RegionCarbonProfile) -> float:
         """Returns the average intensity for a profile."""
         return (profile.carbon_intensity_low + profile.carbon_intensity_high) / 2
+
+    def _resolve_region_coordinates(self, region: str) -> tuple[float, float] | None:
+        coords = REGION_COORDS.get(region)
+        if coords is None:
+            logger.warning("carbon_region_unmapped", region=region)
+        return coords
 
     def get_lowest_carbon_region(self, candidate_regions: List[str]) -> str:
         """
@@ -409,9 +449,8 @@ class CarbonAwareScheduler:
 
             client = get_http_client()
             # WattTime uses a login endpoint for a token, then GET /v2/forecast
-            coords = WATTTIME_REGION_COORDS.get(region)
+            coords = self._resolve_region_coordinates(region)
             if not coords:
-                logger.warning("wattime_region_unmapped", region=region)
                 return []
 
             payload = {
@@ -439,6 +478,32 @@ class CarbonAwareScheduler:
             logger.error("wattime_api_failed", error=str(e), region=region)
             return []
 
+    async def _fetch_wattime_current_intensity(self, region: str) -> float | None:
+        """
+        Derive a current provider-backed reading from the first available WattTime forecast point.
+        """
+        forecast = await self._fetch_wattime_forecast(region, hours=1)
+        if not forecast:
+            return None
+        first_point = forecast[0]
+        raw_intensity = first_point.get("intensity_gco2_kwh")
+        if not isinstance(raw_intensity, (int, float, str)):
+            logger.warning(
+                "wattime_current_intensity_invalid_payload",
+                region=region,
+                value=raw_intensity,
+            )
+            return None
+        try:
+            return float(raw_intensity)
+        except (TypeError, ValueError):
+            logger.warning(
+                "wattime_current_intensity_invalid_payload",
+                region=region,
+                value=raw_intensity,
+            )
+            return None
+
     async def _fetch_emap_forecast(
         self, region: str, hours: int
     ) -> List[Dict[str, Any]]:
@@ -448,12 +513,9 @@ class CarbonAwareScheduler:
             from app.shared.core.http import get_http_client
 
             client = get_http_client()
-            # Maps region to Electricity Maps zone (e.g., US-VA, DE, FR)
-            zone = "US-VA"  # Default
-            if region.startswith("eu-"):
-                zone = region.split("-")[
-                    1
-                ].upper()  # Rough guess (e.g., eu-west-1 -> WEST)
+            coords = self._resolve_region_coordinates(region)
+            if coords is None:
+                return []
 
             headers = (
                 {"auth-token": self.electricitymaps_key}
@@ -462,7 +524,7 @@ class CarbonAwareScheduler:
             )
             response = await client.get(
                 "https://api.electricitymap.org/v3/carbon-intensity/forecast",
-                params={"zone": zone, "horizon": hours},
+                params={"lat": coords[0], "lon": coords[1], "horizon": hours},
                 headers=headers,
             )
             response.raise_for_status()
@@ -478,3 +540,41 @@ class CarbonAwareScheduler:
         except CARBON_FORECAST_RECOVERABLE_EXCEPTIONS as e:
             logger.error("emap_api_failed", error=str(e), region=region)
             return []
+
+    async def _fetch_emap_current_intensity(self, region: str) -> float | None:
+        """Fetch the latest Electricity Maps carbon intensity using geolocation lookup."""
+        try:
+            from app.shared.core.http import get_http_client
+
+            client = get_http_client()
+            coords = self._resolve_region_coordinates(region)
+            if coords is None:
+                return None
+
+            headers = (
+                {"auth-token": self.electricitymaps_key}
+                if self.electricitymaps_key
+                else {}
+            )
+            response = await client.get(
+                "https://api.electricitymap.org/v3/carbon-intensity/latest",
+                params={"lat": coords[0], "lon": coords[1]},
+                headers=headers,
+            )
+            response.raise_for_status()
+            data = response.json()
+            raw_intensity = data.get("carbonIntensity")
+            if raw_intensity is None:
+                logger.warning("emap_latest_missing_intensity", region=region)
+                return None
+            if not isinstance(raw_intensity, (int, float, str)):
+                logger.warning(
+                    "emap_latest_invalid_intensity_type",
+                    region=region,
+                    value_type=type(raw_intensity).__name__,
+                )
+                return None
+            return float(raw_intensity)
+        except CARBON_FORECAST_RECOVERABLE_EXCEPTIONS as e:
+            logger.error("emap_current_intensity_failed", error=str(e), region=region)
+            return None

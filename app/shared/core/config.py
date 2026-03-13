@@ -9,6 +9,7 @@ import structlog
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field, field_validator, model_validator
 from app.shared.core.constants import AWS_SUPPORTED_REGIONS
+from app.shared.core.runtime_paths import DEFAULT_ENV_FILE
 from app.shared.core.config_validation import (
     validate_all_config as _validate_all_config_impl,
     validate_billing_config as _validate_billing_config_impl,
@@ -546,7 +547,10 @@ class Settings(BaseSettings):
         """Validate enforcement gate runtime safety controls."""
         _validate_enforcement_guardrails_impl(self)
 
-    model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True)
+    model_config = SettingsConfigDict(
+        env_file=str(DEFAULT_ENV_FILE),
+        env_ignore_empty=True,
+    )
 
     @property
     def is_production(self) -> bool:

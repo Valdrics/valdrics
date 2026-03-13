@@ -285,6 +285,85 @@ async def test_ingestion_execute_marks_connection_failed_on_recoverable_adapter_
 
 
 @pytest.mark.asyncio
+async def test_ingestion_execute_checkpoints_only_successful_connections_and_preserves_payload(db):
+    handler = CostIngestionHandler()
+    retained_connection_id = str(uuid4())
+    job = BackgroundJob(
+        tenant_id=uuid4(),
+        payload={
+            "start_date": "2026-01-01",
+            "end_date": "2026-01-02",
+            "checkpoint": {
+                "resume_token": "keep-me",
+                "completed_connections": [retained_connection_id],
+            },
+            "window_label": "backfill",
+        },
+    )
+    db.execute = AsyncMock(return_value=None)
+    db.add = MagicMock()
+
+    failed_conn = MagicMock()
+    failed_conn.id = uuid4()
+    failed_conn.provider = "aws"
+    failed_conn.tenant_id = job.tenant_id
+    failed_conn.name = "aws-failed"
+
+    successful_conn = MagicMock()
+    successful_conn.id = uuid4()
+    successful_conn.provider = "aws"
+    successful_conn.tenant_id = job.tenant_id
+    successful_conn.name = "aws-success"
+
+    successful_adapter = MagicMock()
+
+    async def successful_stream(*args, **kwargs):
+        del args, kwargs
+        yield {"cost_usd": 5.0}
+
+    successful_adapter.stream_cost_and_usage = successful_stream
+
+    with (
+        patch(
+            "app.modules.governance.domain.jobs.handlers.costs.list_tenant_connections",
+            new=AsyncMock(return_value=[failed_conn, successful_conn]),
+        ),
+        patch(
+            "app.shared.adapters.factory.AdapterFactory.get_adapter",
+            side_effect=[RuntimeError("adapter unavailable"), successful_adapter],
+        ),
+        patch(
+            "app.modules.reporting.domain.persistence.CostPersistenceService"
+        ) as persistence_cls,
+        patch(
+            "app.modules.reporting.domain.attribution_engine.AttributionEngine"
+        ) as mock_engine_cls,
+    ):
+        persistence = persistence_cls.return_value
+
+        async def mock_save_records(records, **kwargs):
+            del kwargs
+            async for _ in records:
+                pass
+            return {"records_saved": 1}
+
+        persistence.save_records_stream = AsyncMock(side_effect=mock_save_records)
+        mock_engine = AsyncMock()
+        mock_engine.apply_rules_to_tenant.return_value = None
+        mock_engine_cls.return_value = mock_engine
+
+        result = await handler.execute(job, db)
+
+    completed_connections = job.payload["checkpoint"]["completed_connections"]
+    assert result["status"] == "completed"
+    assert retained_connection_id in completed_connections
+    assert str(successful_conn.id) in completed_connections
+    assert str(failed_conn.id) not in completed_connections
+    assert job.payload["checkpoint"]["resume_token"] == "keep-me"
+    assert job.payload["window_label"] == "backfill"
+
+
+@pytest.mark.asyncio
 async def test_ingestion_execute_does_not_swallow_fatal_connection_errors(db):
     handler = CostIngestionHandler()
     job = BackgroundJob(tenant_id=uuid4(), payload={})

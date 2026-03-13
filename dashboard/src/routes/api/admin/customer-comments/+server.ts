@@ -1,5 +1,6 @@
 import { env } from '$env/dynamic/private';
 import { json } from '@sveltejs/kit';
+import { serverLogger } from '$lib/logging/server';
 import { appendCustomerComment, listCustomerComments } from '$lib/server/customerCommentsStore';
 import type { User } from '@supabase/supabase-js';
 import type { RequestHandler } from './$types';
@@ -19,13 +20,16 @@ function resolveEmailAllowlist(): Set<string> {
 	);
 }
 
-function isAuthorizedAdmin(user: User | null): boolean {
-	if (!user?.email) return false;
+function authorizeAdmin(
+	user: User | null
+): 'authorized' | 'forbidden' | 'admin_allowlist_unconfigured' {
+	if (!user?.email) return 'forbidden';
 	const allowlist = resolveEmailAllowlist();
 	if (allowlist.size === 0) {
-		return true;
+		serverLogger.error('customer_comments_admin_allowlist_unconfigured');
+		return 'admin_allowlist_unconfigured';
 	}
-	return allowlist.has(user.email.trim().toLowerCase());
+	return allowlist.has(user.email.trim().toLowerCase()) ? 'authorized' : 'forbidden';
 }
 
 async function requireAdmin(
@@ -38,10 +42,29 @@ async function requireAdmin(
 			response: json({ ok: false, error: 'unauthenticated' }, { status: 401 })
 		};
 	}
-	if (!isAuthorizedAdmin(user)) {
+	const authorization = authorizeAdmin(user);
+	if (authorization === 'admin_allowlist_unconfigured') {
 		return {
 			ok: false,
-			response: json({ ok: false, error: 'forbidden' }, { status: 403 })
+			response: json(
+				{ ok: false, error: 'admin_allowlist_unconfigured' },
+				{
+					status: 503,
+					headers: { 'cache-control': 'no-store' }
+				}
+			)
+		};
+	}
+	if (authorization !== 'authorized') {
+		return {
+			ok: false,
+			response: json(
+				{ ok: false, error: 'forbidden' },
+				{
+					status: 403,
+					headers: { 'cache-control': 'no-store' }
+				}
+			)
 		};
 	}
 	return { ok: true };

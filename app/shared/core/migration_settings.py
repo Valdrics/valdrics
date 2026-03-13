@@ -7,6 +7,7 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.shared.core.config_validation_placeholders import require_no_managed_placeholder
+from app.shared.core.runtime_paths import DEFAULT_ENV_FILE
 
 
 _ALLOWED_DB_SSL_MODES = {"disable", "require", "verify-ca", "verify-full"}
@@ -19,7 +20,10 @@ class MigrationSettings(BaseSettings):
     DB_SSL_MODE: str = "require"
     DB_SSL_CA_CERT_PATH: Optional[str] = None
 
-    model_config = SettingsConfigDict(env_file=".env", env_ignore_empty=True)
+    model_config = SettingsConfigDict(
+        env_file=str(DEFAULT_ENV_FILE),
+        env_ignore_empty=True,
+    )
 
     @model_validator(mode="after")
     def validate_migration_config(self) -> "MigrationSettings":

@@ -14,7 +14,7 @@ Thank you for your interest in contributing to Valdrics! This guide will help yo
 
 ```bash
 # Clone the repository
-git clone https://github.com/Valdrics-AI/valdrics.git
+git clone https://github.com/Valdrics/valdrics.git
 cd valdrics
 
 # Install dependencies

@@ -26,14 +26,14 @@ DEFAULT_DRILL_CHECKS: tuple[DrillCheck, ...] = (
         key="pre_rotation_tokens_accepted",
         selector=(
             "tests/unit/enforcement/enforcement_service_cases_part03.py::"
-            "test_consume_approval_token_accepts_rotated_fallback_secret"
+            "test_consume_approval_token_accepts_primary_secret"
         ),
     ),
     DrillCheck(
         key="post_rotation_new_tokens_accepted",
         selector=(
             "tests/unit/enforcement/enforcement_service_cases_part03.py::"
-            "test_consume_approval_token_accepts_rotated_fallback_secret"
+            "test_consume_approval_token_accepts_new_primary_secret_after_rotation"
         ),
     ),
     DrillCheck(
@@ -54,7 +54,7 @@ DEFAULT_DRILL_CHECKS: tuple[DrillCheck, ...] = (
         key="rollback_validation_passed",
         selector=(
             "tests/unit/enforcement/enforcement_service_cases_part04.py::"
-            "test_consume_approval_token_rejects_rotated_secret_without_fallback"
+            "test_consume_approval_token_accepts_rollback_fallback_secret"
         ),
     ),
     DrillCheck(
@@ -82,6 +82,27 @@ SUPPLEMENTAL_CHECKS: tuple[DrillCheck, ...] = (
         ),
     ),
 )
+
+
+def _all_drill_checks() -> tuple[DrillCheck, ...]:
+    return (*DEFAULT_DRILL_CHECKS, *SUPPLEMENTAL_CHECKS)
+
+
+def _validate_unique_check_sources() -> None:
+    seen_keys: set[str] = set()
+    selector_to_key: dict[str, str] = {}
+    for check in _all_drill_checks():
+        if check.key in seen_keys:
+            raise ValueError(f"Duplicate drill evidence key configured: {check.key}")
+        seen_keys.add(check.key)
+
+        prior_key = selector_to_key.get(check.selector)
+        if prior_key is not None:
+            raise ValueError(
+                "Each drill evidence field must map to a distinct selector; "
+                f"{check.key} and {prior_key} both use {check.selector}"
+            )
+        selector_to_key[check.selector] = check.key
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -186,12 +207,11 @@ def _execute_checks(
     timeout_seconds: float,
     retries: int,
 ) -> tuple[dict[str, bool], dict[str, bool], dict[str, str]]:
+    _validate_unique_check_sources()
     selector_results: dict[str, bool] = {}
     selector_logs: dict[str, str] = {}
 
-    unique_selectors = {
-        check.selector for check in (*DEFAULT_DRILL_CHECKS, *SUPPLEMENTAL_CHECKS)
-    }
+    unique_selectors = {check.selector for check in _all_drill_checks()}
     for selector in sorted(unique_selectors):
         passed, output = _run_selector(
             selector=selector,
@@ -213,17 +233,20 @@ def _build_markdown(
     *,
     field_results: dict[str, bool],
     selector_results: dict[str, bool],
-    selector_logs: dict[str, str],
+    _selector_logs: dict[str, str],
 ) -> str:
     now = datetime.now(timezone.utc).replace(microsecond=0)
     drill_date = now.date().isoformat()
     drill_id = f"KRD-{drill_date}-ENF-RT"
     next_due = (now.date() + timedelta(days=90)).isoformat()
     executed_at = now.isoformat().replace("+00:00", "Z")
-    metadata_lines = []
-    for selector in sorted(selector_logs):
-        result = "pass" if selector_results.get(selector, False) else "fail"
-        metadata_lines.append(f"- test_selector_result_{len(metadata_lines) + 1}: {result}")
+    source_lines: list[str] = []
+    for check in _all_drill_checks():
+        source_lines.append(f"- source_{check.key}: {check.selector}")
+        source_lines.append(
+            "- source_result_"
+            f"{check.key}: {'pass' if selector_results.get(check.selector, False) else 'fail'}"
+        )
 
     endpoint_guard_result = field_results.get("endpoint_replay_tamper_guard", False)
     return (
@@ -236,6 +259,9 @@ def _build_markdown(
         "- owner: ci-security-oncall\n"
         "- approver: ci-platform-oncall\n"
         f"- next_drill_due_on: {next_due}\n\n"
+        "## Evidence Sources\n\n"
+        + "\n".join(source_lines)
+        + "\n\n"
         "## Validation Outcomes\n\n"
         f"- pre_rotation_tokens_accepted: {str(field_results['pre_rotation_tokens_accepted']).lower()}\n"
         f"- post_rotation_new_tokens_accepted: {str(field_results['post_rotation_new_tokens_accepted']).lower()}\n"
@@ -246,9 +272,8 @@ def _build_markdown(
         f"- alert_pipeline_verified: {str(field_results['alert_pipeline_verified']).lower()}\n"
         f"- endpoint_replay_tamper_guard: {str(endpoint_guard_result).lower()}\n"
         "- post_drill_status: PASS\n\n"
-        "## Executed Selectors\n\n"
-        + "\n".join(metadata_lines)
-        + "\n"
+        "## Executed Selector Summary\n\n"
+        f"- total_selectors_run: {len(_all_drill_checks())}\n"
     )
 
 

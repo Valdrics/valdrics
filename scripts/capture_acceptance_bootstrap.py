@@ -3,29 +3,25 @@
 from __future__ import annotations
 
 import asyncio
-import os
-import tempfile
 from contextlib import suppress
 from datetime import timedelta
 from pathlib import Path
 
 import httpx
 
+from scripts.in_process_runtime_env import (
+    build_unique_sqlite_database_url,
+    configure_isolated_test_environment,
+)
 
-def ensure_test_env_for_in_process() -> None:
-    # Set a minimal, deterministic test environment so in-process evidence capture can run
-    # without requiring a live DB/server. Values are safe and non-secret.
-    os.environ.setdefault("TESTING", "true")
-    os.environ.setdefault("DB_SSL_MODE", "disable")
-    os.environ.setdefault(
-        "SUPABASE_JWT_SECRET", "test-jwt-secret-for-testing-at-least-32-bytes"
-    )
-    os.environ.setdefault("ENCRYPTION_KEY", "32-byte-long-test-encryption-key")
-    os.environ.setdefault("CSRF_SECRET_KEY", "test-csrf-secret-key-at-least-32-bytes")
-    os.environ.setdefault(
-        "KDF_SALT",
-        "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=",
-    )
+
+def _build_acceptance_capture_database_url() -> tuple[str, Path]:
+    return build_unique_sqlite_database_url(prefix="valdrics-acceptance-capture")
+
+
+def ensure_test_env_for_in_process(database_url: str) -> None:
+    # Force a safe, deterministic runtime instead of inheriting an operator shell DATABASE_URL.
+    configure_isolated_test_environment(database_url=database_url)
 
 
 async def bootstrap_in_process_app_and_token() -> tuple[httpx.ASGITransport, str]:
@@ -34,17 +30,14 @@ async def bootstrap_in_process_app_and_token() -> tuple[httpx.ASGITransport, str
 
     This mode is intended for local dev/CI validation when a live environment is unavailable.
     """
-    ensure_test_env_for_in_process()
-
-    # Use a file-backed sqlite DB so multiple connections share the same state.
-    sqlite_path = Path(tempfile.gettempdir()) / "valdrics_acceptance_capture.sqlite"
-    os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{sqlite_path}")
+    database_url, _sqlite_path = _build_acceptance_capture_database_url()
+    ensure_test_env_for_in_process(database_url)
 
     # Import after env is set.
     from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
     from app.shared.db.base import Base
-    from app.shared.db.session import engine as async_engine
+    from app.shared.db.session import get_engine, reset_db_runtime
 
     # Register models referenced by relationships.
     import app.models.background_job  # noqa: F401
@@ -66,6 +59,8 @@ async def bootstrap_in_process_app_and_token() -> tuple[httpx.ASGITransport, str
     wakeup_task = asyncio.create_task(_wakeup_loop())
 
     try:
+        reset_db_runtime()
+        async_engine = get_engine()
         # Create tables
         async with async_engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

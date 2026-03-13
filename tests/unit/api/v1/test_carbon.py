@@ -179,11 +179,18 @@ async def test_get_carbon_intensity_forecast(mock_scheduler_class):
     request = MagicMock()
     user = MagicMock()
     mock_scheduler = mock_scheduler_class.return_value
-    mock_scheduler.get_intensity_forecast = AsyncMock(return_value=[])
-    mock_scheduler.get_region_intensity = AsyncMock(return_value=0.5)
+    mock_scheduler.get_intensity_forecast_with_source = AsyncMock(
+        return_value=([], "simulation")
+    )
+    mock_scheduler.get_region_intensity_with_source = AsyncMock(
+        return_value=(0.5, "simulation")
+    )
 
     response = await get_carbon_intensity_forecast(request, user, "us-east-1", 24)
     assert response["current_intensity"] == 0.5
+    assert response["source"] == "simulation"
+    assert response["forecast_source"] == "simulation"
+    assert response["current_intensity_source"] == "simulation"
 
 
 @pytest.mark.asyncio
@@ -194,14 +201,42 @@ async def test_get_carbon_intensity_forecast_default_region_hint_is_global(
     request = MagicMock()
     user = MagicMock()
     mock_scheduler = mock_scheduler_class.return_value
-    mock_scheduler.get_intensity_forecast = AsyncMock(return_value=[])
-    mock_scheduler.get_region_intensity = AsyncMock(return_value=0.4)
+    mock_scheduler.get_intensity_forecast_with_source = AsyncMock(
+        return_value=([], "simulation")
+    )
+    mock_scheduler.get_region_intensity_with_source = AsyncMock(
+        return_value=(0.4, "simulation")
+    )
 
     response = await get_carbon_intensity_forecast(request, user)
 
     assert response["region"] == "global"
-    mock_scheduler.get_intensity_forecast.assert_awaited_once_with("global", 24)
-    mock_scheduler.get_region_intensity.assert_awaited_once_with("global")
+    mock_scheduler.get_intensity_forecast_with_source.assert_awaited_once_with(
+        "global", 24
+    )
+    mock_scheduler.get_region_intensity_with_source.assert_awaited_once_with("global")
+
+
+@pytest.mark.asyncio
+@patch("app.modules.reporting.api.v1.carbon.CarbonAwareScheduler")
+async def test_get_carbon_intensity_forecast_reports_mixed_source_when_provider_coverage_differs(
+    mock_scheduler_class,
+):
+    request = MagicMock()
+    user = MagicMock()
+    mock_scheduler = mock_scheduler_class.return_value
+    mock_scheduler.get_intensity_forecast_with_source = AsyncMock(
+        return_value=([], "api")
+    )
+    mock_scheduler.get_region_intensity_with_source = AsyncMock(
+        return_value=("medium", "simulation")
+    )
+
+    response = await get_carbon_intensity_forecast(request, user, "us-east-1", 24)
+
+    assert response["source"] == "mixed"
+    assert response["forecast_source"] == "api"
+    assert response["current_intensity_source"] == "simulation"
 
 
 @pytest.mark.asyncio

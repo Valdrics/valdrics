@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 from uuid import UUID
@@ -13,6 +12,7 @@ from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.shared.adapters.aws_utils import map_aws_connection_to_credentials
 from app.shared.core.config import get_settings
 from app.shared.core.exceptions import ResourceNotFoundError, AdapterError
+from app.shared.core.runtime_paths import PROJECT_ROOT
 
 logger = structlog.get_logger()
 AWS_CONNECTION_VERIFY_RECOVERABLE_EXCEPTIONS = (
@@ -26,7 +26,7 @@ AWS_CONNECTION_VERIFY_RECOVERABLE_EXCEPTIONS = (
     LookupError,
 )
 _CLOUDFORMATION_TEMPLATE_PATH = (
-    Path(__file__).resolve().parents[3] / "cloudformation" / "valdrics-role.yaml"
+    PROJECT_ROOT / "cloudformation" / "valdrics-role.yaml"
 )
 _CLOUDFORMATION_PUBLIC_PATH = "/api/v1/public/templates/aws/valdrics-role.yaml"
 _TRUST_PRINCIPAL_TOKEN = "__VALDRICS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN__"

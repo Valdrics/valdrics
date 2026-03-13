@@ -11,6 +11,8 @@ from fastapi import FastAPI
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
 from fastapi.responses import HTMLResponse
 
+from app.shared.core.runtime_paths import require_static_asset
+
 DOCS_ASSET_SRI_RECOVERABLE_EXCEPTIONS = (
     OSError,
     RuntimeError,
@@ -19,12 +21,17 @@ DOCS_ASSET_SRI_RECOVERABLE_EXCEPTIONS = (
 )
 
 
-def compute_sri(file_path: str, *, logger: Any) -> str | None:
+def compute_sri(file_path: str | Path, *, logger: Any) -> str | None:
+    asset_path = Path(file_path)
     try:
-        digest = hashlib.sha384(Path(file_path).read_bytes()).digest()
+        digest = hashlib.sha384(asset_path.read_bytes()).digest()
         return "sha384-" + base64.b64encode(digest).decode("ascii")
     except DOCS_ASSET_SRI_RECOVERABLE_EXCEPTIONS as exc:
-        logger.warning("docs_asset_sri_compute_failed", file_path=file_path, error=str(exc))
+        logger.warning(
+            "docs_asset_sri_compute_failed",
+            file_path=str(asset_path),
+            error=str(exc),
+        )
         return None
 
 
@@ -39,6 +46,9 @@ def attach_sri(content: str, *, marker: str, sri_hash: str | None) -> str:
 
 
 async def render_swagger_ui_html(app: FastAPI, *, logger: Any) -> HTMLResponse:
+    swagger_js_path = require_static_asset("swagger-ui-bundle.js")
+    swagger_css_path = require_static_asset("swagger-ui.css")
+    require_static_asset("favicon.png")
     response = get_swagger_ui_html(
         openapi_url=app.openapi_url or "/openapi.json",
         title=app.title + " - Swagger UI",
@@ -51,17 +61,19 @@ async def render_swagger_ui_html(app: FastAPI, *, logger: Any) -> HTMLResponse:
     content = attach_sri(
         content,
         marker='src="/static/swagger-ui-bundle.js"',
-        sri_hash=compute_sri("app/static/swagger-ui-bundle.js", logger=logger),
+        sri_hash=compute_sri(swagger_js_path, logger=logger),
     )
     content = attach_sri(
         content,
         marker='href="/static/swagger-ui.css"',
-        sri_hash=compute_sri("app/static/swagger-ui.css", logger=logger),
+        sri_hash=compute_sri(swagger_css_path, logger=logger),
     )
     return HTMLResponse(content=content, status_code=response.status_code)
 
 
 async def render_redoc_ui_html(app: FastAPI, *, logger: Any) -> HTMLResponse:
+    redoc_js_path = require_static_asset("redoc.standalone.js")
+    require_static_asset("favicon.png")
     response = get_redoc_html(
         openapi_url=app.openapi_url or "/openapi.json",
         title=app.title + " - ReDoc",
@@ -72,6 +84,6 @@ async def render_redoc_ui_html(app: FastAPI, *, logger: Any) -> HTMLResponse:
     content = attach_sri(
         content,
         marker='src="/static/redoc.standalone.js"',
-        sri_hash=compute_sri("app/static/redoc.standalone.js", logger=logger),
+        sri_hash=compute_sri(redoc_js_path, logger=logger),
     )
     return HTMLResponse(content=content, status_code=response.status_code)

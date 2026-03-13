@@ -1,6 +1,16 @@
+import os
+import subprocess
+import sys
+import textwrap
+from pathlib import Path
+
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+STATIC_DIR = REPO_ROOT / "app" / "static"
 
 
 @pytest.fixture
@@ -172,6 +182,103 @@ def test_docs_endpoints(client):
     finally:
         live_settings.ENVIRONMENT = original_environment
         live_settings.EXPOSE_API_DOCUMENTATION_PUBLICLY = original_docs_public
+
+
+def test_docs_static_assets_exist() -> None:
+    expected_assets = {
+        "favicon.png": 1024,
+        "swagger-ui-bundle.js": 100_000,
+        "swagger-ui.css": 10_000,
+        "redoc.standalone.js": 100_000,
+    }
+
+    for asset_name, minimum_size_bytes in expected_assets.items():
+        asset_path = STATIC_DIR / asset_name
+        assert asset_path.exists(), asset_name
+        assert asset_path.stat().st_size >= minimum_size_bytes, asset_name
+
+
+def test_docs_endpoints_render_with_real_static_assets(client):
+    from app.main import settings as live_settings
+
+    original_environment = live_settings.ENVIRONMENT
+    original_docs_public = live_settings.EXPOSE_API_DOCUMENTATION_PUBLICLY
+    live_settings.ENVIRONMENT = "development"
+    live_settings.EXPOSE_API_DOCUMENTATION_PUBLICLY = False
+    try:
+        docs_response = client.get("/docs")
+        redoc_response = client.get("/redoc")
+        static_response = client.get("/static/redoc.standalone.js")
+
+        assert docs_response.status_code == 200
+        assert redoc_response.status_code == 200
+        assert static_response.status_code == 200
+        assert 'src="/static/swagger-ui-bundle.js"' in docs_response.text
+        assert 'href="/static/swagger-ui.css"' in docs_response.text
+        assert 'src="/static/redoc.standalone.js"' in redoc_response.text
+        assert 'integrity="sha384-' in docs_response.text
+        assert 'integrity="sha384-' in redoc_response.text
+        assert len(static_response.text) >= 100_000
+    finally:
+        live_settings.ENVIRONMENT = original_environment
+        live_settings.EXPOSE_API_DOCUMENTATION_PUBLICLY = original_docs_public
+
+
+def test_app_import_is_stable_outside_repo_cwd(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("DEBUG=release\n", encoding="utf-8")
+    env = os.environ.copy()
+    env.pop("DEBUG", None)
+    env.update(
+        {
+            "PYTHONPATH": str(REPO_ROOT),
+            "TESTING": "true",
+            "DATABASE_URL": "sqlite+aiosqlite:///:memory:",
+            "SUPABASE_JWT_SECRET": "test-jwt-secret-for-testing-at-least-32-bytes",
+            "ENFORCEMENT_APPROVAL_TOKEN_SECRET": (
+                "test-approval-token-secret-for-testing-at-least-32-bytes"
+            ),
+            "ENFORCEMENT_EXPORT_SIGNING_SECRET": (
+                "test-export-signing-secret-for-testing-at-least-32-bytes"
+            ),
+            "ENCRYPTION_KEY": "32-byte-long-test-encryption-key",
+            "CSRF_SECRET_KEY": "test-csrf-secret-key-at-least-32-bytes",
+            "KDF_SALT": "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=",
+            "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN": (
+                "arn:aws:iam::000000000000:role/ValdricsTestControlPlane"
+            ),
+            "DB_SSL_MODE": "disable",
+        }
+    )
+    script = textwrap.dedent(
+        """
+        from app.main import valdrics_app
+        from app.shared.core.runtime_paths import DEFAULT_ENV_FILE, STATIC_DIR
+
+        static_mount = next(
+            route for route in valdrics_app.routes if getattr(route, "path", None) == "/static"
+        )
+        print(DEFAULT_ENV_FILE)
+        print(STATIC_DIR)
+        print(static_mount.app.directory)
+        """
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    output_lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    assert output_lines == [
+        str(REPO_ROOT / ".env"),
+        str(STATIC_DIR),
+        str(STATIC_DIR),
+    ]
 
 
 def test_docs_endpoints_blocked_in_strict_env(client):

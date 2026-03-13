@@ -168,6 +168,8 @@ def test_koyeb_and_prometheus_contracts_match_internal_metrics_and_ha_defaults()
         if isinstance(item, dict) and "name" in item
     }
     assert int(koyeb["definition"]["scaling"]["min"]) >= 2
+    assert koyeb["definition"]["git"]["repository"] == "github.com/Valdrics/valdrics"
+    assert koyeb_worker["definition"]["git"]["repository"] == "github.com/Valdrics/valdrics"
     assert env_values["WEB_CONCURRENCY"] == "2"
     assert env_values["ENABLE_SCHEDULER"] == "true"
     assert env_values["API_URL"] == "https://api.valdrics.ai"

@@ -216,6 +216,41 @@ async def test_sso_discovery_provider_id_mode_success(
 
 
 @pytest.mark.asyncio
+async def test_sso_discovery_ignores_soft_deleted_tenant(
+    async_client: AsyncClient, db: AsyncSession
+):
+    import uuid
+
+    tenant_id = uuid.uuid4()
+    tenant = Tenant(
+        id=tenant_id,
+        name="Deleted Tenant",
+        plan="growth",
+        is_deleted=True,
+    )
+    db.add(tenant)
+    db.add(
+        SsoDomainMapping(
+            tenant_id=tenant_id,
+            domain="deleted-example.com",
+            federation_mode="domain",
+            provider_id=None,
+            is_active=True,
+        )
+    )
+    await db.commit()
+
+    res = await async_client.post(
+        "/api/v1/public/sso/discovery",
+        json={"email": "user@deleted-example.com"},
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["available"] is False
+    assert payload["reason"] == "sso_not_configured_for_domain"
+
+
+@pytest.mark.asyncio
 async def test_sso_discovery_not_configured(async_client: AsyncClient):
     res = await async_client.post(
         "/api/v1/public/sso/discovery",

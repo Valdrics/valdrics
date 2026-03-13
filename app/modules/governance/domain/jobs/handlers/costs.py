@@ -45,6 +45,19 @@ def _require_iso_date(payload: dict[str, Any], key: str) -> date:
     return date.fromisoformat(raw_value)
 
 
+def _normalize_checkpoint(payload: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+    raw_checkpoint = payload.get("checkpoint", {})
+    checkpoint = dict(raw_checkpoint) if isinstance(raw_checkpoint, dict) else {}
+    raw_completed = checkpoint.get("completed_connections", [])
+    completed_connections = [
+        str(connection_id).strip()
+        for connection_id in raw_completed
+        if str(connection_id).strip()
+    ]
+    checkpoint["completed_connections"] = completed_connections
+    return checkpoint, completed_connections
+
+
 def _serialize_anomaly(item: Any) -> dict[str, Any]:
     return {
         "day": item.day.isoformat(),
@@ -144,8 +157,7 @@ class CostIngestionHandler(BaseJobHandler):
         # Removed redundant commit here as JobProcessor handles it (BE-TRANS-1)
 
         # 2. Process each connection via its appropriate adapter
-        checkpoint = job.payload.get("checkpoint", {}) if job.payload else {}
-        completed_conns = checkpoint.get("completed_connections", [])
+        checkpoint, completed_conns = _normalize_checkpoint(payload)
 
         for conn in connections:
             conn_id_str = str(conn.id)
@@ -223,6 +235,10 @@ class CostIngestionHandler(BaseJobHandler):
                     }
                 )
                 total_records_ingested += int(save_result.get("records_saved", 0) or 0)
+                if conn_id_str not in completed_conns:
+                    completed_conns.append(conn_id_str)
+                    checkpoint["completed_connections"] = completed_conns
+                    job.payload = {**payload, "checkpoint": checkpoint}
 
             except COST_INGESTION_CONNECTION_RECOVERABLE_EXCEPTIONS as e:
                 logger.error(
@@ -241,11 +257,6 @@ class CostIngestionHandler(BaseJobHandler):
                         "total_cost": 0.0,
                     }
                 )
-
-            if conn_id_str not in completed_conns:
-                completed_conns.append(conn_id_str)
-                job.payload = {**checkpoint, "completed_connections": completed_conns}
-                # Redundant commit removed (BE-TRANS-1)
 
         # 3. Trigger Attribution Engine (FinOps Audit 2)
         try:

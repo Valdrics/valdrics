@@ -82,3 +82,18 @@ def ensure_interactive_confirmation(
     entered = str(input_fn(f"Type {token!r} to continue: ")).strip()
     if entered != token:
         raise RuntimeError("Interactive confirmation token mismatch.")
+
+
+def ensure_operator_reason(
+    *,
+    operator: str,
+    reason: str,
+    min_reason_length: int,
+    operation_label: str,
+) -> None:
+    if not str(operator or "").strip():
+        raise RuntimeError(f"--operator is required for {operation_label}.")
+    if len(str(reason or "").strip()) < int(min_reason_length):
+        raise RuntimeError(
+            f"--reason must be at least {int(min_reason_length)} characters for {operation_label}."
+        )

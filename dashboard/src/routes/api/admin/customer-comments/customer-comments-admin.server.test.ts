@@ -75,7 +75,19 @@ describe('admin customer comments route', () => {
 		expect(response.status).toBe(403);
 	});
 
+	it('fails closed when the admin allowlist is unset', async () => {
+		const response = await GET({
+			locals: authedLocals()
+		} as Parameters<typeof GET>[0]);
+		expect(response.status).toBe(503);
+		await expect(response.json()).resolves.toMatchObject({
+			ok: false,
+			error: 'admin_allowlist_unconfigured'
+		});
+	});
+
 	it('accepts comment writes and updates public feed output', async () => {
+		process.env.CUSTOMER_COMMENTS_ADMIN_EMAIL_ALLOWLIST = 'admin@valdrics.test';
 		const postResponse = await POST({
 			locals: authedLocals(),
 			request: buildRequest({
@@ -115,6 +127,7 @@ describe('admin customer comments route', () => {
 	});
 
 	it('rejects invalid payloads', async () => {
+		process.env.CUSTOMER_COMMENTS_ADMIN_EMAIL_ALLOWLIST = 'admin@valdrics.test';
 		const response = await POST({
 			locals: authedLocals(),
 			request: buildRequest({ quote: '', attribution: '' })

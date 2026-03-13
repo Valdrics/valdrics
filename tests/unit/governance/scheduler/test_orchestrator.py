@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
+from apscheduler.triggers.cron import CronTrigger
 from app.modules.governance.domain.scheduler.orchestrator import SchedulerOrchestrator
 from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.models.background_job import BackgroundJob, JobStatus
@@ -136,6 +137,61 @@ async def test_background_job_processing_falls_back_inline_when_celery_unavailab
         "background_job_processing",
         outcome="succeeded",
     )
+
+
+@pytest.mark.asyncio
+async def test_background_job_processing_inline_marks_system_context(
+    orchestrator: SchedulerOrchestrator,
+    mock_session_maker,
+) -> None:
+    mock_db = AsyncMock()
+    mock_session_maker.return_value.__aenter__.return_value = mock_db
+    mock_session_maker.return_value.__aexit__.return_value = None
+
+    with (
+        patch(
+            "app.modules.governance.domain.scheduler.orchestrator.mark_session_system_context",
+            new=AsyncMock(),
+        ) as mark_system_context,
+        patch(
+            "app.modules.governance.domain.jobs.processor.JobProcessor",
+        ) as processor_cls,
+    ):
+        processor = processor_cls.return_value
+        processor.process_pending_jobs = AsyncMock(
+            return_value={"processed": 0, "succeeded": 0, "failed": 0}
+        )
+        await orchestrator._process_background_jobs_inline()
+
+    mark_system_context.assert_awaited_once_with(mock_db)
+    processor.process_pending_jobs.assert_awaited_once()
+
+
+def test_background_job_processor_runs_once_per_minute(orchestrator: SchedulerOrchestrator) -> None:
+    with (
+        patch.object(orchestrator.scheduler, "add_job") as add_job,
+        patch.object(orchestrator.scheduler, "start"),
+    ):
+        orchestrator.start()
+
+    background_call = next(
+        call
+        for call in add_job.call_args_list
+        if call.kwargs.get("id") == "background_job_processor"
+    )
+    trigger = background_call.kwargs["trigger"]
+    assert isinstance(trigger, CronTrigger)
+
+    first = trigger.get_next_fire_time(
+        None,
+        datetime(2026, 1, 1, 10, 0, 5, tzinfo=timezone.utc),
+    )
+    second = trigger.get_next_fire_time(first, first)
+    third = trigger.get_next_fire_time(second, second)
+
+    assert first == datetime(2026, 1, 1, 10, 1, 0, tzinfo=timezone.utc)
+    assert second == datetime(2026, 1, 1, 10, 2, 0, tzinfo=timezone.utc)
+    assert third == datetime(2026, 1, 1, 10, 3, 0, tzinfo=timezone.utc)
 
 
 @pytest.mark.asyncio

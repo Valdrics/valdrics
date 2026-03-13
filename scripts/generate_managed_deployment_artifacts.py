@@ -269,7 +269,7 @@ def _koyeb_manifest(values: dict[str, str], *, environment: str, component: str)
         "type": "WEB" if is_api else "WORKER",
         "definition": {
             "git": {
-                "repository": "github.com/Valdrics-AI/valdrics",
+                "repository": "github.com/Valdrics/valdrics",
                 "branch": "main",
                 "builder": "docker",
                 "dockerfile": "Dockerfile",

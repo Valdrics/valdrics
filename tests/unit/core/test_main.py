@@ -21,7 +21,7 @@ from app.shared.core.enforcement_http_boundary import enforcement_domain_excepti
 from app.shared.core import app_runtime
 from app.shared.core.exceptions import ValdricsException
 from app.modules.enforcement.domain.action_errors import EnforcementDomainError
-from app.shared.db.session import get_db
+from app.shared.db.session import get_db, get_engine, reset_db_runtime
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
@@ -45,6 +45,10 @@ async def lite_client() -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     valdrics_app.dependency_overrides.pop(get_db, None)
+    try:
+        await get_engine().dispose()
+    finally:
+        reset_db_runtime()
 
 
 @pytest.mark.asyncio
