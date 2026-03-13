@@ -270,7 +270,8 @@ jobs:
             --email "performance.owner@valdrics.ai"
             --tier "${{ inputs.bootstrap_tier }}"
           )
-          TOKEN="$(uv run python scripts/bootstrap_performance_tenant.py "${BOOTSTRAP_ARGS[@]}")"
+          TOKEN="$(uv run python scripts/bootstrap_performance_tenant.py "${BOOTSTRAP_ARGS[@]}" | tail -n 1 | tr -d '\r')"
+          [ -n "${TOKEN}" ]
           echo "VALDRICS_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
 
       - name: Export Provided Performance Token
