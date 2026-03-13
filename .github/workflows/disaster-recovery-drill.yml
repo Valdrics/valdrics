@@ -15,7 +15,7 @@ env:
   TESTING: "false"
   DEBUG: "false"
   DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"
-  DB_SSL_MODE: "require"
+  DB_SSL_MODE: "disable"
   API_URL: "https://api.staging.valdrics.example"
   FRONTEND_URL: "https://dashboard.staging.valdrics.example"
   CSRF_SECRET_KEY: "ci-csrf-secret-key-32-chars-min-000000"

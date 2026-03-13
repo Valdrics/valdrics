@@ -156,6 +156,20 @@ def test_strict_runtime_preflight_is_hermetic_and_explicit_in_workflows() -> Non
     assert "uv run python scripts/validate_runtime_env.py --environment staging" in dr_text
 
 
+def test_local_postgres_service_workflows_disable_db_ssl() -> None:
+    perf_text = (REPO_ROOT / ".github/workflows/performance-gate.yml").read_text(
+        encoding="utf-8"
+    )
+    dr_text = (
+        REPO_ROOT / ".github/workflows/disaster-recovery-drill.yml"
+    ).read_text(encoding="utf-8")
+
+    assert 'DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"' in perf_text
+    assert 'DB_SSL_MODE: "disable"' in perf_text
+    assert 'DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"' in dr_text
+    assert 'DB_SSL_MODE: "disable"' in dr_text
+
+
 def test_ci_and_security_workflows_fail_on_high_or_critical_infra_and_container_findings() -> None:
     ci_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     security_text = (REPO_ROOT / ".github/workflows/security-scan.yml").read_text(
