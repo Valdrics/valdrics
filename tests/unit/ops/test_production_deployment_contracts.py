@@ -259,9 +259,9 @@ def test_frontend_ci_node_version_matches_dashboard_container() -> None:
     sbom_text = (REPO_ROOT / ".github/workflows/sbom.yml").read_text(encoding="utf-8")
     dockerfile_text = (REPO_ROOT / "Dockerfile.dashboard").read_text(encoding="utf-8")
 
-    assert 'NODE_VERSION: "20"' in ci_text
-    assert 'NODE_VERSION: "20"' in sbom_text
-    assert "ARG NODE_BASE_IMAGE=node:20-slim" in dockerfile_text
+    assert 'NODE_VERSION: "24.14.0"' in ci_text
+    assert 'NODE_VERSION: "24.14.0"' in sbom_text
+    assert "ARG NODE_BASE_IMAGE=node:24.14.0-slim" in dockerfile_text
 
 
 def test_readme_does_not_reference_missing_raw_k8s_manifests() -> None:

@@ -132,7 +132,7 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     assert "scripts/run_disaster_recovery_drill.py" in dr_workflow
     assert "--max-duration-seconds 1200" in dr_workflow
     assert 'ENVIRONMENT: "staging"' in dr_workflow
-    assert "postgres:16.8-alpine" in dr_workflow
+    assert "postgres:16.13-alpine" in dr_workflow
     assert "uv run alembic upgrade head" in dr_workflow
     assert "uv run celery -A app.shared.core.celery_app:celery_app worker -l info" in dr_workflow
     assert "scripts/run_regional_failover.py" in regional_failover_workflow
