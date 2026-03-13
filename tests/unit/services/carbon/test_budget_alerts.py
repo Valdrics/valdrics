@@ -218,14 +218,15 @@ async def test_send_carbon_alert_slack(carbon_service, mock_db):
                     mock_slack = AsyncMock()
                     mock_get_tenant_slack.return_value = mock_slack
 
-                    budget_status = {
-                        "alert_status": "warning",
-                        "usage_percent": 85.0,
-                        "current_usage_kg": 85.0,
-                        "budget_kg": 100.0,
-                        "recommendations": ["Use Graviton"],
-                    }
+                    with patch("app.shared.core.logging.audit_log_async"):
+                        budget_status = {
+                            "alert_status": "warning",
+                            "usage_percent": 85.0,
+                            "current_usage_kg": 85.0,
+                            "budget_kg": 100.0,
+                            "recommendations": ["Use Graviton"],
+                        }
 
-                    await carbon_service.send_carbon_alert(tenant_id, budget_status)
+                        await carbon_service.send_carbon_alert(tenant_id, budget_status)
 
-                    mock_slack.send_alert.assert_called_once()
+                        mock_slack.send_alert.assert_called_once()
