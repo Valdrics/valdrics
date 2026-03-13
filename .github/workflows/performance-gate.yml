@@ -53,6 +53,10 @@ on:
         required: false
         type: boolean
         default: false
+      bootstrap_tier:
+        description: "Local tenant tier to assign after bootstrap"
+        required: false
+        default: "free"
   workflow_call:
     inputs:
       url:
@@ -95,6 +99,10 @@ on:
         required: false
         type: boolean
         default: false
+      bootstrap_tier:
+        required: false
+        type: string
+        default: "free"
     secrets:
       VALDRICS_TOKEN:
         required: false
@@ -256,7 +264,13 @@ jobs:
         if: ${{ inputs.bootstrap_tenant }}
         run: |
           set -euo pipefail
-          TOKEN="$(uv run python scripts/bootstrap_performance_tenant.py --url http://127.0.0.1:8000 --tenant-name "Performance Validation Tenant" --email "performance.owner@valdrics.ai")"
+          BOOTSTRAP_ARGS=(
+            --url http://127.0.0.1:8000
+            --tenant-name "Performance Validation Tenant"
+            --email "performance.owner@valdrics.ai"
+            --tier "${{ inputs.bootstrap_tier }}"
+          )
+          TOKEN="$(uv run python scripts/bootstrap_performance_tenant.py "${BOOTSTRAP_ARGS[@]}")"
           echo "VALDRICS_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
 
       - name: Export Provided Performance Token

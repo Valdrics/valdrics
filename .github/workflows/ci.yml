@@ -498,6 +498,7 @@ jobs:
       min_throughput: "1.0"
       start_local_api: true
       bootstrap_tenant: true
+      bootstrap_tier: "starter"
 
   # JOB 2: CARBON EMISSIONS (GreenOps 2.0)
   emissions:

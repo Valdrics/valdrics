@@ -86,9 +86,16 @@ def _build_profile_endpoints(args: argparse.Namespace) -> list[str]:
         endpoints = [
             LIVENESS_ENDPOINT,
             f"/api/v1/costs?start_date={start_date}&end_date={end_date}{provider_query}",
-            f"/api/v1/carbon?start_date={start_date}&end_date={end_date}{carbon_provider_query}",
             f"/api/v1/zombies?analyze=false{zombies_provider_query}",
         ]
+        if carbon_provider_query:
+            endpoints.insert(
+                2,
+                (
+                    "/api/v1/carbon?"
+                    f"start_date={start_date}&end_date={end_date}{carbon_provider_query}"
+                ),
+            )
     elif args.profile in {"scale", "soak"}:
         endpoints = _build_scale_profile_endpoints(args)
     else:

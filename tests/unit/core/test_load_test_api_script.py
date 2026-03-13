@@ -31,6 +31,14 @@ def test_build_profile_endpoints_dashboard_defaults_to_liveness():
     endpoints = load_test_api._build_profile_endpoints(_args(profile="dashboard"))
     assert endpoints[0] == load_test_api.LIVENESS_ENDPOINT
     assert load_test_api.DEEP_HEALTH_ENDPOINT not in endpoints
+    assert not any(endpoint.startswith("/api/v1/carbon?") for endpoint in endpoints)
+
+
+def test_build_profile_endpoints_dashboard_includes_carbon_when_provider_is_supported():
+    endpoints = load_test_api._build_profile_endpoints(
+        _args(profile="dashboard", provider="aws")
+    )
+    assert any(endpoint.startswith("/api/v1/carbon?") for endpoint in endpoints)
 
 
 def test_build_profile_endpoints_enforcement_includes_control_plane_read_paths():

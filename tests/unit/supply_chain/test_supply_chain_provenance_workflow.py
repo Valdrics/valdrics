@@ -144,6 +144,9 @@ def test_performance_gate_supports_reuse_and_ci_automation() -> None:
         REPO_ROOT / "scripts/bootstrap_performance_tenant.py"
     ).read_text(encoding="utf-8")
     assert 'p95_target: "1.25"' in ci_text
+    assert "bootstrap_tier:" in perf_text
+    assert '--tier "${{ inputs.bootstrap_tier }}"' in perf_text
+    assert 'bootstrap_tier: "starter"' in ci_text
     assert 'name: perf-gate-evidence-${{ inputs.profile }}' in perf_text
     assert 'name: perf-gate-api-log-${{ inputs.profile }}' in perf_text
     assert 'name: perf-gate-worker-log-${{ inputs.profile }}' in perf_text
