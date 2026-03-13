@@ -15,6 +15,7 @@ import argparse
 import base64
 import json
 import os
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -492,10 +493,20 @@ def _comment_and_status_for_pr(
     )
     comments = client.list_issue_comments(number)
     existing_comment_id = _find_existing_comment_id(comments)
-    if existing_comment_id is None:
-        client.create_issue_comment(number, body)
-    else:
-        client.update_issue_comment(existing_comment_id, body)
+    try:
+        if existing_comment_id is None:
+            client.create_issue_comment(number, body)
+        else:
+            client.update_issue_comment(existing_comment_id, body)
+    except GitHubApiError as exc:
+        message = str(exc)
+        if "403" not in message or "comments" not in message:
+            raise
+        print(
+            "CLA assistant comment sync skipped due to GitHub token restrictions: "
+            f"{message}",
+            file=sys.stderr,
+        )
 
     if state.is_satisfied:
         description = "CLA requirements satisfied"

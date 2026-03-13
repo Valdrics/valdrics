@@ -3,8 +3,10 @@ from __future__ import annotations
 from scripts.cla_assistant import (
     COMMENT_MARKER,
     ClaState,
+    GitHubApiError,
     SignatureEntry,
     _build_comment_body,
+    _comment_and_status_for_pr,
     _collect_required_signers,
     _evaluate_cla_state,
     _normalize_signatures,
@@ -124,3 +126,65 @@ def test_build_comment_body_for_signed_pr_reports_success() -> None:
     assert COMMENT_MARKER in body
     assert "CLA requirements satisfied" in body
     assert "@alice, @bob" in body
+
+
+def test_comment_sync_403_does_not_block_status_update() -> None:
+    recorded_statuses: list[dict[str, str]] = []
+
+    class _Client:
+        def list_issue_comments(self, _number: int):
+            return []
+
+        def create_issue_comment(self, _number: int, _body: str):
+            raise GitHubApiError(
+                "GitHub API POST /repos/Valdrics/valdrics/issues/295/comments failed: 403"
+            )
+
+        def update_issue_comment(self, _comment_id: int, _body: str):
+            raise AssertionError("update should not be called")
+
+        def create_commit_status(
+            self,
+            *,
+            sha: str,
+            state: str,
+            description: str,
+            target_url: str,
+            context: str,
+        ) -> None:
+            recorded_statuses.append(
+                {
+                    "sha": sha,
+                    "state": state,
+                    "description": description,
+                    "target_url": target_url,
+                    "context": context,
+                }
+            )
+
+    _comment_and_status_for_pr(
+        client=_Client(),  # type: ignore[arg-type]
+        pr={
+            "number": 295,
+            "html_url": "https://github.com/Valdrics/valdrics/pull/295",
+            "head": {"sha": "abc123"},
+        },
+        state=ClaState(
+            required_signers=("alice",),
+            signed_required_signers=(),
+            missing_signers=("alice",),
+        ),
+        sign_phrase="I have read the CLA Document and I hereby sign the CLA",
+        document_url="https://github.com/Valdrics/valdrics/blob/main/CLA.md",
+        status_context="cla-assistant",
+    )
+
+    assert recorded_statuses == [
+        {
+            "sha": "abc123",
+            "state": "failure",
+            "description": "CLA signature required",
+            "target_url": "https://github.com/Valdrics/valdrics/pull/295",
+            "context": "cla-assistant",
+        }
+    ]
