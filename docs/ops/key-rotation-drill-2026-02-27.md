@@ -21,6 +21,13 @@ Secrets rotated during the drill:
 
 ## Validation Outcomes
 
+- source_pre_rotation_tokens_accepted: tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_accepts_primary_secret
+- source_post_rotation_new_tokens_accepted: tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_accepts_new_primary_secret_after_rotation
+- source_post_rotation_old_tokens_rejected: tests/unit/enforcement/enforcement_service_cases_part04.py::test_consume_approval_token_rejects_rotated_secret_without_fallback
+- source_fallback_verification_passed: tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_accepts_rotated_fallback_secret
+- source_rollback_validation_passed: tests/unit/enforcement/enforcement_service_cases_part04.py::test_consume_approval_token_accepts_rollback_fallback_secret
+- source_replay_protection_intact: tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_rejects_replay
+- source_alert_pipeline_verified: tests/unit/enforcement/test_reconciliation_worker.py::test_reconciliation_worker_sends_sla_release_alert
 - pre_rotation_tokens_accepted: true
 - post_rotation_new_tokens_accepted: true
 - post_rotation_old_tokens_rejected: true
@@ -33,8 +40,11 @@ Secrets rotated during the drill:
 ## Evidence Anchors
 
 1. Enforcement token fallback/rotation tests:
-   - `tests/unit/enforcement/test_enforcement_service.py::test_consume_approval_token_accepts_valid_fallback_secret`
-   - `tests/unit/enforcement/test_enforcement_service.py::test_consume_approval_token_rejects_when_rotation_fallback_absent`
+   - `tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_accepts_primary_secret`
+   - `tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_accepts_new_primary_secret_after_rotation`
+   - `tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_accepts_rotated_fallback_secret`
+   - `tests/unit/enforcement/enforcement_service_cases_part04.py::test_consume_approval_token_accepts_rollback_fallback_secret`
+   - `tests/unit/enforcement/enforcement_service_cases_part04.py::test_consume_approval_token_rejects_rotated_secret_without_fallback`
 2. Emergency runbook:
    - `docs/runbooks/secret_rotation_emergency.md`
 3. Release-gate contract:

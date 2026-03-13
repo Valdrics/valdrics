@@ -22,6 +22,13 @@ def _valid_doc(*, executed_at_utc: str = "2026-02-27T08:10:00Z") -> str:
 - owner: security-oncall
 - approver: platform-oncall
 - next_drill_due_on: 2026-05-28
+- source_pre_rotation_tokens_accepted: tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_accepts_primary_secret
+- source_post_rotation_new_tokens_accepted: tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_accepts_new_primary_secret_after_rotation
+- source_post_rotation_old_tokens_rejected: tests/unit/enforcement/enforcement_service_cases_part04.py::test_consume_approval_token_rejects_rotated_secret_without_fallback
+- source_fallback_verification_passed: tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_accepts_rotated_fallback_secret
+- source_rollback_validation_passed: tests/unit/enforcement/enforcement_service_cases_part04.py::test_consume_approval_token_accepts_rollback_fallback_secret
+- source_replay_protection_intact: tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_rejects_replay
+- source_alert_pipeline_verified: tests/unit/enforcement/test_reconciliation_worker.py::test_reconciliation_worker_sends_sla_release_alert
 - pre_rotation_tokens_accepted: true
 - post_rotation_new_tokens_accepted: true
 - post_rotation_old_tokens_rejected: true

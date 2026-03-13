@@ -4,29 +4,54 @@ from tests.unit.enforcement.enforcement_service_cases_common import *  # noqa: F
 
 
 @pytest.mark.asyncio
+async def test_consume_approval_token_accepts_rollback_fallback_secret(
+    db, monkeypatch
+) -> None:
+    tenant = await _seed_tenant(db)
+    actor_id = uuid4()
+    old_secret = _deterministic_token_secret("rollback-old-approval-signing-secret")
+    new_secret = _deterministic_token_secret("rollback-new-approval-signing-secret")
+
+    monkeypatch.setattr(
+        enforcement_service_module,
+        "get_settings",
+        lambda: _approval_token_runtime_settings(new_secret),
+    )
+    token, approval, _ = await _issue_approved_token(
+        db=db,
+        tenant_id=tenant.id,
+        actor_id=actor_id,
+        idempotency_key=_deterministic_idempotency_key("consume", "rollback-fallback", 1),
+    )
+
+    monkeypatch.setattr(
+        enforcement_service_module,
+        "get_settings",
+        lambda: _approval_token_runtime_settings(old_secret, [new_secret]),
+    )
+    service = EnforcementService(db)
+    consumed_approval, _ = await service.consume_approval_token(
+        tenant_id=tenant.id,
+        approval_token=token,
+        actor_id=actor_id,
+    )
+    assert consumed_approval.id == approval.id
+    assert consumed_approval.approval_token_consumed_at is not None
+
+
+@pytest.mark.asyncio
 async def test_consume_approval_token_rejects_rotated_secret_without_fallback(
     db, monkeypatch
 ) -> None:
     tenant = await _seed_tenant(db)
     actor_id = uuid4()
-    old_secret = "old-approval-signing-secret-09876543210987654321"
-    new_secret = "new-approval-signing-secret-09876543210987654321"
-
-    def _settings(
-        secret: str,
-        fallback: list[str] | None = None,
-    ) -> SimpleNamespace:
-        return SimpleNamespace(
-            ENFORCEMENT_APPROVAL_TOKEN_SECRET=secret,
-            API_URL="https://api.valdrics.local",
-            JWT_SIGNING_KID="",
-            ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=list(fallback or []),
-        )
+    old_secret = _deterministic_token_secret("old-approval-signing-secret")
+    new_secret = _deterministic_token_secret("new-approval-signing-secret")
 
     monkeypatch.setattr(
         enforcement_service_module,
         "get_settings",
-        lambda: _settings(old_secret),
+        lambda: _approval_token_runtime_settings(old_secret),
     )
     token, _, _ = await _issue_approved_token(
         db=db,
@@ -38,7 +63,7 @@ async def test_consume_approval_token_rejects_rotated_secret_without_fallback(
     monkeypatch.setattr(
         enforcement_service_module,
         "get_settings",
-        lambda: _settings(new_secret),
+        lambda: _approval_token_runtime_settings(new_secret),
     )
     service = EnforcementService(db)
     with pytest.raises(HTTPException) as exc:
@@ -60,7 +85,7 @@ async def test_consume_approval_token_rejects_tampered_payload(db) -> None:
         db=db,
         tenant_id=tenant.id,
         actor_id=actor_id,
-        idempotency_key="consume-tamper-1",
+        idempotency_key=_deterministic_idempotency_key("consume", "tamper", 1),
     )
     header, payload, signature = token.split(".")
     decoded_payload = json.loads(base64.urlsafe_b64decode(payload + "==").decode())
@@ -140,7 +165,7 @@ async def test_approval_token_claims_include_project_and_hourly_cost_binding(db)
         tenant_id=tenant.id,
         actor_id=actor_id,
         project_id=project_id,
-        idempotency_key="consume-claim-shape-1",
+        idempotency_key=_deterministic_idempotency_key("consume", "claim-shape", 1),
     )
 
     service = EnforcementService(db)
@@ -213,7 +238,7 @@ async def test_consume_approval_token_rejects_hourly_cost_claim_mismatch(db) -> 
         db=db,
         tenant_id=tenant.id,
         actor_id=actor_id,
-        idempotency_key="consume-hourly-mismatch-1",
+        idempotency_key=_deterministic_idempotency_key("consume", "hourly-mismatch", 1),
     )
     service = EnforcementService(db)
     payload = dict(service._decode_approval_token(token))

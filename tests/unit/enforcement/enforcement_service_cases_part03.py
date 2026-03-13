@@ -383,6 +383,64 @@ async def test_consume_approval_token_rejects_replay(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_consume_approval_token_accepts_primary_secret(db, monkeypatch) -> None:
+    tenant = await _seed_tenant(db)
+    actor_id = uuid4()
+    primary_secret = _deterministic_token_secret("primary-approval-signing-secret")
+
+    monkeypatch.setattr(
+        enforcement_service_module,
+        "get_settings",
+        lambda: _approval_token_runtime_settings(primary_secret),
+    )
+    token, approval, _ = await _issue_approved_token(
+        db=db,
+        tenant_id=tenant.id,
+        actor_id=actor_id,
+        idempotency_key=_deterministic_idempotency_key("consume", "primary", 1),
+    )
+
+    service = EnforcementService(db)
+    consumed_approval, _ = await service.consume_approval_token(
+        tenant_id=tenant.id,
+        approval_token=token,
+        actor_id=actor_id,
+    )
+    assert consumed_approval.id == approval.id
+    assert consumed_approval.approval_token_consumed_at is not None
+
+
+@pytest.mark.asyncio
+async def test_consume_approval_token_accepts_new_primary_secret_after_rotation(
+    db, monkeypatch
+) -> None:
+    tenant = await _seed_tenant(db)
+    actor_id = uuid4()
+    new_primary_secret = _deterministic_token_secret("new-primary-approval-signing-secret")
+
+    monkeypatch.setattr(
+        enforcement_service_module,
+        "get_settings",
+        lambda: _approval_token_runtime_settings(new_primary_secret),
+    )
+    token, approval, _ = await _issue_approved_token(
+        db=db,
+        tenant_id=tenant.id,
+        actor_id=actor_id,
+        idempotency_key=_deterministic_idempotency_key("consume", "new-primary", 1),
+    )
+
+    service = EnforcementService(db)
+    consumed_approval, _ = await service.consume_approval_token(
+        tenant_id=tenant.id,
+        approval_token=token,
+        actor_id=actor_id,
+    )
+    assert consumed_approval.id == approval.id
+    assert consumed_approval.approval_token_consumed_at is not None
+
+
+@pytest.mark.asyncio
 async def test_consume_approval_token_replay_records_metrics(db, monkeypatch) -> None:
     tenant = await _seed_tenant(db)
     actor_id = uuid4()
@@ -424,36 +482,25 @@ async def test_consume_approval_token_accepts_rotated_fallback_secret(
 ) -> None:
     tenant = await _seed_tenant(db)
     actor_id = uuid4()
-    old_secret = "old-approval-signing-secret-12345678901234567890"
-    new_secret = "new-approval-signing-secret-12345678901234567890"
-
-    def _settings(
-        secret: str,
-        fallback: list[str] | None = None,
-    ) -> SimpleNamespace:
-        return SimpleNamespace(
-            ENFORCEMENT_APPROVAL_TOKEN_SECRET=secret,
-            API_URL="https://api.valdrics.local",
-            JWT_SIGNING_KID="",
-            ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=list(fallback or []),
-        )
+    old_secret = _deterministic_token_secret("old-approval-signing-secret")
+    new_secret = _deterministic_token_secret("new-approval-signing-secret")
 
     monkeypatch.setattr(
         enforcement_service_module,
         "get_settings",
-        lambda: _settings(old_secret),
+        lambda: _approval_token_runtime_settings(old_secret),
     )
     token, approval, _ = await _issue_approved_token(
         db=db,
         tenant_id=tenant.id,
         actor_id=actor_id,
-        idempotency_key="consume-rotation-fallback-1",
+        idempotency_key=_deterministic_idempotency_key("consume", "rotation-fallback", 1),
     )
 
     monkeypatch.setattr(
         enforcement_service_module,
         "get_settings",
-        lambda: _settings(new_secret, [old_secret]),
+        lambda: _approval_token_runtime_settings(new_secret, [old_secret]),
     )
     service = EnforcementService(db)
     consumed_approval, _ = await service.consume_approval_token(

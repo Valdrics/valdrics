@@ -1,11 +1,15 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { GET } from './+server';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+let GET: typeof import('./+server').GET;
 
 const upstreamFetch = vi.fn();
 
 describe('edge proxy auth forwarding', () => {
-	beforeEach(() => {
-		process.env.PRIVATE_API_ORIGIN = 'http://upstream.test';
+	beforeEach(async () => {
+		vi.resetModules();
+		vi.doMock('$lib/server/backend-origin', () => ({
+			resolveBackendOrigin: () => 'http://upstream.test'
+		}));
 		upstreamFetch.mockReset();
 		upstreamFetch.mockResolvedValue(
 			new Response(JSON.stringify({ ok: true }), {
@@ -14,6 +18,11 @@ describe('edge proxy auth forwarding', () => {
 			})
 		);
 		vi.stubGlobal('fetch', upstreamFetch);
+		({ GET } = await import('./+server'));
+	});
+
+	afterEach(() => {
+		vi.doUnmock('$lib/server/backend-origin');
 	});
 
 	it('injects session bearer for jobs stream when request has no authorization header', async () => {
