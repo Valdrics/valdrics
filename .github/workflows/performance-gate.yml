@@ -282,7 +282,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: perf-gate-evidence
+          name: perf-gate-evidence-${{ inputs.profile }}
           path: reports/performance/perf_gate_${{ github.run_id }}.json
           retention-days: 14
 
@@ -290,7 +290,7 @@ jobs:
         if: ${{ always() && inputs.start_local_api }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: perf-gate-api-log
+          name: perf-gate-api-log-${{ inputs.profile }}
           path: /tmp/valdrics-perf.log
           retention-days: 14
 
@@ -298,7 +298,7 @@ jobs:
         if: ${{ always() && inputs.start_local_api }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: perf-gate-worker-log
+          name: perf-gate-worker-log-${{ inputs.profile }}
           path: /tmp/valdrics-perf-worker.log
           retention-days: 14
 

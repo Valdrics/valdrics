@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, EmailStr, Field
 import structlog
 
-from app.shared.db.session import get_db
+from app.shared.db.session import get_system_db
 from app.shared.core.async_utils import maybe_await
 from app.shared.core.logging import audit_log_async as durable_audit_log
 from app.shared.core.auth import get_current_user_from_jwt, CurrentUser
@@ -85,7 +85,7 @@ async def onboard(
     request: Request,
     onboard_req: OnboardRequest,
     user: CurrentUser = Depends(get_current_user_from_jwt),  # No DB check
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_system_db),
     _turnstile: None = Depends(require_turnstile_for_onboard),
 ) -> OnboardResponse:
     # 1. Check if user already exists

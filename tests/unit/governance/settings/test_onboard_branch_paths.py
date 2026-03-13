@@ -6,11 +6,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import HTTPException, Request
+from fastapi.routing import APIRoute
 from sqlalchemy.exc import IntegrityError
 
+from app.main import app
 from app.modules.governance.api.v1.settings.onboard import OnboardRequest, onboard
 from app.shared.core.auth import CurrentUser, UserRole
 from app.shared.core.exceptions import ConfigurationError
+from app.shared.db.session import get_system_db
 
 
 def _request(scheme: str = "https", forwarded_proto: str | None = None) -> Request:
@@ -63,6 +66,24 @@ def _db(
     else:
         db.commit = AsyncMock()
     return db
+
+
+def test_onboard_route_uses_system_db_dependency() -> None:
+    dependency_calls = []
+    target_route = None
+    for route in app.routes:
+        if isinstance(route, APIRoute) and route.path == "/api/v1/settings/onboard":
+            target_route = route
+            break
+
+    assert target_route is not None
+
+    for dependency in target_route.dependant.dependencies:
+        dependency_call = getattr(dependency, "call", None)
+        if dependency_call is not None:
+            dependency_calls.append(dependency_call)
+
+    assert get_system_db in dependency_calls
 
 
 @pytest.mark.asyncio
