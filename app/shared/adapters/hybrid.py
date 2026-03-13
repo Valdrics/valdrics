@@ -128,6 +128,8 @@ class HybridAdapter(HybridNativeConnectorMixin, BaseAdapter):
             raise ExternalAPIError("Missing API token for hybrid native connector")
         if isinstance(token, SecretStr):
             resolved = token.get_secret_value()
+        elif hasattr(token, "get_secret_value"):
+            resolved = token.get_secret_value()
         elif isinstance(token, str):
             resolved = token
         else:
@@ -141,6 +143,8 @@ class HybridAdapter(HybridNativeConnectorMixin, BaseAdapter):
         if token is None:
             raise ExternalAPIError("Missing API secret for hybrid native connector")
         if isinstance(token, SecretStr):
+            resolved = token.get_secret_value()
+        elif hasattr(token, "get_secret_value"):
             resolved = token.get_secret_value()
         elif isinstance(token, str):
             resolved = token

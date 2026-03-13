@@ -33,6 +33,20 @@ _STAGE_FIELD_MAP: dict[TenantGrowthFunnelStage, str] = {
     "paid_activated": "paid_activated_at",
 }
 
+_SNAPSHOT_DATETIME_FIELDS: tuple[str, ...] = (
+    "first_touch_at",
+    "last_touch_at",
+    "tenant_onboarded_at",
+    "first_connection_verified_at",
+    "pricing_viewed_at",
+    "checkout_started_at",
+    "first_value_activated_at",
+    "pql_qualified_at",
+    "paid_activated_at",
+    "created_at",
+    "updated_at",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class TenantGrowthFunnelAttribution:
@@ -223,6 +237,18 @@ def _build_update_values(
     return values
 
 
+def _normalize_snapshot_datetimes(
+    snapshot: TenantGrowthFunnelSnapshot,
+) -> TenantGrowthFunnelSnapshot:
+    for field_name in _SNAPSHOT_DATETIME_FIELDS:
+        setattr(
+            snapshot,
+            field_name,
+            _normalize_timestamp(getattr(snapshot, field_name, None)),
+        )
+    return snapshot
+
+
 async def record_tenant_growth_funnel_stage(
     db: AsyncSession,
     *,
@@ -265,7 +291,7 @@ async def record_tenant_growth_funnel_stage(
         .values(
             pql_qualified_at=func.coalesce(
                 TenantGrowthFunnelSnapshot.pql_qualified_at,
-                normalized_time,
+                TenantGrowthFunnelSnapshot.first_value_activated_at,
             ),
             updated_at=datetime.now(timezone.utc),
         )
@@ -282,4 +308,4 @@ async def record_tenant_growth_funnel_stage(
     ).scalar_one()
     if commit:
         await db.commit()
-    return snapshot
+    return _normalize_snapshot_datetimes(snapshot)

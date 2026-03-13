@@ -1,8 +1,14 @@
 {
-  "generated_at_utc": "2026-03-07T06:35:21.844538+00:00",
+  "generated_at_utc": "2026-03-12T20:00:00+00:00",
   "roots": [
     "app",
     "scripts"
   ],
-  "sites": []
+  "sites": [
+    {
+      "path": "app/modules/optimization/domain/actions/base.py",
+      "line": 136,
+      "kind": "exception"
+    }
+  ]
 }

@@ -44,6 +44,7 @@ def test_generate_managed_deployment_artifacts_outputs_platform_ready_bundle(
             "DATABASE_URL=postgresql+asyncpg://postgres:postgres@db.example.com:5432/postgres",
             "REDIS_URL=redis://redis.example.com:6379/0",
             "SUPABASE_JWT_SECRET=ci-supabase-jwt-secret-32-chars-0000",
+            "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=arn:aws:iam::123456789012:role/ValdricsControlPlane",
             "OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com:4317",
             "PAYSTACK_SECRET_KEY=sk_live_runtime_paystack_key",
             "PAYSTACK_PUBLIC_KEY=pk_live_runtime_paystack_key",
@@ -90,11 +91,23 @@ def test_generate_managed_deployment_artifacts_outputs_platform_ready_bundle(
     worker_env = {item["name"]: item.get("secret") or item.get("value") for item in worker_manifest["definition"]["env"]}
     assert api_env["INTERNAL_JOB_SECRET"] == "valdrics-internal-job-secret"
     assert api_env["OPENAI_API_KEY"] == "valdrics-openai-key"
+    assert (
+        api_env["AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN"]
+        == "valdrics-aws-trust-principal-arn"
+    )
     assert worker_env["OPENAI_API_KEY"] == "valdrics-openai-key"
+    assert (
+        worker_env["AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN"]
+        == "valdrics-aws-trust-principal-arn"
+    )
     assert "INTERNAL_METRICS_AUTH_TOKEN" not in worker_env
 
     assert koyeb_secrets["valdrics-internal-job-secret"] == "ci-internal-job-secret-32-chars-min-000"
     assert koyeb_secrets["valdrics-openai-key"] == "sk-openai-live-key"
+    assert (
+        koyeb_secrets["valdrics-aws-trust-principal-arn"]
+        == "arn:aws:iam::123456789012:role/ValdricsControlPlane"
+    )
     assert "valdrics-forecaster-break-glass-enabled" not in koyeb_secrets
     assert "valdrics-outbound-tls-break-glass-enabled" not in koyeb_secrets
     assert helm_values["global"]["apiHostOverride"] == "api.runtime.example"
@@ -135,6 +148,7 @@ def test_generate_managed_deployment_artifacts_reports_placeholder_blockers_for_
             "DATABASE_URL=postgresql+asyncpg://REPLACE_WITH_DB_USER:REPLACE_WITH_DB_PASSWORD@REPLACE_WITH_DB_HOST:5432/postgres",
             "REDIS_URL=redis://REPLACE_WITH_REDIS_HOST:6379/0",
             "SUPABASE_JWT_SECRET=REPLACE_WITH_SUPABASE_JWT_SECRET_MINIMUM_32_CHARS_VALUE",
+            "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=arn:aws:iam::123456789012:role/REPLACE_WITH_VALDRICS_CONTROL_PLANE_ROLE",
             "OTEL_EXPORTER_OTLP_ENDPOINT=https://REPLACE_WITH_OTEL_COLLECTOR:4317",
             "PAYSTACK_SECRET_KEY=sk_live_REPLACE_WITH_PAYSTACK_SECRET_KEY",
             "PAYSTACK_PUBLIC_KEY=pk_live_REPLACE_WITH_PAYSTACK_PUBLIC_KEY",
@@ -161,7 +175,9 @@ def test_generate_managed_deployment_artifacts_reports_placeholder_blockers_for_
     assert report["ready_for_koyeb"] is False
     assert report["ready_for_helm"] is False
     assert "DATABASE_URL" in report["runtime_validation_blockers"]
+    assert "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN" in report["runtime_validation_blockers"]
     assert "valdrics-groq-key-staging" in report["koyeb_secret_names"]
+    assert "valdrics-aws-trust-principal-arn-staging" in report["koyeb_secret_names"]
     assert "valdrics-forecaster-break-glass-enabled-staging" not in report["koyeb_secret_names"]
     assert report["helm_external_secret_remote_key"] == "/valdrics/staging/app-runtime"
     assert api_manifest["name"] == "valdrics-api-staging"

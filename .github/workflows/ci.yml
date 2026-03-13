@@ -24,8 +24,8 @@ env:
 
 jobs:
   # JOB 1: QUALITY ASSURANCE
-  test:
-    name: Run Unit Tests
+  quality:
+    name: Backend Quality Checks
     runs-on: ubuntu-24.04
     env:
       # Default test-runtime contract (step-level env can override as needed).
@@ -154,9 +154,144 @@ jobs:
       - name: Enforce Frontend Module Size Budget
         run: uv run python3 scripts/verify_frontend_module_size_budget.py
 
-      - name: Run Pytest with Coverage
+  pytest:
+    name: Backend Pytest Shard ${{ matrix.shard_id }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard_id: "1"
+            paths: >-
+              tests/api
+              tests/billing
+              tests/contract
+              tests/core
+              tests/integration
+              tests/security
+              tests/unit/api
+              tests/unit/connections
+              tests/unit/db
+              tests/unit/lead_gen
+              tests/unit/models
+              tests/unit/ops
+              tests/unit/reporting
+              tests/unit/schemas
+              tests/unit/scripts
+              tests/unit/test_hard_cap_service.py
+              tests/unit/test_main_basic.py
+              tests/unit/test_main_coverage.py
+              tests/unit/test_pricing_phase36.py
+          - shard_id: "2"
+            paths: >-
+              tests/unit/analysis
+              tests/unit/core
+              tests/unit/notifications
+              tests/unit/shared
+          - shard_id: "3"
+            paths: >-
+              tests/governance
+              tests/unit/governance
+              tests/unit/remediation
+              tests/unit/services
+              tests/unit/tasks
+          - shard_id: "4"
+            paths: >-
+              tests/unit/adapters
+              tests/unit/enforcement
+              tests/unit/llm
+              tests/unit/modules
+              tests/unit/optimization
+              tests/unit/supply_chain
+              tests/unit/zombies
+    env:
+      ENVIRONMENT: "development"
+      TESTING: "true"
+      DEBUG: "false"
+      DB_SSL_MODE: "require"
+      DATABASE_URL: "sqlite+aiosqlite:///:memory:"
+      CSRF_SECRET_KEY: "ci-csrf-secret-key-32-chars-min-000000"
+      ENCRYPTION_KEY: "ci-encryption-key-32-chars-min-00000000"
+      KDF_SALT: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+      SUPABASE_JWT_SECRET: "ci-supabase-jwt-secret-32-chars-0000"
+      ENFORCEMENT_APPROVAL_TOKEN_SECRET: "ci-enforcement-approval-secret-0000000000"
+      ENFORCEMENT_EXPORT_SIGNING_SECRET: "ci-enforcement-export-signing-secret-0000"
+      ADMIN_API_KEY: "ci-admin-api-key-32-chars-min-0000000"
+      TRUST_PROXY_HEADERS: "true"
+      TRUSTED_PROXY_HOPS: "1"
+      TRUSTED_PROXY_CIDRS: '["127.0.0.1/32"]'
+      AWS_ACCESS_KEY_ID: "testing"
+      AWS_SECRET_ACCESS_KEY: "testing"
+      AWS_DEFAULT_REGION: "us-east-1"
+      GROQ_API_KEY: "testing"
+      CODECARBON_LOG_LEVEL: "info"
+      COVERAGE_FILE: "reports/coverage/.coverage.${{ matrix.shard_id }}"
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: true
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install Dependencies
+        run: uv sync --locked --dev
+
+      - name: Run Pytest Shard with Coverage Data
         run: |
-          uv run pytest -v --cov=app --cov-report=xml --cov-report=term-missing
+          mkdir -p reports/coverage
+          uv run pytest -q --cov=app --cov-report= ${{ matrix.paths }}
+
+      - name: Upload Coverage Data
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: backend-coverage-${{ matrix.shard_id }}
+          path: ${{ env.COVERAGE_FILE }}
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
+  test:
+    name: Backend Test Aggregate / Coverage
+    runs-on: ubuntu-24.04
+    needs: [pytest]
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          enable-cache: true
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install Dependencies
+        run: uv sync --locked --dev
+
+      - name: Download Coverage Data
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: backend-coverage-*
+          path: reports/coverage/shards
+          merge-multiple: true
+
+      - name: Combine Coverage Data
+        run: |
+          uv run coverage combine reports/coverage/shards
+          uv run coverage xml -o coverage.xml
 
       - name: Enforce Global Coverage Gate (90%)
         run: |
@@ -320,7 +455,7 @@ jobs:
 
   performance-health-gate:
     name: Performance Gate - Health
-    needs: [test]
+    needs: [quality, test]
     uses: ./.github/workflows/performance-gate.yml
     with:
       url: "http://127.0.0.1:8000"
@@ -334,7 +469,7 @@ jobs:
 
   performance-dashboard-gate:
     name: Performance Gate - Dashboard
-    needs: [test, dashboard-quality]
+    needs: [quality, test, dashboard-quality]
     uses: ./.github/workflows/performance-gate.yml
     with:
       url: "http://127.0.0.1:8000"
@@ -350,7 +485,7 @@ jobs:
 
   performance-ops-gate:
     name: Performance Gate - Ops
-    needs: [test]
+    needs: [quality, test]
     uses: ./.github/workflows/performance-gate.yml
     with:
       url: "http://127.0.0.1:8000"
@@ -368,7 +503,7 @@ jobs:
   emissions:
     name: Carbon Footprint Report
     runs-on: ubuntu-24.04
-    needs: [test]
+    needs: [quality, test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout Code
@@ -498,7 +633,7 @@ jobs:
   enterprise-tdd-quality-gate:
     name: Enterprise TDD Quality Gate
     runs-on: ubuntu-24.04
-    needs: [test, migration-smoke, type-check, security]
+    needs: [quality, test, migration-smoke, type-check, security]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout Code
@@ -615,7 +750,7 @@ jobs:
   dashboard-browser-gates:
     name: Dashboard ${{ matrix.label }}
     runs-on: ubuntu-24.04
-    needs: [test]
+    needs: [quality, test]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       PUBLIC_API_URL: "https://api.example.com/api/v1"

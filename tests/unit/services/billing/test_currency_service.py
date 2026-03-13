@@ -166,14 +166,15 @@ async def test_get_ngn_rate_rejects_non_cbn_provider_in_strict_mode(mock_db):
 
 
 @pytest.mark.asyncio
-async def test_upsert_db_rate_rolls_back_on_commit_failure(mock_db):
+async def test_upsert_db_rate_rolls_back_on_flush_failure(mock_db):
     result = MagicMock()
     result.scalar_one_or_none.return_value = None
     mock_db.execute.return_value = result
-    mock_db.commit = AsyncMock(side_effect=RuntimeError("commit failed"))
+    mock_db.flush = AsyncMock(side_effect=RuntimeError("flush failed"))
 
     service = ExchangeRateService(mock_db)
-    await service._upsert_db_rate("NGN", Decimal("1500.0"), "cbn_nfem")
+    with pytest.raises(RuntimeError, match="flush failed"):
+        await service._upsert_db_rate("NGN", Decimal("1500.0"), "cbn_nfem")
     mock_db.rollback.assert_called_once()
 
 

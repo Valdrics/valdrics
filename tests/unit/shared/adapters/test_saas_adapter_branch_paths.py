@@ -35,8 +35,20 @@ class _FakeAsyncClient:
         del exc_type, exc, tb
         return None
 
-    async def get(self, url: str, *, headers: dict[str, str], params: dict[str, object] | None = None):
-        self.calls.append((url, {"headers": headers, "params": params}))
+    async def get(
+        self,
+        url: str,
+        *,
+        headers: dict[str, str],
+        params: dict[str, object] | None = None,
+        timeout: object | None = None,
+        **kwargs: object,
+    ):
+        call = {"headers": headers, "params": params}
+        if timeout is not None:
+            call["timeout"] = timeout
+        call.update(kwargs)
+        self.calls.append((url, call))
         outcome = self._outcomes.pop(0)
         if isinstance(outcome, Exception):
             raise outcome
@@ -251,7 +263,7 @@ async def test_saas_stream_stripe_branch_paths_non_dict_out_of_range_conversion_
 
     fake_client = _FakeAsyncClient([_FakeResponse(payload)])
     with (
-        patch("app.shared.adapters.saas.httpx.AsyncClient", return_value=fake_client),
+        patch("app.shared.adapters.saas.get_http_client", return_value=fake_client),
         patch(
             "app.shared.adapters.saas.convert_to_usd",
             new=AsyncMock(side_effect=RuntimeError("fx down")),
@@ -313,7 +325,7 @@ async def test_saas_stream_salesforce_branch_paths_non_dict_out_of_range_convers
     }
     fake_client = _FakeAsyncClient([_FakeResponse(payload)])
     with (
-        patch("app.shared.adapters.saas.httpx.AsyncClient", return_value=fake_client),
+        patch("app.shared.adapters.saas.get_http_client", return_value=fake_client),
         patch(
             "app.shared.adapters.saas.convert_to_usd",
             new=AsyncMock(side_effect=RuntimeError("fx error")),
@@ -355,7 +367,7 @@ async def test_saas_get_json_dead_fallback_branches_with_patched_range() -> None
 
     fake_client = _FakeAsyncClient([httpx.ConnectError("c1"), httpx.ConnectError("c2")])
     with (
-        patch("app.shared.adapters.saas.httpx.AsyncClient", return_value=fake_client),
+        patch("app.shared.adapters.saas.get_http_client", return_value=fake_client),
         patch("app.shared.adapters.http_retry.asyncio.sleep", new=AsyncMock()),
         patch("app.shared.adapters.http_retry.range", return_value=[1, 2]),
     ):

@@ -79,6 +79,34 @@ async def test_get_csrf_token(async_client: AsyncClient):
 
 
 @pytest.mark.asyncio
+async def test_get_public_aws_setup_template(async_client: AsyncClient):
+    response = await async_client.get("/api/v1/public/templates/aws/valdrics-role.yaml")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/x-yaml")
+    assert response.headers["cache-control"] == "public, max-age=300"
+    assert "etag" in response.headers
+    assert "AWSTemplateFormatVersion" in response.text
+    assert "arn:aws:iam::000000000000:role/ValdricsTestControlPlane" in response.text
+    assert "__VALDRICS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN__" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_get_public_aws_setup_template_honors_if_none_match(
+    async_client: AsyncClient,
+):
+    first = await async_client.get("/api/v1/public/templates/aws/valdrics-role.yaml")
+    response = await async_client.get(
+        "/api/v1/public/templates/aws/valdrics-role.yaml",
+        headers={"If-None-Match": first.headers["etag"]},
+    )
+
+    assert first.status_code == 200
+    assert response.status_code == 304
+    assert response.headers["etag"] == first.headers["etag"]
+
+
+@pytest.mark.asyncio
 async def test_run_public_assessment(async_client: AsyncClient):
     """POST /assessment should trigger FreeAssessmentService."""
     mock_result = {"potential_savings": 250.0, "zombies_found": 12}

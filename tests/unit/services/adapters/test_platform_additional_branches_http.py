@@ -21,7 +21,7 @@ async def test_platform_post_json_retry_and_error_branches() -> None:
     adapter = PlatformAdapter(_conn(vendor="newrelic", auth_method="api_key"))
 
     retry_then_ok = _FakeAsyncClient([_http_status_error(500, method="POST"), _FakeResponse({"ok": True})])
-    with patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=retry_then_ok):
+    with patch("app.shared.adapters.platform.get_http_client", return_value=retry_then_ok):
         payload = await adapter._post_json(
             "https://example.invalid",
             headers={"API-Key": "x"},
@@ -30,7 +30,7 @@ async def test_platform_post_json_retry_and_error_branches() -> None:
     assert payload == {"ok": True}
 
     non_retry = _FakeAsyncClient([_http_status_error(401, method="POST")])
-    with patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=non_retry):
+    with patch("app.shared.adapters.platform.get_http_client", return_value=non_retry):
         with pytest.raises(ExternalAPIError, match="failed with status 401"):
             await adapter._post_json(
                 "https://example.invalid",
@@ -39,7 +39,7 @@ async def test_platform_post_json_retry_and_error_branches() -> None:
             )
 
     bad_json = _FakeAsyncClient([_InvalidJSONResponse({})])
-    with patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=bad_json):
+    with patch("app.shared.adapters.platform.get_http_client", return_value=bad_json):
         with pytest.raises(ExternalAPIError, match="invalid JSON"):
             await adapter._post_json(
                 "https://example.invalid",
@@ -50,7 +50,9 @@ async def test_platform_post_json_retry_and_error_branches() -> None:
     transport_fail = _FakeAsyncClient(
         [httpx.ConnectError("c1"), httpx.ConnectError("c2"), httpx.ConnectError("c3")]
     )
-    with patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=transport_fail):
+    with patch(
+        "app.shared.adapters.platform.get_http_client", return_value=transport_fail
+    ):
         with pytest.raises(ExternalAPIError, match="request failed"):
             await adapter._post_json(
                 "https://example.invalid",
@@ -78,24 +80,26 @@ async def test_platform_get_json_retry_and_error_paths() -> None:
     adapter = PlatformAdapter(_conn(vendor="ledger", auth_method="api_key"))
 
     retry_then_ok = _FakeAsyncClient([_http_status_error(500), _FakeResponse({"ok": True})])
-    with patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=retry_then_ok):
+    with patch("app.shared.adapters.platform.get_http_client", return_value=retry_then_ok):
         payload = await adapter._get_json("https://example.invalid", headers={})
     assert payload == {"ok": True}
 
     non_retry = _FakeAsyncClient([_http_status_error(401)])
-    with patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=non_retry):
+    with patch("app.shared.adapters.platform.get_http_client", return_value=non_retry):
         with pytest.raises(ExternalAPIError, match="status 401"):
             await adapter._get_json("https://example.invalid", headers={})
 
     bad_json = _FakeAsyncClient([_InvalidJSONResponse({})])
-    with patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=bad_json):
+    with patch("app.shared.adapters.platform.get_http_client", return_value=bad_json):
         with pytest.raises(ExternalAPIError, match="invalid JSON"):
             await adapter._get_json("https://example.invalid", headers={})
 
     transport_fail = _FakeAsyncClient(
         [httpx.ConnectError("c1"), httpx.ConnectError("c2"), httpx.ConnectError("c3")]
     )
-    with patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=transport_fail):
+    with patch(
+        "app.shared.adapters.platform.get_http_client", return_value=transport_fail
+    ):
         with pytest.raises(ExternalAPIError, match="request failed"):
             await adapter._get_json("https://example.invalid", headers={})
 
@@ -106,7 +110,10 @@ async def test_platform_get_json_and_post_json_fallthrough_raise_last_error() ->
 
     get_transport_fail = _FakeAsyncClient([httpx.ConnectError("c1"), httpx.ConnectError("c2")])
     with (
-        patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=get_transport_fail),
+        patch(
+            "app.shared.adapters.platform.get_http_client",
+            return_value=get_transport_fail,
+        ),
         patch("app.shared.adapters.http_retry.range", return_value=[1, 2]),
     ):
         with pytest.raises(ExternalAPIError, match="Platform request failed:"):
@@ -114,7 +121,10 @@ async def test_platform_get_json_and_post_json_fallthrough_raise_last_error() ->
 
     post_transport_fail = _FakeAsyncClient([httpx.ConnectError("p1"), httpx.ConnectError("p2")])
     with (
-        patch("app.shared.adapters.platform.httpx.AsyncClient", return_value=post_transport_fail),
+        patch(
+            "app.shared.adapters.platform.get_http_client",
+            return_value=post_transport_fail,
+        ),
         patch("app.shared.adapters.http_retry.range", return_value=[1, 2]),
     ):
         with pytest.raises(ExternalAPIError, match="Platform native request failed:"):
@@ -123,4 +133,3 @@ async def test_platform_get_json_and_post_json_fallthrough_raise_last_error() ->
                 headers={"API-Key": "x"},
                 json={"query": "ok"},
             )
-

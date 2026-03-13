@@ -32,6 +32,7 @@ DECLARED_EXTERNAL_VALUE_KEYS = (
     "REDIS_URL",
     "SUPABASE_URL",
     "SUPABASE_JWT_SECRET",
+    "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN",
     "PAYSTACK_SECRET_KEY",
     "PAYSTACK_PUBLIC_KEY",
     "SENTRY_DSN",
@@ -44,6 +45,7 @@ RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS = (
     "DATABASE_URL",
     "REDIS_URL",
     "SUPABASE_JWT_SECRET",
+    "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN",
     "PAYSTACK_SECRET_KEY",
     "PAYSTACK_PUBLIC_KEY",
     "SENTRY_DSN",
@@ -102,6 +104,10 @@ def _default_supabase_url() -> str:
 
 def _default_supabase_jwt_secret() -> str:
     return "REPLACE_WITH_SUPABASE_JWT_SECRET_MINIMUM_32_CHARS_VALUE"
+
+
+def _default_aws_assume_role_trust_principal_arn() -> str:
+    return "arn:aws:iam::123456789012:role/REPLACE_WITH_VALDRICS_CONTROL_PLANE_ROLE"
 
 
 def _default_redis_url() -> str:
@@ -171,6 +177,7 @@ def _build_overrides(
     redis_url: str | None,
     supabase_url: str | None,
     supabase_jwt_secret: str | None,
+    aws_assume_role_trust_principal_arn: str | None,
     llm_provider: str,
     llm_api_key: str | None,
     paystack_secret_key: str | None,
@@ -200,6 +207,10 @@ def _build_overrides(
         "REDIS_URL": redis_url or _default_redis_url(),
         "SUPABASE_URL": supabase_url or _default_supabase_url(),
         "SUPABASE_JWT_SECRET": supabase_jwt_secret or _default_supabase_jwt_secret(),
+        "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN": (
+            aws_assume_role_trust_principal_arn
+            or _default_aws_assume_role_trust_principal_arn()
+        ),
         "CSRF_SECRET_KEY": _generate_hex(64),
         "ENCRYPTION_KEY": _generate_urlsafe_b64(32),
         "KDF_SALT": _generate_b64(32),
@@ -307,6 +318,7 @@ def generate_managed_runtime_env(
     redis_url: str | None = None,
     supabase_url: str | None = None,
     supabase_jwt_secret: str | None = None,
+    aws_assume_role_trust_principal_arn: str | None = None,
     llm_provider: str = DEFAULT_LLM_PROVIDER,
     llm_api_key: str | None = None,
     paystack_secret_key: str | None = None,
@@ -331,6 +343,7 @@ def generate_managed_runtime_env(
         redis_url=redis_url,
         supabase_url=supabase_url,
         supabase_jwt_secret=supabase_jwt_secret,
+        aws_assume_role_trust_principal_arn=aws_assume_role_trust_principal_arn,
         llm_provider=llm_provider,
         llm_api_key=llm_api_key,
         paystack_secret_key=paystack_secret_key,
@@ -413,6 +426,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--redis-url", default=None)
     parser.add_argument("--supabase-url", default=None)
     parser.add_argument("--supabase-jwt-secret", default=None)
+    parser.add_argument("--aws-assume-role-trust-principal-arn", default=None)
     parser.add_argument(
         "--llm-provider",
         default=DEFAULT_LLM_PROVIDER,
@@ -452,6 +466,7 @@ def main(argv: list[str] | None = None) -> int:
         redis_url=args.redis_url,
         supabase_url=args.supabase_url,
         supabase_jwt_secret=args.supabase_jwt_secret,
+        aws_assume_role_trust_principal_arn=args.aws_assume_role_trust_principal_arn,
         llm_provider=str(args.llm_provider),
         llm_api_key=args.llm_api_key,
         paystack_secret_key=args.paystack_secret_key,

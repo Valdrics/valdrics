@@ -50,8 +50,24 @@ class _FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb) -> bool:  # type: ignore[no-untyped-def]
         return False
 
-    async def get(self, url: str, headers=None, params=None):  # type: ignore[no-untyped-def]
-        self.calls.append({"method": "GET", "url": url, "headers": headers, "params": params})
+    async def get(  # type: ignore[no-untyped-def]
+        self,
+        url: str,
+        headers=None,
+        params=None,
+        timeout=None,
+        **kwargs,
+    ):
+        self.calls.append(
+            {
+                "method": "GET",
+                "url": url,
+                "headers": headers,
+                "params": params,
+                "timeout": timeout,
+                **kwargs,
+            }
+        )
         if not self.responses:
             raise AssertionError("No fake responses configured")
         item = self.responses.pop(0)
@@ -59,7 +75,16 @@ class _FakeAsyncClient:
             raise item
         return item
 
-    async def post(self, url: str, headers=None, params=None, json=None, auth=None):  # type: ignore[no-untyped-def]
+    async def post(  # type: ignore[no-untyped-def]
+        self,
+        url: str,
+        headers=None,
+        params=None,
+        json=None,
+        auth=None,
+        timeout=None,
+        **kwargs,
+    ):
         self.calls.append(
             {
                 "method": "POST",
@@ -68,6 +93,8 @@ class _FakeAsyncClient:
                 "params": params,
                 "json": json,
                 "auth": auth,
+                "timeout": timeout,
+                **kwargs,
             }
         )
         if not self.responses:
@@ -125,4 +152,3 @@ def _single_row_gen(row: dict[str, object]):
         yield row
 
     return _gen
-

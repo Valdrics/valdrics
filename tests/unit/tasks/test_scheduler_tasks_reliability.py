@@ -450,6 +450,14 @@ class TestSchedulerTasksProductionQuality:
                 new_callable=AsyncMock,
             ) as mock_auto_activate,
             patch(
+                "app.shared.core.cloud_pricing_data.sync_supported_aws_pricing",
+                new=AsyncMock(return_value=0),
+            ) as mock_sync_supported_aws_pricing,
+            patch(
+                "app.shared.core.cloud_pricing_data.refresh_cloud_resource_pricing",
+                new=AsyncMock(return_value=0),
+            ) as mock_refresh_cloud_resource_pricing,
+            patch(
                 "app.shared.core.maintenance.PartitionMaintenanceService.create_future_partitions",
                 new=AsyncMock(return_value=0),
             ) as mock_create_partitions,
@@ -484,5 +492,7 @@ class TestSchedulerTasksProductionQuality:
 
             await _maintenance_sweep_logic()
 
+            mock_sync_supported_aws_pricing.assert_awaited_once()
+            mock_refresh_cloud_resource_pricing.assert_awaited_once()
             mock_create_partitions.assert_awaited_once_with(months_ahead=3)
             mock_archive_partitions.assert_awaited_once_with(months_old=13)

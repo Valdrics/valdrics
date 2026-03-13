@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.background_job import BackgroundJob, JobStatus
+from app.shared.core.datetime_ops import as_utc_datetime
 
 
 TERMINAL_JOB_STATUSES = {
@@ -66,12 +67,22 @@ async def compute_job_slo(
         latest_completed: datetime | None = None
         durations: list[float] = []
         for j in items:
-            if j.completed_at and (
-                latest_completed is None or j.completed_at > latest_completed
+            completed_at = (
+                as_utc_datetime(j.completed_at)
+                if isinstance(j.completed_at, datetime)
+                else None
+            )
+            started_at = (
+                as_utc_datetime(j.started_at)
+                if isinstance(j.started_at, datetime)
+                else None
+            )
+            if completed_at and (
+                latest_completed is None or completed_at > latest_completed
             ):
-                latest_completed = j.completed_at
-            if j.started_at and j.completed_at:
-                delta = (j.completed_at - j.started_at).total_seconds()
+                latest_completed = completed_at
+            if started_at and completed_at:
+                delta = (completed_at - started_at).total_seconds()
                 if delta >= 0:
                     durations.append(delta)
 
@@ -150,10 +161,7 @@ async def compute_job_backlog_snapshot(
     oldest_pending_age_seconds: float | None = None
     oldest_pending_scheduled_for: str | None = None
     if isinstance(oldest_pending, datetime):
-        # SQLite often returns naive datetimes even when columns are timezone-aware.
-        # Treat naive values as UTC for consistent backlog age math.
-        if oldest_pending.tzinfo is None:
-            oldest_pending = oldest_pending.replace(tzinfo=timezone.utc)
+        oldest_pending = as_utc_datetime(oldest_pending)
         oldest_pending_scheduled_for = oldest_pending.isoformat()
         oldest_pending_age_seconds = max(0.0, (now - oldest_pending).total_seconds())
 

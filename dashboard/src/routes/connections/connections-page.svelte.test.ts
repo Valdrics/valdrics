@@ -239,14 +239,23 @@ describe('connections page API wiring', () => {
 		await screen.findByText('SaaS connector validation failed');
 	});
 
-	it('shows growth plan prompts for cross-cloud expansion on lower tiers', async () => {
-		const growthUpgradePrompt = getUpgradePrompt('growth', 'Azure and GCP coverage');
+	it('shows starter plan prompts for cross-cloud expansion on lower tiers', async () => {
+		const starterUpgradePrompt = getUpgradePrompt('starter', 'Azure and GCP coverage');
 		render(Page, { data: pageData('free') });
 		await screen.findByText('Cloud Accounts');
-		await screen.findAllByRole('link', { name: /View Growth plan/i });
+		await screen.findAllByRole('link', { name: /View Starter plan/i });
 
-		expect(document.body.textContent || '').toContain(growthUpgradePrompt.body);
-		expect(screen.getAllByRole('link', { name: /View Growth plan/i }).length).toBeGreaterThan(0);
+		expect(document.body.textContent || '').toContain(starterUpgradePrompt.body);
+		expect(screen.getAllByRole('link', { name: /View Starter plan/i }).length).toBeGreaterThan(0);
+	});
+
+	it('shows direct Azure and GCP connect actions on starter tier', async () => {
+		render(Page, { data: pageData('starter') });
+		await screen.findByText('Cloud Accounts');
+		await waitFor(() => {
+			expect(screen.getByRole('link', { name: 'Connect Azure' })).toBeTruthy();
+			expect(screen.getByRole('link', { name: 'Connect GCP' })).toBeTruthy();
+		});
 	});
 
 	it('shows pro plan prompts for cloud-plus connectors before pro', async () => {

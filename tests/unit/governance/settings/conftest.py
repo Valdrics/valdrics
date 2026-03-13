@@ -4,6 +4,7 @@ import os
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from contextlib import ExitStack
 from pathlib import Path
 from tempfile import mkstemp
 from typing import Any, TYPE_CHECKING
@@ -71,13 +72,12 @@ async def async_engine() -> AsyncGenerator[Any, None]:
     from sqlalchemy import create_engine
     from sqlalchemy.ext.asyncio import create_async_engine
 
-    from app.models.background_job import BackgroundJob
-    from app.models.notification_settings import NotificationSettings
-    from app.models.remediation_settings import RemediationSettings
-    from app.models.sso_domain_mapping import SsoDomainMapping
-    from app.models.tenant import Tenant, User
-    from app.models.tenant_identity_settings import TenantIdentitySettings
-    from app.modules.governance.domain.security.audit_log import AuditLog
+    from app.shared.db.base import Base
+    from tests import conftest as root_test_conftest
+
+    # Mirror the root suite bootstrap so every mapped table exists even when
+    # this subtree runs after other modules have already imported part of the ORM.
+    root_test_conftest._register_models()
 
     fd, raw_path = mkstemp(prefix="valdrics-settings-", suffix=".sqlite")
     os.close(fd)
@@ -85,19 +85,7 @@ async def async_engine() -> AsyncGenerator[Any, None]:
     path = Path(raw_path)
 
     sync_engine = create_engine(f"sqlite:///{path}")
-    Tenant.metadata.create_all(
-        sync_engine,
-        tables=[
-            Tenant.__table__,
-            User.__table__,
-            BackgroundJob.__table__,
-            NotificationSettings.__table__,
-            RemediationSettings.__table__,
-            SsoDomainMapping.__table__,
-            TenantIdentitySettings.__table__,
-            AuditLog.__table__,
-        ],
-    )
+    Base.metadata.create_all(sync_engine)
     sync_engine.dispose()
 
     engine = create_async_engine(f"sqlite+aiosqlite:///{path}")
@@ -137,27 +125,52 @@ async def async_client(
     from httpx import ASGITransport, AsyncClient
 
     from app.shared.db.session import get_db, get_system_db
+    from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+    from unittest.mock import patch
 
     old_db_override = app.dependency_overrides.get(get_db)
     old_system_db_override = app.dependency_overrides.get(get_system_db)
-    app.dependency_overrides[get_db] = lambda: db
-    app.dependency_overrides[get_system_db] = lambda: db
+    session_maker = async_sessionmaker(
+        bind=db.bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+    modules_to_patch = [
+        "app.shared.db.session.async_session_maker",
+        "app.shared.connections.oidc.async_session_maker",
+        "app.modules.governance.api.v1.jobs.async_session_maker",
+        "app.modules.governance.domain.jobs.cur_ingestion.async_session_maker",
+        "app.modules.governance.domain.jobs.processor.async_session_maker",
+        "app.tasks.scheduler_tasks.async_session_maker",
+        "app.shared.llm.pricing_data.async_session_maker",
+        "app.main.async_session_maker",
+    ]
 
-    try:
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            setattr(client, "app", app)
-            yield client
-    finally:
-        if old_db_override is not None:
-            app.dependency_overrides[get_db] = old_db_override
-        else:
-            app.dependency_overrides.pop(get_db, None)
+    with ExitStack() as stack:
+        for target in modules_to_patch:
+            try:
+                stack.enter_context(patch(target, session_maker))
+            except (ImportError, AttributeError):
+                continue
 
-        if old_system_db_override is not None:
-            app.dependency_overrides[get_system_db] = old_system_db_override
-        else:
-            app.dependency_overrides.pop(get_system_db, None)
+        app.dependency_overrides[get_db] = lambda: db
+        app.dependency_overrides[get_system_db] = lambda: db
+
+        try:
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                setattr(client, "app", app)
+                yield client
+        finally:
+            if old_db_override is not None:
+                app.dependency_overrides[get_db] = old_db_override
+            else:
+                app.dependency_overrides.pop(get_db, None)
+
+            if old_system_db_override is not None:
+                app.dependency_overrides[get_system_db] = old_system_db_override
+            else:
+                app.dependency_overrides.pop(get_system_db, None)
 
 
 @pytest_asyncio.fixture

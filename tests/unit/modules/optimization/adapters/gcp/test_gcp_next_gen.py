@@ -49,7 +49,8 @@ async def test_idle_vertex_endpoints_plugin_scan(mock_gcp_creds):
             create=True,
         ), \
              patch("app.modules.optimization.adapters.gcp.plugins.ai.service_account", MagicMock()), \
-             patch("app.modules.optimization.adapters.gcp.plugins.ai.monitoring_v3.MetricServiceClient", return_value=mock_monitor):
+             patch("app.modules.optimization.adapters.gcp.plugins.ai.monitoring_v3.MetricServiceClient", return_value=mock_monitor), \
+             patch("app.modules.optimization.adapters.gcp.plugins.ai.PricingService.estimate_monthly_waste", return_value=42.0):
             
             zombies = await plugin.scan(
                 "project-id",

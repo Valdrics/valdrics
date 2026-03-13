@@ -28,6 +28,7 @@ Set these in production runtime (Koyeb/Kubernetes/etc):
 - `PAYSTACK_SECRET_KEY=sk_live_...`
 - `PAYSTACK_PUBLIC_KEY=pk_live_...`
 - `CORS_ORIGINS=[\"https://<your-frontend-domain>\"]`
+- `AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=arn:aws:iam::<valdrics-account-id>:role/<valdrics-control-plane-role>`
 - `SAAS_STRICT_INTEGRATIONS=true`
 - `SENTRY_DSN=https://...`
 - `OTEL_EXPORTER_OTLP_ENDPOINT=https://<otel-collector>:4317`
@@ -76,11 +77,17 @@ placeholders for operator-managed values such as:
 - `API_URL`
 - `FRONTEND_URL`
 - `TRUSTED_PROXY_CIDRS`
+- `AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN`
 - `PAYSTACK_SECRET_KEY`
 - `PAYSTACK_PUBLIC_KEY`
 - selected LLM provider API key
 - `SENTRY_DSN`
 - `OTEL_EXPORTER_OTLP_ENDPOINT`
+
+Optional AWS onboarding override:
+
+- `CLOUDFORMATION_TEMPLATE_URL=https://<public-template-host>/api/v1/public/templates/aws/valdrics-role.yaml`
+  Leave empty to serve the release-owned template directly from `API_URL`.
 
 Validate a completed file directly:
 

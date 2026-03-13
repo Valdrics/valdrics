@@ -44,7 +44,7 @@ async def test_get_json_returns_empty_dict_for_204() -> None:
     response = httpx.Response(204, request=request)
 
     with patch(
-        "app.shared.adapters.license.httpx.AsyncClient",
+        "app.shared.adapters.license.get_http_client",
         return_value=FakeGetClient(response),
     ):
         payload = await adapter._get_json("https://example.invalid", headers={})
@@ -57,7 +57,7 @@ async def test_license_get_json_retry_and_shape_branches() -> None:
 
     list_payload_client = FakeAsyncClient([FakeResponse([{"id": "u1"}])])
     with patch(
-        "app.shared.adapters.license.httpx.AsyncClient",
+        "app.shared.adapters.license.get_http_client",
         return_value=list_payload_client,
     ):
         payload = await adapter._get_json("https://example.invalid", headers={})
@@ -65,7 +65,7 @@ async def test_license_get_json_retry_and_shape_branches() -> None:
 
     bad_shape_client = FakeAsyncClient([FakeResponse("bad-shape")])
     with patch(
-        "app.shared.adapters.license.httpx.AsyncClient",
+        "app.shared.adapters.license.get_http_client",
         return_value=bad_shape_client,
     ):
         with pytest.raises(ExternalAPIError, match="invalid payload shape"):
@@ -75,7 +75,7 @@ async def test_license_get_json_retry_and_shape_branches() -> None:
         [http_status_error(500), FakeResponse({"ok": True})]
     )
     with patch(
-        "app.shared.adapters.license.httpx.AsyncClient",
+        "app.shared.adapters.license.get_http_client",
         return_value=retry_then_ok_client,
     ):
         payload = await adapter._get_json("https://example.invalid", headers={})
@@ -83,7 +83,7 @@ async def test_license_get_json_retry_and_shape_branches() -> None:
 
     non_retry_client = FakeAsyncClient([http_status_error(401)])
     with patch(
-        "app.shared.adapters.license.httpx.AsyncClient",
+        "app.shared.adapters.license.get_http_client",
         return_value=non_retry_client,
     ):
         with pytest.raises(ExternalAPIError, match="status 401"):
@@ -93,7 +93,7 @@ async def test_license_get_json_retry_and_shape_branches() -> None:
         [httpx.ConnectError("c1"), httpx.ConnectError("c2"), httpx.ConnectError("c3")]
     )
     with patch(
-        "app.shared.adapters.license.httpx.AsyncClient",
+        "app.shared.adapters.license.get_http_client",
         return_value=transport_client,
     ):
         with pytest.raises(ExternalAPIError, match="request failed"):
@@ -106,7 +106,10 @@ async def test_license_get_json_fallthrough_raises_last_error_and_unexpected() -
 
     fallthrough_client = FakeAsyncClient([httpx.ConnectError("c1"), httpx.ConnectError("c2")])
     with (
-        patch("app.shared.adapters.license.httpx.AsyncClient", return_value=fallthrough_client),
+        patch(
+            "app.shared.adapters.license.get_http_client",
+            return_value=fallthrough_client,
+        ),
         patch("app.shared.adapters.http_retry.range", return_value=[1, 2]),
     ):
         with pytest.raises(ExternalAPIError, match="License connector API request failed:"):

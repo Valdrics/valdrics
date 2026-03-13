@@ -49,6 +49,9 @@ _RLS_EXEMPT_TABLE_PATTERN = re.compile(
     r"\b(" + "|".join(re.escape(table.lower()) for table in RLS_EXEMPT_TABLES) + r")\b"
 )
 _AUDIT_LOG_TABLE_PATTERN = re.compile(r"\b(?:[a-z0-9_]+\.)?audit_logs(?:_[a-z0-9_]+)?\b")
+_AUDIT_LOG_UPDATE_PATTERN = re.compile(
+    r"\bupdate\s+(?:only\s+)?(?:[a-z0-9_]+\.)?audit_logs(?:_[a-z0-9_]+)?\b"
+)
 _AUDIT_LOG_DIRECT_DELETE_PATTERN = re.compile(
     r"\bdelete\s+from\s+(?:only\s+)?(?:[a-z0-9_]+\.)?audit_logs(?:_[a-z0-9_]+)?\b"
 )
@@ -421,7 +424,7 @@ def enforce_audit_log_immutability(
     _executemany: bool,
 ) -> tuple[str, Any]:
     stmt_lower = statement.lower()
-    if _AUDIT_LOG_TABLE_PATTERN.search(stmt_lower) and _SQL_UPDATE_PATTERN.search(stmt_lower):
+    if _AUDIT_LOG_UPDATE_PATTERN.search(stmt_lower):
         raise ValdricsException(
             message="audit_logs entries are immutable and cannot be updated",
             code="audit_logs_update_forbidden",
@@ -432,10 +435,8 @@ def enforce_audit_log_immutability(
             },
         )
 
-    if _AUDIT_LOG_TABLE_PATTERN.search(stmt_lower) and _SQL_DELETE_PATTERN.search(stmt_lower):
-        if _AUDIT_LOG_DIRECT_DELETE_PATTERN.search(stmt_lower) and bool(
-            conn.info.get(_AUDIT_LOG_RETENTION_DELETE_FLAG, False)
-        ):
+    if _AUDIT_LOG_DIRECT_DELETE_PATTERN.search(stmt_lower):
+        if bool(conn.info.get(_AUDIT_LOG_RETENTION_DELETE_FLAG, False)):
             return statement, parameters
         raise ValdricsException(
             message="audit_logs deletes are reserved for the retention purge path",

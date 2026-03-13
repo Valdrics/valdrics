@@ -224,21 +224,38 @@ async def test_verify_connection_internal_error(service, mock_db):
 
 
 def test_get_aws_setup_templates():
-    templates = CloudConnectionService.get_aws_setup_templates("ext-123")
+    with patch(
+        "app.shared.connections.aws.get_settings",
+        return_value=MagicMock(
+            API_URL="https://api.valdrics.test",
+            AWS_DEFAULT_REGION="us-east-1",
+            AWS_SUPPORTED_REGIONS=["us-east-1"],
+            AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=(
+                "arn:aws:iam::123456789012:role/ValdricsControlPlane"
+            ),
+            CLOUDFORMATION_TEMPLATE_URL="",
+        ),
+    ):
+        templates = CloudConnectionService.get_aws_setup_templates("ext-123")
     assert "magic_link" in templates
     assert "ext-123" in templates["magic_link"]
     assert "terraform_snippet" in templates
-    assert "githubusercontent.com" in templates["cfn_template"]
+    assert "AWSTemplateFormatVersion" in templates["cfn_template"]
 
 
 def test_get_aws_setup_templates_falls_back_to_us_east_1_for_invalid_region():
     with patch(
         "app.shared.connections.aws.get_settings",
         return_value=MagicMock(
+            API_URL="https://api.valdrics.test",
             AWS_DEFAULT_REGION="global",
             AWS_SUPPORTED_REGIONS=["us-east-1", "eu-west-1"],
+            AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=(
+                "arn:aws:iam::123456789012:role/ValdricsControlPlane"
+            ),
             CLOUDFORMATION_TEMPLATE_URL="https://templates.example.com/aws-role.yaml",
         ),
     ):
         templates = CloudConnectionService.get_aws_setup_templates("ext-123")
     assert "region=us-east-1" in templates["magic_link"]
+    assert "templates.example.com%2Faws-role.yaml" in templates["magic_link"]

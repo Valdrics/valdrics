@@ -56,7 +56,8 @@ async def test_overprovisioned_compute_plugin_scan(mock_gcp_creds):
         mock_monitor_client.list_time_series.return_value = [mock_ts]
         
         with patch("app.modules.optimization.adapters.gcp.plugins.rightsizing.compute_v1.InstancesClient", return_value=mock_instances_client), \
-             patch("app.modules.optimization.adapters.gcp.plugins.rightsizing.monitoring_v3.MetricServiceClient", return_value=mock_monitor_client):
+             patch("app.modules.optimization.adapters.gcp.plugins.rightsizing.monitoring_v3.MetricServiceClient", return_value=mock_monitor_client), \
+             patch("app.modules.optimization.adapters.gcp.plugins.rightsizing.PricingService.estimate_monthly_waste", return_value=88.0):
             
             zombies = await plugin.scan(
                 session="project-id",
@@ -68,6 +69,7 @@ async def test_overprovisioned_compute_plugin_scan(mock_gcp_creds):
     z = zombies[0]
     assert z["resource_id"] == str(mock_instance.id)
     assert z["resource_type"] == "GCP Compute Instance"
+    assert z["monthly_cost"] == 88.0
     assert "e2-standard-4" in z["recommendation"]
     assert "Max CPU" in z["explainability_notes"]
     assert z["confidence_score"] > 0.8

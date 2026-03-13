@@ -4,6 +4,7 @@ from datetime import date
 from decimal import Decimal
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
+import app.modules.reporting.domain.attribution_engine as attribution_engine_module
 from app.modules.reporting.domain.attribution_engine import AttributionEngine
 from app.models.attribution import AttributionRule
 from app.models.cloud import CostRecord
@@ -265,15 +266,14 @@ async def test_apply_rules_percentage_mismatch_logs_warning(engine):
     rule.rule_type = "PERCENTAGE"
     rule.conditions = {}
     rule.allocation = [{"bucket": "A", "percentage": 10}]
+    mock_logger = MagicMock()
     with (
         patch.object(engine, "match_conditions", return_value=True),
-        patch(
-            "app.modules.reporting.domain.attribution_engine.logger.warning"
-        ) as mock_warning,
+        patch.object(attribution_engine_module, "logger", mock_logger),
     ):
         allocations = await engine.apply_rules(record, [rule])
     assert len(allocations) == 1
-    mock_warning.assert_called_once()
+    mock_logger.warning.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -300,14 +300,13 @@ async def test_apply_rules_to_tenant_no_records_logs_and_returns_zero(
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = []
     mock_db.execute.return_value = mock_result
-    with patch(
-        "app.modules.reporting.domain.attribution_engine.logger.info"
-    ) as mock_info:
+    mock_logger = MagicMock()
+    with patch.object(attribution_engine_module, "logger", mock_logger):
         result = await engine.apply_rules_to_tenant(
             tenant_id, date(2026, 1, 1), date(2026, 1, 31)
         )
     assert result == {"records_processed": 0, "allocations_created": 0}
-    mock_info.assert_called_once()
+    mock_logger.info.assert_called_once()
 
 
 @pytest.mark.asyncio

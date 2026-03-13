@@ -101,6 +101,8 @@ class LicenseAdapter(BaseAdapter):
             raise ExternalAPIError("Missing API token for license native connector")
         if isinstance(token, SecretStr):
             resolved = token.get_secret_value()
+        elif hasattr(token, "get_secret_value"):
+            resolved = token.get_secret_value()
         elif isinstance(token, str):
             resolved = token
         else:

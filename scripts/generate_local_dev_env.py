@@ -45,6 +45,9 @@ def _build_overrides(seed: str) -> dict[str, str]:
         "TESTING": "false",
         "API_URL": "http://localhost:8000",
         "FRONTEND_URL": "http://localhost:5174",
+        "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN": (
+            "arn:aws:iam::000000000000:role/ValdricsLocalDevControlPlane"
+        ),
         "DATABASE_URL": "sqlite+aiosqlite:///./valdrics_local_dev.sqlite3",
         "DB_SSL_MODE": "disable",
         "LOCAL_SQLITE_BOOTSTRAP": "true",

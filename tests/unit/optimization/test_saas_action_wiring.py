@@ -38,13 +38,9 @@ async def test_saas_github_action_builds_typed_credentials_from_dict() -> None:
 
     mock_client = AsyncMock()
     mock_client.delete = AsyncMock(return_value=mock_response)
-    mock_cm = AsyncMock()
-    mock_cm.__aenter__.return_value = mock_client
-    mock_cm.__aexit__.return_value = None
-
     with patch(
-        "app.modules.optimization.domain.actions.saas.github.httpx.AsyncClient",
-        return_value=mock_cm,
+        "app.modules.optimization.domain.actions.saas.github.get_http_client",
+        return_value=mock_client,
     ):
         result = await action._perform_action("octocat", context)
 

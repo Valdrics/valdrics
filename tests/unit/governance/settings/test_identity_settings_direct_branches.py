@@ -132,6 +132,34 @@ async def test_get_identity_diagnostics_reports_sso_scim_issues() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_identity_diagnostics_normalizes_naive_scim_rotation_timestamp() -> None:
+    tenant_id = uuid4()
+    rotated_at = datetime.now() - timedelta(days=120)
+    identity = SimpleNamespace(
+        sso_enabled=False,
+        allowed_email_domains=[],
+        sso_federation_enabled=False,
+        sso_federation_mode="domain",
+        sso_federation_provider_id=None,
+        scim_enabled=True,
+        scim_bearer_token="secret-token",
+        scim_token_bidx="blind-index",
+        scim_last_rotated_at=rotated_at,
+    )
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = _ScalarOneResult(identity)
+
+    response = await identity_api.get_identity_diagnostics(
+        current_user=_admin_user(tenant_id, tier=PricingTier.ENTERPRISE),
+        db=mock_db,
+    )
+
+    assert response.scim.last_rotated_at == rotated_at.replace(tzinfo=timezone.utc).isoformat()
+    assert response.scim.token_age_days is not None
+    assert response.scim.rotation_overdue is True
+
+
+@pytest.mark.asyncio
 async def test_sso_federation_validation_bootstraps_missing_identity(
     monkeypatch,
 ) -> None:
@@ -378,7 +406,7 @@ async def test_update_identity_settings_fails_when_audit_logging_fails(
 
     monkeypatch.setattr(identity_api, "AuditLogger", _AuditLoggerFailure)
 
-    with pytest.raises(RuntimeError, match="audit unavailable"):
+    with pytest.raises(HTTPException) as exc:
         await identity_api.update_identity_settings(
             payload=payload,
             current_user=_admin_user(
@@ -388,6 +416,8 @@ async def test_update_identity_settings_fails_when_audit_logging_fails(
             ),
             db=mock_db,
         )
+    assert exc.value.status_code == 500
+    mock_db.rollback.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -436,8 +466,10 @@ async def test_rotate_scim_token_fails_when_audit_logging_fails(
 
     monkeypatch.setattr(identity_api, "AuditLogger", _AuditLoggerFailure)
 
-    with pytest.raises(RuntimeError, match="audit unavailable"):
+    with pytest.raises(HTTPException) as exc:
         await identity_api.rotate_scim_token(
             current_user=_admin_user(tenant_id, tier=PricingTier.ENTERPRISE),
             db=mock_db,
         )
+    assert exc.value.status_code == 500
+    mock_db.rollback.assert_awaited_once()

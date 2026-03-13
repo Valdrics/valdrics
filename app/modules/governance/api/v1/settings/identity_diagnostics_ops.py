@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Any, Callable
 from urllib.parse import urlparse
 
+from app.shared.core.datetime_ops import as_utc_datetime_or_none
+
 
 def build_identity_diagnostics_payload(
     *,
@@ -63,7 +65,7 @@ def build_identity_diagnostics_payload(
     scim_available = is_feature_enabled_fn(tier, scim_feature_flag)
     scim_has_token = bool(getattr(identity, "scim_bearer_token", None))
     scim_bidx_present = bool(getattr(identity, "scim_token_bidx", None))
-    scim_last_rotated = getattr(identity, "scim_last_rotated_at", None)
+    scim_last_rotated = as_utc_datetime_or_none(getattr(identity, "scim_last_rotated_at", None))
     token_age_days: int | None = None
     if scim_last_rotated:
         token_age_days = max(

@@ -25,15 +25,16 @@ async def test_github_unused_seat_plugin():
         },
     ]
 
-    mock_client_ctx = AsyncMock()
     mock_client = AsyncMock()
-    mock_client_ctx.__aenter__.return_value = mock_client
     mock_client.get.return_value = MagicMock(
         status_code=200,
         json=lambda: mock_members,
     )
 
-    with patch("httpx.AsyncClient", return_value=mock_client_ctx):
+    with patch(
+        "app.modules.optimization.adapters.saas.plugins.api.get_http_client",
+        return_value=mock_client,
+    ):
         zombies = await plugin.scan(
             session=None,
             region="global",

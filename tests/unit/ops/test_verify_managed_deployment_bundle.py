@@ -67,6 +67,9 @@ def _build_bundle(tmp_path: Path, *, environment: str = "production") -> tuple[P
         redis_url="redis://redis.example.com:6379/0",
         supabase_url="https://example.supabase.co",
         supabase_jwt_secret="x" * 40,
+        aws_assume_role_trust_principal_arn=(
+            "arn:aws:iam::123456789012:role/ValdricsControlPlane"
+        ),
         llm_provider="groq",
         llm_api_key="gsk_test_runtime_key",
         paystack_secret_key="sk_live_runtime_paystack_key",

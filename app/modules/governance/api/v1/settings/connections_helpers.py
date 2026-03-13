@@ -63,6 +63,42 @@ def check_multi_cloud_tier(user: CurrentUser) -> PricingTier:
     return current_plan
 
 
+def _enforce_aws_org_discovery_tier(
+    current_plan: PricingTier, user: CurrentUser
+) -> None:
+    allowed_plans = {
+        PricingTier.GROWTH,
+        PricingTier.PRO,
+        PricingTier.ENTERPRISE,
+    }
+
+    if current_plan in allowed_plans:
+        return
+
+    logger.warning(
+        "tier_gate_denied_aws_org_discovery",
+        tenant_id=str(user.tenant_id),
+        plan=current_plan.value,
+        required="growth",
+    )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            "AWS organization discovery requires 'Growth' plan or higher. "
+            f"Current plan: {current_plan.value}"
+        ),
+    )
+
+
+def check_aws_org_discovery_tier(user: CurrentUser) -> PricingTier:
+    """
+    Ensure AWS Organizations discovery is available for the tenant tier.
+    """
+    current_plan = normalize_tier(getattr(user, "tier", PricingTier.FREE))
+    _enforce_aws_org_discovery_tier(current_plan, user)
+    return current_plan
+
+
 def check_cloud_plus_tier(user: CurrentUser) -> PricingTier:
     """
     Ensure Cloud+ connectors are available for the current tenant tier.

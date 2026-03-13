@@ -17,7 +17,7 @@
 		discoveryError,
 		discoveryInfo,
 		isLoading,
-		canUseGrowthFeatures,
+		canUseMultiCloudFeatures,
 		canUseCloudPlusFeatures,
 		canUseIdpDeepScan,
 		getDiscoveryCategoryLabel,
@@ -30,12 +30,13 @@
 		handleContinueToSetup
 	} = $props();
 
-	const growthUpgradePrompt = getUpgradePrompt('growth', 'Azure and GCP coverage');
+	const starterUpgradePrompt = getUpgradePrompt('starter', 'Azure and GCP coverage');
 	const proUpgradePrompt = getUpgradePrompt('pro', 'Cloud+ connectors');
 	const idpDeepScanPrompt = getUpgradePrompt('pro', 'IdP deep scan');
 	const selectedProviderUpgradePrompt = $derived(
-		(selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseGrowthFeatures()
-			? growthUpgradePrompt
+		(selectedProvider === 'azure' || selectedProvider === 'gcp') &&
+		!canUseMultiCloudFeatures()
+			? starterUpgradePrompt
 			: (selectedProvider === 'saas' || selectedProvider === 'license') &&
 				  !canUseCloudPlusFeatures()
 				? proUpgradePrompt
@@ -73,7 +74,7 @@
 				<CloudLogo provider="azure" size={32} />
 			</div>
 			<h3>Microsoft Azure</h3>
-			<span class="badge">Growth Plan+</span>
+			<span class="badge">Starter Plan+</span>
 		</button>
 
 		<button
@@ -86,7 +87,7 @@
 				<CloudLogo provider="gcp" size={32} />
 			</div>
 			<h3>Google Cloud</h3>
-			<span class="badge">Growth Plan+</span>
+			<span class="badge">Starter Plan+</span>
 		</button>
 
 		<button

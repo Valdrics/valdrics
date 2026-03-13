@@ -34,9 +34,8 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              # Valdrics's AWS Account
-              # In production, replace with your actual AWS account ID
-              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+              # Valdrics control-plane principal ARN injected by the API template renderer.
+              AWS: '__VALDRICS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN__'
             Action: sts:AssumeRole
             Condition:
               StringEquals:

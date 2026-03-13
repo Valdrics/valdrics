@@ -88,8 +88,8 @@ def test_estimate_cost():
     # OpenAI default: input $0.15, output $0.60 per 1M (example)
     # Price is 0 if provider or default pricing is missing.
     with patch(
-        "app.shared.llm.factory.LLM_PRICING",
-        {"openai": {"default": MagicMock(input=0.15, output=0.60)}},
+        "app.shared.llm.factory.get_provider_pricing",
+        return_value={"default": MagicMock(input=0.15, output=0.60)},
     ):
         cost = LLMFactory.estimate_cost("openai", 1_000_000, 1_000_000)
         assert cost == 0.75

@@ -42,10 +42,24 @@ class FakeAsyncClient:
     async def __aexit__(self, exc_type, exc, tb) -> bool:  # type: ignore[no-untyped-def]
         return False
 
-    async def get(self, url: str, headers=None, params=None):  # type: ignore[no-untyped-def]
+    async def get(  # type: ignore[no-untyped-def]
+        self,
+        url: str,
+        headers=None,
+        params=None,
+        timeout=None,
+        **kwargs,
+    ):
         assert url
         self.calls.append(
-            {"method": "GET", "url": url, "headers": headers, "params": params}
+            {
+                "method": "GET",
+                "url": url,
+                "headers": headers,
+                "params": params,
+                "timeout": timeout,
+                **kwargs,
+            }
         )
         if not self.responses:
             raise AssertionError("No fake responses configured for HTTP call")
@@ -54,7 +68,16 @@ class FakeAsyncClient:
             raise next_item
         return next_item
 
-    async def post(self, url: str, headers=None, params=None, json=None, auth=None):  # type: ignore[no-untyped-def]
+    async def post(  # type: ignore[no-untyped-def]
+        self,
+        url: str,
+        headers=None,
+        params=None,
+        json=None,
+        auth=None,
+        timeout=None,
+        **kwargs,
+    ):
         assert url
         self.calls.append(
             {
@@ -64,6 +87,8 @@ class FakeAsyncClient:
                 "params": params,
                 "json": json,
                 "auth": auth,
+                "timeout": timeout,
+                **kwargs,
             }
         )
         if not self.responses:

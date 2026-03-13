@@ -70,7 +70,7 @@
 			required_fields: string[];
 			optional_fields: string[];
 		};
-		canUseGrowthFeatures: () => boolean;
+		canUseMultiCloudFeatures: () => boolean;
 		canUseCloudPlusFeatures: () => boolean;
 		canUseIdpDeepScan: () => boolean;
 		getProviderLabel: (provider: OnboardingProvider) => string;
@@ -141,7 +141,7 @@
 		cloudPlusConnectorConfigInput = $bindable(),
 		cloudPlusNativeConnectors,
 		cloudPlusManualFeedSchema,
-		canUseGrowthFeatures,
+		canUseMultiCloudFeatures,
 		canUseCloudPlusFeatures,
 		canUseIdpDeepScan,
 		getProviderLabel,
@@ -215,7 +215,7 @@
 				{discoveryError}
 				{discoveryInfo}
 				{isLoading}
-				{canUseGrowthFeatures}
+				{canUseMultiCloudFeatures}
 				{canUseCloudPlusFeatures}
 				{canUseIdpDeepScan}
 				{getDiscoveryCategoryLabel}

@@ -28,7 +28,9 @@ def _resolve_azure_error_base() -> type[Exception]:
         from azure.core.exceptions import AzureError
     except ImportError:  # pragma: no cover - fallback for SDK-mocked test envs
         return Exception
-    return AzureError
+    if isinstance(AzureError, type) and issubclass(AzureError, Exception):
+        return AzureError
+    return Exception
 
 CPU_MAX_THRESHOLD_PERCENT = 10.0
 SKIPPED_VM_SIZE_TOKENS: tuple[str, ...] = ("standard_b", "basic_a")

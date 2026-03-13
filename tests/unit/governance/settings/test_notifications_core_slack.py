@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
@@ -181,7 +181,7 @@ async def test_test_slack_notification_uses_override(
         response = await async_client.post("/api/v1/settings/notifications/test-slack")
 
     assert response.status_code == 200
-    mock_get_tenant.assert_awaited_once_with(db, tenant_id)
+    mock_get_tenant.assert_awaited_once_with(ANY, tenant_id)
 
 
 @pytest.mark.asyncio

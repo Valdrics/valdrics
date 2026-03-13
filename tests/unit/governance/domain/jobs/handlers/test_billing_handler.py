@@ -2,6 +2,7 @@ import pytest
 from uuid import uuid4
 from unittest.mock import MagicMock, patch, AsyncMock
 from app.modules.governance.domain.jobs.handlers.billing import RecurringBillingHandler
+from app.modules.governance.domain.jobs.errors import PermanentJobError
 from app.models.background_job import BackgroundJob
 
 # We need to mock the imports logic inside the handler
@@ -29,9 +30,9 @@ async def test_execute_subscription_not_found(db):
         return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
     )
 
-    result = await handler.execute(job, db)
-    assert result["status"] == "failed"
-    assert result["reason"] == "subscription_not_found"
+    with pytest.raises(PermanentJobError) as exc:
+        await handler.execute(job, db)
+    assert "subscription not found" in str(exc.value).lower()
 
 
 @pytest.mark.asyncio

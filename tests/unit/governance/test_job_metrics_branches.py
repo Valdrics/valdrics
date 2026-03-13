@@ -145,6 +145,41 @@ async def test_compute_job_slo_returns_empty_metrics_for_no_terminal_jobs(
 
 
 @pytest.mark.asyncio
+async def test_compute_job_slo_normalizes_naive_started_and_completed_timestamps(
+    db, test_tenant
+) -> None:
+    created_at = datetime.now(timezone.utc) - timedelta(hours=1)
+    naive_started = datetime(2026, 2, 1, 9, 0, 0)
+    naive_completed = datetime(2026, 2, 1, 9, 4, 0)
+    db.add(
+        _job(
+            tenant_id=test_tenant.id,
+            job_type="finops_analysis",
+            status=JobStatus.COMPLETED.value,
+            created_at=created_at,
+            scheduled_for=created_at,
+            started_at=naive_started,
+            completed_at=naive_completed,
+        )
+    )
+    await db.commit()
+
+    payload = await compute_job_slo(
+        db,
+        tenant_id=test_tenant.id,
+        window_hours=24,
+        target_success_rate_percent=10,
+    )
+
+    metric = payload["metrics"][0]
+    assert metric["avg_duration_seconds"] == 240.0
+    assert metric["p95_duration_seconds"] == 240.0
+    assert metric["latest_completed_at"] == naive_completed.replace(
+        tzinfo=timezone.utc
+    ).isoformat()
+
+
+@pytest.mark.asyncio
 async def test_compute_job_backlog_snapshot_counts_and_oldest_pending_age(
     db, test_tenant
 ) -> None:

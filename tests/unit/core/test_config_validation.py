@@ -185,6 +185,38 @@ class TestSettingsValidation:
             assert settings.DB_SSL_MODE == "disable"
             assert settings.is_production is False
 
+    def test_settings_rejects_invalid_aws_trust_principal_arn(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    DB_SSL_MODE="disable",
+                    AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN="not-an-arn",
+                    _env_file=None,
+                )
+
+            assert "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN" in str(exc.value)
+
+    def test_settings_rejects_invalid_cloudformation_template_url(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    DB_SSL_MODE="disable",
+                    CLOUDFORMATION_TEMPLATE_URL="javascript:alert(1)",
+                    _env_file=None,
+                )
+
+            assert "CLOUDFORMATION_TEMPLATE_URL" in str(exc.value)
+
     def test_settings_accepts_local_sqlite_bootstrap_in_local_runtime(self):
         with patch.dict("os.environ", {}, clear=True):
             settings = Settings(

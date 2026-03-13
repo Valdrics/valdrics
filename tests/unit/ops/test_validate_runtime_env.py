@@ -16,6 +16,9 @@ def _set_strict_env() -> None:
     os.environ["KDF_SALT"] = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
     os.environ["SUPABASE_JWT_SECRET"] = "ci-supabase-jwt-secret-32-chars-0000"
     os.environ["ADMIN_API_KEY"] = "ci-admin-api-key-32-chars-min-0000000"
+    os.environ["AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN"] = (
+        "arn:aws:iam::123456789012:role/ValdricsControlPlane"
+    )
     os.environ["ENFORCEMENT_APPROVAL_TOKEN_SECRET"] = (
         "ci-enforcement-approval-token-secret-32-chars"
     )
@@ -136,6 +139,7 @@ def test_validate_runtime_env_loads_explicit_env_file(
                 "KDF_SALT=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
                 "SUPABASE_JWT_SECRET=ci-supabase-jwt-secret-32-chars-0000",
                 "ADMIN_API_KEY=ci-admin-api-key-32-chars-min-0000000",
+                "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=arn:aws:iam::123456789012:role/ValdricsControlPlane",
                 "ENFORCEMENT_APPROVAL_TOKEN_SECRET=ci-enforcement-approval-token-secret-32-chars",
                 "ENFORCEMENT_EXPORT_SIGNING_SECRET=ci-enforcement-export-signing-secret-32-char",
                 "GROQ_API_KEY=testing",
@@ -195,6 +199,7 @@ def test_validate_runtime_env_rejects_placeholder_public_url(
                 "KDF_SALT=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
                 "SUPABASE_JWT_SECRET=ci-supabase-jwt-secret-32-chars-0000",
                 "ADMIN_API_KEY=ci-admin-api-key-32-chars-min-0000000",
+                "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=arn:aws:iam::123456789012:role/ValdricsControlPlane",
                 "ENFORCEMENT_APPROVAL_TOKEN_SECRET=ci-enforcement-approval-token-secret-32-chars",
                 "ENFORCEMENT_EXPORT_SIGNING_SECRET=ci-enforcement-export-signing-secret-32-char",
                 "GROQ_API_KEY=testing",

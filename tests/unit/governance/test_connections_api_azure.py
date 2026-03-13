@@ -12,7 +12,14 @@ pytest_plugins = ("tests.unit.governance.connections_api_fixtures",)
 
 
 @pytest.mark.asyncio
-async def test_create_azure_connection_denied_on_free(ac, override_auth):
+async def test_create_azure_connection_success_on_starter(
+    ac, db, override_auth, auth_user
+):
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = PricingTier.STARTER.value
+    await db.commit()
+    auth_user.tier = PricingTier.STARTER
+
     payload = {
         "name": "Azure Test",
         "azure_tenant_id": str(uuid4()),
@@ -21,11 +28,8 @@ async def test_create_azure_connection_denied_on_free(ac, override_auth):
         "client_secret": "secret",
     }
     resp = await ac.post("/api/v1/settings/connections/azure", json=payload)
-    assert resp.status_code == 403
-    data = resp.json()
-
-    val = data.get("detail", str(data))
-    assert "Growth" in val
+    assert resp.status_code == 201
+    assert resp.json()["subscription_id"] == payload["subscription_id"]
 
 
 @pytest.mark.asyncio
@@ -145,10 +149,13 @@ async def test_verify_azure_connection_tenant_isolation(
 
 
 @pytest.mark.asyncio
-async def test_verify_azure_connection_denied_on_free(ac, db, override_auth, auth_user):
+async def test_verify_azure_connection_success_on_starter(
+    ac, db, override_auth, auth_user
+):
     tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.FREE.value
+    tenant.plan = PricingTier.STARTER.value
     await db.commit()
+    auth_user.tier = PricingTier.STARTER
 
     conn = AzureConnection(
         tenant_id=auth_user.tenant_id,
@@ -156,12 +163,17 @@ async def test_verify_azure_connection_denied_on_free(ac, db, override_auth, aut
         azure_tenant_id="t",
         client_id="c",
         subscription_id="s",
+        client_secret="secret",
     )
     db.add(conn)
     await db.commit()
 
-    resp = await ac.post(f"/api/v1/settings/connections/azure/{conn.id}/verify")
-    assert resp.status_code == 403
+    with patch(
+        "app.shared.connections.azure.AzureConnectionService.verify_connection"
+    ) as mock_verify:
+        mock_verify.return_value = {"status": "verified"}
+        resp = await ac.post(f"/api/v1/settings/connections/azure/{conn.id}/verify")
+    assert resp.status_code == 200
 
 
 @pytest.mark.asyncio

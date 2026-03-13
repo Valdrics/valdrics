@@ -7,6 +7,7 @@ import pytest
 from botocore.exceptions import ClientError
 
 from app.modules.optimization.adapters.aws.plugins import storage as storage_plugins
+from app.modules.reporting.domain.pricing.service import PricingQuote
 
 
 class AsyncContext:
@@ -54,6 +55,20 @@ def _client_error(code: str = "AccessDenied", operation: str = "TestOperation") 
     return ClientError({"Error": {"Code": code, "Message": code}}, operation)
 
 
+def _pricing_quote(*, monthly_cost_usd: float) -> PricingQuote:
+    return PricingQuote(
+        provider="aws",
+        resource_type="volume",
+        resource_size="test",
+        requested_region="us-east-1",
+        effective_region="us-east-1",
+        hourly_rate_usd=0.0,
+        monthly_cost_usd=monthly_cost_usd,
+        source="unit-test",
+        pricing_metadata={"pricing_confidence": "catalog_exact"},
+    )
+
+
 def test_storage_plugin_category_keys() -> None:
     assert storage_plugins.UnattachedVolumesPlugin().category_key == "unattached_volumes"
     assert storage_plugins.OldSnapshotsPlugin().category_key == "old_snapshots"
@@ -91,8 +106,11 @@ async def test_unattached_volumes_metric_check_failure_logs_and_still_emits_zomb
     with (
         patch.object(storage_plugins, "logger") as logger_mock,
         patch(
-            "app.modules.reporting.domain.pricing.service.PricingService.estimate_monthly_waste",
-            side_effect=[12.345, 1.234],
+            "app.modules.reporting.domain.pricing.service.PricingService.estimate_monthly_waste_quote",
+            side_effect=[
+                _pricing_quote(monthly_cost_usd=12.345),
+                _pricing_quote(monthly_cost_usd=1.234),
+            ],
         ),
     ):
         zombies = await plugin.scan(session=MagicMock(), region="us-east-1")

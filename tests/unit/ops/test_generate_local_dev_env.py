@@ -79,6 +79,10 @@ def test_generate_local_dev_env_derives_required_key_shapes(tmp_path: Path) -> N
     assert values["ENABLE_SCHEDULER"] == "false"
     assert values["DB_SSL_MODE"] == "disable"
     assert values["REDIS_URL"] == ""
+    assert (
+        values["AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN"]
+        == "arn:aws:iam::000000000000:role/ValdricsLocalDevControlPlane"
+    )
     assert len(values["CSRF_SECRET_KEY"]) >= 32
     assert len(values["SUPABASE_JWT_SECRET"]) >= 32
     assert len(values["ADMIN_API_KEY"]) >= 32

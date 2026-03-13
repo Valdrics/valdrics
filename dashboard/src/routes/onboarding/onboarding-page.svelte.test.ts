@@ -193,15 +193,15 @@ describe('onboarding cloud+ flow', () => {
 		await screen.findByText('connector_config.instance_url is required for Salesforce.');
 	});
 
-	it('shows growth plan prompt when Azure onboarding is selected below growth', async () => {
-		const growthPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'growth');
+	it('shows starter plan prompt when Azure onboarding is selected below starter', async () => {
+		const starterPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'starter');
 		renderPage('free');
 
 		await fireEvent.click(screen.getByRole('button', { name: /Microsoft Azure/i }));
 
-		expect(screen.getByText('Move to Growth for Azure and GCP coverage')).toBeTruthy();
-		expect(document.body.textContent || '').toContain(growthPlan?.story?.summary ?? '');
-		expect(screen.getByRole('link', { name: /View Growth plan/i })).toBeTruthy();
+		expect(screen.getByText('Move to Starter for Azure and GCP coverage')).toBeTruthy();
+		expect(document.body.textContent || '').toContain(starterPlan?.story?.summary ?? '');
+		expect(screen.getByRole('link', { name: /View Starter plan/i })).toBeTruthy();
 	});
 
 	it('shows pro plan prompt when SaaS onboarding is selected below pro', async () => {

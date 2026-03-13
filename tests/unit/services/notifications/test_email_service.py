@@ -3,6 +3,7 @@ Tests for EmailService - SMTP Notifications
 """
 
 import pytest
+import smtplib
 from unittest.mock import patch
 from datetime import datetime, timezone
 from app.modules.notifications.domain.email_service import EmailService
@@ -51,7 +52,7 @@ async def test_send_carbon_alert_failure(email_service):
     """Test graceful failure on SMTP error."""
     with patch("smtplib.SMTP") as mock_smtp_cls:
         mock_smtp = mock_smtp_cls.return_value.__enter__.return_value
-        mock_smtp.sendmail.side_effect = Exception("smtp fail")
+        mock_smtp.sendmail.side_effect = smtplib.SMTPException("smtp fail")
 
         res = await email_service.send_carbon_alert(["to@v.io"], {"tier": "starter"})
         assert res is False

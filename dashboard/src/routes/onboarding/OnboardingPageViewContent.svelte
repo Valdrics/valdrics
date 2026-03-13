@@ -28,7 +28,7 @@
 	} from './onboardingTypesUtils';
 	import {
 		canUseCloudPlusFeaturesForTier,
-		canUseGrowthFeaturesForTier,
+		canUseMultiCloudFeaturesForTier,
 		canUseIdpDeepScanForTier
 	} from './onboardingTierAccess';
 	import {
@@ -107,7 +107,8 @@
 		error = $state(''),
 		success = $state(false),
 		copied = $state(false);
-	const canUseGrowthFeatures = (): boolean => canUseGrowthFeaturesForTier(data?.subscription?.tier);
+	const canUseMultiCloudFeatures = (): boolean =>
+		canUseMultiCloudFeaturesForTier(data?.subscription?.tier);
 	const canUseCloudPlusFeatures = (): boolean =>
 		canUseCloudPlusFeaturesForTier(data?.subscription?.tier);
 	const canUseIdpDeepScan = (): boolean => canUseIdpDeepScanForTier(data?.subscription?.tier);
@@ -182,7 +183,7 @@
 		try {
 			const info = await connectDiscoveryCandidateFlow({
 				candidate,
-				canUseGrowthFeatures: canUseGrowthFeatures(),
+				canUseMultiCloudFeatures: canUseMultiCloudFeatures(),
 				canUseCloudPlusFeatures: canUseCloudPlusFeatures(),
 				updateDiscoveryCandidateStatus,
 				setSelectedProvider: (provider) => (selectedProvider = provider),
@@ -300,7 +301,7 @@
 	async function handleContinueToSetup() {
 		const accessError = getOnboardingSetupAccessError({
 			selectedProvider,
-			canUseGrowthFeatures: canUseGrowthFeatures(),
+			canUseMultiCloudFeatures: canUseMultiCloudFeatures(),
 			canUseCloudPlusFeatures: canUseCloudPlusFeatures(),
 			getProviderLabel
 		});
@@ -439,7 +440,7 @@
 		cloudPlusSampleFeed,
 		cloudPlusNativeConnectors,
 		cloudPlusManualFeedSchema,
-		canUseGrowthFeatures,
+		canUseMultiCloudFeatures,
 		canUseCloudPlusFeatures,
 		canUseIdpDeepScan,
 		getProviderLabel,

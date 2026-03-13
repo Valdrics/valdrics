@@ -44,7 +44,7 @@ async def test_platform_adapter_native_ledger_http_normalizes_records() -> None:
     )
     adapter = PlatformAdapter(conn)
     with patch(
-        "app.shared.adapters.platform.httpx.AsyncClient", return_value=fake_client
+        "app.shared.adapters.platform.get_http_client", return_value=fake_client
     ):
         rows = await adapter.get_cost_and_usage(
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -86,7 +86,7 @@ async def test_platform_adapter_native_datadog_normalizes_priced_usage() -> None
 
     adapter = PlatformAdapter(conn)
     with patch(
-        "app.shared.adapters.platform.httpx.AsyncClient", return_value=fake_client
+        "app.shared.adapters.platform.get_http_client", return_value=fake_client
     ):
         rows = await adapter.get_cost_and_usage(
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -138,7 +138,7 @@ async def test_platform_adapter_native_newrelic_normalizes_priced_nrql_results()
     )
     adapter = PlatformAdapter(conn)
     with patch(
-        "app.shared.adapters.platform.httpx.AsyncClient", return_value=fake_client
+        "app.shared.adapters.platform.get_http_client", return_value=fake_client
     ):
         rows = await adapter.get_cost_and_usage(
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -181,7 +181,7 @@ async def test_hybrid_adapter_native_ledger_http_normalizes_records() -> None:
     )
     adapter = HybridAdapter(conn)
     with patch(
-        "app.shared.adapters.hybrid.httpx.AsyncClient", return_value=fake_client
+        "app.shared.adapters.hybrid.get_http_client", return_value=fake_client
     ):
         rows = await adapter.get_cost_and_usage(
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -236,7 +236,7 @@ async def test_hybrid_adapter_native_cloudkitty_normalizes_summary() -> None:
 
     adapter = HybridAdapter(conn)
     with patch(
-        "app.shared.adapters.hybrid.httpx.AsyncClient", return_value=fake_client
+        "app.shared.adapters.hybrid.get_http_client", return_value=fake_client
     ):
         rows = await adapter.get_cost_and_usage(
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),
@@ -286,7 +286,7 @@ async def test_hybrid_adapter_native_vmware_estimates_cost_from_inventory() -> N
 
     adapter = HybridAdapter(conn)
     with patch(
-        "app.shared.adapters.hybrid.httpx.AsyncClient", return_value=fake_client
+        "app.shared.adapters.hybrid.get_http_client", return_value=fake_client
     ):
         rows = await adapter.get_cost_and_usage(
             start_date=datetime(2026, 1, 1, tzinfo=timezone.utc),

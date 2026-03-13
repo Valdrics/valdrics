@@ -65,9 +65,10 @@ async def test_saas_detector_wires_connection_credentials_for_github_plugin() ->
     assert isinstance(detector, SaaSZombieDetector)
 
     with pytest.MonkeyPatch.context() as mp:
-        import httpx
-
-        mp.setattr(httpx, "AsyncClient", lambda *args, **kwargs: mock_client_ctx)
+        mp.setattr(
+            "app.modules.optimization.adapters.saas.plugins.api.get_http_client",
+            lambda *args, **kwargs: mock_client,
+        )
         result = await detector.scan_all()
 
     assert any(

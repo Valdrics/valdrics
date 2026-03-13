@@ -35,6 +35,7 @@ LLM_PROVIDER_SECRET_NAME = {
 }
 RUNTIME_BLOCKER_KEYS = (
     "API_URL",
+    "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN",
     "DATABASE_URL",
     "FRONTEND_URL",
     "OTEL_EXPORTER_OTLP_ENDPOINT",
@@ -49,6 +50,7 @@ KOYEB_SHARED_SECRET_NAMES = {
     "DATABASE_URL": "valdrics-database-url",
     "REDIS_URL": "valdrics-redis-url",
     "SUPABASE_JWT_SECRET": "valdrics-jwt-secret",
+    "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN": "valdrics-aws-trust-principal-arn",
     "ENFORCEMENT_APPROVAL_TOKEN_SECRET": "valdrics-enforcement-approval-token-secret",
     "ENFORCEMENT_EXPORT_SIGNING_SECRET": "valdrics-enforcement-export-signing-secret",
     "OTEL_EXPORTER_OTLP_ENDPOINT": "valdrics-otlp-endpoint",

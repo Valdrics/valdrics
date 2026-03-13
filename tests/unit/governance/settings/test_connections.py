@@ -55,6 +55,7 @@ async def test_get_aws_setup_templates(async_client: AsyncClient):
     data = response.json()
     assert "cloudformation_yaml" in data
     assert "terraform_hcl" in data
+    assert "AWSTemplateFormatVersion" in data["cloudformation_yaml"]
 
 
 @pytest.mark.asyncio
@@ -114,7 +115,7 @@ async def test_create_azure_connection_denied_on_free_tier(
         "/api/v1/settings/connections/azure", json=payload
     )
     assert response.status_code == 403
-    assert "requires 'Growth' plan or higher" in response.json()["error"]
+    assert "requires 'Starter' plan or higher" in response.json()["error"]
 
 
 @pytest.mark.asyncio
