@@ -29,6 +29,10 @@ REQUIRED_BOOL_FIELDS: tuple[str, ...] = (
     "alert_pipeline_verified",
 )
 
+REQUIRED_SOURCE_FIELDS: tuple[str, ...] = tuple(
+    f"source_{field}" for field in REQUIRED_BOOL_FIELDS
+)
+
 _FIELD_RE = re.compile(r"^- ([a-z0-9_]+):\s*(.+)\s*$")
 
 
@@ -89,6 +93,15 @@ def _parse_bool(value: str, *, field: str) -> bool:
     raise ValueError(f"{field} must be boolean-like (true/false)")
 
 
+def _parse_selector(value: str, *, field: str) -> str:
+    selector = str(value or "").strip()
+    if not selector:
+        raise ValueError(f"Missing required selector field: {field}")
+    if not selector.startswith("tests/") or "::" not in selector:
+        raise ValueError(f"{field} must be a repo-local pytest selector")
+    return selector
+
+
 def verify_key_rotation_drill_evidence(
     *,
     drill_path: Path,
@@ -113,6 +126,15 @@ def verify_key_rotation_drill_evidence(
         value = _parse_bool(fields.get(field, ""), field=field)
         if value is not True:
             raise ValueError(f"{field} must be true")
+
+    source_selectors = {
+        field: _parse_selector(fields.get(field, ""), field=field)
+        for field in REQUIRED_SOURCE_FIELDS
+    }
+    if len(set(source_selectors.values())) != len(source_selectors):
+        raise ValueError(
+            "required validation outcomes must be backed by distinct source selectors"
+        )
 
     executed_at_utc = _parse_iso_utc(fields.get("executed_at_utc"), field="executed_at_utc")
     next_drill_due_on = _parse_iso_date(fields.get("next_drill_due_on"), field="next_drill_due_on")

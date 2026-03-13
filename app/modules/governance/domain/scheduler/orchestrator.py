@@ -14,6 +14,7 @@ from app.modules.governance.domain.scheduler.cohorts import TenantCohort
 from app.modules.governance.domain.scheduler.processors import AnalysisProcessor
 from app.shared.core.config import get_settings
 from app.shared.core.rate_limit import get_redis_client
+from app.shared.db.session import mark_session_system_context
 from app.shared.core.ops_metrics import (
     STUCK_JOB_COUNT,
     record_scheduler_inline_fallback,
@@ -381,6 +382,7 @@ class SchedulerOrchestrator:
 
         for _ in range(max_batches):
             async with self.session_maker() as db:
+                await mark_session_system_context(db)
                 processor = JobProcessor(db)
                 batch = await processor.process_pending_jobs(limit=batch_size)
             totals["batches"] += 1
@@ -530,7 +532,7 @@ class SchedulerOrchestrator:
         # Background job processing: Every minute
         self.scheduler.add_job(
             self.background_job_processing_job,
-            trigger=CronTrigger(timezone="UTC"),
+            trigger=CronTrigger(minute="*", second=0, timezone="UTC"),
             id="background_job_processor",
             replace_existing=True,
         )

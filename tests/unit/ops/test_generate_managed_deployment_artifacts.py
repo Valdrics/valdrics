@@ -81,6 +81,11 @@ def test_generate_managed_deployment_artifacts_outputs_platform_ready_bundle(
     assert report["runtime_validation_blockers"] == []
     assert api_manifest["name"] == "valdrics-api"
     assert worker_manifest["name"] == "valdrics-worker"
+    assert api_manifest["definition"]["git"]["repository"] == "github.com/Valdrics/valdrics"
+    assert (
+        worker_manifest["definition"]["git"]["repository"]
+        == "github.com/Valdrics/valdrics"
+    )
     assert worker_manifest["definition"]["command"][0:3] == [
         "celery",
         "-A",
@@ -181,4 +186,5 @@ def test_generate_managed_deployment_artifacts_reports_placeholder_blockers_for_
     assert "valdrics-forecaster-break-glass-enabled-staging" not in report["koyeb_secret_names"]
     assert report["helm_external_secret_remote_key"] == "/valdrics/staging/app-runtime"
     assert api_manifest["name"] == "valdrics-api-staging"
+    assert api_manifest["definition"]["git"]["repository"] == "github.com/Valdrics/valdrics"
     assert "valdrics-internal-job-secret-staging" in report["koyeb_secret_names"]

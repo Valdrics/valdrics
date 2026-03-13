@@ -7,7 +7,7 @@ name: valdrics-api
 type: WEB
 definition:
   git:
-    repository: github.com/Valdrics-AI/valdrics
+    repository: github.com/Valdrics/valdrics
     branch: main
     builder: docker
     dockerfile: Dockerfile

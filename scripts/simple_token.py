@@ -1,29 +1,26 @@
+#!/usr/bin/env python3
+"""Retired legacy token helper.
 
-import jwt
-import os
-import base64
-import binascii
-from datetime import datetime, timedelta, timezone
-from dotenv import load_dotenv
+This entrypoint is intentionally disabled. Operators must use
+`scripts/emergency_token.py`, which enforces explicit break-glass controls,
+environment confirmation, short TTLs, and audit attribution.
+"""
 
-load_dotenv()
-secret_str = os.getenv('SUPABASE_JWT_SECRET')
-# Supabase secrets are often base64 encoded.
-try:
-    secret = base64.b64decode(secret_str)
-except (binascii.Error, TypeError, ValueError):
-    secret = secret_str
+from __future__ import annotations
 
-uid = "ffb600f6-46cc-410e-a9f3-275d942663f3"
-email = "admin@jirasmo.ke"
+import sys
 
-payload = {
-    "sub": uid,
-    "email": email,
-    "aud": "authenticated",
-    "iss": "supabase",
-    "exp": int((datetime.now(timezone.utc) + timedelta(hours=100)).timestamp())
-}
 
-token = jwt.encode(payload, secret, algorithm="HS256")
-print(token)
+DEPRECATION_MESSAGE = (
+    "scripts/simple_token.py is retired. "
+    "Use scripts/emergency_token.py for the guarded emergency-token flow."
+)
+
+
+def main() -> int:
+    print(DEPRECATION_MESSAGE, file=sys.stderr)
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

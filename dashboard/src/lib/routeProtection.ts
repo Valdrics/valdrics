@@ -24,6 +24,8 @@ const PUBLIC_SEGMENT_PREFIXES = [
 	'/proof',
 	'/resources',
 	'/.well-known',
+	'/api/edge',
+	'/api/geo',
 	'/api/marketing',
 	'/_app' // SvelteKit build assets
 ];

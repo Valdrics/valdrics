@@ -15,5 +15,5 @@ maintainers:
     email: team@valdrics.ai
 home: https://valdrics.ai
 sources:
-  - https://github.com/Valdrics-AI/valdrics
+  - https://github.com/Valdrics/valdrics
 dependencies: []

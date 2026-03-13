@@ -168,8 +168,15 @@ def _run_subprocess(
     }
 
 
+def _build_local_bootstrap_database_path() -> Path:
+    database_root = Path(
+        tempfile.mkdtemp(prefix="valdrics_webhook_job_reliability_drill_")
+    )
+    return database_root / "drill.sqlite3"
+
+
 def _run_local_sqlite_bootstrap() -> dict[str, object]:
-    database_path = Path(tempfile.gettempdir()) / "valdrics_webhook_reliability_drill.sqlite3"
+    database_path = _build_local_bootstrap_database_path()
     database_url = f"sqlite+aiosqlite:///{database_path.as_posix()}"
     env = _build_local_bootstrap_env(database_url)
 
@@ -184,6 +191,7 @@ def _run_local_sqlite_bootstrap() -> dict[str, object]:
     )
     result["database_url"] = database_url
     result["database_path"] = database_path.as_posix()
+    result["database_isolation"] = "unique_temp_path_per_run"
     return result
 
 

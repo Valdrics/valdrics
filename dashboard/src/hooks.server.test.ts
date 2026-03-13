@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
 	createServerClient: vi.fn(),
-	isPublicPath: vi.fn(),
 	canUseE2EAuthBypass: vi.fn(),
 	shouldUseSecureCookies: vi.fn(),
 	serverLogger: {
@@ -32,10 +31,6 @@ vi.mock('$env/dynamic/public', () => ({
 
 vi.mock('$env/dynamic/private', () => ({
 	env: mocks.privateEnv
-}));
-
-vi.mock('$lib/routeProtection', () => ({
-	isPublicPath: (...args: unknown[]) => mocks.isPublicPath(...args)
 }));
 
 vi.mock('$lib/serverSecurity', () => ({
@@ -69,7 +64,6 @@ describe('hooks.server handle', () => {
 	beforeEach(() => {
 		mocks.publicEnv.PUBLIC_SUPABASE_URL = 'https://supabase.example.co';
 		mocks.publicEnv.PUBLIC_SUPABASE_ANON_KEY = 'anon-key';
-		mocks.isPublicPath.mockReset();
 		mocks.createServerClient.mockReset();
 		mocks.canUseE2EAuthBypass.mockReset();
 		mocks.shouldUseSecureCookies.mockReset();
@@ -84,7 +78,6 @@ describe('hooks.server handle', () => {
 	it('allows public routes even when Supabase public env is missing', async () => {
 		mocks.publicEnv.PUBLIC_SUPABASE_URL = '';
 		mocks.publicEnv.PUBLIC_SUPABASE_ANON_KEY = '';
-		mocks.isPublicPath.mockReturnValue(true);
 
 		const event = createEvent('https://example.com/');
 		const resolve = vi.fn(
@@ -107,10 +100,37 @@ describe('hooks.server handle', () => {
 		expect(sessionResult).toEqual({ session: null, user: null });
 	});
 
+	it('allows public helper APIs using the real public-path allowlist', async () => {
+		mocks.publicEnv.PUBLIC_SUPABASE_URL = '';
+		mocks.publicEnv.PUBLIC_SUPABASE_ANON_KEY = '';
+
+		for (const url of [
+			'https://example.com/api/geo/currency',
+			'https://example.com/api/edge/health/live'
+		]) {
+			const event = createEvent(url);
+			const resolve = vi.fn(
+				async () =>
+					new Response(JSON.stringify({ ok: true }), {
+						status: 200,
+						headers: { 'content-type': 'application/json' }
+					})
+			);
+
+			const response = await handle({
+				event,
+				resolve
+			} as Parameters<typeof handle>[0]);
+
+			expect(response.status).toBe(200);
+			expect(resolve).toHaveBeenCalledTimes(1);
+		}
+		expect(mocks.createServerClient).not.toHaveBeenCalled();
+	});
+
 	it('fails closed for protected routes when Supabase public env is missing', async () => {
 		mocks.publicEnv.PUBLIC_SUPABASE_URL = '';
 		mocks.publicEnv.PUBLIC_SUPABASE_ANON_KEY = '';
-		mocks.isPublicPath.mockReturnValue(false);
 
 		const event = createEvent('https://example.com/ops');
 		const resolve = vi.fn();
@@ -125,7 +145,6 @@ describe('hooks.server handle', () => {
 	});
 
 	it('redirects protected routes to login when session is absent', async () => {
-		mocks.isPublicPath.mockReturnValue(false);
 		mocks.createServerClient.mockReturnValue({
 			auth: {
 				getSession: vi.fn().mockResolvedValue({ data: { session: null } }),
@@ -147,7 +166,6 @@ describe('hooks.server handle', () => {
 	});
 
 	it('logs provider resolution faults and fails closed to null session', async () => {
-		mocks.isPublicPath.mockReturnValue(true);
 		mocks.createServerClient.mockReturnValue({
 			auth: {
 				getSession: vi.fn().mockRejectedValue(new Error('dns failure')),
@@ -178,7 +196,6 @@ describe('hooks.server handle', () => {
 	});
 
 	it('uses constant-time bypass matching and builds non-static e2e sessions', async () => {
-		mocks.isPublicPath.mockReturnValue(true);
 		mocks.canUseE2EAuthBypass.mockReturnValue(true);
 		mocks.privateEnv.E2E_AUTH_SECRET = 'test-shared-secret';
 		mocks.createServerClient.mockReturnValue({

@@ -348,6 +348,7 @@ async def discover_sso_federation(
         .join(Tenant, SsoDomainMapping.tenant_id == Tenant.id)
         .where(SsoDomainMapping.domain == domain)
         .where(SsoDomainMapping.is_active.is_(True))
+        .where(Tenant.is_deleted.is_(False))
     )
     try:
         rows = (await asyncio.wait_for(db.execute(stmt), timeout=10.0)).all()

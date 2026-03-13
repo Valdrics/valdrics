@@ -102,6 +102,38 @@ class TestCarbonRegionIntensity:
             assert isinstance(intensity, CarbonIntensity)
 
     @pytest.mark.asyncio
+    async def test_get_region_intensity_with_source_reports_api_when_provider_data_available(self):
+        scheduler = CarbonAwareScheduler(electricitymaps_key="em-key")
+
+        with patch.object(
+            scheduler,
+            "_fetch_emap_current_intensity",
+            new=AsyncMock(return_value=180.0),
+        ):
+            intensity, source = await scheduler.get_region_intensity_with_source(
+                "us-west-2"
+            )
+
+        assert intensity == CarbonIntensity.LOW
+        assert source == "api"
+
+    @pytest.mark.asyncio
+    async def test_get_region_intensity_with_source_reports_simulation_on_provider_fallback(self):
+        scheduler = CarbonAwareScheduler(electricitymaps_key="em-key")
+
+        with patch.object(
+            scheduler,
+            "_fetch_emap_current_intensity",
+            new=AsyncMock(return_value=None),
+        ):
+            intensity, source = await scheduler.get_region_intensity_with_source(
+                "us-west-2"
+            )
+
+        assert isinstance(intensity, CarbonIntensity)
+        assert source == "simulation"
+
+    @pytest.mark.asyncio
     async def test_region_intensity_low_carbon_regions(self):
         """Test that low-carbon regions are classified correctly."""
         scheduler = CarbonAwareScheduler()
@@ -230,6 +262,23 @@ class TestCarbonIntensityForecast:
             assert "intensity_gco2_kwh" in item
             assert "level" in item
             assert item["level"] in ["very_low", "low", "medium", "high", "very_high"]
+
+    @pytest.mark.asyncio
+    async def test_get_intensity_forecast_with_source_falls_back_to_simulation_when_provider_returns_empty(self):
+        scheduler = CarbonAwareScheduler(electricitymaps_key="em-key")
+
+        with patch.object(
+            scheduler,
+            "_fetch_emap_forecast",
+            new=AsyncMock(return_value=[]),
+        ):
+            forecast, source = await scheduler.get_intensity_forecast_with_source(
+                "us-west-2",
+                hours=3,
+            )
+
+        assert len(forecast) == 3
+        assert source == "simulation"
 
     def test_intensity_to_level_boundary_values(self):
         """Test level classification at boundaries."""
@@ -650,6 +699,42 @@ class TestCarbonForecastApiFallbacks:
             result = await scheduler._fetch_emap_forecast("us-east-1", hours=3)
 
         assert result == []
+
+    @pytest.mark.asyncio
+    async def test_fetch_emap_forecast_uses_region_coordinates(self) -> None:
+        scheduler = CarbonAwareScheduler(electricitymaps_key="token")
+        response = MagicMock()
+        response.json.return_value = {
+            "forecast": [
+                {"datetime": "2026-01-01T00:00:00Z", "carbonIntensity": 123.0}
+            ]
+        }
+        response.raise_for_status.return_value = None
+        client = MagicMock()
+        client.get = AsyncMock(return_value=response)
+
+        with patch("app.shared.core.http.get_http_client", return_value=client):
+            result = await scheduler._fetch_emap_forecast("us-west-2", hours=3)
+
+        assert result[0]["intensity_gco2_kwh"] == 123.0
+        _, kwargs = client.get.await_args
+        assert kwargs["params"] == {"lat": 45.52, "lon": -122.67, "horizon": 3}
+
+    @pytest.mark.asyncio
+    async def test_fetch_emap_current_intensity_uses_region_coordinates(self) -> None:
+        scheduler = CarbonAwareScheduler(electricitymaps_key="token")
+        response = MagicMock()
+        response.json.return_value = {"carbonIntensity": 210.0}
+        response.raise_for_status.return_value = None
+        client = MagicMock()
+        client.get = AsyncMock(return_value=response)
+
+        with patch("app.shared.core.http.get_http_client", return_value=client):
+            result = await scheduler._fetch_emap_current_intensity("eu-west-1")
+
+        assert result == 210.0
+        _, kwargs = client.get.await_args
+        assert kwargs["params"] == {"lat": 53.34, "lon": -6.26}
 
     @pytest.mark.asyncio
     async def test_fetch_wattime_forecast_does_not_swallow_base_exceptions(

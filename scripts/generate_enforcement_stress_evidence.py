@@ -17,6 +17,8 @@ from uuid import UUID
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from scripts.in_process_runtime_env import configure_isolated_test_environment
+
 
 ENFORCEMENT_ENDPOINTS: tuple[str, ...] = (
     "/health/live",
@@ -34,6 +36,19 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description="Generate enforcement stress evidence artifact in CI/local runs.",
     )
     parser.add_argument("--output", required=True, help="Output JSON artifact path.")
+    parser.add_argument(
+        "--database-url",
+        required=True,
+        help=(
+            "Explicit database URL for the in-process runtime. Release evidence never "
+            "inherits a shell-exported DATABASE_URL."
+        ),
+    )
+    parser.add_argument(
+        "--required-database-engine",
+        default="postgresql",
+        help="Required runtime database engine for emitted evidence (default: postgresql).",
+    )
     parser.add_argument(
         "--duration-seconds",
         type=int,
@@ -108,28 +123,59 @@ def _extract_health_database_engine(payload: Any) -> str:
     )
 
 
-def _ensure_test_env() -> Path:
-    os.environ.setdefault("TESTING", "true")
-    os.environ.setdefault("DB_SSL_MODE", "disable")
-    os.environ.setdefault(
-        "SUPABASE_JWT_SECRET", "test-jwt-secret-for-testing-at-least-32-bytes"
-    )
-    os.environ.setdefault("ENCRYPTION_KEY", "32-byte-long-test-encryption-key")
-    os.environ.setdefault("CSRF_SECRET_KEY", "test-csrf-secret-key-at-least-32-bytes")
-    os.environ.setdefault(
-        "KDF_SALT",
-        "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=",
-    )
-    sqlite_path = Path(tempfile.gettempdir()) / "valdrics_enforcement_stress.sqlite"
-    os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{sqlite_path}")
-    return sqlite_path
+def _resolve_requested_database_url(
+    *,
+    database_url: str,
+    required_database_engine: str,
+) -> str:
+    resolved_database_url = str(database_url or "").strip()
+    if not resolved_database_url:
+        raise ValueError("--database-url must be provided for enforcement stress evidence")
+
+    actual_engine = _normalize_database_engine_name(resolved_database_url)
+    required_engine = _normalize_database_engine_name(required_database_engine)
+    if not actual_engine:
+        raise ValueError(
+            f"Unable to determine database engine from --database-url: {resolved_database_url!r}"
+        )
+    if required_engine and actual_engine != required_engine:
+        raise ValueError(
+            "enforcement stress evidence requires a "
+            f"{required_engine} runtime, got {actual_engine}"
+        )
+    return resolved_database_url
 
 
-async def _bootstrap_app_and_token() -> tuple[Any, str]:
-    _ensure_test_env()
+def _configure_isolated_bootstrap_env(*, database_url: str) -> str:
+    resolved_database_url = str(database_url or "").strip()
+    configure_isolated_test_environment(database_url=resolved_database_url)
+    return resolved_database_url
+
+
+def _validate_runtime_database_engine(
+    *,
+    runtime_snapshot: dict[str, Any],
+    required_database_engine: str,
+) -> str:
+    actual_engine = _normalize_database_engine_name(runtime_snapshot.get("database_engine"))
+    required_engine = _normalize_database_engine_name(required_database_engine)
+    if not actual_engine:
+        raise ValueError(
+            "runtime health snapshot did not report a database engine for enforcement evidence"
+        )
+    if required_engine and actual_engine != required_engine:
+        raise ValueError(
+            "runtime database engine does not satisfy the enforcement evidence contract: "
+            f"expected {required_engine}, got {actual_engine}"
+        )
+    return actual_engine
+
+
+async def _bootstrap_app_and_token(*, database_url: str) -> tuple[Any, str]:
+    _configure_isolated_bootstrap_env(database_url=database_url)
 
     from app.shared.db.base import Base
-    from app.shared.db.session import get_engine
+    from app.shared.db.session import get_engine, reset_db_runtime
 
     # Register relationship targets before metadata creation.
     import app.models.aws_connection  # noqa: F401
@@ -143,6 +189,7 @@ async def _bootstrap_app_and_token() -> tuple[Any, str]:
     import app.models.tenant  # noqa: F401
     import app.models.tenant_identity_settings  # noqa: F401
 
+    reset_db_runtime()
     async_engine = get_engine()
     async with async_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -269,7 +316,14 @@ def _result_to_payload(result: Any) -> dict[str, Any]:
 
 
 async def generate_evidence(args: argparse.Namespace) -> dict[str, Any]:
-    app, token = await _bootstrap_app_and_token()
+    required_database_engine = _normalize_database_engine_name(
+        getattr(args, "required_database_engine", "postgresql")
+    )
+    database_url = _resolve_requested_database_url(
+        database_url=str(getattr(args, "database_url", "")),
+        required_database_engine=required_database_engine,
+    )
+    app, token = await _bootstrap_app_and_token(database_url=database_url)
     target_url = "http://testserver"
     endpoints = list(ENFORCEMENT_ENDPOINTS)
     headers = {"Authorization": f"Bearer {token}"}
@@ -286,6 +340,10 @@ async def generate_evidence(args: argparse.Namespace) -> dict[str, Any]:
         runtime_snapshot = await _collect_runtime_snapshot(client)
         if not preflight.get("passed"):
             raise ValueError("enforcement stress preflight failed")
+        runtime_snapshot["database_engine"] = _validate_runtime_database_engine(
+            runtime_snapshot=runtime_snapshot,
+            required_database_engine=required_database_engine,
+        )
 
         from app.shared.core import http as http_core
         from app.shared.core.performance_evidence import (
@@ -398,6 +456,7 @@ async def generate_evidence(args: argparse.Namespace) -> dict[str, Any]:
         "runner": "scripts/load_test_api.py",
         "preflight": preflight,
         "runtime": runtime_snapshot,
+        "required_database_engine": required_database_engine,
         "thresholds": {
             "max_p95_seconds": thresholds.max_p95_seconds,
             "max_error_rate_percent": thresholds.max_error_rate_percent,

@@ -115,7 +115,7 @@
 				</div>
 				<div class="public-page__actions-row">
 					<a
-						href="https://github.com/Valdrics-AI/valdrics/tree/main/docs"
+						href="https://github.com/Valdrics/valdrics/tree/main/docs"
 						target="_blank"
 						rel="noopener noreferrer"
 						class="btn btn-secondary"
