@@ -80,7 +80,8 @@ def _write_baseline(
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "root": str(root),
+        # Keep the checked-in baseline stable across different local worktrees and CI paths.
+        "root": ".",
         "breaches": [asdict(item) for item in breaches],
     }
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")

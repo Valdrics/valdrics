@@ -15,12 +15,8 @@ export function getOnboardingSetupAccessError(args: {
 	canUseCloudPlusFeatures: boolean;
 	getProviderLabel: (provider: OnboardingProvider) => string;
 }): string | null {
-	const {
-		selectedProvider,
-		canUseMultiCloudFeatures,
-		canUseCloudPlusFeatures,
-		getProviderLabel
-	} = args;
+	const { selectedProvider, canUseMultiCloudFeatures, canUseCloudPlusFeatures, getProviderLabel } =
+		args;
 	if ((selectedProvider === 'azure' || selectedProvider === 'gcp') && !canUseMultiCloudFeatures) {
 		return `${getProviderLabel(selectedProvider)} onboarding requires Starter tier or higher.`;
 	}

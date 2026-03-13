@@ -62,8 +62,8 @@
 			<p class="landing-proof-k">About and direct review</p>
 			<h3 class="landing-h3">Buyers can review the company and product before onboarding</h3>
 			<p class="landing-p">
-				Use the public about page, docs, proof pack, and status surface to understand how
-				Valdrics is built and how early evaluation works before procurement or source access.
+				Use the public about page, docs, proof pack, and status surface to understand how Valdrics
+				is built and how early evaluation works before procurement or source access.
 			</p>
 			<div class="landing-proof-state-links">
 				<a href={aboutHref} class="landing-cta-link" onclick={() => onTrackCta('about_review')}
