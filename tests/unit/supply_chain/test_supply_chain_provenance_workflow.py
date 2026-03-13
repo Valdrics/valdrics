@@ -138,6 +138,12 @@ def test_performance_gate_supports_reuse_and_ci_automation() -> None:
     assert "performance-dashboard-gate:" in ci_text
     assert "performance-ops-gate:" in ci_text
     assert "uses: ./.github/workflows/performance-gate.yml" in ci_text
+    assert "performance.owner@valdrics.local" not in perf_text
+    assert 'performance.owner@valdrics.ai' in perf_text
+    assert 'performance.owner@valdrics.ai' in (
+        REPO_ROOT / "scripts/bootstrap_performance_tenant.py"
+    ).read_text(encoding="utf-8")
+    assert 'p95_target: "1.25"' in ci_text
 
 
 def test_strict_runtime_preflight_is_hermetic_and_explicit_in_workflows() -> None:

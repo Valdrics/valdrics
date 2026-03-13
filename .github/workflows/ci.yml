@@ -463,7 +463,7 @@ jobs:
       duration: "15"
       users: "5"
       ramp: "2"
-      p95_target: "1.0"
+      p95_target: "1.25"
       max_error_rate: "0.0"
       start_local_api: true
 

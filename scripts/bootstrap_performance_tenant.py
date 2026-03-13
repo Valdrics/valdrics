@@ -25,7 +25,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--email",
-        default="performance.owner@valdrics.local",
+        default="performance.owner@valdrics.ai",
         help="Owner email used for the bootstrap token and onboarding.",
     )
     parser.add_argument(
@@ -73,4 +73,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

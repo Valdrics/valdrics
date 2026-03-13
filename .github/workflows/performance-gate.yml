@@ -256,7 +256,7 @@ jobs:
         if: ${{ inputs.bootstrap_tenant }}
         run: |
           set -euo pipefail
-          TOKEN="$(uv run python scripts/bootstrap_performance_tenant.py --url http://127.0.0.1:8000 --tenant-name "Performance Validation Tenant" --email "performance.owner@valdrics.local")"
+          TOKEN="$(uv run python scripts/bootstrap_performance_tenant.py --url http://127.0.0.1:8000 --tenant-name "Performance Validation Tenant" --email "performance.owner@valdrics.ai")"
           echo "VALDRICS_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
 
       - name: Export Provided Performance Token
