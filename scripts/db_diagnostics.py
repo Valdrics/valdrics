@@ -10,9 +10,9 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.shared.core.config import get_settings
+from app.shared.db.session import get_engine
 
 
 @dataclass(frozen=True)
@@ -22,8 +22,7 @@ class CommandResult:
 
 
 def _build_engine() -> AsyncEngine:
-    settings = get_settings()
-    return create_async_engine(settings.DATABASE_URL)
+    return get_engine()
 
 
 async def _run_ping(engine: AsyncEngine) -> CommandResult:
@@ -204,4 +203,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

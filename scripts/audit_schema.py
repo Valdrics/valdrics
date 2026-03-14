@@ -1,11 +1,12 @@
 import asyncio
-from sqlalchemy.ext.asyncio import create_async_engine
+
 from sqlalchemy import text
-from app.shared.core.config import get_settings
+
+from app.shared.db.session import get_engine
+from scripts.rls_tooling import is_rls_exempt_table, requires_rls
 
 async def audit_schema():
-    settings = get_settings()
-    engine = create_async_engine(settings.DATABASE_URL)
+    engine = get_engine()
     
     async with engine.connect() as conn:
         print("\n--- GLOBAL SCHEMA AUDIT ---")
@@ -41,7 +42,9 @@ async def audit_schema():
             status = "✅ READY"
             issues = []
             
-            if has_tenant_id and not t.rls_enabled:
+            if has_tenant_id and is_rls_exempt_table(t.table_name):
+                issues.append("RLS EXEMPT")
+            elif requires_rls(table_name=t.table_name, has_tenant_id=has_tenant_id) and not t.rls_enabled:
                 status = "❌ NOT READY"
                 issues.append("RLS NOT ENABLED")
             

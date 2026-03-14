@@ -23,6 +23,21 @@ def test_build_cloudflare_dns_payload_uses_origin_hostname() -> None:
     }
 
 
+def test_build_cloudflare_dns_payload_rejects_non_default_port() -> None:
+    with pytest.raises(ValueError, match="non-default port"):
+        run_regional_failover._build_cloudflare_dns_payload(
+            record_name="api.valdrics.example",
+            target_origin="https://secondary-api.valdrics.example:8443",
+        )
+
+
+def test_normalize_origin_rejects_path_suffix() -> None:
+    with pytest.raises(ValueError, match="bare origin without path"):
+        run_regional_failover._normalize_origin(
+            "https://secondary-api.valdrics.example/ready"
+        )
+
+
 @pytest.mark.asyncio
 async def test_main_dry_run_emits_automated_failover_evidence(
     monkeypatch: pytest.MonkeyPatch,

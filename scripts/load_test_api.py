@@ -6,7 +6,7 @@ This wraps `app.shared.core.performance_testing.LoadTester` so we can
 standardize how we measure p95/p99 for key endpoints during hardening.
 
 Example:
-  export VALDRICS_TOKEN="$(uv run python scripts/dev_bearer_token.py --email owner@valdrics.io)"
+  export VALDRICS_TOKEN="<existing-jwt-or-guarded-emergency-token>"
   uv run python scripts/load_test_api.py --url http://127.0.0.1:8000 --endpoint /health/live --endpoint /api/v1/costs/acceptance/kpis
 
 Perf smoke (dashboard profile):

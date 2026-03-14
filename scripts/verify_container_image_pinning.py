@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import os
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 import yaml
+from dotenv import dotenv_values
 
 DEFAULT_REPO_ROOT = Path(".")
 DEFAULT_COMPOSE_PATHS: tuple[Path, ...] = (
@@ -17,6 +19,8 @@ DEFAULT_COMPOSE_PATHS: tuple[Path, ...] = (
 )
 MUTABLE_TAGS = {"latest"}
 SHA256_DIGEST_RE = re.compile(r"^[0-9a-f]{64}$")
+INTERPOLATION_RE = re.compile(r"\$\{([^}]+)\}")
+VARIABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def _resolve_path(*, repo_root: Path, compose_path: Path) -> Path:
@@ -25,6 +29,60 @@ def _resolve_path(*, repo_root: Path, compose_path: Path) -> Path:
 
 def _is_variable_ref(value: str) -> bool:
     return "${" in value and "}" in value
+
+
+def _load_interpolation_environment(
+    *, repo_root: Path, environment: Mapping[str, str] | None
+) -> dict[str, str]:
+    env_path = repo_root / ".env"
+    resolved: dict[str, str] = {}
+    if env_path.exists():
+        resolved.update(
+            {
+                str(key): str(value)
+                for key, value in dotenv_values(env_path).items()
+                if value is not None
+            }
+        )
+    source_environment = environment if environment is not None else os.environ
+    resolved.update({str(key): str(value) for key, value in source_environment.items()})
+    return resolved
+
+
+def _resolve_interpolation_token(expression: str, environment: Mapping[str, str]) -> str:
+    for operator in (":-", ":?", "?", "-"):
+        if operator not in expression:
+            continue
+        variable_name, operand = expression.split(operator, 1)
+        variable_name = variable_name.strip()
+        if not VARIABLE_NAME_RE.fullmatch(variable_name):
+            raise ValueError(f"unsupported interpolation token: {expression}")
+        value = environment.get(variable_name)
+        if operator == ":-":
+            return value if value not in {None, ""} else operand
+        if operator == "-":
+            return value if value is not None else operand
+        if operator == ":?":
+            if value not in {None, ""}:
+                return value
+            raise ValueError(operand or f"{variable_name} must be set")
+        if value is not None:
+            return value
+        raise ValueError(operand or f"{variable_name} must be set")
+
+    variable_name = expression.strip()
+    if not VARIABLE_NAME_RE.fullmatch(variable_name):
+        raise ValueError(f"unsupported interpolation token: {expression}")
+    if variable_name not in environment:
+        raise ValueError(f"{variable_name} must be set")
+    return environment[variable_name]
+
+
+def _resolve_image_ref(image_ref: str, *, environment: Mapping[str, str]) -> str:
+    def _replace(match: re.Match[str]) -> str:
+        return _resolve_interpolation_token(match.group(1), environment)
+
+    return INTERPOLATION_RE.sub(_replace, image_ref)
 
 
 def _extract_tag(image_ref: str) -> str | None:
@@ -45,6 +103,7 @@ def _verify_service_image(
     compose_path: Path,
     service_name: str,
     service_def: dict[str, Any],
+    environment: Mapping[str, str],
 ) -> tuple[str, ...]:
     image_value = service_def.get("image")
     if image_value is None:
@@ -56,7 +115,16 @@ def _verify_service_image(
             f"{compose_path.as_posix()}:{service_name} image reference must not be empty",
         )
     if _is_variable_ref(image_ref):
-        return ()
+        try:
+            image_ref = _resolve_image_ref(image_ref, environment=environment)
+        except ValueError as exc:
+            return (
+                f"{compose_path.as_posix()}:{service_name} image reference could not be resolved: {exc}",
+            )
+        if not image_ref.strip():
+            return (
+                f"{compose_path.as_posix()}:{service_name} image reference resolved to an empty value",
+            )
 
     if "@sha256:" in image_ref:
         digest = image_ref.split("@sha256:", 1)[1].strip()
@@ -97,8 +165,13 @@ def verify_container_image_pinning(
     *,
     repo_root: Path,
     compose_paths: tuple[Path, ...] = DEFAULT_COMPOSE_PATHS,
+    environment: Mapping[str, str] | None = None,
 ) -> tuple[str, ...]:
     errors: list[str] = []
+    interpolation_environment = _load_interpolation_environment(
+        repo_root=repo_root,
+        environment=environment,
+    )
 
     for compose_path in compose_paths:
         resolved = _resolve_path(repo_root=repo_root, compose_path=compose_path)
@@ -120,6 +193,7 @@ def verify_container_image_pinning(
                     compose_path=resolved,
                     service_name=str(service_name),
                     service_def=service_def,
+                    environment=interpolation_environment,
                 )
             )
     return tuple(errors)

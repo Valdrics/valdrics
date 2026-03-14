@@ -1,15 +1,11 @@
 import asyncio
-import sys
-import os
-from uuid import uuid4
-from sqlalchemy import text
 from datetime import datetime, timezone
+from uuid import uuid4
 
-# Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from sqlalchemy import text
 
-from app.shared.db.session import async_session_maker, engine
 from app.shared.core.security import encrypt_string, generate_blind_index
+from app.shared.db.session import async_session_maker, get_engine
 
 async def seed_data():
     """Seed initial development data (Tenant + User) using Raw SQL."""
@@ -29,12 +25,12 @@ async def seed_data():
                 tenant_id = uuid4()
                 tenant_name = "Valdrics Dev"
                 tenant_name_enc = encrypt_string(tenant_name)
-                tenant_name_bidx = generate_blind_index(tenant_name)
+                tenant_name_bidx = generate_blind_index(tenant_name, tenant_id=tenant_id)
                 
                 user_id = uuid4()
                 user_email = "admin@valdrics.com"
                 user_email_enc = encrypt_string(user_email)
-                user_email_bidx = generate_blind_index(user_email)
+                user_email_bidx = generate_blind_index(user_email, tenant_id=tenant_id)
                 
                 now = datetime.now(timezone.utc)
 
@@ -80,7 +76,7 @@ async def seed_data():
                  print("  ~ Users already exist, skipping seed.", flush=True)
 
     print("✅ Dev data seeding complete!", flush=True)
-    await engine.dispose()
+    await get_engine().dispose()
 
 if __name__ == "__main__":
     asyncio.run(seed_data())
