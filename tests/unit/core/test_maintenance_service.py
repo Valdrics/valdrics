@@ -73,6 +73,17 @@ async def test_create_future_partitions_logs_and_continues_on_create_error() -> 
 
 
 @pytest.mark.asyncio
+async def test_create_future_partitions_skips_unsupported_backend() -> None:
+    db = AsyncMock()
+    db.bind = type("Bind", (), {"dialect": type("Dialect", (), {"name": "sqlite"})()})()
+    service = PartitionMaintenanceService(db)
+
+    assert await service.create_future_partitions(months_ahead=1) == 0
+    db.execute.assert_not_called()
+    db.scalar.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_archive_old_partitions_skips_unsupported_backend() -> None:
     db = AsyncMock()
     db.bind = type("Bind", (), {"dialect": type("Dialect", (), {"name": "sqlite"})()})()
@@ -116,6 +127,31 @@ async def test_archive_old_partitions_archives_only_old_partitions() -> None:
 
 
 @pytest.mark.asyncio
+async def test_archive_old_partitions_raises_on_archive_setup_failure() -> None:
+    db = AsyncMock()
+    db.execute = AsyncMock()
+    db.bind = type(
+        "Bind", (), {"dialect": type("Dialect", (), {"name": "postgresql"})()}
+    )()
+    service = PartitionMaintenanceService(db)
+
+    with (
+        patch.object(
+            service,
+            "_ensure_cost_archive_table",
+            AsyncMock(side_effect=RuntimeError("archive setup failed")),
+        ),
+        patch("app.shared.core.maintenance.logger.error") as logger_error,
+    ):
+        with pytest.raises(RuntimeError, match="archive setup failed"):
+            await service.archive_old_partitions(months_old=13)
+
+    logger_error.assert_called_once_with(
+        "partition_archival_failed", error="archive setup failed"
+    )
+
+
+@pytest.mark.asyncio
 async def test_archive_partition_upserts_and_drops_source_partition() -> None:
     db = AsyncMock()
     db.scalar = AsyncMock(return_value=4)
@@ -129,9 +165,8 @@ async def test_archive_partition_upserts_and_drops_source_partition() -> None:
 
     assert archived == 4
     assert db.scalar.await_count == 1
-    assert db.execute.await_count == 3
+    assert db.execute.await_count == 2
     statements = [str(call.args[0]) for call in db.execute.await_args_list]
     assert "INSERT INTO cost_records_archive" in statements[0]
     assert "ON CONFLICT (id, recorded_at)" in statements[0]
-    assert "DELETE FROM cost_records_2024_01" in statements[1]
-    assert "DROP TABLE IF EXISTS cost_records_2024_01" in statements[2]
+    assert "DROP TABLE IF EXISTS cost_records_2024_01" in statements[1]

@@ -30,13 +30,13 @@ async def monitor_usage(session):
 
 async def run_cleanup() -> int:
     engine = get_engine()
-    
-    bloated_partitions = []
-    
-    async with async_session_maker() as session:
-        try:
+
+    try:
+        bloated_partitions = []
+
+        async with async_session_maker() as session:
             await monitor_usage(session)
-            
+
             # Identify bloat (Partitions with very few rows but > 1MB size)
             res = await session.execute(text("""
                 SELECT relname 
@@ -52,28 +52,24 @@ async def run_cleanup() -> int:
             else:
                 print("\nNo significant bloat detected in cost_records partitions.")
 
-        except SUPABASE_CLEANUP_RECOVERABLE_EXCEPTIONS as exc:
-            print(f"❌ ERROR: {exc}", file=sys.stderr)
-            return 1
-    
-    # Run VACUUM FULL outside transaction to reclaim disk space
-    if bloated_partitions:
-        try:
+        # Run VACUUM FULL outside transaction to reclaim disk space
+        if bloated_partitions:
             async with engine.connect() as conn:
                 await conn.execution_options(isolation_level="AUTOCOMMIT")
                 for part in bloated_partitions:
                     print(f"  VACUUM FULL {part}...")
                     await conn.execute(text(f"VACUUM FULL {part};"))
                 print("✅ Aggressive reclamation (VACUUM FULL) completed.")
-        except SUPABASE_CLEANUP_RECOVERABLE_EXCEPTIONS as vacuum_exc:
-            print(f"⚠️ Vacuum failed: {vacuum_exc}", file=sys.stderr)
-            return 1
-    
-    async with async_session_maker() as session:
-        await monitor_usage(session)
 
-    await engine.dispose()
-    return 0
+        async with async_session_maker() as session:
+            await monitor_usage(session)
+
+        return 0
+    except SUPABASE_CLEANUP_RECOVERABLE_EXCEPTIONS as exc:
+        print(f"❌ ERROR: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        await engine.dispose()
 
 if __name__ == "__main__":
     raise SystemExit(asyncio.run(run_cleanup()))

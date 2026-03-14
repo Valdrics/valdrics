@@ -3,7 +3,7 @@
 Snapshot:
 - Captured at: `2026-03-14T04:30:09Z`
 - Base commit: `342b9939f50b76df99c2f61874f4d303ba1f37f0`
-- Pending paths: `36`
+- Pending paths: `40`
 - Branch at snapshot: `fix/main-trivy-pyjwt-2026-03-14`
 
 ## Track BE: Security and Release-Gate Hardening
@@ -48,7 +48,7 @@ Notes:
 Scope:
 - Harden destructive or high-risk operator scripts with explicit break-glass validation.
 - Retire unsafe dev bearer-token generation paths.
-- Centralize RLS table-filter helpers and make purge/remediation tooling deterministic.
+- Centralize RLS table-filter helpers, extend partition/supabase script failure coverage, and make purge/remediation tooling deterministic.
 
 Paths:
 - `scripts/audit_schema.py`
@@ -69,6 +69,7 @@ Paths:
 - `scripts/verify_rls.py`
 - `tests/unit/ops/test_db_diagnostics.py`
 - `tests/unit/ops/test_legacy_script_hardening.py`
+- `tests/unit/ops/test_partition_and_rls_scripts.py`
 
 Notes:
 - New `scripts/emergency_disconnect.py` performs Valdrics-side AWS disconnect only; cloud-side revocation remains manual.
@@ -77,12 +78,14 @@ Notes:
 
 ## Track BH: Runtime Operations Verification and Managed Failover
 Scope:
-- Strengthen regional failover and container-image pinning verifiers.
+- Strengthen regional failover, partition maintenance, and container-image pinning verifiers.
 - Keep runtime disposition freshness aligned with ops evidence generation.
 
 Paths:
+- `app/shared/core/maintenance.py`
 - `scripts/run_regional_failover.py`
 - `scripts/verify_container_image_pinning.py`
+- `tests/unit/core/test_maintenance_service.py`
 - `tests/unit/ops/test_run_regional_failover.py`
 - `tests/unit/ops/test_verify_container_image_pinning.py`
 
