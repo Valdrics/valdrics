@@ -53,6 +53,10 @@ on:
         required: false
         type: boolean
         default: false
+      bootstrap_tier:
+        description: "Local tenant tier to assign after bootstrap"
+        required: false
+        default: "free"
   workflow_call:
     inputs:
       url:
@@ -95,6 +99,10 @@ on:
         required: false
         type: boolean
         default: false
+      bootstrap_tier:
+        required: false
+        type: string
+        default: "free"
     secrets:
       VALDRICS_TOKEN:
         required: false
@@ -109,7 +117,7 @@ env:
   TESTING: "false"
   DEBUG: "false"
   DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"
-  DB_SSL_MODE: "require"
+  DB_SSL_MODE: "disable"
   API_URL: "https://api.staging.valdrics.example"
   FRONTEND_URL: "https://dashboard.staging.valdrics.example"
   CSRF_SECRET_KEY: "ci-csrf-secret-key-32-chars-min-000000"
@@ -256,7 +264,14 @@ jobs:
         if: ${{ inputs.bootstrap_tenant }}
         run: |
           set -euo pipefail
-          TOKEN="$(uv run python scripts/bootstrap_performance_tenant.py --url http://127.0.0.1:8000 --tenant-name "Performance Validation Tenant" --email "performance.owner@valdrics.local")"
+          BOOTSTRAP_ARGS=(
+            --url http://127.0.0.1:8000
+            --tenant-name "Performance Validation Tenant"
+            --email "performance.owner@valdrics.ai"
+            --tier "${{ inputs.bootstrap_tier }}"
+          )
+          TOKEN="$(uv run python scripts/bootstrap_performance_tenant.py "${BOOTSTRAP_ARGS[@]}" | tail -n 1 | tr -d '\r')"
+          [ -n "${TOKEN}" ]
           echo "VALDRICS_TOKEN=${TOKEN}" >> "$GITHUB_ENV"
 
       - name: Export Provided Performance Token
@@ -282,7 +297,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: perf-gate-evidence
+          name: perf-gate-evidence-${{ inputs.profile }}
           path: reports/performance/perf_gate_${{ github.run_id }}.json
           retention-days: 14
 
@@ -290,7 +305,7 @@ jobs:
         if: ${{ always() && inputs.start_local_api }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: perf-gate-api-log
+          name: perf-gate-api-log-${{ inputs.profile }}
           path: /tmp/valdrics-perf.log
           retention-days: 14
 
@@ -298,7 +313,7 @@ jobs:
         if: ${{ always() && inputs.start_local_api }}
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
-          name: perf-gate-worker-log
+          name: perf-gate-worker-log-${{ inputs.profile }}
           path: /tmp/valdrics-perf-worker.log
           retention-days: 14
 

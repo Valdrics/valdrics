@@ -8,6 +8,8 @@ import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from fastapi.testclient import TestClient
 
+from scripts.in_process_runtime_env import build_isolated_test_environment_values
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STATIC_DIR = REPO_ROOT / "app" / "static"
@@ -229,24 +231,22 @@ def test_app_import_is_stable_outside_repo_cwd(tmp_path: Path) -> None:
     env = os.environ.copy()
     env.pop("DEBUG", None)
     env.update(
+        build_isolated_test_environment_values(
+            database_url="sqlite+aiosqlite:///:memory:"
+        )
+    )
+    env.update(
         {
             "PYTHONPATH": str(REPO_ROOT),
-            "TESTING": "true",
-            "DATABASE_URL": "sqlite+aiosqlite:///:memory:",
-            "SUPABASE_JWT_SECRET": "test-jwt-secret-for-testing-at-least-32-bytes",
             "ENFORCEMENT_APPROVAL_TOKEN_SECRET": (
                 "test-approval-token-secret-for-testing-at-least-32-bytes"
             ),
             "ENFORCEMENT_EXPORT_SIGNING_SECRET": (
                 "test-export-signing-secret-for-testing-at-least-32-bytes"
             ),
-            "ENCRYPTION_KEY": "32-byte-long-test-encryption-key",
-            "CSRF_SECRET_KEY": "test-csrf-secret-key-at-least-32-bytes",
-            "KDF_SALT": "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=",
             "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN": (
                 "arn:aws:iam::000000000000:role/ValdricsTestControlPlane"
             ),
-            "DB_SSL_MODE": "disable",
         }
     )
     script = textwrap.dedent(

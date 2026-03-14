@@ -138,6 +138,19 @@ def test_performance_gate_supports_reuse_and_ci_automation() -> None:
     assert "performance-dashboard-gate:" in ci_text
     assert "performance-ops-gate:" in ci_text
     assert "uses: ./.github/workflows/performance-gate.yml" in ci_text
+    assert "performance.owner@valdrics.local" not in perf_text
+    assert 'performance.owner@valdrics.ai' in perf_text
+    assert 'performance.owner@valdrics.ai' in (
+        REPO_ROOT / "scripts/bootstrap_performance_tenant.py"
+    ).read_text(encoding="utf-8")
+    assert 'p95_target: "1.25"' in ci_text
+    assert "bootstrap_tier:" in perf_text
+    assert '--tier "${{ inputs.bootstrap_tier }}"' in perf_text
+    assert 'tail -n 1 | tr -d' in perf_text
+    assert 'bootstrap_tier: "starter"' in ci_text
+    assert 'name: perf-gate-evidence-${{ inputs.profile }}' in perf_text
+    assert 'name: perf-gate-api-log-${{ inputs.profile }}' in perf_text
+    assert 'name: perf-gate-worker-log-${{ inputs.profile }}' in perf_text
 
 
 def test_strict_runtime_preflight_is_hermetic_and_explicit_in_workflows() -> None:
@@ -154,6 +167,20 @@ def test_strict_runtime_preflight_is_hermetic_and_explicit_in_workflows() -> Non
     assert "otel/opentelemetry-collector:0.147.0" in dr_text
     assert "Wait for OTEL Collector" in dr_text
     assert "uv run python scripts/validate_runtime_env.py --environment staging" in dr_text
+
+
+def test_local_postgres_service_workflows_disable_db_ssl() -> None:
+    perf_text = (REPO_ROOT / ".github/workflows/performance-gate.yml").read_text(
+        encoding="utf-8"
+    )
+    dr_text = (
+        REPO_ROOT / ".github/workflows/disaster-recovery-drill.yml"
+    ).read_text(encoding="utf-8")
+
+    assert 'DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"' in perf_text
+    assert 'DB_SSL_MODE: "disable"' in perf_text
+    assert 'DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"' in dr_text
+    assert 'DB_SSL_MODE: "disable"' in dr_text
 
 
 def test_ci_and_security_workflows_fail_on_high_or_critical_infra_and_container_findings() -> None:

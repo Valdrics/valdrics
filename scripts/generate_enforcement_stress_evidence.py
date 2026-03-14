@@ -6,8 +6,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-import os
-import tempfile
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path

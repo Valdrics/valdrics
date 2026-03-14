@@ -5,27 +5,38 @@ from pathlib import Path
 import tempfile
 
 
-_ISOLATED_TEST_ENV = {
-    "CSRF_SECRET_KEY": "test-csrf-secret-key-at-least-32-bytes",
-    "DB_SSL_MODE": "disable",
-    "DEBUG": "false",
-    "ENCRYPTION_KEY": "32-byte-long-test-encryption-key",
-    "ENVIRONMENT": "local",
-    "KDF_SALT": "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=",
-    "PGSSLMODE": "disable",
-    "SUPABASE_JWT_SECRET": "test-jwt-secret-for-testing-at-least-32-bytes",
-    "TESTING": "true",
-}
+def _build_synthetic_secret(label: str, *, minimum_length: int = 32) -> str:
+    normalized = str(label or "fixture").strip().replace("_", "-")
+    seed = f"valdrics-{normalized}-fixture-"
+    value = seed
+    while len(value) < minimum_length:
+        value += seed
+    return value[:minimum_length]
 
 
-def configure_isolated_test_environment(*, database_url: str) -> None:
+def build_isolated_test_environment_values(*, database_url: str) -> dict[str, str]:
     resolved_database_url = str(database_url or "").strip()
     if not resolved_database_url:
         raise ValueError("database_url must be provided for isolated in-process runtime")
 
-    env_values = dict(_ISOLATED_TEST_ENV)
-    env_values["DATABASE_URL"] = resolved_database_url
-    for key, value in env_values.items():
+    return {
+        "CSRF_SECRET_KEY": _build_synthetic_secret("csrf-secret"),
+        "DATABASE_URL": resolved_database_url,
+        "DB_SSL_MODE": "disable",
+        "DEBUG": "false",
+        "ENCRYPTION_KEY": _build_synthetic_secret("encryption-key"),
+        "ENVIRONMENT": "local",
+        "KDF_SALT": "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=",
+        "PGSSLMODE": "disable",
+        "SUPABASE_JWT_SECRET": _build_synthetic_secret("supabase-jwt-secret"),
+        "TESTING": "true",
+    }
+
+
+def configure_isolated_test_environment(*, database_url: str) -> None:
+    for key, value in build_isolated_test_environment_values(
+        database_url=database_url
+    ).items():
         os.environ[key] = value
 
 

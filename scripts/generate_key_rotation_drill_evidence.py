@@ -301,7 +301,7 @@ def main(argv: list[str] | None = None) -> int:
         _build_markdown(
             field_results=field_results,
             selector_results=selector_results,
-            selector_logs=selector_logs,
+            _selector_logs=selector_logs,
         ),
         encoding="utf-8",
     )

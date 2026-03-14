@@ -17,11 +17,15 @@ def test_key_rotation_drill_pack_has_required_evidence_markers() -> None:
         "owner:",
         "approver:",
         "next_drill_due_on:",
+        "source_pre_rotation_tokens_accepted:",
+        "source_post_rotation_new_tokens_accepted:",
+        "source_rollback_validation_passed:",
         "fallback_verification_passed: true",
         "rollback_validation_passed: true",
         "post_drill_status: PASS",
-        "test_consume_approval_token_accepts_valid_fallback_secret",
-        "test_consume_approval_token_rejects_when_rotation_fallback_absent",
+        "test_consume_approval_token_accepts_primary_secret",
+        "test_consume_approval_token_accepts_new_primary_secret_after_rotation",
+        "test_consume_approval_token_accepts_rollback_fallback_secret",
     )
     for snippet in required_snippets:
         assert snippet in raw

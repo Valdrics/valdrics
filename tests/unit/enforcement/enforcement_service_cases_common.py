@@ -60,6 +60,31 @@ class _FakeCounter:
         self.calls.append((dict(self._last_labels), float(amount)))
 
 
+def _approval_token_runtime_settings(
+    secret: str,
+    fallback: list[str] | None = None,
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        ENFORCEMENT_APPROVAL_TOKEN_SECRET=secret,
+        API_URL="https://api.valdrics.local",
+        JWT_SIGNING_KID="",
+        ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=list(fallback or []),
+    )
+
+
+def _deterministic_token_secret(label: str) -> str:
+    normalized = str(label or "approval-secret").strip().replace("_", "-")
+    seed = f"valdrics-{normalized}-fixture-"
+    value = seed
+    while len(value) < 48:
+        value += seed
+    return value[:48]
+
+
+def _deterministic_idempotency_key(*parts: object) -> str:
+    return "-".join(str(part).strip().replace("_", "-") for part in parts if str(part).strip())
+
+
 async def _seed_tenant(db) -> Tenant:
     tenant = Tenant(
         id=uuid4(),
