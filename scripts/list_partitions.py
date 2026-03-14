@@ -1,14 +1,11 @@
 import asyncio
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
-
-from app.shared.core.config import get_settings
+from app.shared.db.session import get_engine
 
 
 async def list_partitions():
-    settings = get_settings()
-    engine = create_async_engine(settings.DATABASE_URL)
+    engine = get_engine()
     async with engine.connect() as conn:
         print("\n--- Partition Audit ---")
         for table in ["cost_records", "audit_logs"]:

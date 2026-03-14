@@ -230,6 +230,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     ok_count = sum(1 for result in results if result.ok)
+    failed_count = len(results) - ok_count
     print(f"[acceptance] wrote bundle: {bundle_dir}")
     print(f"[acceptance] results: {ok_count}/{len(results)} ok")
     if ok_count == 0:
@@ -238,6 +239,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         print(f"[acceptance] details: {bundle_dir / 'manifest.json'}")
         return 2
+    if failed_count > 0:
+        print(
+            "[acceptance] error: evidence bundle is incomplete because one or more captures failed."
+        )
+        print(f"[acceptance] details: {bundle_dir / 'manifest.json'}")
+        return 1
     return 0
 
 

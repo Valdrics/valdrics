@@ -24,7 +24,8 @@ def sanitize_bearer_token(raw: str | None) -> str:
     Extract a safe JWT token string for `Authorization: Bearer <token>` from operator inputs.
 
     Why this exists:
-    - Operators often do: `VALDRICS_TOKEN=$(python scripts/dev_bearer_token.py ...)`.
+    - Operators often pass tokens through shell expansion or copy/paste, which means
+      stray stdout can still corrupt the value with extra lines.
       If any logs accidentally go to stdout, the env var becomes multiline and breaks HTTP headers.
 
     What we accept:

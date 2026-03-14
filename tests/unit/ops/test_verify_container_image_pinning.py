@@ -37,6 +37,10 @@ def test_verify_container_image_pinning_accepts_tag_digest_and_build_images(
     errors = verify_container_image_pinning(
         repo_root=tmp_path,
         compose_paths=(Path("docker-compose.test.yml"),),
+        environment={
+            "REGISTRY": "ghcr.io/valdrics",
+            "VERSION": "1.2.3",
+        },
     )
     assert errors == ()
 
@@ -56,6 +60,31 @@ def test_verify_container_image_pinning_flags_latest_tag(tmp_path: Path) -> None
     errors = verify_container_image_pinning(
         repo_root=tmp_path,
         compose_paths=(Path("docker-compose.test.yml"),),
+    )
+    assert any("mutable tag 'latest'" in item for item in errors)
+
+
+def test_verify_container_image_pinning_flags_latest_from_interpolation(
+    tmp_path: Path,
+) -> None:
+    _write(
+        tmp_path / "docker-compose.test.yml",
+        "\n".join(
+            [
+                "services:",
+                "  api:",
+                '    image: "${REGISTRY:-ghcr.io/valdrics}/valdrics-backend:${VERSION:?Set VERSION}"',
+            ]
+        ),
+    )
+
+    errors = verify_container_image_pinning(
+        repo_root=tmp_path,
+        compose_paths=(Path("docker-compose.test.yml"),),
+        environment={
+            "REGISTRY": "ghcr.io/valdrics",
+            "VERSION": "latest",
+        },
     )
     assert any("mutable tag 'latest'" in item for item in errors)
 
@@ -98,6 +127,28 @@ def test_verify_container_image_pinning_flags_invalid_digest(tmp_path: Path) -> 
         compose_paths=(Path("docker-compose.test.yml"),),
     )
     assert any("digest must be sha256:<64-hex>" in item for item in errors)
+
+
+def test_verify_container_image_pinning_flags_unresolved_required_variable(
+    tmp_path: Path,
+) -> None:
+    _write(
+        tmp_path / "docker-compose.test.yml",
+        "\n".join(
+            [
+                "services:",
+                "  api:",
+                '    image: "${REGISTRY:-ghcr.io/valdrics}/valdrics-backend:${VERSION:?Set VERSION to an immutable release tag}"',
+            ]
+        ),
+    )
+
+    errors = verify_container_image_pinning(
+        repo_root=tmp_path,
+        compose_paths=(Path("docker-compose.test.yml"),),
+        environment={"REGISTRY": "ghcr.io/valdrics"},
+    )
+    assert any("Set VERSION to an immutable release tag" in item for item in errors)
 
 
 def test_main_returns_failure_for_missing_default_compose_files(tmp_path: Path) -> None:

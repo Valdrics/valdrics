@@ -30,6 +30,12 @@ PLACEHOLDER_TOKEN_RE = re.compile(
     r"(?:\b(?:todo|tbd|placeholder|replace(?:_|-)?me|changeme)\b|example\.com|\.example\b|yyyy)",
     flags=re.IGNORECASE,
 )
+REQUIRED_RUNTIME_PROBE_FIELDS = (
+    "probe_id",
+    "command",
+    "passed",
+    "output_excerpt",
+)
 
 
 def _parse_iso_utc(value: Any, *, field: str) -> datetime:
@@ -90,6 +96,49 @@ def _load_payload(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _validate_runtime_probe_results(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    probe_results = payload.get("runtime_probe_results")
+    if not isinstance(probe_results, list) or not probe_results:
+        raise ValueError("runtime_probe_results must be a non-empty array")
+
+    indexed: dict[str, dict[str, Any]] = {}
+    for idx, item in enumerate(probe_results):
+        if not isinstance(item, dict):
+            raise ValueError(f"runtime_probe_results[{idx}] must be an object")
+        for field_name in REQUIRED_RUNTIME_PROBE_FIELDS:
+            if field_name not in item:
+                raise ValueError(
+                    f"runtime_probe_results[{idx}] is missing required field {field_name!r}"
+                )
+
+        probe_id = _parse_non_empty_str(
+            item.get("probe_id"),
+            field=f"runtime_probe_results[{idx}].probe_id",
+        )
+        if probe_id in indexed:
+            raise ValueError(f"duplicate runtime probe result: {probe_id}")
+        command = _parse_non_empty_str(
+            item.get("command"),
+            field=f"runtime_probe_results[{idx}].command",
+        )
+        output_excerpt = item.get("output_excerpt")
+        if not isinstance(output_excerpt, str):
+            raise ValueError(
+                f"runtime_probe_results[{idx}].output_excerpt must be a string"
+            )
+        passed = item.get("passed")
+        if not isinstance(passed, bool):
+            raise ValueError(f"runtime_probe_results[{idx}].passed must be a boolean")
+
+        indexed[probe_id] = {
+            "probe_id": probe_id,
+            "command": command,
+            "passed": passed,
+            "output_excerpt": output_excerpt,
+        }
+    return indexed
+
+
 def verify_disposition_register(
     *,
     register_path: Path,
@@ -122,6 +171,8 @@ def verify_disposition_register(
         field="source_audit_path",
     )
     _ = source_audit_path
+
+    probe_results = _validate_runtime_probe_results(payload)
 
     dispositions = payload.get("dispositions")
     if not isinstance(dispositions, list) or not dispositions:
@@ -171,6 +222,21 @@ def verify_disposition_register(
                 item.get("backlog_ref"),
                 field=f"dispositions[{idx}].backlog_ref",
             )
+        control_probe_ids = item.get("control_probe_ids")
+        if not isinstance(control_probe_ids, list) or not control_probe_ids:
+            raise ValueError(
+                f"dispositions[{idx}].control_probe_ids must be a non-empty array"
+            )
+        for probe_idx, probe_id_value in enumerate(control_probe_ids):
+            probe_id = _parse_non_empty_str(
+                probe_id_value,
+                field=f"dispositions[{idx}].control_probe_ids[{probe_idx}]",
+            )
+            if probe_id not in probe_results:
+                raise ValueError(
+                    f"dispositions[{idx}].control_probe_ids[{probe_idx}] "
+                    f"references missing runtime probe: {probe_id}"
+                )
 
         review_by = _parse_iso_date(
             item.get("review_by"),

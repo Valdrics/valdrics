@@ -33,7 +33,10 @@ class PartitionMaintenanceService:
             bind_getter = getattr(self.db, "get_bind", None)
             if callable(bind_getter):
                 bind = bind_getter()
-        return str(getattr(getattr(bind, "dialect", None), "name", "") or "").strip().lower()
+        dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
+        if not isinstance(dialect_name, str):
+            return ""
+        return dialect_name.strip().lower()
 
     @staticmethod
     def _partition_is_older_than_cutoff(partition_name: str, *, cutoff_month: date) -> bool:
@@ -178,11 +181,6 @@ ON CONFLICT (id, recorded_at) {upsert_clause}
         await self.db.execute(text(archive_sql))
         await self.db.execute(
             text(
-                f"DELETE FROM {safe_partition_name}"  # nosec B608 - partition identifier is validated locally
-            )
-        )
-        await self.db.execute(
-            text(
                 f"DROP TABLE IF EXISTS {safe_partition_name}"  # nosec B608 - partition identifier is validated locally
             )
         )
@@ -198,6 +196,14 @@ ON CONFLICT (id, recorded_at) {upsert_clause}
         Pre-creates partitions for all supported tables.
         Returns the count of new partitions created.
         """
+        backend_name = self._backend_name()
+        if backend_name and backend_name != "postgresql":
+            logger.info(
+                "partition_creation_skipped_unsupported_backend",
+                backend=backend_name,
+            )
+            return 0
+
         today = date.today()
         created_count = 0
         
@@ -257,14 +263,15 @@ ON CONFLICT (id, recorded_at) {upsert_clause}
         """
         Move old cost-record partitions into archive storage and retire the partition.
         """
-        try:
-            if self._backend_name() and self._backend_name() != "postgresql":
-                logger.info(
-                    "partition_archival_skipped_unsupported_backend",
-                    backend=self._backend_name(),
-                )
-                return 0
+        backend_name = self._backend_name()
+        if backend_name and backend_name != "postgresql":
+            logger.info(
+                "partition_archival_skipped_unsupported_backend",
+                backend=backend_name,
+            )
+            return 0
 
+        try:
             await self.db.execute(
                 text("SELECT pg_advisory_xact_lock(:lock_id)"),
                 {"lock_id": self.PARTITION_MAINTENANCE_LOCK_ID},
@@ -284,6 +291,6 @@ ON CONFLICT (id, recorded_at) {upsert_clause}
                 )
 
             return archived_rows
-        except PARTITION_MAINTENANCE_RECOVERABLE_EXCEPTIONS as e:
-            logger.warning("partition_archival_failed", error=str(e))
-            return 0
+        except PARTITION_MAINTENANCE_RECOVERABLE_EXCEPTIONS as exc:
+            logger.error("partition_archival_failed", error=str(exc))
+            raise

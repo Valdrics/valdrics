@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
-"""Guarded bulk deactivation of AWS connections."""
+"""Guarded emergency disconnect for a single AWS connection.
+
+This script only performs the Valdrics-side disconnect. Any AWS-side trust or
+policy revocation must be completed manually under the documented incident
+response runbook.
+"""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import sys
+from uuid import UUID
 
 import structlog
-from sqlalchemy import func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.aws_connection import AWSConnection
+from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLogger
 from app.shared.db.session import async_session_maker, mark_session_system_context
 from scripts.safety_guardrails import (
     current_environment,
@@ -25,16 +32,18 @@ from scripts.safety_guardrails import (
 logger = structlog.get_logger()
 
 CONFIRM_PHRASE = (
-    "DEACTIVATE_ALL_AWS_CONNECTIONS"  # nosec B105 - explicit operator confirmation phrase
+    "EMERGENCY_DISCONNECT_AWS_CONNECTION"
+    # nosec B105 - explicit operator confirmation phrase
 )
 INTERACTIVE_CONFIRM_TOKEN = (
-    "DEACTIVATE_AWS_CONNECTIONS"  # nosec B105 - explicit interactive confirmation token
+    "DISCONNECT_AWS_CONNECTION"
+    # nosec B105 - explicit interactive confirmation token
 )
 PROD_BYPASS = (
-    "I_UNDERSTAND_AWS_CONNECTION_DEACTIVATION_RISK"
+    "I_UNDERSTAND_EMERGENCY_DISCONNECT_RISK"
     # nosec B105 - explicit protected-environment bypass phrase
 )
-NONINTERACTIVE_BYPASS_ENV = "VALDRICS_ALLOW_NONINTERACTIVE_AWS_DEACTIVATION"
+NONINTERACTIVE_BYPASS_ENV = "VALDRICS_ALLOW_NONINTERACTIVE_EMERGENCY_DISCONNECT"
 MIN_REASON_LENGTH = 16
 
 
@@ -50,9 +59,9 @@ def _validate_request(
     environment = current_environment()
     ensure_protected_environment_bypass(
         environment=environment,
-        bypass_env_var="VALDRICS_ALLOW_PROD_AWS_DEACTIVATION",
+        bypass_env_var="VALDRICS_ALLOW_PROD_EMERGENCY_DISCONNECT",
         bypass_phrase=PROD_BYPASS,
-        operation_label="AWS connection deactivation",
+        operation_label="emergency AWS disconnect",
     )
     ensure_force_and_phrase(force=force, phrase=phrase, expected_phrase=CONFIRM_PHRASE)
     ensure_environment_confirmation(
@@ -68,75 +77,99 @@ def _validate_request(
         operator=operator,
         reason=reason,
         min_reason_length=MIN_REASON_LENGTH,
-        operation_label="AWS connection deactivation",
+        operation_label="emergency AWS disconnect",
     )
 
 
-async def deactivate_all_connections(
+async def disconnect_connection(
     *,
+    connection_id: str,
     dry_run: bool,
     operator: str,
     reason: str,
-) -> int:
+) -> dict[str, object]:
+    target_id = UUID(str(connection_id).strip())
+
     async with async_session_maker() as session:
         await mark_session_system_context(session)
-        active_count = int(
-            (await session.execute(
-                select(func.count()).select_from(AWSConnection).where(
-                    AWSConnection.status != "inactive"
-                )
-            )).scalar_one()
-            or 0
-        )
+        connection = await session.get(AWSConnection, target_id)
+        if connection is None:
+            raise RuntimeError(f"AWS connection not found: {target_id}")
+
+        payload: dict[str, object] = {
+            "connection_id": str(connection.id),
+            "tenant_id": str(connection.tenant_id),
+            "aws_account_id": str(connection.aws_account_id),
+            "previous_status": str(connection.status),
+            "manual_aws_revocation_required": True,
+        }
 
         logger.info(
-            "aws_connection_deactivation_requested",
+            "emergency_disconnect_requested",
             dry_run=dry_run,
-            active_connections=active_count,
             operator=operator.strip(),
             reason=reason.strip(),
+            **payload,
         )
 
         if dry_run:
-            print(f"Dry-run: would deactivate {active_count} AWS connections.")
-            return active_count
+            print(json.dumps({"mode": "dry_run", **payload}, sort_keys=True))
+            return payload
 
         try:
-            result = await session.execute(
-                update(AWSConnection)
-                .where(AWSConnection.status != "inactive")
-                .values(status="inactive")
+            connection.status = "inactive"
+            connection.error_message = f"Emergency disconnect: {reason.strip()}"
+            audit = AuditLogger(
+                db=session,
+                tenant_id=connection.tenant_id,
+                correlation_id=f"emergency-disconnect:{connection.id}",
+            )
+            await audit.log(
+                event_type=AuditEventType.AWS_DISCONNECTED,
+                actor_email=operator.strip(),
+                resource_type="aws_connection",
+                resource_id=str(connection.id),
+                details={
+                    "operator": operator.strip(),
+                    "reason": reason.strip(),
+                    "disconnect_mode": "app_side_only",
+                    "aws_account_id": str(connection.aws_account_id),
+                    "manual_aws_revocation_required": True,
+                },
+                success=True,
             )
             await session.commit()
         except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as exc:
             await session.rollback()
             logger.error(
-                "aws_connection_deactivation_failed",
-                error=str(exc),
+                "emergency_disconnect_failed",
                 operator=operator.strip(),
                 reason=reason.strip(),
+                error=str(exc),
+                **payload,
             )
             raise
 
-    affected = int(result.rowcount or 0)
-    logger.info(
-        "aws_connection_deactivation_complete",
-        connections_affected=affected,
-        operator=operator.strip(),
-        reason=reason.strip(),
-    )
-    print(f"Successfully deactivated {affected} AWS connections.")
-    return affected
+    print(json.dumps({"mode": "executed", **payload}, sort_keys=True))
+    return payload
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Dry-run by default. Use explicit break-glass confirmation to deactivate all AWS connections."
+        description=(
+            "Dry-run by default. Use explicit break-glass confirmation to deactivate "
+            "a single AWS connection inside Valdrics."
+        )
+    )
+    parser.add_argument(
+        "--connection-id",
+        required=True,
+        help="AWS connection UUID to deactivate.",
     )
     parser.add_argument(
         "--execute",
         action="store_true",
-        help="Perform the deactivation. Without this flag the script only reports impact.",
+        help="Perform the disconnect. Without this flag the script only reports impact.",
     )
     parser.add_argument("--operator", default="", help="Operator identifier (email or handle).")
     parser.add_argument(
@@ -180,7 +213,8 @@ def main() -> int:
                 reason=str(args.reason),
             )
         asyncio.run(
-            deactivate_all_connections(
+            disconnect_connection(
+                connection_id=str(args.connection_id),
                 dry_run=not bool(args.execute),
                 operator=str(args.operator),
                 reason=str(args.reason),

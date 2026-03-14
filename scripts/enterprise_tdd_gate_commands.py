@@ -49,6 +49,9 @@ def build_gate_commands() -> list[list[str]]:
             "scripts/verify_dependency_locking.py",
         ],
         [
+            "env",
+            "REGISTRY=ghcr.io/valdrics",
+            "VERSION=0.0.0-enterprise-gate",
             "uv",
             "run",
             "python3",

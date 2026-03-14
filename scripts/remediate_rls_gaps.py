@@ -1,11 +1,12 @@
 import asyncio
+
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
-from app.shared.core.config import get_settings
+
+from app.shared.db.session import get_engine
+from scripts.rls_tooling import filter_rls_candidate_tables
 
 async def remediate_rls():
-    settings = get_settings()
-    engine = create_async_engine(settings.DATABASE_URL)
+    engine = get_engine()
     
     async with engine.connect() as conn:
         print("\n--- REMEDIATING RLS GAPS ---")
@@ -24,16 +25,16 @@ async def remediate_rls():
                 WHERE table_name = c.relname AND column_name = 'tenant_id'
             );
         """))
-        target_tables = [r[0] for r in res]
+        target_tables = list(filter_rls_candidate_tables(r[0] for r in res))
         
         print(f"Found {len(target_tables)} tables/partitions requiring RLS enforcement.")
         
+        preparer = conn.dialect.identifier_preparer
         for table in target_tables:
             print(f"  Enforcing RLS on {table}...")
-            # Enable RLS
-            await conn.execute(text(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;"))
-            # Force RLS (even for owners/privileged roles in app context)
-            await conn.execute(text(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY;"))
+            quoted_table = preparer.quote(table)
+            await conn.execute(text(f"ALTER TABLE {quoted_table} ENABLE ROW LEVEL SECURITY;"))
+            await conn.execute(text(f"ALTER TABLE {quoted_table} FORCE ROW LEVEL SECURITY;"))
             
             # If it is a partition, it might need the policy explicitly if not inherited 
             # (though in PG11+ it usually inherits, forcing it is safer).

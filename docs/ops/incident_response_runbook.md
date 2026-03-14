@@ -25,9 +25,16 @@
 ### Emergency Disconnect
 If an AWS connection is compromised or performing unauthorized deletions:
 ```bash
-python3 scripts/emergency_disconnect.py --tenant-id <UUID> --provider aws
+python3 scripts/emergency_disconnect.py \
+  --connection-id <UUID> \
+  --execute \
+  --operator <email> \
+  --reason "Emergency disconnect approved during incident response" \
+  --force \
+  --confirm-phrase EMERGENCY_DISCONNECT_AWS_CONNECTION \
+  --confirm-environment <environment>
 ```
-*This attaches an inline 'Deny All' policy to the Valdrics IAM role.*
+*This performs the Valdrics-side disconnect only. AWS-side trust or policy revocation must still be completed manually in the customer account.*
 
 ### Global Kill Switch
 To stop all remediation actions globally (if a systemic bug is suspected):

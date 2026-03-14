@@ -8,6 +8,13 @@ import pytest
 from scripts import db_diagnostics
 
 
+def test_build_engine_uses_shared_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    sentinel = object()
+    monkeypatch.setattr(db_diagnostics, "get_engine", lambda: sentinel)
+
+    assert db_diagnostics._build_engine() is sentinel
+
+
 @pytest.mark.asyncio
 async def test_run_command_dispatches_ping_and_disposes_engine() -> None:
     engine = SimpleNamespace(dispose=AsyncMock())

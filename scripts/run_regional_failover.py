@@ -39,7 +39,22 @@ def _normalize_origin(origin: str) -> str:
     parsed = urlparse(normalized)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise ValueError("secondary API origin must be an explicit http(s) origin")
-    return normalized
+    if parsed.path not in {"", "/"} or parsed.params or parsed.query or parsed.fragment:
+        raise ValueError(
+            "secondary API origin must be a bare origin without path, query, or fragment"
+        )
+
+    default_port = 443 if parsed.scheme == "https" else 80
+    if parsed.port is not None and parsed.port != default_port:
+        raise ValueError(
+            "secondary API origin cannot include a non-default port because Cloudflare "
+            "DNS cutover targets hostnames only"
+        )
+
+    hostname = str(parsed.hostname or "").strip()
+    if not hostname:
+        raise ValueError("secondary API origin must include a hostname")
+    return f"{parsed.scheme}://{hostname}"
 
 
 def _build_cloudflare_headers(api_token: str) -> dict[str, str]:

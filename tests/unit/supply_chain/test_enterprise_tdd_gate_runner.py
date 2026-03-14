@@ -148,7 +148,10 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
         "python3",
         "scripts/verify_dependency_locking.py",
     ]
-    assert image_pinning_cmd[:4] == [
+    assert image_pinning_cmd[:7] == [
+        "env",
+        "REGISTRY=ghcr.io/valdrics",
+        "VERSION=0.0.0-enterprise-gate",
         "uv",
         "run",
         "python3",

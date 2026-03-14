@@ -1,8 +1,10 @@
 import asyncio
+import sys
+
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from app.shared.core.config import get_settings
+
+from app.shared.db.session import async_session_maker, get_engine
 
 SUPABASE_CLEANUP_RECOVERABLE_EXCEPTIONS = (
     SQLAlchemyError,
@@ -26,23 +28,15 @@ async def monitor_usage(session):
     for r in res:
         print(f"TABLE: {r.table_name:<30} | SIZE: {r.total_size:<10} | ROWS: {r.row_count}")
 
-async def run_cleanup():
-    settings = get_settings()
-    db_url = settings.DATABASE_URL
-    if not db_url:
-        print("DATABASE_URL not set.")
-        return
+async def run_cleanup() -> int:
+    engine = get_engine()
 
-    print(f"Targeting: {db_url.split('@')[-1]}")
-    engine = create_async_engine(db_url)
-    async_session = async_sessionmaker(engine, expire_on_commit=False)
-    
-    bloated_partitions = []
-    
-    async with async_session() as session:
-        try:
+    try:
+        bloated_partitions = []
+
+        async with async_session_maker() as session:
             await monitor_usage(session)
-            
+
             # Identify bloat (Partitions with very few rows but > 1MB size)
             res = await session.execute(text("""
                 SELECT relname 
@@ -58,25 +52,24 @@ async def run_cleanup():
             else:
                 print("\nNo significant bloat detected in cost_records partitions.")
 
-        except SUPABASE_CLEANUP_RECOVERABLE_EXCEPTIONS as e:
-            print(f"❌ ERROR: {e}")
-    
-    # Run VACUUM FULL outside transaction to reclaim disk space
-    if bloated_partitions:
-        try:
+        # Run VACUUM FULL outside transaction to reclaim disk space
+        if bloated_partitions:
             async with engine.connect() as conn:
                 await conn.execution_options(isolation_level="AUTOCOMMIT")
                 for part in bloated_partitions:
                     print(f"  VACUUM FULL {part}...")
                     await conn.execute(text(f"VACUUM FULL {part};"))
                 print("✅ Aggressive reclamation (VACUUM FULL) completed.")
-        except SUPABASE_CLEANUP_RECOVERABLE_EXCEPTIONS as vacuum_e:
-            print(f"⚠️ Vacuum failed: {vacuum_e}")
-    
-    async with async_session() as session:
-        await monitor_usage(session)
 
-    await engine.dispose()
+        async with async_session_maker() as session:
+            await monitor_usage(session)
+
+        return 0
+    except SUPABASE_CLEANUP_RECOVERABLE_EXCEPTIONS as exc:
+        print(f"❌ ERROR: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        await engine.dispose()
 
 if __name__ == "__main__":
-    asyncio.run(run_cleanup())
+    raise SystemExit(asyncio.run(run_cleanup()))

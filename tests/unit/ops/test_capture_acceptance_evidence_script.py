@@ -71,3 +71,46 @@ def test_main_uses_runner_capture_function(
     assert called["base_url"] == "http://127.0.0.1:8000"
     assert called["output_root"] == tmp_path
     assert str(called["token"]) == "abc.def.ghi"
+
+
+def test_main_returns_nonzero_when_bundle_is_incomplete(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+
+    async def _fake_capture(**_: object) -> tuple[Path, list[CaptureResult]]:
+        return (
+            bundle_dir,
+            [
+                CaptureResult(
+                    name="acceptance_kpis_json",
+                    path="bundle/acceptance_kpis.json",
+                    status_code=200,
+                    ok=True,
+                ),
+                CaptureResult(
+                    name="acceptance_budget_summary_json",
+                    path="bundle/acceptance_budget_summary.json",
+                    status_code=500,
+                    ok=False,
+                    error="server error",
+                ),
+            ],
+        )
+
+    monkeypatch.setattr(script_module, "capture_acceptance_evidence", _fake_capture)
+
+    exit_code = script_module.main(
+        [
+            "--url",
+            "http://127.0.0.1:8000",
+            "--token",
+            "abc.def.ghi",
+            "--output-root",
+            str(tmp_path),
+        ]
+    )
+
+    assert exit_code == 1

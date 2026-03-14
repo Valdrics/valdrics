@@ -96,9 +96,18 @@ async def update_exchange_rates():
         RuntimeError,
         TypeError,
         ValueError,
-    ) as e:
-        logger.error("exchange_rate_update_failed", error=str(e))
+    ) as exc:
+        logger.error("exchange_rate_update_failed", error=str(exc))
+        raise RuntimeError("exchange_rate_update_failed") from exc
+
+
+def main() -> int:
+    try:
+        asyncio.run(update_exchange_rates())
+    except RuntimeError:
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(update_exchange_rates())
+    raise SystemExit(main())

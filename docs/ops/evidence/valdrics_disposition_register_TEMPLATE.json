@@ -1,6 +1,14 @@
 {
   "captured_at": "2026-02-28T15:20:00Z",
   "source_audit_path": "/absolute/path/to/VALDRX_CODEBASE_AUDIT_2026-02-28.md.resolved",
+  "runtime_probe_results": [
+    {
+      "probe_id": "adapter_coverage",
+      "command": "python scripts/verify_adapter_test_coverage.py",
+      "passed": true,
+      "output_excerpt": "Verifier output excerpt"
+    }
+  ],
   "dispositions": [
     {
       "finding_id": "VAL-ADAPT-001",
@@ -9,6 +17,9 @@
       "review_by": "2026-03-31",
       "rationale": "Short rationale for why this finding is dispositioned rather than immediately remediated.",
       "exit_criteria": "Machine-checkable condition that must be true to close this disposition as remediated.",
+      "control_probe_ids": [
+        "adapter_coverage"
+      ],
       "backlog_ref": "VAL-ADAPT-002+"
     }
   ]

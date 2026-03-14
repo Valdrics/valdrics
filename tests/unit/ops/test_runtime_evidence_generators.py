@@ -180,6 +180,9 @@ def test_generate_valdrics_disposition_register_emits_verifiable_artifact(
         )
         == 0
     )
+    payload = json.loads(output.read_text(encoding="utf-8"))
+    assert payload["runtime_probe_results"]
+    assert all(item["control_probe_ids"] for item in payload["dispositions"])
     assert (
         verify_disposition_register(
             register_path=output,
