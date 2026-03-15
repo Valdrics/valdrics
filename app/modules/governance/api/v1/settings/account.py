@@ -38,6 +38,15 @@ class AccountClosureResponse(BaseModel):
     closed_at: str | None = None
 
 
+def _identity_revoked(identity: TenantIdentitySettings | None) -> bool:
+    return identity is None or (
+        not bool(identity.scim_enabled)
+        and not bool(identity.sso_enabled)
+        and not bool(identity.sso_federation_enabled)
+        and not bool(identity.scim_bearer_token)
+    )
+
+
 @router.get("/account/status", response_model=AccountClosureResponse)
 async def get_account_status(
     current_user: Annotated[CurrentUser, Depends(requires_role("owner"))],
@@ -73,19 +82,12 @@ async def get_account_status(
             )
         )
     ).scalar_one_or_none()
-    identity_revoked = identity is None or (
-        not bool(identity.scim_enabled)
-        and not bool(identity.sso_enabled)
-        and not bool(identity.sso_federation_enabled)
-        and not bool(identity.scim_bearer_token)
-    )
-
     return AccountClosureResponse(
         status="closed" if tenant.is_deleted else "active",
         tenant_id=str(tenant_id),
         users_revoked=int(inactive_users or 0),
         background_jobs_revoked=len(open_jobs),
-        identity_revoked=identity_revoked,
+        identity_revoked=_identity_revoked(identity),
         closed_at=tenant.deleted_at.isoformat() if tenant.deleted_at else None,
     )
 
@@ -142,7 +144,7 @@ async def close_account(
             tenant_id=str(tenant_id),
             users_revoked=0,
             background_jobs_revoked=len(open_jobs),
-            identity_revoked=identity is None or not bool(identity.scim_bearer_token),
+            identity_revoked=_identity_revoked(identity),
             closed_at=tenant.deleted_at.isoformat() if tenant.deleted_at else now.isoformat(),
         )
 
@@ -191,7 +193,7 @@ async def close_account(
             "offboarding": {
                 "users_revoked": users_revoked,
                 "background_jobs_revoked": background_jobs_revoked,
-                "identity_revoked": identity is not None,
+                "identity_revoked": _identity_revoked(identity),
                 "closed_at": now.isoformat(),
             }
         },
@@ -207,6 +209,6 @@ async def close_account(
         tenant_id=str(tenant_id),
         users_revoked=users_revoked,
         background_jobs_revoked=background_jobs_revoked,
-        identity_revoked=identity is not None,
+        identity_revoked=_identity_revoked(identity),
         closed_at=now.isoformat(),
     )

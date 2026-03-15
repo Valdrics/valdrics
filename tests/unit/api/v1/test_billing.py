@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from app.modules.billing.api.v1.billing import (
     get_public_plans,
@@ -15,6 +16,7 @@ from app.modules.billing.api.v1.billing import (
     update_pricing_plan,
     _extract_client_ip,
 )
+from app.modules.billing.api.v1.billing_models import ExchangeRateUpdate, PricingPlanUpdate
 from app.models.pricing import PricingPlan, ExchangeRate
 from app.modules.billing.domain.billing.paystack_billing import TenantSubscription
 from app.shared.core.pricing import PricingTier, TIER_CONFIG
@@ -223,6 +225,14 @@ async def test_get_features(mock_user: MagicMock) -> None:
         mock_get_config.return_value = {"features": ["f1"], "limits": {}}
         response = await get_features(MagicMock(), mock_user)
         assert "f1" in response["features"]
+
+
+def test_billing_update_models_require_positive_values() -> None:
+    with pytest.raises(ValidationError):
+        ExchangeRateUpdate(rate=0)
+
+    with pytest.raises(ValidationError):
+        PricingPlanUpdate(price_usd=0)
 
 
 @pytest.mark.asyncio

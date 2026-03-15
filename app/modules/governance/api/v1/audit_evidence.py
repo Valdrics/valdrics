@@ -1,7 +1,7 @@
 from dataclasses import dataclass
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, NoReturn, TypeVar
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.governance.api.v1.audit_evidence_common import (
@@ -9,6 +9,7 @@ from app.modules.governance.api.v1.audit_evidence_common import (
     AdminComplianceUser,
     capture_evidence_event,
     list_evidence_items,
+    require_tenant_id,
     validate_evidence_payload,
 )
 from app.modules.governance.api.v1.audit_schemas import (
@@ -50,6 +51,8 @@ class _EvidenceEndpointConfig:
     request_path: str
     warning_event: str
     response_payload_field: str
+    capture_status: str = "recorded"
+    verification_status: str = "operator_attested"
 
 
 _LOAD_TEST_CONFIG = _EvidenceEndpointConfig(
@@ -93,6 +96,19 @@ _SSO_FEDERATION_CONFIG = _EvidenceEndpointConfig(
     response_payload_field="sso_federation_validation",
 )
 
+_RETIRED_OPERATOR_CAPTURE_DETAIL = (
+    "Operator-submitted evidence capture is retired. Use a server-verified "
+    "evidence workflow instead."
+)
+
+
+def _raise_retired_operator_capture(user: AdminComplianceUser) -> NoReturn:
+    require_tenant_id(user)
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail=_RETIRED_OPERATOR_CAPTURE_DETAIL,
+    )
+
 
 async def _capture_evidence_response(
     *,
@@ -114,9 +130,10 @@ async def _capture_evidence_response(
         payload=payload,
         success=bool(success),
         request_path=config.request_path,
+        verification_status=config.verification_status,
     )
     payload_data = {
-        "status": "captured",
+        "status": config.capture_status,
         "event_id": str(event.id),
         "run_id": run_id,
         "captured_at": event.event_timestamp.isoformat(),
@@ -156,15 +173,8 @@ async def capture_load_test_evidence(
     user: AdminComplianceUser,
     db: AsyncSession = Depends(get_db),
 ) -> LoadTestEvidenceCaptureResponse:
-    return await _capture_evidence_response(
-        payload=payload,
-        user=user,
-        db=db,
-        config=_LOAD_TEST_CONFIG,
-        response_model=LoadTestEvidenceCaptureResponse,
-        resource_id=str(payload.profile or "custom"),
-        success=True,
-    )
+    _ = (payload, db)
+    return _raise_retired_operator_capture(user)
 
 
 @router.get(
@@ -195,15 +205,8 @@ async def capture_ingestion_persistence_evidence(
     user: AdminComplianceUser,
     db: AsyncSession = Depends(get_db),
 ) -> IngestionPersistenceEvidenceCaptureResponse:
-    return await _capture_evidence_response(
-        payload=payload,
-        user=user,
-        db=db,
-        config=_INGESTION_PERSISTENCE_CONFIG,
-        response_model=IngestionPersistenceEvidenceCaptureResponse,
-        resource_id=str(payload.provider or "unknown"),
-        success=bool(payload.meets_targets) if payload.meets_targets is not None else True,
-    )
+    _ = (payload, db)
+    return _raise_retired_operator_capture(user)
 
 
 @router.get(
@@ -235,19 +238,8 @@ async def capture_ingestion_soak_evidence(
     user: AdminComplianceUser,
     db: AsyncSession = Depends(get_db),
 ) -> IngestionSoakEvidenceCaptureResponse:
-    return await _capture_evidence_response(
-        payload=payload,
-        user=user,
-        db=db,
-        config=_INGESTION_SOAK_CONFIG,
-        response_model=IngestionSoakEvidenceCaptureResponse,
-        resource_id=str(payload.jobs_enqueued),
-        success=(
-            bool(payload.meets_targets)
-            if payload.meets_targets is not None
-            else bool(payload.results.jobs_failed == 0)
-        ),
-    )
+    _ = (payload, db)
+    return _raise_retired_operator_capture(user)
 
 
 @router.get(
@@ -279,15 +271,8 @@ async def capture_identity_idp_smoke_evidence(
     user: AdminComplianceUser,
     db: AsyncSession = Depends(get_db),
 ) -> IdentityIdpSmokeEvidenceCaptureResponse:
-    return await _capture_evidence_response(
-        payload=payload,
-        user=user,
-        db=db,
-        config=_IDENTITY_IDP_SMOKE_CONFIG,
-        response_model=IdentityIdpSmokeEvidenceCaptureResponse,
-        resource_id=str(payload.idp or ""),
-        success=bool(payload.passed),
-    )
+    _ = (payload, db)
+    return _raise_retired_operator_capture(user)
 
 
 @router.get(
@@ -319,15 +304,8 @@ async def capture_sso_federation_validation_evidence(
     user: AdminComplianceUser,
     db: AsyncSession = Depends(get_db),
 ) -> SsoFederationValidationEvidenceCaptureResponse:
-    return await _capture_evidence_response(
-        payload=payload,
-        user=user,
-        db=db,
-        config=_SSO_FEDERATION_CONFIG,
-        response_model=SsoFederationValidationEvidenceCaptureResponse,
-        resource_id=str(payload.federation_mode or ""),
-        success=bool(payload.passed),
-    )
+    _ = (payload, db)
+    return _raise_retired_operator_capture(user)
 
 
 @router.get(

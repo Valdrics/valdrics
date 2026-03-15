@@ -4,7 +4,7 @@ import math
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Optional
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,6 +60,27 @@ async def get_or_create_unit_settings(
     return settings
 
 
+async def get_unit_settings_snapshot(
+    db: AsyncSession, tenant_id: UUID
+) -> UnitEconomicsSettings:
+    settings = await db.scalar(
+        select(UnitEconomicsSettings).where(
+            UnitEconomicsSettings.tenant_id == tenant_id
+        )
+    )
+    if settings is not None:
+        return settings
+
+    return UnitEconomicsSettings(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        default_request_volume=1000.0,
+        default_workload_volume=100.0,
+        default_customer_volume=50.0,
+        anomaly_threshold_percent=20.0,
+    )
+
+
 async def window_total_cost(
     db: AsyncSession,
     tenant_id: UUID,
@@ -95,7 +116,9 @@ def build_provider_recency_summary(
     recency_target_hours: int,
 ) -> ProviderRecencyResponse:
     threshold = now - timedelta(hours=recency_target_hours)
-    active_connections = [conn for conn in connections if is_connection_active_state(conn)]
+    active_connections = [
+        conn for conn in connections if is_connection_active_state(conn)
+    ]
 
     recently_ingested = 0
     stale_connections = 0
@@ -126,7 +149,9 @@ def build_provider_recency_summary(
         recently_ingested=recently_ingested,
         stale_connections=stale_connections,
         never_ingested=never_ingested,
-        latest_ingested_at=latest_ingested_at.isoformat() if latest_ingested_at else None,
+        latest_ingested_at=latest_ingested_at.isoformat()
+        if latest_ingested_at
+        else None,
         recency_target_hours=recency_target_hours,
         meets_recency_target=meets_recency_target,
     )
@@ -331,6 +356,11 @@ async def compute_license_governance_kpi(
     end_dt_exclusive = datetime.combine(end_date + timedelta(days=1), time.min).replace(
         tzinfo=timezone.utc
     )
+    activity_at = func.coalesce(
+        RemediationRequest.executed_at,
+        RemediationRequest.updated_at,
+        RemediationRequest.created_at,
+    )
     in_flight_statuses = (
         RemediationStatus.PENDING,
         RemediationStatus.PENDING_APPROVAL,
@@ -353,8 +383,8 @@ async def compute_license_governance_kpi(
     ).where(
         RemediationRequest.tenant_id == tenant_id,
         RemediationRequest.action == RemediationAction.RECLAIM_LICENSE_SEAT,
-        RemediationRequest.created_at >= start_dt,
-        RemediationRequest.created_at < end_dt_exclusive,
+        activity_at >= start_dt,
+        activity_at < end_dt_exclusive,
     )
     counts_row = (await db.execute(counts_stmt)).one()
 
@@ -384,8 +414,8 @@ async def compute_license_governance_kpi(
             RemediationRequest.tenant_id == tenant_id,
             RemediationRequest.action == RemediationAction.RECLAIM_LICENSE_SEAT,
             RemediationRequest.status == RemediationStatus.COMPLETED,
-            RemediationRequest.created_at >= start_dt,
-            RemediationRequest.created_at < end_dt_exclusive,
+            activity_at >= start_dt,
+            activity_at < end_dt_exclusive,
             RemediationRequest.executed_at.is_not(None),
         )
     )

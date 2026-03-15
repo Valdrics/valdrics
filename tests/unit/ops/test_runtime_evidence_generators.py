@@ -13,6 +13,7 @@ from scripts.generate_finance_committee_packet_assumptions import (
     main as generate_finance_committee_packet_assumptions_main,
 )
 from scripts.generate_key_rotation_drill_evidence import (
+    _all_drill_checks,
     main as generate_key_rotation_drill_evidence_main,
 )
 from scripts.generate_pkg_fin_policy_decisions import (
@@ -161,6 +162,12 @@ def test_generate_key_rotation_drill_evidence_emits_verifiable_artifact(
         == 0
     )
     assert verify_key_rotation_drill_evidence(drill_path=output, max_drill_age_days=120.0) == 0
+
+
+def test_key_rotation_drill_checks_use_distinct_selectors() -> None:
+    selectors = [check.selector for check in _all_drill_checks()]
+
+    assert len(selectors) == len(set(selectors))
 
 
 def test_generate_valdrics_disposition_register_emits_verifiable_artifact(

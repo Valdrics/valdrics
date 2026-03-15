@@ -96,13 +96,34 @@ async def test_get_job_slo(async_client: AsyncClient, db_session, mock_user):
 @pytest.mark.asyncio
 async def test_process_jobs_manual(async_client: AsyncClient):
     """Test manual job processing trigger."""
-    with patch(
-        "app.modules.governance.api.v1.jobs.JobProcessor.process_pending_jobs"
-    ) as mock_proc:
+    app.dependency_overrides[get_current_user] = lambda: MagicMock(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        role="admin",
+        tier="pro",
+    )
+    with (
+        patch(
+            "app.modules.governance.api.v1.jobs.JobProcessor.process_pending_jobs"
+        ) as mock_proc,
+        patch(
+            "app.modules.governance.api.v1.jobs.mark_session_system_context",
+            new=AsyncMock(),
+        ) as mark_system_context,
+    ):
         mock_proc.return_value = {"processed": 1, "succeeded": 1, "failed": 0}
         response = await async_client.post("/api/v1/jobs/process")
         assert response.status_code == 200
         assert response.json()["processed"] == 1
+        mark_system_context.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_jobs_manual_requires_platform_scope(async_client: AsyncClient):
+    response = await async_client.post("/api/v1/jobs/process")
+
+    assert response.status_code == 403
+    assert "Platform operator access is required" in response.text
 
 
 @pytest.mark.asyncio
@@ -253,7 +274,7 @@ async def test_enqueue_new_job_success(async_client: AsyncClient):
     now = datetime.now(timezone.utc)
     mock_job = MagicMock()
     mock_job.id = uuid.uuid4()
-    mock_job.job_type = JobType.NOTIFICATION.value
+    mock_job.job_type = JobType.FINOPS_ANALYSIS.value
     mock_job.status = JobStatus.PENDING.value
     mock_job.attempts = 0
     mock_job.scheduled_for = now
@@ -264,13 +285,44 @@ async def test_enqueue_new_job_success(async_client: AsyncClient):
     ):
         response = await async_client.post(
             "/api/v1/jobs/enqueue",
-            json={"job_type": JobType.NOTIFICATION.value, "payload": {"msg": "hello"}},
+            json={
+                "job_type": JobType.FINOPS_ANALYSIS.value,
+                "payload": {"scope": "tenant"},
+            },
         )
     assert response.status_code == 200
     body = response.json()
     assert body["id"] == str(mock_job.id)
-    assert body["job_type"] == JobType.NOTIFICATION.value
+    assert body["job_type"] == JobType.FINOPS_ANALYSIS.value
     assert body["status"] == JobStatus.PENDING.value
+
+
+@pytest.mark.asyncio
+async def test_enqueue_new_job_rejects_notification_type(async_client: AsyncClient):
+    response = await async_client.post(
+        "/api/v1/jobs/enqueue",
+        json={"job_type": JobType.NOTIFICATION.value, "payload": {"msg": "hello"}},
+    )
+    assert response.status_code == 403
+    assert "Unauthorized job type" in response.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_enqueue_new_job_requires_admin(async_client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: MagicMock(
+        id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        role="member",
+        tier="pro",
+    )
+    try:
+        response = await async_client.post(
+            "/api/v1/jobs/enqueue",
+            json={"job_type": JobType.FINOPS_ANALYSIS.value, "payload": {"k": "v"}},
+        )
+        assert response.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.asyncio

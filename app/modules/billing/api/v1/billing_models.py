@@ -1,22 +1,22 @@
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ExchangeRateUpdate(BaseModel):
-    rate: float
+    rate: float = Field(gt=0)
     provider: str = "manual"
 
 
 class PricingPlanUpdate(BaseModel):
-    price_usd: float
+    price_usd: float = Field(gt=0)
     features: Optional[Dict[str, Any]] = None
     limits: Optional[Dict[str, Any]] = None
 
 
 class CheckoutRequest(BaseModel):
     tier: str  # starter, growth, pro, enterprise
-    billing_cycle: str = "monthly"  # monthly, annual
+    billing_cycle: Literal["monthly", "annual"] = "monthly"
     currency: Optional[str] = None  # NGN (default), USD (feature-gated)
     callback_url: Optional[str] = None
 

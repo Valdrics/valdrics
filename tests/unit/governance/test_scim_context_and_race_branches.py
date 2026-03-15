@@ -66,7 +66,10 @@ async def test_get_scim_context_additional_branches() -> None:
 
     unauthorized_db = _SequentialDB([_FirstResult(None)])
     with (
-        patch("app.modules.governance.api.v1.scim.generate_secret_blind_index", return_value="bidx"),
+        patch(
+            "app.modules.governance.api.v1.scim.generate_secret_blind_index",
+            return_value="bidx",
+        ),
         patch(
             "app.modules.governance.api.v1.scim.db_session.async_session_maker",
             new=_session_maker_for(unauthorized_db),
@@ -77,7 +80,10 @@ async def test_get_scim_context_additional_branches() -> None:
 
     disabled_db = _SequentialDB([_FirstResult((tenant_id, False))])
     with (
-        patch("app.modules.governance.api.v1.scim.generate_secret_blind_index", return_value="bidx"),
+        patch(
+            "app.modules.governance.api.v1.scim.generate_secret_blind_index",
+            return_value="bidx",
+        ),
         patch(
             "app.modules.governance.api.v1.scim.db_session.async_session_maker",
             new=_session_maker_for(disabled_db),
@@ -87,10 +93,13 @@ async def test_get_scim_context_additional_branches() -> None:
             await get_scim_context(request)
 
     free_db = _SequentialDB(
-        [_FirstResult((tenant_id, True)), _ScalarResult("free")]
+        [_FirstResult((tenant_id, True)), _FirstResult(("free", False))]
     )
     with (
-        patch("app.modules.governance.api.v1.scim.generate_secret_blind_index", return_value="bidx"),
+        patch(
+            "app.modules.governance.api.v1.scim.generate_secret_blind_index",
+            return_value="bidx",
+        ),
         patch(
             "app.modules.governance.api.v1.scim.db_session.async_session_maker",
             new=_session_maker_for(free_db),
@@ -99,12 +108,31 @@ async def test_get_scim_context_additional_branches() -> None:
         with pytest.raises(ScimError, match="Enterprise tier"):
             await get_scim_context(request)
 
+    deleted_db = _SequentialDB(
+        [_FirstResult((tenant_id, True)), _FirstResult(("enterprise", True))]
+    )
+    with (
+        patch(
+            "app.modules.governance.api.v1.scim.generate_secret_blind_index",
+            return_value="bidx",
+        ),
+        patch(
+            "app.modules.governance.api.v1.scim.db_session.async_session_maker",
+            new=_session_maker_for(deleted_db),
+        ),
+    ):
+        with pytest.raises(ScimError, match="deactivated"):
+            await get_scim_context(request)
+
     ok_db = _SequentialDB(
-        [_FirstResult((tenant_id, True)), _ScalarResult("enterprise")]
+        [_FirstResult((tenant_id, True)), _FirstResult(("enterprise", False))]
     )
     ok_request = _auth_request("token-y")
     with (
-        patch("app.modules.governance.api.v1.scim.generate_secret_blind_index", return_value="bidx"),
+        patch(
+            "app.modules.governance.api.v1.scim.generate_secret_blind_index",
+            return_value="bidx",
+        ),
         patch(
             "app.modules.governance.api.v1.scim.db_session.async_session_maker",
             new=_session_maker_for(ok_db),
@@ -149,7 +177,9 @@ class _RaceDB:
 
 @pytest.mark.asyncio
 async def test_get_or_create_scim_group_race_integrity_branch() -> None:
-    existing = SimpleNamespace(id=uuid4(), display_name="FinOps", display_name_norm="finops")
+    existing = SimpleNamespace(
+        id=uuid4(), display_name="FinOps", display_name_norm="finops"
+    )
     race_db = _RaceDB(existing)
     group = await _get_or_create_scim_group(
         race_db, tenant_id=uuid4(), display_name="FinOps"

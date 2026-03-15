@@ -216,10 +216,8 @@ async def test_compute_partitioning_evidence_handles_catalog_errors() -> None:
     mock_db.execute = AsyncMock(side_effect=RuntimeError("catalog unavailable"))
     mock_db.scalar = AsyncMock()
 
-    payload = await _compute_partitioning_evidence(mock_db)
-    assert payload.dialect == "postgresql"
-    assert payload.partitioning_supported is True
-    assert all(item.exists is False for item in payload.tables)
+    with pytest.raises(audit_partitioning_api.PartitioningEvidenceCollectionError):
+        await _compute_partitioning_evidence(mock_db)
 
 
 @pytest.mark.asyncio

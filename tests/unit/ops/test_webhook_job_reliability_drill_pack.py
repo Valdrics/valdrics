@@ -6,6 +6,7 @@ from tempfile import TemporaryDirectory
 from scripts.run_webhook_job_reliability_drill import (
     DRILL_SCENARIOS,
     LOCAL_DRILL_ENV_SEED,
+    _build_local_bootstrap_database_path,
     _build_local_bootstrap_env,
 )
 
@@ -66,6 +67,16 @@ def test_webhook_job_reliability_drill_builds_secure_local_bootstrap_env() -> No
     assert env["ENCRYPTION_KEY"]
     assert env["ADMIN_API_KEY"]
     assert LOCAL_DRILL_ENV_SEED == "valdrics-webhook-job-reliability-drill-v1"
+
+
+def test_webhook_job_reliability_drill_uses_unique_database_paths_per_run() -> None:
+    first = _build_local_bootstrap_database_path()
+    second = _build_local_bootstrap_database_path()
+
+    assert first != second
+    assert first.name == "drill.sqlite3"
+    assert second.name == "drill.sqlite3"
+    assert first.parent != second.parent
 
 
 def test_webhook_job_reliability_runbook_documents_required_metrics_and_alerts() -> None:

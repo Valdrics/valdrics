@@ -1,10 +1,12 @@
 from datetime import datetime
+import importlib
+import pkgutil
 from typing import Annotated, Any, List, Literal, Optional
 from uuid import UUID
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import asc, desc, select
+from sqlalchemy import asc, delete, desc, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,7 +16,11 @@ from app.modules.governance.domain.security.audit_log import AuditLog
 from app.shared.core.auth import CurrentUser, requires_role
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
-from app.shared.core.config import get_settings
+from app.shared.db.base import Base
+from app.shared.db.session import (
+    allow_audit_log_retention_purge,
+    allow_system_audit_log_retention_purge,
+)
 from app.shared.db.session import get_db
 
 logger = structlog.get_logger()
@@ -27,7 +33,44 @@ AUDIT_ACCESS_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     TypeError,
     ValueError,
     AttributeError,
+    ImportError,
 )
+ERASURE_SWEEP_EXCLUDED_TABLES = frozenset(
+    {"tenants", "users", "audit_logs", "system_audit_logs"}
+)
+
+
+def _load_all_model_modules() -> None:
+    import app.models as app_models
+
+    for module_info in pkgutil.iter_modules(
+        app_models.__path__, f"{app_models.__name__}."
+    ):
+        if module_info.ispkg:
+            continue
+        importlib.import_module(module_info.name)
+
+
+def _iter_tenant_scoped_models() -> list[type[Any]]:
+    _load_all_model_modules()
+
+    table_to_model: dict[str, type[Any]] = {}
+    for mapper in Base.registry.mappers:
+        if getattr(mapper.class_, "__table__", None) is None:
+            continue
+        table_name = str(getattr(mapper.local_table, "name", ""))
+        if table_name:
+            table_to_model[table_name] = mapper.class_
+    models: list[type[Any]] = []
+    for table in reversed(Base.metadata.sorted_tables):
+        table_name = str(getattr(table, "name", ""))
+        table_columns = getattr(table, "c", {})
+        if table_name in ERASURE_SWEEP_EXCLUDED_TABLES or "tenant_id" not in table_columns:
+            continue
+        model = table_to_model.get(table_name)
+        if model is not None:
+            models.append(model)
+    return models
 
 @router.get("/logs", response_model=List[AuditLogResponse])
 async def get_audit_logs(
@@ -263,28 +306,20 @@ async def request_data_erasure(
     try:
         from app.models.tenant import User
         from app.models.tenant import Tenant
-        from app.models.cloud import CostRecord, CloudAccount
-        from app.models.remediation import RemediationRequest
-        from app.models.anomaly_marker import AnomalyMarker
         from app.models.aws_connection import AWSConnection
-        from app.models.azure_connection import AzureConnection
-        from app.models.gcp_connection import GCPConnection
-        from app.models.saas_connection import SaaSConnection
-        from app.models.license_connection import LicenseConnection
-        from app.models.platform_connection import PlatformConnection
-        from app.models.hybrid_connection import HybridConnection
-        from app.models.llm import LLMUsage, LLMBudget
-        from app.models.notification_settings import NotificationSettings
-        from app.models.background_job import BackgroundJob
-        from app.models.carbon_settings import CarbonSettings
-        from app.models.remediation_settings import RemediationSettings
+        from app.models.cloud import CostRecord
         from app.models.discovered_account import DiscoveredAccount
-        from app.models.attribution import AttributionRule, CostAllocation
+        from app.models.attribution import CostAllocation
         from app.models.cost_audit import CostAuditLog
-        from app.models.optimization import StrategyRecommendation
-        from sqlalchemy import delete
+        from app.modules.governance.domain.security.audit_log import (
+            AuditEventType,
+            SystemAuditLog,
+            SystemAuditLogger,
+        )
 
         tenant_id = user.tenant_id
+        if tenant_id is None:
+            raise HTTPException(status_code=403, detail="Tenant context is required")
 
         tenant_row = await db.execute(
             select(Tenant).where(Tenant.id == tenant_id).with_for_update()
@@ -300,61 +335,30 @@ async def request_data_erasure(
         )
 
         # Delete in order of dependencies
-        deleted_counts = {}
+        deleted_counts: dict[str, int] = {}
+        tenant_user_ids = select(User.id).where(User.tenant_id == tenant_id)
 
-        # 1. Delete dependent cost data (audit logs for records)
-        await db.execute(
+        # 1. Delete dependent cost evidence with no direct tenant_id.
+        result = await db.execute(
             delete(CostAuditLog).where(
                 CostAuditLog.cost_record_id.in_(
                     select(CostRecord.id).where(CostRecord.tenant_id == tenant_id)
                 )
             )
         )
+        deleted_counts["cost_audit_logs"] = _rowcount(result)
 
-        # 2. Delete attribution allocations before cost records (FK dependency)
-        await db.execute(
+        # 2. Delete derived allocations before cost records.
+        result = await db.execute(
             delete(CostAllocation).where(
                 CostAllocation.cost_record_id.in_(
                     select(CostRecord.id).where(CostRecord.tenant_id == tenant_id)
                 )
             )
         )
+        deleted_counts["cost_allocations"] = _rowcount(result)
 
-        # 3. Delete cost records (largest table)
-        result = await db.execute(
-            delete(CostRecord).where(CostRecord.tenant_id == tenant_id)
-        )
-        deleted_counts["cost_records"] = _rowcount(result)
-
-        # 4. Delete anomaly markers
-        result = await db.execute(
-            delete(AnomalyMarker).where(AnomalyMarker.tenant_id == tenant_id)
-        )
-        deleted_counts["anomaly_markers"] = _rowcount(result)
-
-        # 5. Delete remediation and discovery data
-        result = await db.execute(
-            delete(RemediationRequest).where(RemediationRequest.tenant_id == tenant_id)
-        )
-        deleted_counts["remediation_requests"] = _rowcount(result)
-
-        result = await db.execute(
-            delete(StrategyRecommendation).where(
-                StrategyRecommendation.tenant_id == tenant_id
-            )
-        )
-        deleted_counts["strategy_recommendations"] = _rowcount(result)
-
-        # Optimization strategies are global catalog entries, not tenant-owned records.
-        # Tenant data erasure must only remove tenant-specific recommendations.
-        deleted_counts["optimization_strategies"] = 0
-
-        await db.execute(
-            delete(RemediationSettings).where(
-                RemediationSettings.tenant_id == tenant_id
-            )
-        )
-
+        # 3. Delete child discovery rows with indirect tenant ownership.
         result = await db.execute(
             delete(DiscoveredAccount).where(
                 DiscoveredAccount.management_connection_id.in_(
@@ -364,71 +368,62 @@ async def request_data_erasure(
         )
         deleted_counts["discovered_accounts"] = _rowcount(result)
 
-        # 6. Delete Cloud Connections and Attribution
-        await db.execute(
-            delete(AWSConnection).where(AWSConnection.tenant_id == tenant_id)
-        )
-        await db.execute(
-            delete(AzureConnection).where(AzureConnection.tenant_id == tenant_id)
-        )
-        await db.execute(
-            delete(GCPConnection).where(GCPConnection.tenant_id == tenant_id)
-        )
-        await db.execute(
-            delete(SaaSConnection).where(SaaSConnection.tenant_id == tenant_id)
-        )
-        await db.execute(
-            delete(LicenseConnection).where(LicenseConnection.tenant_id == tenant_id)
-        )
-        await db.execute(
-            delete(PlatformConnection).where(PlatformConnection.tenant_id == tenant_id)
-        )
-        await db.execute(
-            delete(HybridConnection).where(HybridConnection.tenant_id == tenant_id)
-        )
+        # 4. Remove tenant-scoped audit logs before deleting tenant users.
+        await allow_audit_log_retention_purge(db, True)
+        try:
+            result = await db.execute(delete(AuditLog).where(AuditLog.tenant_id == tenant_id))
+        finally:
+            await allow_audit_log_retention_purge(db, False)
+        deleted_counts["audit_logs"] = _rowcount(result)
 
-        await db.execute(
-            delete(AttributionRule).where(AttributionRule.tenant_id == tenant_id)
-        )
-
-        # 7. Delete LLM Usage and Budgets
-        result = await db.execute(
-            delete(LLMUsage).where(LLMUsage.tenant_id == tenant_id)
-        )
-        deleted_counts["llm_usage_records"] = _rowcount(result)
-
-        await db.execute(delete(LLMBudget).where(LLMBudget.tenant_id == tenant_id))
-
-        # 8. Delete Notification and Carbon settings
-        await db.execute(
-            delete(NotificationSettings).where(
-                NotificationSettings.tenant_id == tenant_id
+        # 5. Remove system-scope audit rows that directly reference tenant users so
+        # user deletion cannot be blocked by immutable cross-scope audit history.
+        await allow_system_audit_log_retention_purge(db, True)
+        try:
+            result = await db.execute(
+                delete(SystemAuditLog).where(SystemAuditLog.actor_id.in_(tenant_user_ids))
             )
-        )
-        await db.execute(
-            delete(CarbonSettings).where(CarbonSettings.tenant_id == tenant_id)
-        )
+        finally:
+            await allow_system_audit_log_retention_purge(db, False)
+        deleted_counts["system_audit_logs"] = _rowcount(result)
 
-        # 9. Delete Background Jobs
-        result = await db.execute(
-            delete(BackgroundJob).where(BackgroundJob.tenant_id == tenant_id)
-        )
-        deleted_counts["background_jobs"] = _rowcount(result)
+        # 6. Sweep all tenant-scoped tables registered in metadata, including
+        # identity/SSO/SCIM/growth/finance evidence tables that were previously omitted.
+        for model in _iter_tenant_scoped_models():
+            result = await db.execute(
+                delete(model).where(getattr(model, "tenant_id") == tenant_id)
+            )
+            deleted_counts[model.__table__.name] = _rowcount(result)
 
-        # 10. Delete Cloud accounts (Meta)
-        result = await db.execute(
-            delete(CloudAccount).where(CloudAccount.tenant_id == tenant_id)
-        )
-        deleted_counts["cloud_accounts"] = _rowcount(result)
+        # 7. Delete all tenant users, including the requesting owner principal.
+        result = await db.execute(delete(User).where(User.tenant_id == tenant_id))
+        deleted_counts["users"] = _rowcount(result)
 
-        # 11. Delete users (except the requesting user - they delete last)
-        result = await db.execute(
-            delete(User).where(User.tenant_id == tenant_id, User.id != user.id)
-        )
-        deleted_counts["other_users"] = _rowcount(result)
+        # 8. Delete the tenant container itself.
+        result = await db.execute(delete(Tenant).where(Tenant.id == tenant_id))
+        deleted_counts["tenants"] = _rowcount(result)
+        if deleted_counts["tenants"] != 1:
+            raise HTTPException(status_code=404, detail="Tenant not found")
 
-        # 6. Audit logs preserved (required for compliance) but marked
-        # We don't delete audit logs - they are required for SOC2
+        # Preserve a system-scope, non-tenant-linked audit summary for compliance.
+        erasure_audit = SystemAuditLogger(db=db)
+        await erasure_audit.log(
+            event_type=AuditEventType.TENANT_DELETED,
+            actor_id=None,
+            actor_email=None,
+            resource_type="tenant_erasure",
+            resource_id=str(tenant_id),
+            details={
+                "erasure": {
+                    "tenant_id": str(tenant_id),
+                    "requested_by_email_redacted": True,
+                    "deleted_counts": deleted_counts,
+                }
+            },
+            success=True,
+            request_method="DELETE",
+            request_path="/api/v1/audit/data-erasure-request",
+        )
 
         await db.commit()
 
@@ -437,20 +432,17 @@ async def request_data_erasure(
             tenant_id=str(tenant_id),
             deleted_counts=deleted_counts,
         )
-        audit_retention_days = int(get_settings().AUDIT_LOG_RETENTION_DAYS)
 
         return {
             "status": "erasure_complete",
-            "message": "All tenant data has been deleted. Audit logs are preserved for compliance.",
+            "message": (
+                "Tenant data erasure completed. The tenant record, all tenant users, "
+                "and tenant-scoped data have been deleted."
+            ),
             "deleted_counts": deleted_counts,
-            "next_steps": [
-                "Close the tenant account via POST /api/v1/settings/account/close to revoke remaining access",
-                (
-                    f"Audit logs are retained for {audit_retention_days} days and then "
-                    "purged automatically by the maintenance sweep"
-                ),
-                "Contact support@valdrics.com for any questions",
-            ],
+            "retained_records": {
+                "system_audit_summary": True,
+            },
         }
 
     except HTTPException:

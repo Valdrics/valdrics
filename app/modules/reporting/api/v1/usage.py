@@ -335,7 +335,12 @@ async def _get_workload_metering(
             )
             .label("zombie_scans"),
             func.max(BackgroundJob.completed_at)
-            .filter(BackgroundJob.status == JobStatus.COMPLETED)
+            .filter(
+                BackgroundJob.status == JobStatus.COMPLETED,
+                BackgroundJob.job_type.in_(
+                    (JobType.FINOPS_ANALYSIS, JobType.ZOMBIE_SCAN)
+                ),
+            )
             .label("last_scan"),
         ).where(BackgroundJob.tenant_id == tenant_id)
     )

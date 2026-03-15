@@ -31,14 +31,17 @@ async def test_get_carbon_footprint_date_range_error():
     new_callable=AsyncMock,
 )
 @patch(
-    "app.modules.reporting.api.v1.carbon._get_provider_connection",
+    "app.modules.reporting.api.v1.carbon._get_provider_connections",
     new_callable=AsyncMock,
 )
-async def test_get_carbon_footprint_success(mock_get_connection, mock_fetch_cost_data):
+async def test_get_carbon_footprint_success(
+    mock_get_connections,
+    mock_fetch_cost_data,
+):
     user = MagicMock()
     user.tenant_id = "tenant-123"
     db = AsyncMock()
-    mock_get_connection.return_value = MagicMock()
+    mock_get_connections.return_value = [MagicMock()]
     mock_fetch_cost_data.return_value = [{"service": "Amazon EC2", "cost_usd": 100.0}]
 
     with patch(
@@ -55,14 +58,14 @@ async def test_get_carbon_footprint_success(mock_get_connection, mock_fetch_cost
 
 @pytest.mark.asyncio
 @patch(
-    "app.modules.reporting.api.v1.carbon._get_provider_connection",
+    "app.modules.reporting.api.v1.carbon._get_provider_connections",
     new_callable=AsyncMock,
 )
-async def test_get_carbon_budget_no_connection(mock_get_connection):
+async def test_get_carbon_budget_no_connection(mock_get_connections):
     user = MagicMock()
     user.tenant_id = "tenant-123"
     db = AsyncMock()
-    mock_get_connection.return_value = None
+    mock_get_connections.return_value = []
 
     response = await get_carbon_budget(user, db, provider="aws")
     assert response["alert_status"] == "unknown"
@@ -74,18 +77,20 @@ async def test_get_carbon_budget_no_connection(mock_get_connection):
     new_callable=AsyncMock,
 )
 @patch(
-    "app.modules.reporting.api.v1.carbon._get_provider_connection",
+    "app.modules.reporting.api.v1.carbon._get_provider_connections",
     new_callable=AsyncMock,
 )
 @patch("app.modules.reporting.api.v1.carbon.CarbonBudgetService")
 async def test_get_carbon_budget_success(
-    mock_budget_service_class, mock_get_connection, mock_fetch_cost_data
+    mock_budget_service_class,
+    mock_get_connections,
+    mock_fetch_cost_data,
 ):
     user = MagicMock()
     user.tenant_id = "tenant-123"
     db = AsyncMock()
 
-    mock_get_connection.return_value = MagicMock()
+    mock_get_connections.return_value = [MagicMock()]
     mock_fetch_cost_data.return_value = [{"service": "Amazon EC2", "cost_usd": 10.0}]
 
     # Carbon settings lookup query
@@ -103,6 +108,53 @@ async def test_get_carbon_budget_success(
 
 
 @pytest.mark.asyncio
+@patch(
+    "app.modules.reporting.api.v1.carbon._fetch_provider_cost_data",
+    new_callable=AsyncMock,
+)
+@patch(
+    "app.modules.reporting.api.v1.carbon._get_provider_connections",
+    new_callable=AsyncMock,
+)
+async def test_get_carbon_footprint_aggregates_multiple_provider_connections(
+    mock_get_connections,
+    mock_fetch_cost_data,
+):
+    user = MagicMock()
+    user.tenant_id = "tenant-123"
+    db = AsyncMock()
+
+    first = MagicMock()
+    first.region = "us-east-1"
+    second = MagicMock()
+    second.region = "us-west-2"
+    mock_get_connections.return_value = [first, second]
+    mock_fetch_cost_data.side_effect = [
+        [{"service": "Amazon EC2", "cost_usd": 10.0}],
+        [{"service": "Amazon RDS", "cost_usd": 5.0}],
+    ]
+
+    with patch(
+        "app.modules.reporting.api.v1.carbon.CarbonCalculator"
+    ) as mock_calc_class:
+        mock_calc = mock_calc_class.return_value
+        mock_calc.calculate_from_costs.return_value = {"total_co2_kg": 3.5}
+
+        response = await get_carbon_footprint(
+            date.today(), date.today(), user, db, provider="aws"
+        )
+
+    assert response["total_co2_kg"] == 3.5
+    assert mock_fetch_cost_data.await_count == 2
+    args, kwargs = mock_calc.calculate_from_costs.call_args
+    assert args[0] == [
+        {"service": "Amazon EC2", "cost_usd": 10.0},
+        {"service": "Amazon RDS", "cost_usd": 5.0},
+    ]
+    assert kwargs["region"] == "global"
+
+
+@pytest.mark.asyncio
 async def test_get_carbon_footprint_invalid_provider():
     user = MagicMock()
     user.tenant_id = "tenant-123"
@@ -117,16 +169,16 @@ async def test_get_carbon_footprint_invalid_provider():
 
 @pytest.mark.asyncio
 @patch(
-    "app.modules.reporting.api.v1.carbon._get_provider_connection",
+    "app.modules.reporting.api.v1.carbon._get_provider_connections",
     new_callable=AsyncMock,
 )
 async def test_get_carbon_footprint_accepts_cloud_plus_provider(
-    mock_get_connection,
+    mock_get_connections,
 ):
     user = MagicMock()
     user.tenant_id = "tenant-123"
     db = AsyncMock()
-    mock_get_connection.return_value = None
+    mock_get_connections.return_value = []
 
     with pytest.raises(HTTPException) as exc:
         await get_carbon_footprint(
@@ -151,7 +203,6 @@ async def test_analyze_graviton_opportunities_success(
     user.tenant_id = "tenant-123"
     db = AsyncMock()
 
-    mock_result = MagicMock()
     connection = MagicMock()
     connection.aws_account_id = "123456789012"
     connection.role_arn = "arn:aws:iam::123456789012:role/ValdricsRole"
@@ -161,15 +212,26 @@ async def test_analyze_graviton_opportunities_success(
     connection.cur_bucket_name = "cur-bucket"
     connection.cur_report_name = "cur-report"
     connection.cur_prefix = "cur-prefix"
-    mock_result.scalar_one_or_none.return_value = connection
-    db.execute.return_value = mock_result
-
     _ = mock_adapter_class.return_value
 
     mock_analyzer = mock_analyzer_class.return_value
     mock_analyzer.analyze = AsyncMock(return_value={"candidates": []})
 
-    response = await analyze_graviton_opportunities(user, db)
+    with (
+        patch(
+            "app.modules.reporting.api.v1.carbon._get_provider_connections",
+            new=AsyncMock(return_value=[connection]),
+        ),
+        patch(
+            "app.shared.adapters.aws_utils.map_aws_connection_to_credentials",
+            return_value={"aws_access_key_id": "key"},
+        ),
+        patch(
+            "app.modules.reporting.api.v1.carbon.get_cache_service",
+            return_value=MagicMock(enabled=False),
+        ),
+    ):
+        response = await analyze_graviton_opportunities(user, db)
     assert "candidates" in response
 
 
@@ -245,11 +307,11 @@ async def test_get_carbon_intensity_forecast_reports_mixed_source_when_provider_
     new_callable=AsyncMock,
 )
 @patch(
-    "app.modules.reporting.api.v1.carbon._get_provider_connection",
+    "app.modules.reporting.api.v1.carbon._get_provider_connections",
     new_callable=AsyncMock,
 )
 async def test_get_carbon_footprint_cache_hit_skips_provider_calls(
-    mock_get_connection,
+    mock_get_connections,
     mock_fetch_cost_data,
 ):
     user = MagicMock()
@@ -274,7 +336,7 @@ async def test_get_carbon_footprint_cache_hit_skips_provider_calls(
         )
 
     assert response["total_co2_kg"] == 7.7
-    mock_get_connection.assert_not_awaited()
+    mock_get_connections.assert_not_awaited()
     mock_fetch_cost_data.assert_not_awaited()
 
 
@@ -284,7 +346,7 @@ async def test_get_carbon_footprint_cache_hit_skips_provider_calls(
     new_callable=AsyncMock,
 )
 @patch(
-    "app.modules.reporting.api.v1.carbon._get_provider_connection",
+    "app.modules.reporting.api.v1.carbon._get_provider_connections",
     new_callable=AsyncMock,
 )
 @patch("app.modules.reporting.api.v1.carbon.CarbonCalculator")
@@ -292,7 +354,7 @@ async def test_get_carbon_footprint_cache_hit_skips_provider_calls(
 async def test_get_carbon_budget_uses_tenant_default_region_for_global_aws(
     mock_budget_service_class,
     mock_calculator_class,
-    mock_get_connection,
+    mock_get_connections,
     mock_fetch_cost_data,
 ):
     user = MagicMock()
@@ -302,7 +364,7 @@ async def test_get_carbon_budget_uses_tenant_default_region_for_global_aws(
     connection = MagicMock()
     connection.provider = "aws"
     connection.region = "us-west-2"
-    mock_get_connection.return_value = connection
+    mock_get_connections.return_value = [connection]
     mock_fetch_cost_data.return_value = [{"service": "Amazon EC2", "cost_usd": 10.0}]
 
     settings_row = MagicMock()
@@ -435,16 +497,29 @@ async def test_get_provider_connection_and_aws_gross_usage_branch() -> None:
         "app.modules.reporting.api.v1.carbon.list_tenant_connections",
         new=AsyncMock(return_value=[]),
     ):
+        assert await carbon_api._get_provider_connections(db, tenant_id, "aws") == []
         assert await carbon_api._get_provider_connection(db, tenant_id, "aws") is None
 
-    connection = MagicMock()
+    stale_connection = MagicMock()
+    stale_connection.id = uuid.uuid4()
+    stale_connection.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    stale_connection.last_verified_at = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    fresh_connection = MagicMock()
+    fresh_connection.id = uuid.uuid4()
+    fresh_connection.created_at = datetime(2026, 1, 3, tzinfo=timezone.utc)
+    fresh_connection.last_verified_at = datetime(2026, 1, 4, tzinfo=timezone.utc)
     with patch(
         "app.modules.reporting.api.v1.carbon.list_tenant_connections",
-        new=AsyncMock(return_value=[connection]),
+        new=AsyncMock(return_value=[stale_connection, fresh_connection]),
     ):
+        assert await carbon_api._get_provider_connections(
+            db,
+            tenant_id,
+            "aws",
+        ) == [stale_connection, fresh_connection]
         assert (
             await carbon_api._get_provider_connection(db, tenant_id, "aws")
-            is connection
+            is fresh_connection
         )
 
     adapter = MagicMock()
@@ -454,7 +529,7 @@ async def test_get_provider_connection_and_aws_gross_usage_branch() -> None:
         return_value=adapter,
     ):
         payload = await carbon_api._fetch_provider_cost_data(
-            connection=connection,
+            connection=fresh_connection,
             provider="aws",
             start_date=date(2026, 1, 1),
             end_date=date(2026, 1, 2),
@@ -499,7 +574,7 @@ async def test_get_green_schedule_cache_hit_branch() -> None:
     new_callable=AsyncMock,
 )
 @patch(
-    "app.modules.reporting.api.v1.carbon._get_provider_connection",
+    "app.modules.reporting.api.v1.carbon._get_provider_connections",
     new_callable=AsyncMock,
 )
 @patch("app.modules.reporting.api.v1.carbon.CarbonCalculator")
@@ -507,13 +582,13 @@ async def test_get_green_schedule_cache_hit_branch() -> None:
 async def test_get_carbon_budget_sends_alert_when_warning(
     mock_budget_service_class,
     mock_calculator_class,
-    mock_get_connection,
+    mock_get_connections,
     mock_fetch_cost_data,
 ):
     user = MagicMock()
     user.tenant_id = "tenant-123"
     db = AsyncMock()
-    mock_get_connection.return_value = MagicMock()
+    mock_get_connections.return_value = [MagicMock()]
     mock_fetch_cost_data.return_value = [{"service": "Amazon EC2", "cost_usd": 10.0}]
     settings_result = MagicMock()
     settings_result.scalar_one_or_none.return_value = None
@@ -543,13 +618,55 @@ async def test_analyze_graviton_cache_and_no_connection_branches() -> None:
     assert cached["cached"] is True
 
     cache.get = AsyncMock(return_value=None)
-    db = AsyncMock()
-    result = MagicMock()
-    result.scalar_one_or_none.return_value = None
-    db.execute.return_value = result
-    with patch("app.modules.reporting.api.v1.carbon.get_cache_service", return_value=cache):
-        payload = await analyze_graviton_opportunities(user, db)
+    with (
+        patch("app.modules.reporting.api.v1.carbon.get_cache_service", return_value=cache),
+        patch(
+            "app.modules.reporting.api.v1.carbon._get_provider_connections",
+            new=AsyncMock(return_value=[]),
+        ),
+    ):
+        payload = await analyze_graviton_opportunities(user, AsyncMock())
     assert payload["migration_candidates"] == 0
+    assert payload["error"] == "No active AWS connection found"
+
+
+@pytest.mark.asyncio
+@patch("app.modules.reporting.api.v1.carbon.GravitonAnalyzer")
+@patch("app.modules.reporting.api.v1.carbon._get_provider_connections", new_callable=AsyncMock)
+async def test_analyze_graviton_uses_preferred_active_connection(
+    mock_get_connections,
+    mock_analyzer_class,
+) -> None:
+    user = MagicMock()
+    user.tenant_id = uuid.uuid4()
+
+    stale = MagicMock()
+    stale.id = uuid.uuid4()
+    stale.created_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    stale.last_verified_at = datetime(2026, 1, 2, tzinfo=timezone.utc)
+    fresh = MagicMock()
+    fresh.id = uuid.uuid4()
+    fresh.created_at = datetime(2026, 1, 3, tzinfo=timezone.utc)
+    fresh.last_verified_at = datetime(2026, 1, 4, tzinfo=timezone.utc)
+    mock_get_connections.return_value = [stale, fresh]
+
+    analyzer = mock_analyzer_class.return_value
+    analyzer.analyze = AsyncMock(return_value={"migration_candidates": 2})
+
+    with (
+        patch(
+            "app.shared.adapters.aws_utils.map_aws_connection_to_credentials",
+            return_value={"aws_access_key_id": "key"},
+        ) as mock_map_credentials,
+        patch(
+            "app.modules.reporting.api.v1.carbon.get_cache_service",
+            return_value=MagicMock(enabled=False),
+        ),
+    ):
+        payload = await analyze_graviton_opportunities(user=user, db=AsyncMock())
+
+    assert payload["migration_candidates"] == 2
+    mock_map_credentials.assert_called_once_with(fresh)
 
 
 @pytest.mark.asyncio

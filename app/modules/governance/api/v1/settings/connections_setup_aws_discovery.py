@@ -82,7 +82,7 @@ __all__ = (
 async def create_aws_connection(
     request: Request,
     data: AWSConnectionCreate,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> AWSConnection:
     tenant_id = _require_tenant_id(current_user)
@@ -157,7 +157,7 @@ async def list_aws_connections(
 async def verify_aws_connection(
     request: Request,
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     return await AWSConnectionService(db).verify_connection(
@@ -168,7 +168,7 @@ async def verify_aws_connection(
 @router.delete("/aws/{connection_id}", status_code=204)
 async def delete_aws_connection(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     tenant_id = _require_tenant_id(current_user)
@@ -201,7 +201,7 @@ async def delete_aws_connection(
 @router.post("/aws/{connection_id}/sync-org")
 async def sync_aws_org(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     tenant_id = _require_tenant_id(current_user)
@@ -214,6 +214,11 @@ async def sync_aws_org(
     connection = result.scalar_one_or_none()
     if not connection or not connection.is_management_account:
         raise HTTPException(404, "Management account connection not found")
+    if str(getattr(connection, "status", "")).strip().lower() != "active":
+        raise HTTPException(
+            409,
+            "Management account connection must be active and verified before organization sync",
+        )
 
     count = await OrganizationsDiscoveryService.sync_accounts(db, connection)
     return {"message": f"Successfully discovered {count} accounts", "count": count}
@@ -238,7 +243,10 @@ async def list_discovered_accounts(
 
     result = await db.execute(
         select(DiscoveredAccount)
-        .where(DiscoveredAccount.management_connection_id.in_(mgmt_ids))
+        .where(
+            DiscoveredAccount.management_connection_id.in_(mgmt_ids),
+            DiscoveredAccount.status != "stale",
+        )
         .order_by(DiscoveredAccount.last_discovered_at.desc())
     )
     return list(result.scalars().all())
@@ -247,7 +255,7 @@ async def list_discovered_accounts(
 @router.post("/aws/discovered/{discovered_id}/link")
 async def link_discovered_account(
     discovered_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     tenant_id = _require_tenant_id(current_user)
@@ -269,6 +277,8 @@ async def link_discovered_account(
         raise HTTPException(404, "Discovered account not found or not authorized")
 
     discovered, mgmt = row
+    if discovered.status == "stale":
+        raise HTTPException(409, "Discovered account is no longer present in AWS Organizations")
     role_name = "OrganizationAccountAccessRole"
     role_arn = f"arn:aws:iam::{discovered.account_id}:role/{role_name}"
 
@@ -317,7 +327,7 @@ async def link_discovered_account(
 async def discovery_stage_a(
     request: Request,
     data: DiscoveryStageARequest,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryStageResponse:
     tenant_id = _require_tenant_id(current_user)
@@ -363,7 +373,7 @@ async def discovery_stage_a(
 async def discovery_deep_scan(
     request: Request,
     data: DiscoveryDeepScanRequest,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryStageResponse:
     tenant_id = _require_tenant_id(current_user)
@@ -483,7 +493,7 @@ async def _update_discovery_candidate_status(
 async def accept_discovery_candidate(
     request: Request,
     candidate_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryCandidate:
     return await _update_discovery_candidate_status(
@@ -503,7 +513,7 @@ async def accept_discovery_candidate(
 async def ignore_discovery_candidate(
     request: Request,
     candidate_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryCandidate:
     return await _update_discovery_candidate_status(
@@ -523,7 +533,7 @@ async def ignore_discovery_candidate(
 async def mark_discovery_candidate_connected(
     request: Request,
     candidate_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> DiscoveryCandidate:
     return await _update_discovery_candidate_status(

@@ -26,11 +26,11 @@ async def get_unit_economics_settings_impl(
     user: CurrentUser,
     db: AsyncSession,
     require_tenant_id: Callable[[CurrentUser], UUID],
-    get_or_create_unit_settings: Callable[..., Awaitable[Any]],
+    get_unit_settings_snapshot: Callable[..., Awaitable[Any]],
     settings_to_response: Callable[[Any], UnitEconomicsSettingsResponse],
 ) -> UnitEconomicsSettingsResponse:
     tenant_id = require_tenant_id(user)
-    settings = await get_or_create_unit_settings(db, tenant_id)
+    settings = await get_unit_settings_snapshot(db, tenant_id)
     return settings_to_response(settings)
 
 
@@ -65,7 +65,7 @@ async def get_unit_economics_impl(
     user: CurrentUser,
     db: AsyncSession,
     require_tenant_id: Callable[[CurrentUser], UUID],
-    get_or_create_unit_settings: Callable[..., Awaitable[Any]],
+    get_unit_settings_snapshot: Callable[..., Awaitable[Any]],
     window_total_cost: Callable[..., Awaitable[Any]],
     build_unit_metrics: Callable[..., Any],
 ) -> UnitEconomicsResponse:
@@ -73,7 +73,7 @@ async def get_unit_economics_impl(
         raise HTTPException(status_code=400, detail="start_date must be <= end_date")
 
     tenant_id = require_tenant_id(user)
-    settings = await get_or_create_unit_settings(db, tenant_id)
+    settings = await get_unit_settings_snapshot(db, tenant_id)
 
     total_cost = await window_total_cost(db, tenant_id, start_date, end_date, provider)
     window_days = (end_date - start_date).days + 1

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
+from uuid import UUID
 
 from app.shared.core.auth import (
     CurrentUser,
@@ -63,10 +64,22 @@ class LLMSettingsUpdate(BaseModel):
     preferred_model: str = Field("llama-3.3-70b-versatile")
 
     # Optional API Key Overrides (BYOK)
-    openai_api_key: str | None = Field(None, max_length=255)
-    claude_api_key: str | None = Field(None, max_length=255)
-    google_api_key: str | None = Field(None, max_length=255)
-    groq_api_key: str | None = Field(None, max_length=255)
+    openai_api_key: str | None = Field(None, max_length=512)
+    claude_api_key: str | None = Field(None, max_length=512)
+    google_api_key: str | None = Field(None, max_length=512)
+    groq_api_key: str | None = Field(None, max_length=512)
+
+
+def _build_default_llm_settings(tenant_id: UUID | None) -> LLMBudget:
+    """Return an unsaved default LLM settings snapshot for read-only callers."""
+    return LLMBudget(
+        tenant_id=tenant_id,
+        monthly_limit_usd=10.0,
+        alert_threshold_percent=80,
+        hard_limit=False,
+        preferred_provider="groq",
+        preferred_model="llama-3.3-70b-versatile",
+    )
 
 
 # ============================================================
@@ -87,24 +100,8 @@ async def get_llm_settings(
     )
     settings = result.scalar_one_or_none()
 
-    # Create default budget if not exists
     if not settings:
-        settings = LLMBudget(
-            tenant_id=current_user.tenant_id,
-            monthly_limit_usd=10.0,
-            alert_threshold_percent=80,
-            hard_limit=False,
-            preferred_provider="groq",
-            preferred_model="llama-3.3-70b-versatile",
-        )
-        db.add(settings)
-        await db.commit()
-        await db.refresh(settings)
-
-        logger.info(
-            "llm_settings_created",
-            tenant_id=str(current_user.tenant_id),
-        )
+        settings = _build_default_llm_settings(current_user.tenant_id)
 
     # Map model flags for response
     return LLMSettingsResponse(
@@ -148,37 +145,32 @@ async def update_llm_settings(
         select(LLMBudget).where(LLMBudget.tenant_id == current_user.tenant_id)
     )
     settings = result.scalar_one_or_none()
+    update_data = data.model_dump(exclude_unset=True)
 
     if not settings:
-        settings = LLMBudget(tenant_id=current_user.tenant_id, **data.model_dump())
+        settings = _build_default_llm_settings(current_user.tenant_id)
         db.add(settings)
-    else:
-        update_data = data.model_dump()
-        # Item 15: Validate thresholds at boundaries
-        if update_data["alert_threshold_percent"] == 0:
-            logger.info(
-                "llm_alert_threshold_zero", tenant_id=str(current_user.tenant_id)
-            )
-        elif update_data["alert_threshold_percent"] == 100:
-            logger.info(
-                "llm_alert_threshold_max", tenant_id=str(current_user.tenant_id)
-            )
+    # Item 15: Validate thresholds at boundaries
+    if update_data.get("alert_threshold_percent") == 0:
+        logger.info("llm_alert_threshold_zero", tenant_id=str(current_user.tenant_id))
+    elif update_data.get("alert_threshold_percent") == 100:
+        logger.info("llm_alert_threshold_max", tenant_id=str(current_user.tenant_id))
 
-        allowed_fields = {
-            "monthly_limit_usd",
-            "alert_threshold_percent",
-            "hard_limit",
-            "preferred_provider",
-            "preferred_model",
-            "openai_api_key",
-            "claude_api_key",
-            "google_api_key",
-            "groq_api_key",
-        }
+    allowed_fields = {
+        "monthly_limit_usd",
+        "alert_threshold_percent",
+        "hard_limit",
+        "preferred_provider",
+        "preferred_model",
+        "openai_api_key",
+        "claude_api_key",
+        "google_api_key",
+        "groq_api_key",
+    }
 
-        for key in allowed_fields:
-            if key in update_data:
-                setattr(settings, key, update_data[key])
+    for key in allowed_fields:
+        if key in update_data:
+            setattr(settings, key, update_data[key])
 
     await maybe_await(
         audit_log(
@@ -191,7 +183,7 @@ async def update_llm_settings(
                 "model": settings.preferred_model,
                 "keys_updated": [
                     k
-                    for k, v in data.model_dump().items()
+                    for k, v in update_data.items()
                     if "api_key" in k and v is not None
                 ],
             },

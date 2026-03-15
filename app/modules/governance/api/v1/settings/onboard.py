@@ -36,6 +36,10 @@ ONBOARDING_VERIFICATION_RECOVERABLE_EXCEPTIONS = (
 )
 
 
+def _normalize_email(value: str) -> str:
+    return value.strip().lower()
+
+
 def _parse_optional_iso_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
@@ -88,6 +92,18 @@ async def onboard(
     db: AsyncSession = Depends(get_system_db),
     _turnstile: None = Depends(require_turnstile_for_onboard),
 ) -> OnboardResponse:
+    authenticated_email = _normalize_email(str(user.email))
+    requested_admin_email = (
+        _normalize_email(str(onboard_req.admin_email))
+        if onboard_req.admin_email is not None
+        else authenticated_email
+    )
+    if requested_admin_email != authenticated_email:
+        raise HTTPException(
+            400,
+            "admin_email must match the authenticated user email for onboarding",
+        )
+
     # 1. Check if user already exists
     existing = await db.execute(select(User).where(User.id == user.id))
     if existing.scalar_one_or_none():
@@ -114,7 +130,8 @@ async def onboard(
 
         platform = normalize_provider(onboard_req.cloud_config.get("platform", ""))
         default_aws_region = (
-            str(getattr(settings, "AWS_DEFAULT_REGION", "") or "").strip() or "us-east-1"
+            str(getattr(settings, "AWS_DEFAULT_REGION", "") or "").strip()
+            or "us-east-1"
         )
         logger.info("verifying_initial_cloud_connection", platform=platform)
 
@@ -280,7 +297,10 @@ async def onboard(
 
     # 3. Create User linked to Tenant
     new_user = User(
-        id=user.id, email=user.email, tenant_id=tenant.id, role=UserRole.OWNER
+        id=user.id,
+        email=requested_admin_email,
+        tenant_id=tenant.id,
+        role=UserRole.OWNER,
     )
     db.add(new_user)
     try:

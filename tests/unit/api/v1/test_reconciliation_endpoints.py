@@ -1,10 +1,11 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 
+from app.modules.reporting.api.v1 import costs_reconciliation_routes
 from app.shared.core.auth import CurrentUser, UserRole, get_current_user
 from app.shared.core.pricing import PricingTier
 
@@ -296,7 +297,9 @@ async def test_restatement_runs_rejects_invalid_date_order(async_client, app) ->
 
 
 @pytest.mark.asyncio
-async def test_list_provider_invoices_returns_transformed_payload(async_client, app) -> None:
+async def test_list_provider_invoices_returns_transformed_payload(
+    async_client, app
+) -> None:
     tenant_id = uuid4()
     user = CurrentUser(
         id=uuid4(),
@@ -393,7 +396,136 @@ async def test_upsert_provider_invoice_success(async_client, app) -> None:
 
 
 @pytest.mark.asyncio
-async def test_upsert_provider_invoice_rejects_invalid_window(async_client, app) -> None:
+async def test_invoice_routes_defer_commit_until_audit_succeeds() -> None:
+    tenant_id = uuid4()
+    user = CurrentUser(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        email="invoice-audit-ordering@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+    db = MagicMock()
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+    request = SimpleNamespace(
+        method="POST",
+        url=SimpleNamespace(path="/api/v1/costs/reconciliation/invoices"),
+    )
+    invoice = SimpleNamespace(
+        id=uuid4(),
+        provider="aws",
+        period_start=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        period_end=datetime(2026, 1, 31, tzinfo=timezone.utc),
+        invoice_number="INV-2026-01",
+        currency="USD",
+        total_amount=100.0,
+        total_amount_usd=100.0,
+        status="posted",
+        notes="ok",
+        updated_at=datetime(2026, 2, 1, tzinfo=timezone.utc),
+    )
+
+    with (
+        patch(
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.upsert_invoice",
+            new=AsyncMock(return_value=invoice),
+        ) as mock_upsert,
+        patch(
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.AuditLogger.log",
+            new=AsyncMock(side_effect=RuntimeError("audit boom")),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="audit boom"):
+            await costs_reconciliation_routes.upsert_provider_invoice_impl(
+                request=request,
+                payload=costs_reconciliation_routes.ProviderInvoiceUpsertRequest(
+                    provider="aws",
+                    start_date=datetime(2026, 1, 1, tzinfo=timezone.utc).date(),
+                    end_date=datetime(2026, 1, 31, tzinfo=timezone.utc).date(),
+                    currency="USD",
+                    total_amount=100.0,
+                    invoice_number="INV-2026-01",
+                ),
+                user=user,
+                db=db,
+                require_tenant_id=lambda current_user: current_user.tenant_id,
+            )
+
+    assert mock_upsert.await_args.kwargs["commit"] is False
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()
+
+    db = MagicMock()
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+    request = SimpleNamespace(
+        method="PATCH",
+        url=SimpleNamespace(path=f"/api/v1/costs/reconciliation/invoices/{invoice.id}"),
+    )
+
+    with (
+        patch(
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.update_invoice_status",
+            new=AsyncMock(return_value=SimpleNamespace(status="posted")),
+        ) as mock_update,
+        patch(
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.AuditLogger.log",
+            new=AsyncMock(side_effect=RuntimeError("audit boom")),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="audit boom"):
+            await costs_reconciliation_routes.update_provider_invoice_status_impl(
+                request=request,
+                invoice_id=invoice.id,
+                payload=costs_reconciliation_routes.ProviderInvoiceStatusUpdateRequest(
+                    status="posted"
+                ),
+                user=user,
+                db=db,
+                require_tenant_id=lambda current_user: current_user.tenant_id,
+            )
+
+    assert mock_update.await_args.kwargs["commit"] is False
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()
+
+    db = MagicMock()
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+    request = SimpleNamespace(
+        method="DELETE",
+        url=SimpleNamespace(path=f"/api/v1/costs/reconciliation/invoices/{invoice.id}"),
+    )
+
+    with (
+        patch(
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.delete_invoice",
+            new=AsyncMock(return_value=True),
+        ) as mock_delete,
+        patch(
+            "app.modules.reporting.api.v1.costs_reconciliation_routes.AuditLogger.log",
+            new=AsyncMock(side_effect=RuntimeError("audit boom")),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="audit boom"):
+            await costs_reconciliation_routes.delete_provider_invoice_impl(
+                request=request,
+                invoice_id=invoice.id,
+                user=user,
+                db=db,
+                require_tenant_id=lambda current_user: current_user.tenant_id,
+            )
+
+    assert mock_delete.await_args.kwargs["commit"] is False
+    db.commit.assert_not_awaited()
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_upsert_provider_invoice_rejects_invalid_window(
+    async_client, app
+) -> None:
     tenant_id = uuid4()
     user = CurrentUser(
         id=uuid4(),
@@ -472,9 +604,7 @@ async def test_update_provider_invoice_status_success_and_not_found(
         with (
             patch(
                 "app.modules.reporting.api.v1.costs_reconciliation_routes.CostReconciliationService.update_invoice_status",
-                new=AsyncMock(
-                    side_effect=[SimpleNamespace(status="posted"), None]
-                ),
+                new=AsyncMock(side_effect=[SimpleNamespace(status="posted"), None]),
             ),
             patch(
                 "app.modules.reporting.api.v1.costs_reconciliation_routes.AuditLogger.log",

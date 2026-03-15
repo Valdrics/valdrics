@@ -13,6 +13,8 @@ Notes:
 
 from __future__ import annotations
 
+import csv
+import io
 from datetime import date, timedelta
 from datetime import datetime, time, timezone
 from typing import Any, Optional
@@ -38,6 +40,7 @@ from app.modules.reporting.domain.savings_proof import (
 from app.modules.reporting.domain.realized_savings import RealizedSavingsService
 from app.models.remediation import RemediationRequest, RemediationStatus
 from app.models.realized_savings import RealizedSavingsEvent
+from app.modules.reporting.api.v1.costs_helpers import sanitize_csv_cell
 
 logger = structlog.get_logger()
 router = APIRouter(tags=["Savings Proof"])
@@ -198,13 +201,19 @@ async def compute_realized_savings(
     window_start = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
     window_end = datetime.combine(end_date, time.max, tzinfo=timezone.utc)
 
-    stmt = select(RemediationRequest).where(
-        RemediationRequest.tenant_id == tenant_id,
-        RemediationRequest.status == RemediationStatus.COMPLETED.value,
-        RemediationRequest.executed_at.is_not(None),
-        RemediationRequest.executed_at >= window_start,
-        RemediationRequest.executed_at <= window_end,
-    ).order_by(RemediationRequest.executed_at.desc(), RemediationRequest.created_at.desc())
+    stmt = (
+        select(RemediationRequest)
+        .where(
+            RemediationRequest.tenant_id == tenant_id,
+            RemediationRequest.status == RemediationStatus.COMPLETED.value,
+            RemediationRequest.executed_at.is_not(None),
+            RemediationRequest.executed_at >= window_start,
+            RemediationRequest.executed_at <= window_end,
+        )
+        .order_by(
+            RemediationRequest.executed_at.desc(), RemediationRequest.created_at.desc()
+        )
+    )
     stmt = stmt.limit(normalized_limit)
     scalar_result = (await db.execute(stmt)).scalars()
     remediations = list(
@@ -316,7 +325,9 @@ async def list_realized_savings_events(
         stmt = stmt.where(RealizedSavingsEvent.provider == normalized_provider)
 
     execute_result = await db.execute(stmt)
-    rows = list(execute_result.all() if hasattr(execute_result, "all") else execute_result)
+    rows = list(
+        execute_result.all() if hasattr(execute_result, "all") else execute_result
+    )
     events: list[RealizedSavingsEventResponse] = []
     for event, executed_at in rows:
         events.append(
@@ -369,15 +380,19 @@ async def list_realized_savings_events(
             "confidence_score",
             "computed_at",
         ]
-        lines = [",".join(header)]
+        out = io.StringIO()
+        writer = csv.writer(out)
+        writer.writerow(header)
         for item in events:
             row = item.model_dump()
-            lines.append(",".join([str(row.get(col, "") or "") for col in header]))
+            writer.writerow(
+                [sanitize_csv_cell(row.get(col, "") or "") for col in header]
+            )
         filename = (
             f"realized-savings-{start_date.isoformat()}-{end_date.isoformat()}.csv"
         )
         return Response(
-            content="\n".join(lines) + "\n",
+            content=out.getvalue(),
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )

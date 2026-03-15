@@ -20,7 +20,7 @@ async def test_carbon_settings_lifecycle(
     app.dependency_overrides[get_current_user] = lambda: mock_user
 
     try:
-        # 1. GET - Create default
+        # 1. GET - Return default snapshot
         response = await async_client.get("/api/v1/settings/carbon")
         assert response.status_code == 200
         assert response.json()["carbon_budget_kg"] == 100.0
@@ -52,7 +52,7 @@ async def test_notifications_settings_lifecycle(
     app.dependency_overrides[get_current_user] = lambda: mock_user
 
     try:
-        # 1. GET - Create default
+        # 1. GET - Return default snapshot
         response = await async_client.get("/api/v1/settings/notifications")
         assert response.status_code == 200
         assert response.json()["slack_enabled"] is True

@@ -6,6 +6,7 @@ Manages circuit breaker and safety controls for tenants.
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
@@ -25,6 +26,24 @@ SAFETY_CIRCUIT_RECOVERABLE_EXCEPTIONS = (
     TimeoutError,
     OSError,
 )
+SAFETY_AUDIT_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    RuntimeError,
+    ValueError,
+    TypeError,
+    ConnectionError,
+    TimeoutError,
+    OSError,
+)
+
+
+def _require_tenant_id(current_user: CurrentUser) -> str:
+    if current_user.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant context required",
+        )
+    return str(current_user.tenant_id)
 
 
 # ============================================================
@@ -69,7 +88,7 @@ async def get_safety_status(
     settings = get_settings()
 
     try:
-        circuit_breaker = await get_circuit_breaker(str(current_user.tenant_id))
+        circuit_breaker = await get_circuit_breaker(_require_tenant_id(current_user))
 
         state = await circuit_breaker.state.get("state", "closed")
         failure_count = await circuit_breaker.state.get("failure_count", 0)
@@ -115,29 +134,39 @@ async def reset_circuit_breaker(
     from app.shared.remediation.circuit_breaker import get_circuit_breaker
 
     try:
-        circuit_breaker = await get_circuit_breaker(str(current_user.tenant_id))
+        tenant_id = _require_tenant_id(current_user)
+        circuit_breaker = await get_circuit_breaker(tenant_id)
         await circuit_breaker.reset()
 
         logger.info(
             "circuit_breaker_reset",
-            tenant_id=str(current_user.tenant_id),
+            tenant_id=tenant_id,
             by_user=str(current_user.id),
         )
 
-        await maybe_await(
-            audit_log(
-                "remediation.safety_reset",
-                str(current_user.id),
-                str(current_user.tenant_id),
-                {"action": "manual_circuit_reset", "status": "closed"},
-                db=_db,
-                resource_type="circuit_breaker",
-                resource_id=str(current_user.tenant_id),
-                request_method="POST",
-                request_path="/api/v1/settings/safety/reset",
-                commit=True,
+        try:
+            await maybe_await(
+                audit_log(
+                    "remediation.safety_reset",
+                    str(current_user.id),
+                    tenant_id,
+                    {"action": "manual_circuit_reset", "status": "closed"},
+                    db=_db,
+                    resource_type="circuit_breaker",
+                    resource_id=tenant_id,
+                    request_method="POST",
+                    request_path="/api/v1/settings/safety/reset",
+                    commit=True,
+                )
             )
-        )
+        except SAFETY_AUDIT_RECOVERABLE_EXCEPTIONS as exc:
+            await maybe_await(_db.rollback())
+            logger.warning(
+                "circuit_breaker_reset_audit_failed",
+                tenant_id=tenant_id,
+                user_id=str(current_user.id),
+                error=str(exc),
+            )
 
         return {"status": "reset", "message": "Circuit breaker reset to closed state"}
     except SAFETY_CIRCUIT_RECOVERABLE_EXCEPTIONS as e:

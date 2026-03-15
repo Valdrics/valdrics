@@ -2,6 +2,7 @@ import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch, MagicMock
 from uuid import uuid4
+from datetime import datetime, timezone
 
 from app.shared.connections.organizations import OrganizationsDiscoveryService
 from app.models.aws_connection import AWSConnection
@@ -257,6 +258,7 @@ async def test_sync_accounts_update_existing(mock_db, management_connection):
         # Assert updated
         assert existing_account.name == "Updated Name"
         assert existing_account.email == "new@example.com"
+        assert existing_account.last_discovered_at is not None
 
         mock_db.add.assert_not_called()
         mock_db.commit.assert_awaited()
@@ -314,6 +316,60 @@ async def test_sync_accounts_uses_resolved_region_for_sts(mock_db, management_co
     first_call = mock_session.client.call_args_list[0]
     assert first_call.args[0] == "sts"
     assert first_call.kwargs["region_name"] == "eu-west-1"
+
+
+@pytest.mark.asyncio
+async def test_sync_accounts_marks_removed_accounts_stale(mock_db, management_connection):
+    mock_sts_client = MagicMock()
+    mock_sts_client.assume_role = AsyncMock(
+        return_value={
+            "Credentials": {
+                "AccessKeyId": "ASIA...",
+                "SecretAccessKey": "secret...",
+                "SessionToken": "token...",
+            }
+        }
+    )
+    mock_sts_ctx = MagicMock()
+    mock_sts_ctx.__aenter__ = AsyncMock(return_value=mock_sts_client)
+    mock_sts_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    mock_org_client = MagicMock()
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = _async_iter(
+        [{"Accounts": []}]
+    )
+    mock_org_client.get_paginator.return_value = mock_paginator
+    mock_org_ctx = MagicMock()
+    mock_org_ctx.__aenter__ = AsyncMock(return_value=mock_org_client)
+    mock_org_ctx.__aexit__ = AsyncMock(return_value=None)
+
+    mock_session = MagicMock()
+    mock_session.client.side_effect = [mock_sts_ctx, mock_org_ctx]
+
+    stale_candidate = DiscoveredAccount(
+        management_connection_id=management_connection.id,
+        account_id="222222222222",
+        name="Old Member",
+        status="discovered",
+        last_discovered_at=datetime.now(timezone.utc),
+    )
+
+    with patch(
+        "app.shared.connections.organizations.aioboto3.Session",
+        return_value=mock_session,
+    ):
+        mock_result = MagicMock()
+        mock_result.scalars.return_value.all.return_value = [stale_candidate]
+        mock_db.execute.return_value = mock_result
+
+        count = await OrganizationsDiscoveryService.sync_accounts(
+            mock_db, management_connection
+        )
+
+    assert count == 0
+    assert stale_candidate.status == "stale"
+    mock_db.commit.assert_awaited()
 
 
 # Helper for async iteration

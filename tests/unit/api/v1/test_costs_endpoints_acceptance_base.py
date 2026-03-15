@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from app.models.license_connection import LicenseConnection
 from app.models.remediation import (
@@ -14,18 +15,19 @@ from app.models.remediation import (
     RemediationStatus,
 )
 from app.models.tenant import Tenant, User
+from app.models.unit_economics_settings import UnitEconomicsSettings
 from app.modules.reporting.api.v1 import costs as costs_api
 from app.shared.core.auth import CurrentUser, UserRole, get_current_user
 from app.shared.core.pricing import PricingTier
 @pytest.mark.asyncio
-async def test_get_acceptance_kpis(async_client: AsyncClient, app):
+async def test_get_acceptance_kpis(async_client: AsyncClient, app, db):
     tenant_id = uuid.uuid4()
     user_id = uuid.uuid4()
     mock_user = CurrentUser(
         id=user_id,
         tenant_id=tenant_id,
         email="q2-kpi@valdrics.io",
-        role=UserRole.MEMBER,
+        role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
 
@@ -82,7 +84,7 @@ async def test_get_acceptance_kpis(async_client: AsyncClient, app):
                 ),
             ),
             patch(
-                "app.modules.reporting.api.v1.costs._get_or_create_unit_settings",
+                "app.modules.reporting.api.v1.costs._get_unit_settings_snapshot",
                 new=AsyncMock(
                     return_value=SimpleNamespace(
                         default_request_volume=1000,
@@ -111,6 +113,12 @@ async def test_get_acceptance_kpis(async_client: AsyncClient, app):
         assert by_key["chargeback_coverage"]["actual"] == "94.00%"
         assert by_key["unit_economics_stability"]["meets_target"] is True
         assert "license_governance_reliability" in by_key
+        settings_row = await db.scalar(
+            select(UnitEconomicsSettings).where(
+                UnitEconomicsSettings.tenant_id == tenant_id
+            )
+        )
+        assert settings_row is None
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -242,7 +250,7 @@ async def test_get_acceptance_kpis_includes_license_governance_metrics(
                 ),
             ),
             patch(
-                "app.modules.reporting.api.v1.costs._get_or_create_unit_settings",
+                "app.modules.reporting.api.v1.costs._get_unit_settings_snapshot",
                 new=AsyncMock(
                     return_value=SimpleNamespace(
                         default_request_volume=1000,
@@ -275,5 +283,4 @@ async def test_get_acceptance_kpis_includes_license_governance_metrics(
         assert license_metric["meets_target"] is False
     finally:
         app.dependency_overrides.pop(get_current_user, None)
-
 

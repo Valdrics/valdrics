@@ -102,6 +102,45 @@ async def test_capture_notification_acceptance_evidence_partial_failure_fail_fas
 
 
 @pytest.mark.asyncio
+async def test_capture_notification_acceptance_evidence_survives_evidence_write_failure(
+    async_client: AsyncClient,
+    app,
+    make_current_user,
+    override_current_user,
+) -> None:
+    admin = make_current_user(tier=PricingTier.PRO)
+    slack = AsyncMock()
+    slack.send_alert.return_value = True
+
+    with (
+        override_current_user(app, admin),
+        patch(
+            "app.modules.notifications.domain.get_tenant_slack_service",
+            new=AsyncMock(return_value=slack),
+        ),
+        patch(
+            "app.modules.governance.api.v1.settings.notifications._record_acceptance_evidence",
+            new=AsyncMock(side_effect=RuntimeError("audit db down")),
+        ),
+    ):
+        capture = await async_client.post(
+            "/api/v1/settings/notifications/acceptance-evidence/capture",
+            json={
+                "include_slack": True,
+                "include_jira": False,
+                "include_teams": False,
+                "include_workflow": False,
+            },
+        )
+
+    assert capture.status_code == 200
+    payload = capture.json()
+    assert payload["overall_status"] == "success"
+    assert payload["passed"] == 1
+    assert payload["failed"] == 0
+
+
+@pytest.mark.asyncio
 async def test_list_notification_acceptance_evidence_requires_tenant(
     async_client: AsyncClient,
     app,

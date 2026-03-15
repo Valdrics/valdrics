@@ -50,6 +50,70 @@ GCP_STS_SUBJECT_TOKEN_TYPE = (
 
 class OIDCService:
     @staticmethod
+    async def _verify_gcp_project_access(
+        access_token: str,
+        project_id: str,
+        *,
+        client: Any,
+    ) -> tuple[bool, str | None]:
+        response = await client.get(
+            f"https://cloudresourcemanager.googleapis.com/v1/projects/{project_id}",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                "oidc_verify_gcp_project_access_failed",
+                project_id=project_id,
+                status_code=response.status_code,
+            )
+            try:
+                body = response.json()
+                message = body.get("error", {}).get("message")
+                if isinstance(message, str) and message.strip():
+                    return False, message
+            except OIDC_STS_RESPONSE_PARSE_RECOVERABLE_EXCEPTIONS:
+                pass
+            return False, f"Failed to access GCP project '{project_id}'"
+        return True, None
+
+    @staticmethod
+    async def _verify_gcp_billing_export_access(
+        access_token: str,
+        *,
+        billing_project_id: str,
+        billing_dataset: str,
+        billing_table: str,
+        client: Any,
+    ) -> tuple[bool, str | None]:
+        response = await client.get(
+            "https://bigquery.googleapis.com/bigquery/v2/"
+            f"projects/{billing_project_id}/datasets/{billing_dataset}/tables/{billing_table}",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        if response.status_code >= 400:
+            logger.warning(
+                "oidc_verify_gcp_billing_export_access_failed",
+                billing_project_id=billing_project_id,
+                billing_dataset=billing_dataset,
+                billing_table=billing_table,
+                status_code=response.status_code,
+            )
+            try:
+                body = response.json()
+                error = body.get("error")
+                if isinstance(error, dict):
+                    message = error.get("message")
+                    if isinstance(message, str) and message.strip():
+                        return False, message
+            except OIDC_STS_RESPONSE_PARSE_RECOVERABLE_EXCEPTIONS:
+                pass
+            table_path = (
+                f"{billing_project_id}.{billing_dataset}.{billing_table}"
+            )
+            return False, f"Failed to access BigQuery billing export '{table_path}'"
+        return True, None
+
+    @staticmethod
     async def get_discovery_doc() -> dict[str, Any]:
         """
         Workload-identity discovery document.
@@ -175,9 +239,14 @@ class OIDCService:
 
     @staticmethod
     async def verify_gcp_access(
-        project_id: str, tenant_id: str
+        project_id: str,
+        tenant_id: str,
+        *,
+        billing_project_id: str | None = None,
+        billing_dataset: str | None = None,
+        billing_table: str | None = None,
     ) -> tuple[bool, str | None]:
-        """Verify that GCP can exchange our OIDC token for access."""
+        """Verify that GCP can exchange our OIDC token and access the requested project."""
 
         settings = get_settings()
         audience = settings.GCP_OIDC_AUDIENCE
@@ -225,8 +294,30 @@ class OIDCService:
                 return False, error_msg
 
             data = response.json()
-            if not data.get("access_token"):
+            access_token = data.get("access_token")
+            if not access_token:
                 return False, "STS exchange succeeded but no access token returned"
+
+            project_ok, project_error = await OIDCService._verify_gcp_project_access(
+                str(access_token),
+                project_id,
+                client=client,
+            )
+            if not project_ok:
+                return False, project_error
+
+            if billing_project_id and billing_dataset and billing_table:
+                billing_ok, billing_error = (
+                    await OIDCService._verify_gcp_billing_export_access(
+                        str(access_token),
+                        billing_project_id=billing_project_id,
+                        billing_dataset=billing_dataset,
+                        billing_table=billing_table,
+                        client=client,
+                    )
+                )
+                if not billing_ok:
+                    return False, billing_error
 
             logger.info(
                 "oidc_verify_gcp_access_success",

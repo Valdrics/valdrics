@@ -17,6 +17,7 @@ from scripts import (
     seed_final,
     supabase_cleanup,
     verify_rls,
+    verify_rls_detailed,
 )
 
 
@@ -93,7 +94,7 @@ async def test_verify_rls_ignores_exempt_tables(
     conn = SimpleNamespace(
         execute=AsyncMock(
             side_effect=[
-                _result(fetchall=[("cloud_accounts",)]),
+                _result(fetchall=[]),
                 _result(fetchall=[("users",), ("cloud_accounts",)]),
                 _result(fetchall=[("users",), ("cloud_accounts",)]),
             ]
@@ -105,11 +106,46 @@ async def test_verify_rls_ignores_exempt_tables(
     )
     monkeypatch.setattr(verify_rls, "get_engine", lambda: engine)
 
-    await verify_rls.check()
+    exit_code = await verify_rls.check()
 
     output = capsys.readouterr().out
+    assert exit_code == 1
     assert "cloud_accounts" in output
     assert "users" not in output
+
+
+@pytest.mark.asyncio
+async def test_verify_rls_detailed_ignores_exempt_tables_and_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    conn = SimpleNamespace(
+        execute=AsyncMock(
+            side_effect=[
+                _result(fetchall=[("head",)]),
+                _result(
+                    fetchall=[
+                        SimpleNamespace(table_name="users", rowsecurity=False),
+                        SimpleNamespace(table_name="cloud_accounts", rowsecurity=False),
+                    ]
+                ),
+                _result(fetchall=[("users",), ("cloud_accounts",)]),
+            ]
+        )
+    )
+    engine = SimpleNamespace(
+        connect=lambda: _AsyncContextManager(conn),
+        dispose=AsyncMock(),
+    )
+    monkeypatch.setattr(verify_rls_detailed, "get_engine", lambda: engine)
+
+    exit_code = await verify_rls_detailed.check()
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "Table users: RLS EXEMPT" in output
+    assert "Table cloud_accounts: RLS Enabled = False" in output
+    assert "Missing RLS on required tables" in output
 
 
 @pytest.mark.asyncio

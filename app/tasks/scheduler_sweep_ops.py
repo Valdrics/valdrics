@@ -158,76 +158,76 @@ async def acceptance_sweep_logic(
                     open_db_session_fn=open_db_session_fn,
                     asyncio_module=asyncio_module,
                 ) as db:
-                        result = await db.execute(
-                            sa.select(tenant_model).with_for_update(skip_locked=True)
-                        )
-                        tenant_limit = system_sweep_tenant_limit_fn()
-                        tenants = cap_scope_items_fn(
-                            result.scalars().all(),
-                            scope="acceptance_tenants",
-                            limit=tenant_limit,
-                        )
-                        if not tenants:
-                            logger.info("acceptance_sweep_no_tenants")
-                            return
+                    tenant_limit = system_sweep_tenant_limit_fn()
+                    result = await db.execute(
+                        sa.select(tenant_model)
+                        .limit(tenant_limit + 1)
+                        .with_for_update(skip_locked=True)
+                    )
+                    tenants = cap_scope_items_fn(
+                        result.scalars().all(),
+                        scope="acceptance_tenants",
+                        limit=tenant_limit,
+                    )
+                    if not tenants:
+                        logger.info("acceptance_sweep_no_tenants")
+                        return
 
-                        now = datetime_module.now(timezone_obj.utc)
-                        bucket_str = now.strftime("%Y-%m-%d")
-                        jobs_enqueued = 0
-                        capture_close_package = now.day == 1
-                        capture_quarterly_report = now.day == 1 and now.month in {
-                            1,
-                            4,
-                            7,
-                            10,
-                        }
+                    now = datetime_module.now(timezone_obj.utc)
+                    bucket_str = now.strftime("%Y-%m-%d")
+                    jobs_enqueued = 0
+                    capture_close_package = now.day == 1
+                    capture_quarterly_report = now.day == 1 and now.month in {
+                        1,
+                        4,
+                        7,
+                        10,
+                    }
 
-                        for tenant in tenants:
-                            dedup_key = (
-                                f"{tenant.id}:{job_type.ACCEPTANCE_SUITE_CAPTURE.value}:{bucket_str}"
+                    for tenant in tenants:
+                        dedup_key = (
+                            f"{tenant.id}:{job_type.ACCEPTANCE_SUITE_CAPTURE.value}:{bucket_str}"
+                        )
+                        payload: dict[str, Any] | None = None
+                        if capture_close_package or capture_quarterly_report:
+                            payload = {}
+                            if capture_close_package:
+                                payload["capture_close_package"] = True
+                            if capture_quarterly_report:
+                                payload["capture_quarterly_report"] = True
+                        stmt = (
+                            insert(background_job_model)
+                            .values(
+                                job_type=job_type.ACCEPTANCE_SUITE_CAPTURE.value,
+                                tenant_id=tenant.id,
+                                status=job_status.PENDING,
+                                scheduled_for=now,
+                                created_at=now,
+                                payload=payload,
+                                deduplication_key=dedup_key,
+                                priority=0,
                             )
-                            payload: dict[str, Any] | None = None
-                            if capture_close_package or capture_quarterly_report:
-                                payload = {}
-                                if capture_close_package:
-                                    payload["capture_close_package"] = True
-                                if capture_quarterly_report:
-                                    payload["capture_quarterly_report"] = True
-                            stmt = (
-                                insert(background_job_model)
-                                .values(
-                                    job_type=job_type.ACCEPTANCE_SUITE_CAPTURE.value,
-                                    tenant_id=tenant.id,
-                                    status=job_status.PENDING,
-                                    scheduled_for=now,
-                                    created_at=now,
-                                    payload=payload,
-                                    deduplication_key=dedup_key,
-                                    priority=0,
-                                )
-                                .on_conflict_do_nothing(
-                                    index_elements=["deduplication_key"]
-                                )
+                            .on_conflict_do_nothing(index_elements=["deduplication_key"])
+                        )
+
+                        result_proxy = await db.execute(stmt)
+                        if (
+                            hasattr(result_proxy, "rowcount")
+                            and result_proxy.rowcount > 0
+                        ):
+                            jobs_enqueued += 1
+                            increment_background_job_metric(
+                                background_jobs_enqueued=background_jobs_enqueued,
+                                job_type_value=job_type.ACCEPTANCE_SUITE_CAPTURE.value,
+                                cohort="ACCEPTANCE",
                             )
 
-                            result_proxy = await db.execute(stmt)
-                            if (
-                                hasattr(result_proxy, "rowcount")
-                                and result_proxy.rowcount > 0
-                            ):
-                                jobs_enqueued += 1
-                                increment_background_job_metric(
-                                    background_jobs_enqueued=background_jobs_enqueued,
-                                    job_type_value=job_type.ACCEPTANCE_SUITE_CAPTURE.value,
-                                    cohort="ACCEPTANCE",
-                                )
-
-                        logger.info(
-                            "acceptance_sweep_enqueued",
-                            tenants=len(tenants),
-                            jobs_enqueued=jobs_enqueued,
-                            bucket=bucket_str,
-                        )
+                    logger.info(
+                        "acceptance_sweep_enqueued",
+                        tenants=len(tenants),
+                        jobs_enqueued=jobs_enqueued,
+                        bucket=bucket_str,
+                    )
 
                 scheduler_job_runs.labels(job_name=job_name, status="success").inc()
                 break
@@ -311,10 +311,12 @@ async def enforcement_reconciliation_sweep_logic(
                 open_db_session_fn=open_db_session_fn,
                 asyncio_module=asyncio_module,
             ) as db:
-                result = await db.execute(
-                    sa.select(tenant_model.id).with_for_update(skip_locked=True)
-                )
                 tenant_limit = system_sweep_tenant_limit_fn()
+                result = await db.execute(
+                    sa.select(tenant_model.id)
+                    .limit(tenant_limit + 1)
+                    .with_for_update(skip_locked=True)
+                )
                 tenant_ids = cap_scope_items_fn(
                     result.scalars().all(),
                     scope="enforcement_reconciliation_tenants",

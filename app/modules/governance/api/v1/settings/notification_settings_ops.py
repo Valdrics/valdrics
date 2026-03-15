@@ -1,7 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
+
+
+def _setting_value(data: Any, key: str, default: Any = None) -> Any:
+    if isinstance(data, Mapping):
+        return data.get(key, default)
+    return getattr(data, key, default)
 
 
 def enforce_incident_integrations_access(
@@ -14,10 +20,10 @@ def enforce_incident_integrations_access(
     raise_http_exception_fn: Callable[[int, str], None],
 ) -> None:
     needs_incident_integrations = bool(
-        getattr(data, "teams_enabled", False)
-        or getattr(data, "workflow_github_enabled", False)
-        or getattr(data, "workflow_gitlab_enabled", False)
-        or getattr(data, "workflow_webhook_enabled", False)
+        _setting_value(data, "teams_enabled", False)
+        or _setting_value(data, "workflow_github_enabled", False)
+        or _setting_value(data, "workflow_gitlab_enabled", False)
+        or _setting_value(data, "workflow_webhook_enabled", False)
     )
     if not needs_incident_integrations:
         return
@@ -44,7 +50,7 @@ def enforce_jira_integration_access(
     jira_integration_feature: Any,
     raise_http_exception_fn: Callable[[int, str], None],
 ) -> None:
-    if not bool(getattr(data, "jira_enabled", False)):
+    if not bool(_setting_value(data, "jira_enabled", False)):
         return
 
     tier = normalize_tier_fn(current_tier)
@@ -70,8 +76,8 @@ def enforce_slack_integration_access(
     raise_http_exception_fn: Callable[[int, str], None],
 ) -> None:
     needs_slack_integration = bool(
-        getattr(data, "slack_enabled", False)
-        or getattr(data, "slack_channel_override", None)
+        _setting_value(data, "slack_enabled", False)
+        or _setting_value(data, "slack_channel_override", None)
     )
     if not needs_slack_integration:
         return
@@ -134,59 +140,88 @@ def apply_notification_settings_update(
     settings: Any,
     updates: dict[str, Any],
 ) -> None:
-    settings.slack_enabled = updates["slack_enabled"]
-    settings.slack_channel_override = updates["slack_channel_override"]
-    settings.jira_enabled = updates["jira_enabled"]
-    settings.jira_base_url = updates["jira_base_url"]
-    settings.jira_email = str(updates["jira_email"]) if updates["jira_email"] else None
-    settings.jira_project_key = updates["jira_project_key"]
-    settings.jira_issue_type = updates["jira_issue_type"]
-    if updates["jira_api_token"]:
+    if "slack_enabled" in updates:
+        settings.slack_enabled = updates["slack_enabled"]
+    if "slack_channel_override" in updates:
+        settings.slack_channel_override = updates["slack_channel_override"]
+    if "jira_enabled" in updates:
+        settings.jira_enabled = updates["jira_enabled"]
+    if "jira_base_url" in updates:
+        settings.jira_base_url = updates["jira_base_url"]
+    if "jira_email" in updates:
+        settings.jira_email = (
+            str(updates["jira_email"]) if updates["jira_email"] else None
+        )
+    if "jira_project_key" in updates:
+        settings.jira_project_key = updates["jira_project_key"]
+    if "jira_issue_type" in updates:
+        settings.jira_issue_type = updates["jira_issue_type"]
+    if updates.get("jira_api_token"):
         settings.jira_api_token = updates["jira_api_token"]
-    elif updates["clear_jira_api_token"]:
+    elif updates.get("clear_jira_api_token"):
         settings.jira_api_token = None
     elif not hasattr(settings, "jira_api_token"):
         settings.jira_api_token = None
 
-    settings.teams_enabled = updates["teams_enabled"]
-    if updates["teams_webhook_url"]:
+    if "teams_enabled" in updates:
+        settings.teams_enabled = updates["teams_enabled"]
+    if "teams_webhook_url" in updates:
         settings.teams_webhook_url = updates["teams_webhook_url"]
-    elif updates["clear_teams_webhook_url"]:
+    if updates.get("teams_webhook_url"):
+        settings.teams_webhook_url = updates["teams_webhook_url"]
+    elif updates.get("clear_teams_webhook_url"):
         settings.teams_webhook_url = None
     elif not hasattr(settings, "teams_webhook_url"):
         settings.teams_webhook_url = None
 
-    settings.digest_schedule = updates["digest_schedule"]
-    settings.digest_hour = updates["digest_hour"]
-    settings.digest_minute = updates["digest_minute"]
-    settings.alert_on_budget_warning = updates["alert_on_budget_warning"]
-    settings.alert_on_budget_exceeded = updates["alert_on_budget_exceeded"]
-    settings.alert_on_zombie_detected = updates["alert_on_zombie_detected"]
+    if "digest_schedule" in updates:
+        settings.digest_schedule = updates["digest_schedule"]
+    if "digest_hour" in updates:
+        settings.digest_hour = updates["digest_hour"]
+    if "digest_minute" in updates:
+        settings.digest_minute = updates["digest_minute"]
+    if "alert_on_budget_warning" in updates:
+        settings.alert_on_budget_warning = updates["alert_on_budget_warning"]
+    if "alert_on_budget_exceeded" in updates:
+        settings.alert_on_budget_exceeded = updates["alert_on_budget_exceeded"]
+    if "alert_on_zombie_detected" in updates:
+        settings.alert_on_zombie_detected = updates["alert_on_zombie_detected"]
 
-    settings.workflow_github_enabled = updates["workflow_github_enabled"]
-    settings.workflow_github_owner = updates["workflow_github_owner"]
-    settings.workflow_github_repo = updates["workflow_github_repo"]
-    settings.workflow_github_workflow_id = updates["workflow_github_workflow_id"]
-    settings.workflow_github_ref = updates["workflow_github_ref"]
-    if updates["workflow_github_token"]:
+    if "workflow_github_enabled" in updates:
+        settings.workflow_github_enabled = updates["workflow_github_enabled"]
+    if "workflow_github_owner" in updates:
+        settings.workflow_github_owner = updates["workflow_github_owner"]
+    if "workflow_github_repo" in updates:
+        settings.workflow_github_repo = updates["workflow_github_repo"]
+    if "workflow_github_workflow_id" in updates:
+        settings.workflow_github_workflow_id = updates["workflow_github_workflow_id"]
+    if "workflow_github_ref" in updates:
+        settings.workflow_github_ref = updates["workflow_github_ref"]
+    if updates.get("workflow_github_token"):
         settings.workflow_github_token = updates["workflow_github_token"]
-    elif updates["clear_workflow_github_token"]:
+    elif updates.get("clear_workflow_github_token"):
         settings.workflow_github_token = None
 
-    settings.workflow_gitlab_enabled = updates["workflow_gitlab_enabled"]
-    settings.workflow_gitlab_base_url = updates["workflow_gitlab_base_url"]
-    settings.workflow_gitlab_project_id = updates["workflow_gitlab_project_id"]
-    settings.workflow_gitlab_ref = updates["workflow_gitlab_ref"]
-    if updates["workflow_gitlab_trigger_token"]:
+    if "workflow_gitlab_enabled" in updates:
+        settings.workflow_gitlab_enabled = updates["workflow_gitlab_enabled"]
+    if "workflow_gitlab_base_url" in updates:
+        settings.workflow_gitlab_base_url = updates["workflow_gitlab_base_url"]
+    if "workflow_gitlab_project_id" in updates:
+        settings.workflow_gitlab_project_id = updates["workflow_gitlab_project_id"]
+    if "workflow_gitlab_ref" in updates:
+        settings.workflow_gitlab_ref = updates["workflow_gitlab_ref"]
+    if updates.get("workflow_gitlab_trigger_token"):
         settings.workflow_gitlab_trigger_token = updates["workflow_gitlab_trigger_token"]
-    elif updates["clear_workflow_gitlab_trigger_token"]:
+    elif updates.get("clear_workflow_gitlab_trigger_token"):
         settings.workflow_gitlab_trigger_token = None
 
-    settings.workflow_webhook_enabled = updates["workflow_webhook_enabled"]
-    settings.workflow_webhook_url = updates["workflow_webhook_url"]
-    if updates["workflow_webhook_bearer_token"]:
+    if "workflow_webhook_enabled" in updates:
+        settings.workflow_webhook_enabled = updates["workflow_webhook_enabled"]
+    if "workflow_webhook_url" in updates:
+        settings.workflow_webhook_url = updates["workflow_webhook_url"]
+    if updates.get("workflow_webhook_bearer_token"):
         settings.workflow_webhook_bearer_token = updates["workflow_webhook_bearer_token"]
-    elif updates["clear_workflow_webhook_bearer_token"]:
+    elif updates.get("clear_workflow_webhook_bearer_token"):
         settings.workflow_webhook_bearer_token = None
 
 

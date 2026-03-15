@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,33 @@ from app.modules.governance.api.v1.scim_models import (
     ScimUserCreate,
     ScimUserPut,
 )
+
+
+async def _audit_and_commit_user_change(
+    *,
+    db: AsyncSession,
+    tenant_id: UUID,
+    audit_logger_cls: Any,
+    audit_kwargs: dict[str, Any],
+    scim_error_factory: Any,
+    conflict_message: str | None = None,
+) -> None:
+    audit = audit_logger_cls(db, tenant_id)
+    try:
+        await audit.log(**audit_kwargs)
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if conflict_message is None:
+            raise
+        raise scim_error_factory(
+            409,
+            conflict_message,
+            scim_type="uniqueness",
+        ) from exc
+    except Exception:
+        await db.rollback()
+        raise
 
 
 async def list_users_route(
@@ -55,13 +82,18 @@ async def list_users_route(
         )
     if email_filter:
         stmt = stmt.where(User.email == email_filter)
+    count_stmt = select(func.count(User.id)).where(User.tenant_id == tenant_id)
+    if email_filter:
+        count_stmt = count_stmt.where(User.email == email_filter)
 
-    result = await db.execute(stmt)
-    users = list(result.scalars().all())
-    total = len(users)
+    total = int((await db.execute(count_stmt)).scalar_one() or 0)
     start = start_index - 1
-    end = start + count if count else start
-    page = users[start:end]
+    if count == 0:
+        page: list[Any] = []
+    else:
+        stmt = stmt.order_by(User.id.asc()).offset(start).limit(count)
+        result = await db.execute(stmt)
+        page = list(result.scalars().all())
 
     base_url = str(request.base_url).rstrip("/")
     group_map = await load_user_group_refs_map_fn(
@@ -111,7 +143,9 @@ async def create_user_route(
         await db.flush()
     except IntegrityError as exc:
         await db.rollback()
-        raise scim_error_factory(409, "User already exists", scim_type="uniqueness") from exc
+        raise scim_error_factory(
+            409, "User already exists", scim_type="uniqueness"
+        ) from exc
 
     await apply_scim_group_mappings_fn(
         db,
@@ -120,32 +154,31 @@ async def create_user_route(
         groups=body.groups,
         for_create=True,
     )
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise scim_error_factory(409, "User already exists", scim_type="uniqueness") from exc
-
-    audit = audit_logger_cls(db, tenant_id)
-    await audit.log(
-        event_type=audit_event_type.SCIM_USER_CREATED,
-        actor_id=None,
-        resource_type="user",
-        resource_id=str(user.id),
-        details={
-            "email": str(user.email),
-            "active": bool(user.is_active),
-            "role": str(getattr(user, "role", "")),
-            "persona": str(getattr(user, "persona", ""))
-            if getattr(user, "persona", None)
-            else None,
-            "groups_provided": body.groups is not None,
-            "groups_count": len(body.groups or []),
+    await _audit_and_commit_user_change(
+        db=db,
+        tenant_id=tenant_id,
+        audit_logger_cls=audit_logger_cls,
+        audit_kwargs={
+            "event_type": audit_event_type.SCIM_USER_CREATED,
+            "actor_id": None,
+            "resource_type": "user",
+            "resource_id": str(user.id),
+            "details": {
+                "email": str(user.email),
+                "active": bool(user.is_active),
+                "role": str(getattr(user, "role", "")),
+                "persona": str(getattr(user, "persona", ""))
+                if getattr(user, "persona", None)
+                else None,
+                "groups_provided": body.groups is not None,
+                "groups_count": len(body.groups or []),
+            },
+            "request_method": "SCIM",
+            "request_path": "/scim/v2/Users",
         },
-        request_method="SCIM",
-        request_path="/scim/v2/Users",
+        scim_error_factory=scim_error_factory,
+        conflict_message="User already exists",
     )
-    await db.commit()
 
     base_url = str(request.base_url).rstrip("/")
     group_map = await load_user_group_refs_map_fn(
@@ -239,32 +272,31 @@ async def put_user_route(
         groups=body.groups,
         for_create=False,
     )
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise scim_error_factory(409, "User already exists", scim_type="uniqueness") from exc
-
-    audit = audit_logger_cls(db, tenant_id)
-    await audit.log(
-        event_type=audit_event_type.SCIM_USER_UPDATED,
-        actor_id=None,
-        resource_type="user",
-        resource_id=str(user.id),
-        details={
-            "email": str(user.email),
-            "active": bool(user.is_active),
-            "role": str(getattr(user, "role", "")),
-            "persona": str(getattr(user, "persona", ""))
-            if getattr(user, "persona", None)
-            else None,
-            "groups_provided": body.groups is not None,
-            "groups_count": len(body.groups or []),
+    await _audit_and_commit_user_change(
+        db=db,
+        tenant_id=tenant_id,
+        audit_logger_cls=audit_logger_cls,
+        audit_kwargs={
+            "event_type": audit_event_type.SCIM_USER_UPDATED,
+            "actor_id": None,
+            "resource_type": "user",
+            "resource_id": str(user.id),
+            "details": {
+                "email": str(user.email),
+                "active": bool(user.is_active),
+                "role": str(getattr(user, "role", "")),
+                "persona": str(getattr(user, "persona", ""))
+                if getattr(user, "persona", None)
+                else None,
+                "groups_provided": body.groups is not None,
+                "groups_count": len(body.groups or []),
+            },
+            "request_method": "SCIM",
+            "request_path": f"/scim/v2/Users/{user.id}",
         },
-        request_method="SCIM",
-        request_path=f"/scim/v2/Users/{user.id}",
+        scim_error_factory=scim_error_factory,
+        conflict_message="User already exists",
     )
-    await db.commit()
 
     base_url = str(request.base_url).rstrip("/")
     group_map = await load_user_group_refs_map_fn(
@@ -362,23 +394,22 @@ async def patch_user_route(
 
         apply_patch_operation_fn(user, operation)
 
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise scim_error_factory(409, "User already exists", scim_type="uniqueness") from exc
-
-    audit = audit_logger_cls(db, tenant_id)
-    await audit.log(
-        event_type=audit_event_type.SCIM_USER_UPDATED,
-        actor_id=None,
-        resource_type="user",
-        resource_id=str(user.id),
-        details={"email": str(user.email), "active": bool(user.is_active)},
-        request_method="SCIM",
-        request_path=f"/scim/v2/Users/{user.id}",
+    await _audit_and_commit_user_change(
+        db=db,
+        tenant_id=tenant_id,
+        audit_logger_cls=audit_logger_cls,
+        audit_kwargs={
+            "event_type": audit_event_type.SCIM_USER_UPDATED,
+            "actor_id": None,
+            "resource_type": "user",
+            "resource_id": str(user.id),
+            "details": {"email": str(user.email), "active": bool(user.is_active)},
+            "request_method": "SCIM",
+            "request_path": f"/scim/v2/Users/{user.id}",
+        },
+        scim_error_factory=scim_error_factory,
+        conflict_message="User already exists",
     )
-    await db.commit()
 
     base_url = str(request.base_url).rstrip("/")
     group_map = await load_user_group_refs_map_fn(
@@ -419,17 +450,19 @@ async def delete_user_route(
         raise scim_error_factory(404, "Resource not found")
 
     user.is_active = False
-    await db.commit()
-
-    audit = audit_logger_cls(db, tenant_id)
-    await audit.log(
-        event_type=audit_event_type.SCIM_USER_DEPROVISIONED,
-        actor_id=None,
-        resource_type="user",
-        resource_id=str(user.id),
-        details={"email": str(user.email), "active": bool(user.is_active)},
-        request_method="SCIM",
-        request_path=f"/scim/v2/Users/{user.id}",
+    await _audit_and_commit_user_change(
+        db=db,
+        tenant_id=tenant_id,
+        audit_logger_cls=audit_logger_cls,
+        audit_kwargs={
+            "event_type": audit_event_type.SCIM_USER_DEPROVISIONED,
+            "actor_id": None,
+            "resource_type": "user",
+            "resource_id": str(user.id),
+            "details": {"email": str(user.email), "active": bool(user.is_active)},
+            "request_method": "SCIM",
+            "request_path": f"/scim/v2/Users/{user.id}",
+        },
+        scim_error_factory=scim_error_factory,
     )
-    await db.commit()
     return JSONResponse(status_code=204, content={})

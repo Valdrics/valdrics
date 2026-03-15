@@ -1,5 +1,6 @@
 import aioboto3
 import structlog
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -13,6 +14,7 @@ from botocore.exceptions import (
 from app.models.aws_connection import AWSConnection
 from app.models.discovered_account import DiscoveredAccount
 from app.shared.adapters.aws_utils import DEFAULT_BOTO_CONFIG, resolve_aws_region_hint
+from app.shared.core.exceptions import AdapterError
 
 logger = structlog.get_logger()
 ORG_DISCOVERY_RECOVERABLE_EXCEPTIONS = (
@@ -85,6 +87,8 @@ class OrganizationsDiscoveryService:
                     )
                 )
                 existing_map = {acc.account_id: acc for acc in result.scalars().all()}
+                discovered_ids: set[str] = set()
+                discovered_at = datetime.now(timezone.utc)
 
                 async for page in paginator.paginate():
                     for acc in page.get("Accounts", []):
@@ -92,11 +96,16 @@ class OrganizationsDiscoveryService:
                         if acc["Id"] == connection.aws_account_id:
                             continue
 
+                        discovered_ids.add(acc["Id"])
+
                         discovered = existing_map.get(acc["Id"])
 
                         if discovered:
                             discovered.name = acc["Name"]
                             discovered.email = acc["Email"]
+                            if discovered.status == "stale":
+                                discovered.status = "discovered"
+                            discovered.last_discovered_at = discovered_at
                             # Update existing
                         else:
                             discovered = DiscoveredAccount(
@@ -105,6 +114,7 @@ class OrganizationsDiscoveryService:
                                 name=acc["Name"],
                                 email=acc["Email"],
                                 status="discovered",
+                                last_discovered_at=discovered_at,
                             )
                             db.add(discovered)
                             # Add to map so we don't duplicate if AWS returns same ID twice in pagination
@@ -112,6 +122,10 @@ class OrganizationsDiscoveryService:
 
                         # BE-ORG-4: Increment only for discovered member accounts
                         count += 1
+
+                for account_id, discovered in existing_map.items():
+                    if account_id not in discovered_ids:
+                        discovered.status = "stale"
 
                 await db.commit()
                 logger.info("aws_org_sync_complete", discovered_count=count)
@@ -121,4 +135,7 @@ class OrganizationsDiscoveryService:
             logger.error(
                 "aws_org_sync_failed", error=str(e), connection_id=str(connection.id)
             )
-            return 0
+            raise AdapterError(
+                f"AWS Organizations discovery failed: {str(e)}",
+                code="aws_org_sync_failed",
+            ) from e

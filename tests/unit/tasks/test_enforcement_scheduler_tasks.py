@@ -64,6 +64,46 @@ async def test_enforcement_reconciliation_sweep_dispatches_per_tenant() -> None:
 
 
 @pytest.mark.asyncio
+async def test_enforcement_reconciliation_sweep_bounds_locked_query_before_capping() -> None:
+    tenant_ids = [uuid4(), uuid4(), uuid4()]
+    db = AsyncMock()
+    begin_ctx = AsyncMock()
+    begin_ctx.__aenter__.return_value = db
+    begin_ctx.__aexit__.return_value = None
+    db.begin = MagicMock(return_value=begin_ctx)
+
+    select_result = MagicMock()
+    select_result.scalars.return_value.all.return_value = tenant_ids
+    db.execute.side_effect = [select_result, MagicMock(rowcount=1), MagicMock(rowcount=1)]
+
+    @asynccontextmanager
+    async def _db_cm():
+        yield db
+
+    with (
+        patch("app.tasks.scheduler_tasks._open_db_session", return_value=_db_cm()),
+        patch("app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED"),
+        patch("app.tasks.scheduler_tasks.logger") as mock_logger,
+        patch("app.tasks.scheduler_tasks.get_settings") as mock_settings,
+    ):
+        mock_settings.return_value = SimpleNamespace(
+            ENFORCEMENT_RECONCILIATION_SWEEP_ENABLED=True,
+            SCHEDULER_SYSTEM_SWEEP_MAX_TENANTS=2,
+        )
+        await _enforcement_reconciliation_sweep_logic()
+
+    select_stmt = db.execute.call_args_list[0].args[0]
+    assert getattr(getattr(select_stmt, "_limit_clause", None), "value", None) == 3
+    mock_logger.warning.assert_any_call(
+        "scheduler_scope_capped",
+        scope="enforcement_reconciliation_tenants",
+        total_items=3,
+        capped_items=2,
+        limit=2,
+    )
+
+
+@pytest.mark.asyncio
 async def test_enforcement_reconciliation_sweep_skips_when_disabled() -> None:
     with (
         patch("app.tasks.scheduler_tasks.get_settings") as mock_settings,

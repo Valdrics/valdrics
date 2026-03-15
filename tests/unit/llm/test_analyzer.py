@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.llm.analyzer import FinOpsAnalyzer
+from app.shared.core.pricing import PricingTier
 from app.shared.core.exceptions import AIAnalysisError, BudgetExceededError
 from app.schemas.costs import CloudUsageSummary, CostRecord
 
@@ -421,6 +422,42 @@ class TestFinOpsAnalyzerClientSetup:
             assert byok_key == "sk-test123"
 
     @pytest.mark.asyncio
+    async def test_setup_client_and_usage_ignores_stored_byok_when_tier_disallows(
+        self, analyzer, mock_db
+    ):
+        tenant_id = uuid4()
+
+        mock_budget = MagicMock()
+        mock_budget.preferred_provider = "openai"
+        mock_budget.preferred_model = "gpt-4"
+        mock_budget.openai_api_key = "sk-test123"
+
+        with (
+            patch(
+                "app.shared.llm.analyzer.LLMBudgetManager.check_budget",
+                AsyncMock(return_value=MagicMock()),
+            ),
+            patch("app.shared.llm.analyzer.get_settings"),
+            patch("app.shared.llm.llm_client.get_tier_limit", return_value=False),
+        ):
+            mock_result = MagicMock()
+            mock_result.scalar_one_or_none.return_value = mock_budget
+            mock_db.execute.return_value = mock_result
+
+            result = await analyzer._setup_client_and_usage(
+                tenant_id,
+                mock_db,
+                None,
+                None,
+                tenant_tier=PricingTier.PRO,
+            )
+
+            provider, model, byok_key = result
+            assert provider == "openai"
+            assert model == "gpt-4"
+            assert byok_key is None
+
+    @pytest.mark.asyncio
     async def test_setup_client_and_usage_budget_hard_limit(self, analyzer, mock_db):
         """Test client setup fails on budget hard limit."""
         tenant_id = uuid4()
@@ -744,4 +781,3 @@ class TestFinOpsAnalyzerResultProcessing:
 
             # Should not raise any exceptions
             await analyzer._check_and_alert_anomalies(result)
-

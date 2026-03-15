@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
+from uuid import UUID
 
 from app.shared.core.auth import (
     CurrentUser,
@@ -96,6 +97,22 @@ class HardCapReactivationResponse(BaseModel):
     restored_connections: int
 
 
+def _build_default_activeops_settings(tenant_id: UUID | None) -> RemediationSettings:
+    """Return an unsaved default settings snapshot for read-only callers."""
+    return RemediationSettings(
+        tenant_id=tenant_id,
+        auto_pilot_enabled=False,
+        min_confidence_threshold=0.95,
+        policy_enabled=True,
+        policy_block_production_destructive=True,
+        policy_require_gpu_override=True,
+        policy_low_confidence_warn_threshold=0.90,
+        policy_violation_notify_slack=True,
+        policy_violation_notify_jira=False,
+        policy_escalation_required_role="owner",
+    )
+
+
 # ============================================================
 # API Endpoints
 # ============================================================
@@ -116,25 +133,8 @@ async def get_activeops_settings(
     )
     settings = result.scalar_one_or_none()
 
-    # Create default settings if not exists
     if not settings:
-        settings = RemediationSettings(
-            tenant_id=current_user.tenant_id,
-            auto_pilot_enabled=False,
-            min_confidence_threshold=0.95,
-            policy_enabled=True,
-            policy_block_production_destructive=True,
-            policy_require_gpu_override=True,
-            policy_low_confidence_warn_threshold=0.90,
-            policy_violation_notify_slack=True,
-            policy_violation_notify_jira=False,
-            policy_escalation_required_role="owner",
-        )
-        db.add(settings)
-        await db.commit()
-        await db.refresh(settings)
-
-        logger.info("activeops_settings_created", tenant_id=str(current_user.tenant_id))
+        settings = _build_default_activeops_settings(current_user.tenant_id)
 
     return ActiveOpsSettingsResponse.model_validate(settings)
 
@@ -195,9 +195,25 @@ async def update_activeops_settings(
     settings = result.scalar_one_or_none()
 
     if not settings:
-        settings = RemediationSettings(
-            tenant_id=current_user.tenant_id, **data.model_dump()
-        )
+        settings = _build_default_activeops_settings(current_user.tenant_id)
+        updates = data.model_dump()
+        settings.auto_pilot_enabled = updates["auto_pilot_enabled"]
+        settings.min_confidence_threshold = updates["min_confidence_threshold"]
+        settings.policy_enabled = updates["policy_enabled"]
+        settings.policy_block_production_destructive = updates[
+            "policy_block_production_destructive"
+        ]
+        settings.policy_require_gpu_override = updates["policy_require_gpu_override"]
+        settings.policy_low_confidence_warn_threshold = updates[
+            "policy_low_confidence_warn_threshold"
+        ]
+        settings.policy_violation_notify_slack = updates[
+            "policy_violation_notify_slack"
+        ]
+        settings.policy_violation_notify_jira = updates["policy_violation_notify_jira"]
+        settings.policy_escalation_required_role = updates[
+            "policy_escalation_required_role"
+        ]
         db.add(settings)
     else:
         updates = data.model_dump()

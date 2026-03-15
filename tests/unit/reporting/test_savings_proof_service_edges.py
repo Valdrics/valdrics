@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -348,3 +349,63 @@ def test_render_csv_helpers() -> None:
     drilldown_csv = SavingsProofService.render_drilldown_csv(drilldown)
     assert drilldown_csv.startswith("strategy_type,opportunity_monthly_usd")
     assert "TOTAL,12.00,8.00,1,1,0,0" in drilldown_csv
+
+
+def test_savings_csv_renderers_quote_commas_and_sanitize_formula_cells() -> None:
+    summary = SavingsProofResponse(
+        start_date="2026-02-01",
+        end_date="2026-02-02",
+        as_of="2026-02-03T00:00:00+00:00",
+        tier="pro",
+        opportunity_monthly_usd=12.0,
+        realized_monthly_usd=8.0,
+        open_recommendations=1,
+        applied_recommendations=1,
+        pending_remediations=1,
+        completed_remediations=1,
+        breakdown=[
+            SavingsProofBreakdownItem(
+                provider="=CMD(),x",
+                opportunity_monthly_usd=12.0,
+                realized_monthly_usd=8.0,
+                open_recommendations=1,
+                applied_recommendations=1,
+                pending_remediations=1,
+                completed_remediations=1,
+            )
+        ],
+        notes=[],
+    )
+    summary_rows = list(
+        csv.reader(SavingsProofService.render_csv(summary).splitlines())
+    )
+    assert ["'=CMD(),x", "12.00", "8.00", "1", "1", "1", "1"] in summary_rows
+
+    drilldown = SavingsProofDrilldownResponse(
+        start_date="2026-02-01",
+        end_date="2026-02-02",
+        as_of="2026-02-03T00:00:00+00:00",
+        tier="pro",
+        provider=None,
+        dimension="service",
+        opportunity_monthly_usd=12.0,
+        realized_monthly_usd=8.0,
+        buckets=[
+            SavingsProofDrilldownBucket(
+                key="Compute,Edge",
+                opportunity_monthly_usd=12.0,
+                realized_monthly_usd=8.0,
+                open_recommendations=1,
+                applied_recommendations=1,
+                pending_remediations=0,
+                completed_remediations=0,
+            )
+        ],
+        truncated=False,
+        limit=50,
+        notes=[],
+    )
+    drilldown_rows = list(
+        csv.reader(SavingsProofService.render_drilldown_csv(drilldown).splitlines())
+    )
+    assert ["Compute,Edge", "12.00", "8.00", "1", "1", "0", "0"] in drilldown_rows

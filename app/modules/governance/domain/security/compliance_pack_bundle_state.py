@@ -14,6 +14,8 @@ async def collect_payload_evidence_map(
     db: Any,
     tenant_id: Any,
     evidence_limit: int,
+    start_date: datetime | None,
+    end_date: datetime | None,
     payload_specs: tuple[tuple[str, str, str, bool], ...],
     collect_payload_evidence: PayloadEvidenceCollector,
 ) -> dict[str, list[dict[str, Any]]]:
@@ -26,6 +28,8 @@ async def collect_payload_evidence_map(
             payload_key=payload_key,
             limit=int(evidence_limit),
             include_thresholds=include_thresholds,
+            start_date=start_date,
+            end_date=end_date,
         )
     return payload_evidence
 

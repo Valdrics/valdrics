@@ -72,6 +72,14 @@ def _git_sha() -> str | None:
     return sha if proc.returncode == 0 and sha else None
 
 
+def derive_evidence_checks(tests: list[str]) -> list[str]:
+    normalized_tests = [_normalize_test_selector(test) for test in tests]
+    default_tests = [_normalize_test_selector(test) for test in DEFAULT_TESTS]
+    if normalized_tests == default_tests:
+        return list(DEFAULT_CHECKS)
+    return normalized_tests
+
+
 def run_pytest(tests: list[str]) -> dict[str, Any]:
     normalized_tests = [_normalize_test_selector(test) for test in tests]
     cmd = [sys.executable, "-m", "pytest", "--no-cov", "-q", *normalized_tests]
@@ -125,7 +133,7 @@ def main() -> int:
     result = run_pytest(tests)
     payload = {
         "runner": "scripts/verify_tenant_isolation.py",
-        "checks": DEFAULT_CHECKS,
+        "checks": derive_evidence_checks(tests),
         "passed": bool(result["passed"]),
         "pytest_exit_code": int(result["pytest_exit_code"]),
         "duration_seconds": float(result["duration_seconds"]),

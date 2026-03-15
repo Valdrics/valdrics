@@ -2,7 +2,7 @@ import pytest
 from uuid import uuid4
 from datetime import date
 from decimal import Decimal
-from unittest.mock import MagicMock, AsyncMock
+from unittest.mock import MagicMock, AsyncMock, patch
 from app.modules.reporting.domain.aggregator import CostAggregator
 
 
@@ -71,3 +71,35 @@ async def test_get_governance_report_healthy():
     assert report["unallocated_percentage"] == 5.0
     assert report["status"] == "healthy"
     assert report["recommendation"] is None
+
+
+@pytest.mark.asyncio
+async def test_get_governance_report_empty_window_stays_zero() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+
+    total_result = MagicMock()
+    total_result.scalar.return_value = None
+
+    untagged_result = MagicMock()
+    untagged_row = MagicMock()
+    untagged_row.total_untagged_cost = None
+    untagged_row.untagged_count = 0
+    untagged_result.one.return_value = untagged_row
+
+    db.execute.side_effect = [total_result, untagged_result]
+
+    with patch(
+        "app.modules.reporting.domain.attribution_engine.AttributionEngine"
+    ) as mock_engine_cls:
+        mock_engine_cls.return_value.get_unallocated_analysis = AsyncMock(
+            return_value=[]
+        )
+        report = await CostAggregator.get_governance_report(
+            db, tenant_id, date(2025, 1, 1), date(2025, 1, 31)
+        )
+
+    assert report["total_cost"] == 0.0
+    assert report["unallocated_cost"] == 0.0
+    assert report["unallocated_percentage"] == 0.0
+    assert report["status"] == "healthy"

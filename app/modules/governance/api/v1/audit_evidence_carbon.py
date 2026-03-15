@@ -23,7 +23,7 @@ from app.shared.db.session import get_db
 logger = structlog.get_logger()
 router = APIRouter(tags=["Audit"])
 AUDIT_EVIDENCE_PAYLOAD_ERRORS = (ValidationError, TypeError, ValueError)
-CARBON_FACTOR_FALLBACK_ERRORS = (
+CARBON_FACTOR_CAPTURE_RECOVERABLE_ERRORS = (
     SQLAlchemyError,
     RuntimeError,
     OSError,
@@ -33,6 +33,43 @@ CARBON_FACTOR_FALLBACK_ERRORS = (
     TypeError,
     ValueError,
 )
+
+
+async def _log_failed_carbon_assurance_capture(
+    *,
+    db: AsyncSession,
+    user: CurrentUser,
+    run_id: str,
+    captured_at: str,
+    error_message: str,
+) -> None:
+    from app.modules.governance.domain.security.audit_log import (
+        AuditEventType,
+        AuditLogger,
+    )
+
+    tenant_id = user.tenant_id
+    if tenant_id is None:
+        return
+
+    audit = AuditLogger(db=db, tenant_id=tenant_id, correlation_id=run_id)
+    await audit.log(
+        event_type=AuditEventType.CARBON_ASSURANCE_SNAPSHOT_CAPTURED,
+        actor_id=user.id,
+        actor_email=user.email,
+        resource_type="carbon",
+        resource_id="carbon_assurance_snapshot",
+        details={
+            "run_id": run_id,
+            "captured_at": captured_at,
+            "error": error_message,
+        },
+        success=False,
+        error_message=error_message,
+        request_method="POST",
+        request_path="/api/v1/audit/carbon/assurance/evidence",
+    )
+    await db.commit()
 
 
 def _validate_evidence_payload(
@@ -84,6 +121,7 @@ async def capture_carbon_assurance_evidence(
         raise HTTPException(status_code=403, detail="Tenant context is required")
 
     run_id = str(uuid4())
+    captured_at = datetime.now(timezone.utc).isoformat()
     active_factor_set_id: str | None = None
     active_factor_set_status: str | None = None
     factor_payload: dict[str, Any] | None = None
@@ -93,18 +131,41 @@ async def capture_carbon_assurance_evidence(
         factor_payload = await factor_service.get_active_payload()
         active_factor_set_id = str(active_factor_set.id)
         active_factor_set_status = str(active_factor_set.status)
-    except CARBON_FACTOR_FALLBACK_ERRORS as exc:
+    except CARBON_FACTOR_CAPTURE_RECOVERABLE_ERRORS as exc:
         logger.warning(
-            "carbon_assurance_factor_payload_fallback",
+            "carbon_assurance_factor_payload_unavailable",
             tenant_id=str(tenant_id),
             error=str(exc),
         )
+        await db.rollback()
+        try:
+            await _log_failed_carbon_assurance_capture(
+                db=db,
+                user=user,
+                run_id=run_id,
+                captured_at=captured_at,
+                error_message=str(exc),
+            )
+        except CARBON_FACTOR_CAPTURE_RECOVERABLE_ERRORS as audit_exc:
+            logger.warning(
+                "carbon_assurance_failure_audit_log_failed",
+                tenant_id=str(tenant_id),
+                error=str(audit_exc),
+            )
+            await db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Carbon assurance evidence capture failed because the active carbon "
+                "factor set could not be loaded"
+            ),
+        ) from exc
 
     snapshot = carbon_assurance_snapshot(factor_payload)
     payload = CarbonAssuranceEvidencePayload(
         runner=str(request.runner or "api"),
         notes=str(request.notes) if request.notes else None,
-        captured_at=datetime.now(timezone.utc).isoformat(),
+        captured_at=captured_at,
         snapshot=snapshot,
         factor_set_id=active_factor_set_id,
         factor_set_status=active_factor_set_status,

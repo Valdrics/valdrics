@@ -42,7 +42,7 @@ router = APIRouter()
 async def create_azure_connection(
     request: Request,
     data: AzureConnectionCreate,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> AzureConnection:
     tenant_id = _require_tenant_id(current_user)
@@ -102,7 +102,7 @@ async def create_azure_connection(
 async def verify_azure_connection(
     request: Request,
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     check_multi_cloud_tier(current_user)
@@ -124,7 +124,7 @@ async def list_azure_connections(
 @router.delete("/azure/{connection_id}", status_code=204)
 async def delete_azure_connection(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     tenant_id = _require_tenant_id(current_user)
@@ -162,7 +162,7 @@ async def create_gcp_connection(
     request: Request,
     data: GCPConnectionCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
 ) -> GCPConnection:
     tenant_id = _require_tenant_id(current_user)
     plan = check_multi_cloud_tier(current_user)
@@ -189,6 +189,9 @@ async def create_gcp_connection(
         success, error = await OIDCService.verify_gcp_access(
             project_id=data.project_id,
             tenant_id=str(tenant_id),
+            billing_project_id=data.billing_project_id,
+            billing_dataset=data.billing_dataset,
+            billing_table=data.billing_table,
         )
         if not success:
             raise HTTPException(
@@ -232,7 +235,7 @@ async def create_gcp_connection(
 async def verify_gcp_connection(
     request: Request,
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     check_multi_cloud_tier(current_user)
@@ -256,7 +259,7 @@ async def list_gcp_connections(
 @router.delete("/gcp/{connection_id}", status_code=204)
 async def delete_gcp_connection(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     tenant_id = _require_tenant_id(current_user)

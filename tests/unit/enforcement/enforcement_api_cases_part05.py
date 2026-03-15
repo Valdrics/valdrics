@@ -290,6 +290,8 @@ async def test_enforcement_export_parity_and_archive_endpoints(async_client, db)
                 canonical_manifest.encode("utf-8")
             ).hexdigest()
             assert canonical_manifest_sha256 == manifest_payload["manifest_content_sha256"]
+            canonical_manifest_payload = json.loads(canonical_manifest)
+            assert canonical_manifest_payload["generated_at"] == manifest_payload["generated_at"]
             assert manifest_payload["manifest_content_sha256"] == parity_payload["manifest_content_sha256"]
             assert bundle.read("manifest.sha256").decode("utf-8").strip() == manifest_payload["manifest_content_sha256"]
             assert bundle.read("manifest.sig").decode("utf-8").strip() == manifest_payload["manifest_signature"]

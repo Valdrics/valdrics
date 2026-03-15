@@ -119,3 +119,61 @@ async def test_aggregate_usage_computes_spend_metrics():
     assert out["top_region"] == "us-east-1"
     assert out["region_totals"]["us-east-1"] == 6.0
     assert len(out["hourly_cost_series"]) >= 3
+
+
+@pytest.mark.asyncio
+async def test_generate_recommendations_clears_stale_open_rows_when_strategy_returns_no_recs():
+    db = AsyncMock()
+    db.add_all = MagicMock()
+    db.commit = AsyncMock()
+
+    strategy = MagicMock()
+    strategy.id = uuid4()
+    strategy.name = "Reserved Instance"
+    strategy.type = "reserved_instance"
+    strategy.provider = "aws"
+
+    strategies_result = MagicMock()
+    strategies_result.scalars.return_value.all.return_value = [strategy]
+    delete_result = MagicMock()
+    delete_result.rowcount = 1
+    db.execute = AsyncMock(side_effect=[strategies_result, delete_result])
+
+    with patch(
+        "app.modules.optimization.domain.strategies.baseline_commitment.BaselineCommitmentStrategy"
+    ) as mock_strategy_cls:
+        mock_strategy_cls.return_value.analyze = AsyncMock(return_value=[])
+
+        service = OptimizationService(db)
+        with patch.object(
+            service, "_aggregate_usage", AsyncMock(return_value={"avg": 1.0})
+        ):
+            out = await service.generate_recommendations(uuid4())
+
+    assert out == []
+    db.add_all.assert_not_called()
+    db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_aggregate_usage_uses_requested_lookback_for_daily_coverage():
+    db = AsyncMock()
+    result = MagicMock()
+    result.all.return_value = [
+        (
+            datetime(2026, 2, day, 0, 0, tzinfo=timezone.utc),
+            date(2026, 2, day),
+            "us-east-1",
+            10.0,
+        )
+        for day in range(1, 8)
+    ]
+    db.execute = AsyncMock(return_value=result)
+
+    service = OptimizationService(db)
+    out = await service._aggregate_usage(uuid4(), lookback_days=7)
+
+    assert out["granularity"] == "daily"
+    assert out["expected_buckets"] == 7
+    assert out["observed_buckets"] == 7
+    assert out["coverage_ratio"] == 1.0

@@ -113,6 +113,7 @@ class TenantSubscription(Base):
         DateTime(timezone=True)
     )
     billing_currency: Mapped[str] = mapped_column(String(3), default="NGN")
+    billing_cycle: Mapped[str] = mapped_column(String(20), default="monthly")
     last_charge_amount_subunits: Mapped[Optional[int]] = mapped_column(Numeric(20, 0))
     last_charge_fx_rate: Mapped[Optional[float]] = mapped_column(Numeric(12, 6))
     last_charge_fx_provider: Mapped[Optional[str]] = mapped_column(String(50))

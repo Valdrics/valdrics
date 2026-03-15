@@ -147,7 +147,10 @@ async def test_oidc_verify_gcp():
         mock_client = MockGetClient.return_value
         mock_response = MagicMock(status_code=200)
         mock_response.json.return_value = {"access_token": "access-token"}
+        project_response = MagicMock(status_code=200)
+        project_response.json.return_value = {"projectId": "proj"}
         mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.get = AsyncMock(return_value=project_response)
 
         success, error = await OIDCService.verify_gcp_access("proj", "tenant")
         assert success is True

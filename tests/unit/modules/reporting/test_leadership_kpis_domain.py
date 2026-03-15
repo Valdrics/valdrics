@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ import pytest
 from app.modules.reporting.domain.leadership_kpis import (
     LeadershipKpiService,
     LeadershipKpisResponse,
+    LeadershipTopService,
 )
 from app.shared.core.pricing import PricingTier
 
@@ -104,7 +106,12 @@ async def test_compute_includes_savings_when_feature_enabled() -> None:
         side_effect=[
             _Result(first_value=(Decimal("200.00"), 2, 2, Decimal("12.34"))),
             _Result(all_values=[("aws", Decimal("150.00")), ("gcp", Decimal("50.00"))]),
-            _Result(all_values=[("AmazonEC2", Decimal("120.00")), ("AmazonS3", Decimal("30.00"))]),
+            _Result(
+                all_values=[
+                    ("AmazonEC2", Decimal("120.00")),
+                    ("AmazonS3", Decimal("30.00")),
+                ]
+            ),
             _Result(first_value=(1, 2, 1)),
         ]
     )
@@ -185,7 +192,9 @@ async def test_compute_adds_note_when_savings_service_raises() -> None:
             end_date=date(2026, 2, 2),
         )
 
-    assert any("Savings proof unavailable: proof unavailable" in note for note in payload.notes)
+    assert any(
+        "Savings proof unavailable: proof unavailable" in note for note in payload.notes
+    )
     assert payload.savings_opportunity_monthly_usd == 0.0
     assert payload.savings_realized_monthly_usd == 0.0
     assert payload.security_high_risk_decisions == 0
@@ -227,6 +236,43 @@ async def test_compute_does_not_swallow_base_exceptions_from_savings_proof() -> 
             )
 
 
+@pytest.mark.asyncio
+async def test_compute_counts_same_day_enforcement_decisions_with_datetime_windows() -> (
+    None
+):
+    tenant_id = uuid4()
+    db = AsyncMock()
+    db.execute = AsyncMock(
+        side_effect=[
+            _Result(first_value=(Decimal("10.0"), 1, 1, Decimal("0.5"))),
+            _Result(all_values=[("aws", Decimal("10.0"))]),
+            _Result(all_values=[("AmazonEC2", Decimal("10.0"))]),
+            _Result(first_value=(1, 1, 1)),
+        ]
+    )
+
+    with patch(
+        "app.modules.reporting.domain.leadership_kpis.is_feature_enabled",
+        return_value=False,
+    ):
+        payload = await LeadershipKpiService(db).compute(
+            tenant_id=tenant_id,
+            tier=PricingTier.PRO,
+            start_date=date(2026, 2, 1),
+            end_date=date(2026, 2, 1),
+        )
+
+    security_stmt = db.execute.await_args_list[3].args[0]
+    compiled = str(security_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "2026-02-01 00:00:00+00:00" in compiled
+    assert "2026-02-02 00:00:00+00:00" in compiled
+    assert " < " in compiled
+    assert payload.security_high_risk_decisions == 1
+    assert payload.security_approval_required_decisions == 1
+    assert payload.security_anomaly_signal_decisions == 1
+
+
 def test_render_csv_sorts_provider_rows_by_cost_descending() -> None:
     payload = LeadershipKpisResponse(
         start_date="2026-02-01",
@@ -260,3 +306,39 @@ def test_render_csv_sorts_provider_rows_by_cost_descending() -> None:
     provider_header_index = lines.index("provider,cost_usd")
     assert lines[provider_header_index + 1] == "aws,80.0000"
     assert lines[provider_header_index + 2] == "gcp,20.0000"
+
+
+def test_render_csv_sanitizes_and_quotes_provider_and_service_cells() -> None:
+    payload = LeadershipKpisResponse(
+        start_date="2026-02-01",
+        end_date="2026-02-28",
+        as_of="2026-02-28T00:00:00+00:00",
+        tier="pro",
+        provider=None,
+        include_preliminary=False,
+        total_cost_usd=100.0,
+        cost_by_provider={"aws,prod": 80.0, "=cmd()": 20.0},
+        top_services=[
+            LeadershipTopService(service='=HYPERLINK("x")', cost_usd=20.0),
+            LeadershipTopService(service="Compute,Edge", cost_usd=10.0),
+        ],
+        carbon_total_kgco2e=12.0,
+        carbon_coverage_percent=100.0,
+        savings_opportunity_monthly_usd=25.0,
+        savings_realized_monthly_usd=12.0,
+        open_recommendations=3,
+        applied_recommendations=2,
+        pending_remediations=1,
+        completed_remediations=1,
+        security_high_risk_decisions=2,
+        security_approval_required_decisions=3,
+        security_anomaly_signal_decisions=1,
+        notes=[],
+    )
+
+    rows = list(csv.reader(LeadershipKpiService.render_csv(payload).splitlines()))
+
+    assert ["aws,prod", "80.0000"] in rows
+    assert ["'=cmd()", "20.0000"] in rows
+    assert ['\'=HYPERLINK("x")', "20.0000"] in rows
+    assert ["Compute,Edge", "10.0000"] in rows

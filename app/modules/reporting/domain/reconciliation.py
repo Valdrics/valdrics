@@ -259,6 +259,7 @@ class CostReconciliationService:
         invoice_number: str | None = None,
         status: str | None = None,
         notes: str | None = None,
+        commit: bool = True,
     ) -> Any:
         return await upsert_invoice_impl(
             self,
@@ -271,10 +272,22 @@ class CostReconciliationService:
             invoice_number=invoice_number,
             status=status,
             notes=notes,
+            commit=commit,
         )
 
-    async def delete_invoice(self, tenant_id: UUID, invoice_id: UUID) -> bool:
-        return await delete_invoice_impl(self, tenant_id=tenant_id, invoice_id=invoice_id)
+    async def delete_invoice(
+        self,
+        tenant_id: UUID,
+        invoice_id: UUID,
+        *,
+        commit: bool = True,
+    ) -> bool:
+        return await delete_invoice_impl(
+            self,
+            tenant_id=tenant_id,
+            invoice_id=invoice_id,
+            commit=commit,
+        )
 
     async def update_invoice_status(
         self,
@@ -283,6 +296,7 @@ class CostReconciliationService:
         *,
         status: str,
         notes: str | None = None,
+        commit: bool = True,
     ) -> Any | None:
         return await update_invoice_status_impl(
             self,
@@ -290,6 +304,7 @@ class CostReconciliationService:
             invoice_id=invoice_id,
             status=status,
             notes=notes,
+            commit=commit,
         )
 
     async def _invoice_total_to_usd(self, amount: Decimal, currency: str) -> Decimal:

@@ -33,7 +33,7 @@ def override_auth(mock_user):
 async def test_get_carbon_settings_creates_default(
     async_client: AsyncClient, db_session
 ):
-    """Test that GET /api/v1/settings/carbon creates default settings if none exist."""
+    """Test that GET /api/v1/settings/carbon returns defaults without persisting them."""
     response = await async_client.get("/api/v1/settings/carbon")
     assert response.status_code == 200
     data = response.json()
@@ -41,11 +41,10 @@ async def test_get_carbon_settings_creates_default(
     assert data["alert_threshold_percent"] == 80
     assert data["default_region"] == "global"
 
-    # Verify in DB
+    # Verify GET stayed read-only
     result = await db_session.execute(select(CarbonSettings))
     settings = result.scalars().all()
-    assert len(settings) == 1
-    assert settings[0].carbon_budget_kg == 100.0
+    assert settings == []
 
 
 @pytest.mark.asyncio

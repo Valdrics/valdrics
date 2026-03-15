@@ -6,7 +6,7 @@ from unittest.mock import patch, AsyncMock
 from app.models.gcp_connection import GCPConnection
 from app.shared.core.pricing import PricingTier
 
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, UserRole
 
 pytest_plugins = ("tests.unit.governance.connections_api_fixtures",)
 
@@ -30,6 +30,26 @@ async def test_create_gcp_connection_success_on_growth(
     resp = await ac.post("/api/v1/settings/connections/gcp", json=payload)
     assert resp.status_code == 201
     assert resp.json()["project_id"] == "test-project-123"
+
+
+@pytest.mark.asyncio
+async def test_create_gcp_connection_requires_admin(
+    ac, db, override_auth, auth_user
+):
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = PricingTier.GROWTH.value
+    await db.commit()
+    auth_user.tier = PricingTier.GROWTH
+    auth_user.role = UserRole.MEMBER
+
+    payload = {
+        "name": "GCP Project",
+        "project_id": "test-project-123",
+        "service_account_json": "{}",
+        "auth_method": "secret",
+    }
+    resp = await ac.post("/api/v1/settings/connections/gcp", json=payload)
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio
@@ -88,6 +108,13 @@ async def test_create_gcp_connection_workload_identity_verification_failure(
         mock_verify.return_value = (False, "STS exchange failed")
         resp = await ac.post("/api/v1/settings/connections/gcp", json=payload)
         assert resp.status_code == 400
+        mock_verify.assert_awaited_once_with(
+            project_id="wif-project-123",
+            tenant_id=str(auth_user.tenant_id),
+            billing_project_id=None,
+            billing_dataset=None,
+            billing_table=None,
+        )
         assert "Workload Identity verification failed" in (
             resp.json().get("error") or resp.json().get("message") or ""
         )

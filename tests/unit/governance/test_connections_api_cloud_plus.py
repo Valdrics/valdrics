@@ -7,7 +7,7 @@ from app.models.hybrid_connection import HybridConnection
 from app.models.license_connection import LicenseConnection
 from app.models.platform_connection import PlatformConnection
 from app.models.saas_connection import SaaSConnection
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, UserRole
 from app.shared.core.pricing import PricingTier
 
 pytest_plugins = ("tests.unit.governance.connections_api_fixtures",)
@@ -53,6 +53,24 @@ async def test_create_saas_connection_success_on_pro(ac, db, override_auth, auth
     resp = await ac.post("/api/v1/settings/connections/saas", json=payload)
     assert resp.status_code == 201
     assert resp.json()["vendor"] == "salesforce"
+
+
+@pytest.mark.asyncio
+async def test_create_saas_connection_requires_admin(ac, db, override_auth, auth_user):
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = PricingTier.PRO.value
+    await db.commit()
+    auth_user.tier = PricingTier.PRO
+    auth_user.role = UserRole.MEMBER
+
+    payload = {
+        "name": "Salesforce Feed",
+        "vendor": "salesforce",
+        "auth_method": "manual",
+        "spend_feed": [],
+    }
+    resp = await ac.post("/api/v1/settings/connections/saas", json=payload)
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio

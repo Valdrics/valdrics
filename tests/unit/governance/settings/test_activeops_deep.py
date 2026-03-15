@@ -25,28 +25,27 @@ async def test_activeops_settings_full_lifecycle(
     app.dependency_overrides[get_current_user] = lambda: mock_user
 
     try:
-        # 1. GET - Should create default (Missing lines 57-72)
+        # 1. GET - Should return default snapshot without persisting it
         response = await async_client.get("/api/v1/settings/activeops")
         assert response.status_code == 200
         data = response.json()
         assert data["auto_pilot_enabled"] is False
         assert data["min_confidence_threshold"] == 0.95
 
-        # Verify in DB
+        # Verify read did not materialize a settings row
         result = await db.execute(
             select(RemediationSettings).where(
                 RemediationSettings.tenant_id == tenant_id
             )
         )
-        db_settings = result.scalar_one()
-        assert db_settings.auto_pilot_enabled is False
+        assert result.scalar_one_or_none() is None
 
-        # 2. GET - Should return existing (Missing lines 57-72 branch)
+        # 2. GET - Repeated reads should stay side-effect free
         response = await async_client.get("/api/v1/settings/activeops")
         assert response.status_code == 200
         assert response.json()["auto_pilot_enabled"] is False
 
-        # 3. PUT - Update existing (Missing lines 89-118)
+        # 3. PUT - First write should create settings
         update_data = {"auto_pilot_enabled": True, "min_confidence_threshold": 0.85}
         response = await async_client.put(
             "/api/v1/settings/activeops", json=update_data
@@ -54,6 +53,14 @@ async def test_activeops_settings_full_lifecycle(
         assert response.status_code == 200
         assert response.json()["auto_pilot_enabled"] is True
         assert response.json()["min_confidence_threshold"] == 0.85
+
+        result = await db.execute(
+            select(RemediationSettings).where(
+                RemediationSettings.tenant_id == tenant_id
+            )
+        )
+        db_settings = result.scalar_one()
+        assert db_settings.auto_pilot_enabled is True
 
         # 4. PUT - Update with different values to hit remaining update logic
         update_data = {"auto_pilot_enabled": False, "min_confidence_threshold": 0.99}

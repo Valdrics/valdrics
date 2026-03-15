@@ -5,7 +5,8 @@ from sqlalchemy import text
 from app.shared.db.session import get_engine
 from scripts.rls_tooling import requires_rls
 
-async def check():
+
+async def check() -> int:
     engine = get_engine()
     async with engine.connect() as conn:
         result = await conn.execute(
@@ -38,10 +39,13 @@ async def check():
         ]
         if missing_rls:
             print(f"WARNING: No RLS on: {missing_rls}")
+            exit_code = 1
         else:
             print("SUCCESS: All application tables have RLS enabled.")
-            
+            exit_code = 0
+
     await engine.dispose()
+    return exit_code
 
 if __name__ == "__main__":
-    asyncio.run(check())
+    raise SystemExit(asyncio.run(check()))

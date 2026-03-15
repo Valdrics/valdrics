@@ -31,6 +31,13 @@ PUBLIC_ROUTE_ALLOWLIST: set[tuple[str, str]] = {
     ("GET", "/.well-known/jwks.json"),
     ("GET", "/.well-known/openid-configuration"),
     ("GET", "/api/v1/billing/plans"),
+    ("GET", "/api/v1/public/csrf"),
+    ("GET", "/api/v1/public/templates/aws/valdrics-role.yaml"),
+    ("POST", "/api/v1/public/assessment"),
+    ("POST", "/api/v1/public/sso/discovery"),
+    ("POST", "/api/v1/public/landing/events"),
+    ("POST", "/api/v1/public/marketing/subscribe"),
+    ("POST", "/api/v1/public/marketing/talk-to-sales"),
     ("POST", "/api/v1/billing/webhook"),
     ("GET", "/scim/v2/ServiceProviderConfig"),
     ("GET", "/scim/v2/Schemas"),
@@ -38,7 +45,6 @@ PUBLIC_ROUTE_ALLOWLIST: set[tuple[str, str]] = {
     ("GET", "/scim/v2/ResourceTypes"),
 }
 
-PUBLIC_PREFIX_ALLOWLIST = ("/api/v1/public",)
 MONITORED_PREFIXES = ("/api/v1", "/scim/v2", "/.well-known")
 
 
@@ -71,8 +77,6 @@ def _is_monitored_path(path: str) -> bool:
 
 
 def _is_public_exempt(method: str, path: str) -> bool:
-    if any(path.startswith(prefix) for prefix in PUBLIC_PREFIX_ALLOWLIST):
-        return True
     return (method, path) in PUBLIC_ROUTE_ALLOWLIST
 
 
@@ -112,8 +116,8 @@ def collect_auth_coverage_violations(app: object) -> list[AuthCoverageViolation]
 
 def load_app_for_audit() -> object:
     # Keep config deterministic and test-safe for script execution.
-    os.environ.setdefault("TESTING", "true")
-    os.environ.setdefault("DEBUG", "false")
+    os.environ["TESTING"] = "true"
+    os.environ["DEBUG"] = "false"
     from app.main import app
 
     return app

@@ -64,3 +64,25 @@ def test_validate_checklist_rejects_invalid_status(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="invalid status"):
         validate_checklist(load_checklist(tmp_path / "checklist.json"), repo_root=REPO_ROOT)
+
+
+def test_validate_checklist_rejects_non_baseline_required_control_status(
+    tmp_path: Path,
+) -> None:
+    checklist = load_checklist(REPO_ROOT / DEFAULT_CHECKLIST_PATH)
+    checklist["controls"][0]["status"] = "partial"
+    _write_json(tmp_path / "checklist.json", checklist)
+
+    with pytest.raises(ValueError, match="implemented_baseline"):
+        validate_checklist(load_checklist(tmp_path / "checklist.json"), repo_root=REPO_ROOT)
+
+
+def test_validate_checklist_rejects_irrelevant_evidence_paths_for_required_control(
+    tmp_path: Path,
+) -> None:
+    checklist = load_checklist(REPO_ROOT / DEFAULT_CHECKLIST_PATH)
+    checklist["controls"][0]["evidence"] = ["README.md"]
+    _write_json(tmp_path / "checklist.json", checklist)
+
+    with pytest.raises(ValueError, match="app/modules/enforcement/domain/"):
+        validate_checklist(load_checklist(tmp_path / "checklist.json"), repo_root=REPO_ROOT)

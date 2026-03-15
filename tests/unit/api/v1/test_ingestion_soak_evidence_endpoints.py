@@ -8,13 +8,7 @@ import pytest
 async def test_capture_and_list_ingestion_soak_evidence(
     async_client, app, db, test_tenant
 ):
-    from sqlalchemy import select
-
     from app.models.tenant import User
-    from app.modules.governance.domain.security.audit_log import (
-        AuditEventType,
-        AuditLog,
-    )
     from app.shared.core.auth import CurrentUser, get_current_user, UserRole
     from app.shared.core.pricing import PricingTier
 
@@ -75,28 +69,6 @@ async def test_capture_and_list_ingestion_soak_evidence(
             "/api/v1/audit/performance/ingestion/soak/evidence",
             json=payload,
         )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["status"] == "captured"
-        assert body["ingestion_soak"]["jobs_enqueued"] == 5
-        assert body["ingestion_soak"]["results"]["jobs_failed"] == 0
-
-        list_resp = await async_client.get(
-            "/api/v1/audit/performance/ingestion/soak/evidence",
-            params={"limit": 10},
-        )
-        assert list_resp.status_code == 200
-        listed = list_resp.json()
-        assert listed["total"] >= 1
-        assert listed["items"][0]["ingestion_soak"]["jobs_enqueued"] == 5
-
-        row = await db.scalar(
-            select(AuditLog).where(
-                AuditLog.tenant_id == test_tenant.id,
-                AuditLog.event_type
-                == AuditEventType.PERFORMANCE_INGESTION_SOAK_CAPTURED.value,
-            )
-        )
-        assert row is not None
+        assert resp.status_code == 410
     finally:
         app.dependency_overrides.pop(get_current_user, None)

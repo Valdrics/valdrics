@@ -192,6 +192,11 @@ def _build_public_sales_inquiry_fingerprint(
             "timeline",
             "interestArea",
             "message",
+            "referrer",
+            "source",
+            "utmSource",
+            "utmMedium",
+            "utmCampaign",
         )
     }
     return hashlib.sha256(

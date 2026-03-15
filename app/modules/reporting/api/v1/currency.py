@@ -1,8 +1,8 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from typing import Dict, Any
 from app.shared.core.auth import get_current_user
 from app.models.tenant import User
-from app.shared.core.currency import get_exchange_rate
+from app.shared.core.currency import ExchangeRateUnavailableError, get_exchange_rate
 from app.shared.core.config import get_settings
 
 router = APIRouter(tags=["Currency"])
@@ -37,12 +37,30 @@ async def convert_currency(
     """
     from app.shared.core.currency import convert_usd, format_currency
 
-    converted_amount = await convert_usd(amount, to)
-    formatted = await format_currency(amount, to)
+    target_currency = str(to).strip().upper()
+    supported_currencies = {
+        str(currency).strip().upper()
+        for currency in get_settings().SUPPORTED_CURRENCIES
+    }
+    if target_currency not in supported_currencies:
+        supported = ", ".join(sorted(supported_currencies))
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported target currency '{to}'. Use one of: {supported}",
+        )
+
+    try:
+        converted_amount = await convert_usd(amount, target_currency, strict=True)
+        formatted = await format_currency(amount, target_currency, strict=True)
+    except ExchangeRateUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Exchange rate unavailable for {target_currency}: {exc}",
+        ) from exc
 
     return {
         "original_amount_usd": amount,
         "converted_amount": float(converted_amount),
-        "target_currency": to.upper(),
+        "target_currency": target_currency,
         "formatted": formatted,
     }

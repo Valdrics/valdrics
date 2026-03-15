@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.aws_connection import AWSConnection
 from app.models.carbon_settings import CarbonSettings
 from app.models.carbon_factors import CarbonFactorSet, CarbonFactorUpdateLog
 from app.modules.reporting.domain.budget_alerts import CarbonBudgetService
@@ -35,7 +34,7 @@ from app.modules.reporting.api.v1.carbon_route_helpers import (
     resolve_region_hint as _resolve_region_hint_impl,
     update_log_to_item as _update_log_to_item_impl,
 )
-from app.shared.core.auth import CurrentUser
+from app.shared.core.auth import CurrentUser, requires_platform_role
 from app.shared.core.cache import get_cache_service
 from app.shared.core.connection_queries import list_tenant_connections
 from app.shared.core.config import get_settings
@@ -82,13 +81,82 @@ async def _get_provider_connection(
     tenant_id: UUID,
     provider: str,
 ) -> Any | None:
+    connections = await _get_provider_connections(db, tenant_id, provider)
+    return _select_preferred_connection(connections)
+
+
+async def _get_provider_connections(
+    db: AsyncSession,
+    tenant_id: UUID,
+    provider: str,
+) -> list[Any]:
     connections = await list_tenant_connections(
         db,
         tenant_id=tenant_id,
         active_only=True,
         providers=[provider],
     )
-    return connections[0] if connections else None
+    return list(connections)
+
+
+def _connection_preference_key(connection: Any) -> tuple[bool, datetime, datetime, str]:
+    minimum = datetime.min.replace(tzinfo=timezone.utc)
+    last_verified_at = getattr(connection, "last_verified_at", None) or minimum
+    created_at = getattr(connection, "created_at", None) or minimum
+    return (last_verified_at != minimum, last_verified_at, created_at, str(getattr(connection, "id", "")))
+
+
+def _select_preferred_connection(connections: list[Any]) -> Any | None:
+    if not connections:
+        return None
+    return max(connections, key=_connection_preference_key)
+
+
+async def _fetch_provider_cost_data_for_connections(
+    connections: list[Any],
+    provider: str,
+    start_date: date,
+    end_date: date,
+) -> list[dict[str, Any]]:
+    if not connections:
+        return []
+    batches = await asyncio.gather(
+        *(
+            _fetch_provider_cost_data(connection, provider, start_date, end_date)
+            for connection in connections
+        )
+    )
+    cost_data: list[dict[str, Any]] = []
+    for batch in batches:
+        cost_data.extend(batch)
+    return cost_data
+
+
+def _resolve_calc_region_for_connections(
+    connections: list[Any],
+    provider: str,
+    requested_region: str,
+) -> str:
+    if not connections:
+        return requested_region.strip().lower() or "global"
+    explicit_region = requested_region.strip().lower()
+    if (
+        explicit_region
+        and explicit_region != "global"
+        and not (provider != "aws" and explicit_region == "us-east-1")
+    ):
+        return explicit_region
+    resolved_regions = {
+        _resolve_calc_region(connection, provider, requested_region)
+        for connection in connections
+    }
+    if len(resolved_regions) == 1:
+        return resolved_regions.pop()
+    return "global"
+
+
+def _factor_actor_user_id(user: CurrentUser) -> UUID | None:
+    return user.id if user.tenant_id is not None else None
 
 
 async def _fetch_provider_cost_data(
@@ -156,17 +224,21 @@ async def get_carbon_footprint(
     if cached is not None:
         return cached
 
-    connection = await _get_provider_connection(db, tenant_id, normalized_provider)
+    connections = await _get_provider_connections(db, tenant_id, normalized_provider)
 
-    if not connection:
+    if not connections:
         raise HTTPException(
             400, f"No active {normalized_provider.upper()} connection found"
         )
 
-    cost_data = await _fetch_provider_cost_data(
-        connection, normalized_provider, start_date, end_date
+    cost_data = await _fetch_provider_cost_data_for_connections(
+        connections, normalized_provider, start_date, end_date
     )
-    calc_region = _resolve_calc_region(connection, normalized_provider, region)
+    calc_region = _resolve_calc_region_for_connections(
+        connections,
+        normalized_provider,
+        region,
+    )
     factor_payload = await CarbonFactorService(db).get_active_payload()
     calculator = CarbonCalculator(factor_payload)
     payload = calculator.calculate_from_costs(
@@ -195,9 +267,9 @@ async def get_carbon_budget(
     if cached is not None:
         return cached
 
-    connection = await _get_provider_connection(db, tenant_id, normalized_provider)
+    connections = await _get_provider_connections(db, tenant_id, normalized_provider)
 
-    if not connection:
+    if not connections:
         payload = {
             "error": f"No active {normalized_provider.upper()} connection found",
             "alert_status": "unknown",
@@ -212,7 +284,11 @@ async def get_carbon_budget(
     )
     carbon_settings = settings_result.scalar_one_or_none()
 
-    calc_region = _resolve_calc_region(connection, normalized_provider, region)
+    calc_region = _resolve_calc_region_for_connections(
+        connections,
+        normalized_provider,
+        region,
+    )
     requested_region = region.strip().lower()
     if (
         carbon_settings
@@ -222,8 +298,8 @@ async def get_carbon_budget(
     ):
         calc_region = carbon_settings.default_region
 
-    cost_data = await _fetch_provider_cost_data(
-        connection, normalized_provider, month_start, today
+    cost_data = await _fetch_provider_cost_data_for_connections(
+        connections, normalized_provider, month_start, today
     )
 
     factor_payload = await CarbonFactorService(db).get_active_payload()
@@ -262,13 +338,12 @@ async def analyze_graviton_opportunities(
     if cached is not None:
         return cached
 
-    result = await db.execute(
-        select(AWSConnection).where(AWSConnection.tenant_id == tenant_id).limit(1)
+    connection = _select_preferred_connection(
+        await _get_provider_connections(db, tenant_id, "aws")
     )
-    connection = result.scalar_one_or_none()
 
     if not connection:
-        payload = {"error": "No AWS connection found", "migration_candidates": 0}
+        payload = {"error": "No active AWS connection found", "migration_candidates": 0}
         await _store_cached_payload(cache_key, payload, ttl=CARBON_GRAVITON_CACHE_TTL)
         return payload
 
@@ -373,7 +448,7 @@ async def get_green_schedule(
 async def get_active_carbon_factor_set(
     user: Annotated[
         CurrentUser,
-        Depends(requires_feature(FeatureFlag.CARBON_ASSURANCE, required_role="admin")),
+        Depends(requires_platform_role("admin")),
     ],
     db: AsyncSession = Depends(get_db),
 ) -> CarbonFactorSetItem:
@@ -386,7 +461,7 @@ async def get_active_carbon_factor_set(
 async def list_carbon_factor_sets(
     user: Annotated[
         CurrentUser,
-        Depends(requires_feature(FeatureFlag.CARBON_ASSURANCE, required_role="admin")),
+        Depends(requires_platform_role("admin")),
     ],
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=200, ge=1, le=2000),
@@ -410,7 +485,7 @@ async def list_carbon_factor_sets(
 async def list_carbon_factor_update_logs(
     user: Annotated[
         CurrentUser,
-        Depends(requires_feature(FeatureFlag.CARBON_ASSURANCE, required_role="admin")),
+        Depends(requires_platform_role("admin")),
     ],
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=200, ge=1, le=2000),
@@ -435,14 +510,14 @@ async def stage_carbon_factor_set(
     request: CarbonFactorStageRequest,
     user: Annotated[
         CurrentUser,
-        Depends(requires_feature(FeatureFlag.CARBON_ASSURANCE, required_role="admin")),
+        Depends(requires_platform_role("admin")),
     ],
     db: AsyncSession = Depends(get_db),
 ) -> CarbonFactorSetItem:
     service = CarbonFactorService(db)
     staged = await service.stage(
         request.payload,
-        actor_user_id=user.id,
+        actor_user_id=_factor_actor_user_id(user),
         message=request.message,
     )
     await db.commit()
@@ -454,7 +529,7 @@ async def activate_carbon_factor_set(
     factor_set_id: UUID,
     user: Annotated[
         CurrentUser,
-        Depends(requires_feature(FeatureFlag.CARBON_ASSURANCE, required_role="admin")),
+        Depends(requires_platform_role("admin")),
     ],
     db: AsyncSession = Depends(get_db),
 ) -> CarbonFactorSetItem:
@@ -466,7 +541,7 @@ async def activate_carbon_factor_set(
     service = CarbonFactorService(db)
     activated = await service.activate(
         factor_set,
-        actor_user_id=user.id,
+        actor_user_id=_factor_actor_user_id(user),
         action="manual_activated",
         message="Manually activated via API.",
     )
@@ -478,7 +553,7 @@ async def activate_carbon_factor_set(
 async def auto_activate_latest_carbon_factors(
     user: Annotated[
         CurrentUser,
-        Depends(requires_feature(FeatureFlag.CARBON_ASSURANCE, required_role="admin")),
+        Depends(requires_platform_role("admin")),
     ],
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:

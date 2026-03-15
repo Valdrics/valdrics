@@ -86,6 +86,16 @@ class CarbonSettingsUpdate(BaseModel):
             raise ValueError("email_recipients is required when email_enabled is true")
         return self
 
+
+def _build_default_carbon_settings_response() -> CarbonSettingsResponse:
+    return CarbonSettingsResponse(
+        carbon_budget_kg=100.0,
+        alert_threshold_percent=80,
+        default_region="global",
+        email_enabled=False,
+        email_recipients=None,
+    )
+
 # ============================================================
 # API Endpoints
 # ============================================================
@@ -99,31 +109,15 @@ async def get_carbon_settings(
     """
     Get carbon budget settings for the current tenant.
 
-    Creates default settings if none exist.
+    Returns default settings if none exist.
     """
     result = await db.execute(
         select(CarbonSettings).where(CarbonSettings.tenant_id == current_user.tenant_id)
     )
     settings = result.scalar_one_or_none()
 
-    # Create default settings if not exists
     if not settings:
-        settings = CarbonSettings(
-            tenant_id=current_user.tenant_id,
-            carbon_budget_kg=100.0,
-            alert_threshold_percent=80,
-            default_region="global",
-            email_enabled=False,
-            email_recipients=None,
-        )
-        db.add(settings)
-        await db.commit()
-        await db.refresh(settings)
-
-        logger.info(
-            "carbon_settings_created",
-            tenant_id=str(current_user.tenant_id),
-        )
+        return _build_default_carbon_settings_response()
 
     return CarbonSettingsResponse(
         carbon_budget_kg=float(settings.carbon_budget_kg),

@@ -3,7 +3,8 @@ Notification Settings API
 
 Manages Slack/Jira/Teams and alert notification preferences for tenants.
 """
-from collections.abc import Awaitable, Callable
+
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -22,13 +23,13 @@ from app.modules.governance.api.v1.settings.notification_diagnostics_ops import 
 from app.modules.governance.api.v1.settings.notification_settings_ops import (
     apply_notification_settings_update as _apply_notification_settings_update_impl,
     build_notification_settings_audit_payload as _build_notification_settings_audit_payload_impl,
-    build_notification_settings_create_kwargs as _build_notification_settings_create_kwargs_impl,
     enforce_incident_integrations_access as _enforce_incident_integrations_access_impl,
     enforce_jira_integration_access as _enforce_jira_integration_access_impl,
     enforce_slack_integration_access as _enforce_slack_integration_access_impl,
     validate_notification_settings_requirements as _validate_notification_settings_requirements_impl,
 )
 from app.modules.governance.api.v1.settings.notifications_acceptance_ops import (
+    NOTIFICATION_CONNECTIVITY_RECOVERABLE_ERRORS as _NOTIFICATION_ACCEPTANCE_EVIDENCE_ERRORS_IMPL,
     coerce_status_code as _coerce_status_code_impl,
     normalize_acceptance_details as _normalize_acceptance_details_impl,
     record_acceptance_evidence as _record_acceptance_evidence_impl,
@@ -66,6 +67,32 @@ def _raise_http_exception(status_code: int, detail: str) -> None:
     raise HTTPException(status_code=status_code, detail=detail)
 
 
+def _build_default_notification_settings(
+    *,
+    tenant_id: object,
+    slack_feature_allowed_by_tier: bool,
+) -> NotificationSettings:
+    return NotificationSettings(
+        tenant_id=tenant_id,
+        slack_enabled=slack_feature_allowed_by_tier,
+        jira_enabled=False,
+        jira_issue_type="Task",
+        teams_enabled=False,
+        digest_schedule="daily",
+        digest_hour=9,
+        digest_minute=0,
+        alert_on_budget_warning=True,
+        alert_on_budget_exceeded=True,
+        alert_on_zombie_detected=True,
+        workflow_github_enabled=False,
+        workflow_github_ref="main",
+        workflow_gitlab_enabled=False,
+        workflow_gitlab_base_url="https://gitlab.com",
+        workflow_gitlab_ref="main",
+        workflow_webhook_enabled=False,
+    )
+
+
 _coerce_status_code = _coerce_status_code_impl
 _normalize_acceptance_details = _normalize_acceptance_details_impl
 _record_acceptance_evidence = _record_acceptance_evidence_impl
@@ -73,6 +100,44 @@ _run_slack_connectivity_test = _run_slack_connectivity_test_impl
 _run_jira_connectivity_test = _run_jira_connectivity_test_impl
 _run_teams_connectivity_test = _run_teams_connectivity_test_impl
 _run_workflow_connectivity_test = _run_workflow_connectivity_test_impl
+_notification_acceptance_evidence_errors = _NOTIFICATION_ACCEPTANCE_EVIDENCE_ERRORS_IMPL
+
+
+async def _persist_acceptance_evidence_best_effort(
+    *,
+    db: AsyncSession,
+    user: CurrentUser,
+    run_id: str,
+    channel: str,
+    success: bool,
+    status_code: int,
+    message: str,
+    details: Mapping[str, object] | None,
+    request_path: str,
+) -> None:
+    try:
+        await _record_acceptance_evidence(
+            db=db,
+            user=user,
+            run_id=run_id,
+            channel=channel,
+            success=success,
+            status_code=status_code,
+            message=message,
+            details=details,
+            request_path=request_path,
+        )
+        await db.commit()
+    except _notification_acceptance_evidence_errors as exc:
+        rollback = getattr(db, "rollback", None)
+        if rollback is not None:
+            await maybe_await(rollback())
+        logger.warning(
+            "notification_acceptance_evidence_persist_failed",
+            channel=channel,
+            request_path=request_path,
+            error=str(exc),
+        )
 
 
 async def _execute_notification_channel_test(
@@ -85,7 +150,7 @@ async def _execute_notification_channel_test(
 ) -> dict[str, str]:
     run_id = str(uuid4())
     result = await runner(current_user=current_user, db=db)
-    await _record_acceptance_evidence(
+    await _persist_acceptance_evidence_best_effort(
         db=db,
         user=current_user,
         run_id=run_id,
@@ -96,7 +161,6 @@ async def _execute_notification_channel_test(
         details=result.details,
         request_path=request_path,
     )
-    await db.commit()
     if not result.success:
         raise HTTPException(status_code=result.status_code, detail=result.message)
     return {"status": "success", "message": result.message}
@@ -119,6 +183,7 @@ def _to_acceptance_evidence_item(row: AuditLog) -> IntegrationAcceptanceEvidence
         details=_normalize_acceptance_details(details),
     )
 
+
 @router.get("/notifications", response_model=NotificationSettingsResponse)
 async def get_notification_settings(
     current_user: CurrentUser = Depends(get_current_user_with_db_context),
@@ -135,27 +200,10 @@ async def get_notification_settings(
         tier, FeatureFlag.SLACK_INTEGRATION
     )
 
-    # Create default settings if not exists
     if not settings:
-        settings = NotificationSettings(
+        settings = _build_default_notification_settings(
             tenant_id=current_user.tenant_id,
-            slack_enabled=slack_feature_allowed_by_tier,
-            jira_enabled=False,
-            jira_issue_type="Task",
-            digest_schedule="daily",
-            digest_hour=9,
-            digest_minute=0,
-            alert_on_budget_warning=True,
-            alert_on_budget_exceeded=True,
-            alert_on_zombie_detected=True,
-        )
-        db.add(settings)
-        await db.commit()
-        await db.refresh(settings)
-
-        logger.info(
-            "notification_settings_created",
-            tenant_id=str(current_user.tenant_id),
+            slack_feature_allowed_by_tier=slack_feature_allowed_by_tier,
         )
 
     return _to_notification_response_impl(
@@ -169,6 +217,7 @@ async def update_notification_settings(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> NotificationSettingsResponse:
+    updates = data.model_dump(exclude_unset=True)
     result = await db.execute(
         select(NotificationSettings).where(
             NotificationSettings.tenant_id == current_user.tenant_id
@@ -180,7 +229,7 @@ async def update_notification_settings(
         tier, FeatureFlag.SLACK_INTEGRATION
     )
     _enforce_slack_integration_access_impl(
-        data=data,
+        data=updates,
         current_tier=current_user.tier,
         normalize_tier_fn=normalize_tier,
         is_feature_enabled_fn=is_feature_enabled,
@@ -188,7 +237,7 @@ async def update_notification_settings(
         raise_http_exception_fn=_raise_http_exception,
     )
     _enforce_jira_integration_access_impl(
-        data=data,
+        data=updates,
         current_tier=current_user.tier,
         normalize_tier_fn=normalize_tier,
         is_feature_enabled_fn=is_feature_enabled,
@@ -196,7 +245,7 @@ async def update_notification_settings(
         raise_http_exception_fn=_raise_http_exception,
     )
     _enforce_incident_integrations_access_impl(
-        data=data,
+        data=updates,
         current_tier=current_user.tier,
         normalize_tier_fn=normalize_tier,
         is_feature_enabled_fn=is_feature_enabled,
@@ -205,18 +254,15 @@ async def update_notification_settings(
     )
 
     if not settings:
-        settings = NotificationSettings(
-            **_build_notification_settings_create_kwargs_impl(
-                data=data,
-                tenant_id=current_user.tenant_id,
-            )
+        settings = _build_default_notification_settings(
+            tenant_id=current_user.tenant_id,
+            slack_feature_allowed_by_tier=slack_feature_allowed_by_tier,
         )
         db.add(settings)
-    else:
-        _apply_notification_settings_update_impl(
-            settings=settings,
-            updates=data.model_dump(),
-        )
+    _apply_notification_settings_update_impl(
+        settings=settings,
+        updates=updates,
+    )
 
     _validate_notification_settings_requirements_impl(
         settings=settings,
@@ -300,7 +346,11 @@ async def get_policy_notification_diagnostics(
         tier=tier.value,
         has_activeops_settings=remediation_settings is not None,
         has_notification_settings=notification_settings is not None,
-        policy_enabled=bool(getattr(remediation_settings, "policy_enabled", True)),
+        policy_enabled=(
+            bool(getattr(remediation_settings, "policy_enabled", False))
+            if remediation_settings is not None
+            else False
+        ),
         slack=slack,
         jira=jira,
     )
@@ -413,7 +463,7 @@ async def capture_notification_acceptance_evidence(
     for channel, runner in checks:
         channel_result = await runner(current_user=current_user, db=db)
         results.append(channel_result)
-        await _record_acceptance_evidence(
+        await _persist_acceptance_evidence_best_effort(
             db=db,
             user=current_user,
             run_id=run_id,
@@ -433,7 +483,7 @@ async def capture_notification_acceptance_evidence(
         "success" if failed == 0 else "partial_failure" if passed > 0 else "failed"
     )
 
-    await _record_acceptance_evidence(
+    await _persist_acceptance_evidence_best_effort(
         db=db,
         user=current_user,
         run_id=run_id,
@@ -449,7 +499,6 @@ async def capture_notification_acceptance_evidence(
         },
         request_path="/api/v1/settings/notifications/acceptance-evidence/capture",
     )
-    await db.commit()
 
     return IntegrationAcceptanceCaptureResponse(
         run_id=run_id,

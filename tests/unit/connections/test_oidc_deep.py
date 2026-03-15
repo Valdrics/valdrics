@@ -122,11 +122,46 @@ class TestOIDCDeep:
             patch("app.shared.core.http.get_http_client") as mock_get_http_client,
         ):
             mock_client = AsyncMock()
-            mock_response = MagicMock(status_code=200)
-            mock_response.json.return_value = {"access_token": "access-token"}
-            mock_client.post = AsyncMock(return_value=mock_response)
+            sts_response = MagicMock(status_code=200)
+            sts_response.json.return_value = {"access_token": "access-token"}
+            project_response = MagicMock(status_code=200)
+            project_response.json.return_value = {"projectId": "p1"}
+            mock_client.post = AsyncMock(return_value=sts_response)
+            mock_client.get = AsyncMock(return_value=project_response)
             mock_get_http_client.return_value = mock_client
 
             success, err = await OIDCService.verify_gcp_access("p1", "t1")
             assert success is True
             assert err is None
+
+    @pytest.mark.asyncio
+    async def test_verify_gcp_access_rejects_project_without_authorization(self):
+        settings = MagicMock(
+            GCP_OIDC_AUDIENCE="//iam.googleapis.com/projects/123/locations/global/workloadIdentityPools/pool/providers/provider",
+            GCP_OIDC_SCOPE="https://www.googleapis.com/auth/cloud-platform",
+            GCP_OIDC_STS_URL="https://sts.googleapis.com/v1/token",
+            GCP_OIDC_VERIFY_TIMEOUT_SECONDS=10,
+        )
+        with (
+            patch("app.shared.connections.oidc.get_settings", return_value=settings),
+            patch(
+                "app.shared.connections.oidc.OIDCService.create_token",
+                new_callable=AsyncMock,
+                return_value="id-token",
+            ),
+            patch("app.shared.core.http.get_http_client") as mock_get_http_client,
+        ):
+            mock_client = AsyncMock()
+            sts_response = MagicMock(status_code=200)
+            sts_response.json.return_value = {"access_token": "access-token"}
+            denied_response = MagicMock(status_code=403)
+            denied_response.json.return_value = {
+                "error": {"message": "Caller lacks resourcemanager.projects.get"}
+            }
+            mock_client.post = AsyncMock(return_value=sts_response)
+            mock_client.get = AsyncMock(return_value=denied_response)
+            mock_get_http_client.return_value = mock_client
+
+            success, err = await OIDCService.verify_gcp_access("p1", "t1")
+            assert success is False
+            assert "resourcemanager.projects.get" in str(err)

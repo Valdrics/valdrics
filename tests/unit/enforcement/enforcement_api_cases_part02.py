@@ -1,5 +1,6 @@
 # ruff: noqa: F403,F405
 from tests.unit.enforcement.enforcement_api_cases_common import *  # noqa: F401,F403
+from app.models.enforcement import EnforcementPolicy
 
 
 
@@ -329,6 +330,32 @@ async def test_policy_budget_and_credit_endpoints(async_client, db) -> None:
         assert credit.status_code == 200
         assert credit.json()["pool_type"] == "emergency"
         assert credit.json()["remaining_amount_usd"] == "150.0000"
+    finally:
+        _clear_user_override(async_client)
+
+
+@pytest.mark.asyncio
+async def test_get_policy_is_read_only_when_policy_missing(async_client, db) -> None:
+    tenant = await _seed_tenant(db)
+    member_user = CurrentUser(
+        id=uuid4(),
+        email="member@enforcement.local",
+        tenant_id=tenant.id,
+        role=UserRole.MEMBER,
+    )
+    _override_user(async_client, member_user)
+
+    try:
+        response = await async_client.get("/api/v1/enforcement/policies")
+        assert response.status_code == 200
+        assert response.json()["policy_document_schema_version"] == (
+            "valdrics.enforcement.policy.v1"
+        )
+
+        policy_row = await db.scalar(
+            select(EnforcementPolicy).where(EnforcementPolicy.tenant_id == tenant.id)
+        )
+        assert policy_row is None
     finally:
         _clear_user_override(async_client)
 

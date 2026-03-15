@@ -31,7 +31,7 @@ from app.modules.billing.api.v1.billing_ops import (
     load_public_plans,
     process_paystack_webhook,
 )
-from app.shared.core.auth import CurrentUser, requires_role
+from app.shared.core.auth import CurrentUser, requires_platform_role, requires_role
 from app.shared.db.session import get_db
 from app.shared.core.config import get_settings
 from app.shared.core.proxy_headers import resolve_client_ip
@@ -207,8 +207,8 @@ async def get_billing_usage(
     """
     Tier-aligned usage overview for billing/packaging UX.
 
-    This surfaces how close a tenant is to connection limits (AWS/Azure/GCP/SaaS/License),
-    so upgrades are explainable and enforceable.
+    This surfaces how close a tenant is to active connection limits across all supported
+    connector families, so upgrades are explainable and enforceable.
     """
     from app.shared.core.pricing import PricingTier
 
@@ -344,7 +344,7 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
 async def update_exchange_rate(
     _request: Request,
     request: ExchangeRateUpdate,
-    user: Annotated[CurrentUser, Depends(requires_role("admin"))],
+    user: Annotated[CurrentUser, Depends(requires_platform_role("admin"))],
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Manually update exchange rate."""
@@ -359,7 +359,7 @@ async def update_exchange_rate(
 @auth_limit
 async def get_exchange_rate(
     request: Request,
-    user: Annotated[CurrentUser, Depends(requires_role("admin"))],
+    user: Annotated[CurrentUser, Depends(requires_platform_role("admin"))],
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, Any]:
     """Get current exchange rate with billing safety health flags."""
@@ -373,7 +373,7 @@ async def update_pricing_plan(
     request: Request,
     plan_id: str,  # Note: plan_id is a slug (e.g., 'starter'), not a UUID
     plan_req: PricingPlanUpdate,
-    user: Annotated[CurrentUser, Depends(requires_role("admin"))],
+    user: Annotated[CurrentUser, Depends(requires_platform_role("admin"))],
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, str]:
     """Update pricing plan details."""

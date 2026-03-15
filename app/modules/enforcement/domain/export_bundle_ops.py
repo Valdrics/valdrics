@@ -66,6 +66,7 @@ def build_signed_export_manifest_payload(
 ) -> dict[str, Any]:
     content_payload: dict[str, Any] = {
         "schema_version": "valdrics.enforcement.export_manifest.v1",
+        "generated_at": bundle.generated_at,
         "tenant_id": str(tenant_id),
         "window_start": bundle.window_start,
         "window_end": bundle.window_end,
@@ -242,14 +243,13 @@ async def build_export_bundle_payload(
     policy_lineage_sha256 = hashlib.sha256(policy_lineage_json.encode("utf-8")).hexdigest()
 
     computed_context_lineage_counts: dict[
-        tuple[str, str, str, str, int, int, int, str, str],
-        int,
+        tuple[str, str, str, int, int, int, str, str],
+        dict[str, Any],
     ] = {}
     for decision in decisions:
         snapshot = computed_context_snapshot_fn(decision.response_payload)
         context_key = (
             str(snapshot["context_version"]),
-            str(snapshot["generated_at"]),
             str(snapshot["month_start"]),
             str(snapshot["month_end"]),
             int(snapshot["month_elapsed_days"]),
@@ -258,15 +258,26 @@ async def build_export_bundle_payload(
             str(snapshot["latest_cost_date"]),
             str(snapshot["data_source_mode"]),
         )
-        computed_context_lineage_counts[context_key] = (
-            int(computed_context_lineage_counts.get(context_key, 0)) + 1
-        )
+        existing = computed_context_lineage_counts.get(context_key)
+        snapshot_generated_at = snapshot.get("generated_at")
+        if existing is None:
+            computed_context_lineage_counts[context_key] = {
+                "decision_count": 1,
+                "generated_at": snapshot_generated_at,
+            }
+            continue
+
+        existing["decision_count"] = int(existing["decision_count"]) + 1
+        existing_generated_at = existing.get("generated_at")
+        if snapshot_generated_at is None:
+            continue
+        if existing_generated_at is None or snapshot_generated_at < existing_generated_at:
+            existing["generated_at"] = snapshot_generated_at
 
     computed_context_lineage: list[dict[str, Any]] = []
     for context_key in sorted(computed_context_lineage_counts.keys()):
         (
             context_version,
-            generated_at,
             month_start,
             month_end,
             month_elapsed_days,
@@ -275,10 +286,11 @@ async def build_export_bundle_payload(
             latest_cost_date,
             data_source_mode,
         ) = context_key
+        aggregate = computed_context_lineage_counts[context_key]
         computed_context_lineage.append(
             {
                 "context_version": context_version,
-                "generated_at": generated_at,
+                "generated_at": aggregate.get("generated_at"),
                 "month_start": month_start,
                 "month_end": month_end,
                 "month_elapsed_days": month_elapsed_days,
@@ -286,7 +298,7 @@ async def build_export_bundle_payload(
                 "observed_cost_days": observed_cost_days,
                 "latest_cost_date": latest_cost_date,
                 "data_source_mode": data_source_mode,
-                "decision_count": int(computed_context_lineage_counts[context_key]),
+                "decision_count": int(aggregate["decision_count"]),
             }
         )
     computed_context_lineage_json = json.dumps(

@@ -138,10 +138,17 @@ async def test_unit_economics_settings_endpoints_direct_paths() -> None:
     )
     db = FakeDB()
 
-    with patch.object(
-        costs_api,
-        "_get_or_create_unit_settings",
-        new=AsyncMock(return_value=settings_row),
+    with (
+        patch.object(
+            costs_api,
+            "_get_or_create_unit_settings",
+            new=AsyncMock(return_value=settings_row),
+        ),
+        patch.object(
+            costs_api,
+            "_get_unit_settings_snapshot",
+            new=AsyncMock(return_value=settings_row),
+        ),
     ):
         read_response = await costs_api.get_unit_economics_settings(
             user=user(),
@@ -175,7 +182,7 @@ async def test_get_unit_economics_alert_paths() -> None:
         with (
             patch.object(
                 costs_api,
-                "_get_or_create_unit_settings",
+                "_get_unit_settings_snapshot",
                 new=AsyncMock(
                     return_value=standard_unit_settings(anomaly_threshold_percent=15.0)
                 ),

@@ -29,7 +29,18 @@ PARTITIONING_CATALOG_RECOVERABLE_EXCEPTIONS = (
     OSError,
     SQLAlchemyError,
 )
+PARTITIONING_CAPTURE_RECOVERABLE_EXCEPTIONS = (
+    RuntimeError,
+    ValueError,
+    TypeError,
+    OSError,
+    SQLAlchemyError,
+)
 PARTITIONING_EVIDENCE_PAYLOAD_ERRORS = (ValidationError, TypeError, ValueError)
+
+
+class PartitioningEvidenceCollectionError(RuntimeError):
+    """Raised when partitioning state cannot be inspected reliably."""
 
 
 async def _compute_partitioning_evidence(
@@ -80,8 +91,15 @@ async def _compute_partitioning_evidence(
                 .all()
             )
             table_names = {str(row) for row in rows}
-    except PARTITIONING_CATALOG_RECOVERABLE_EXCEPTIONS:
-        table_names = set()
+    except PARTITIONING_CATALOG_RECOVERABLE_EXCEPTIONS as exc:
+        logger.warning(
+            "partitioning_catalog_lookup_failed",
+            dialect=dialect,
+            error=str(exc),
+        )
+        raise PartitioningEvidenceCollectionError(
+            "Partitioning catalog inspection failed"
+        ) from exc
 
     tables_to_check = ["audit_logs", "cost_records"]
     statuses: list[PartitioningTableStatus] = []
@@ -187,6 +205,44 @@ async def _compute_partitioning_evidence(
     )
 
 
+async def _log_failed_partitioning_capture(
+    *,
+    db: AsyncSession,
+    user: CurrentUser,
+    run_id: str,
+    captured_at: str,
+    dialect: str,
+    error_message: str,
+) -> None:
+    from app.modules.governance.domain.security.audit_log import (
+        AuditEventType,
+        AuditLogger,
+    )
+
+    tenant_id = user.tenant_id
+    if tenant_id is None:
+        return
+
+    audit = AuditLogger(db=db, tenant_id=tenant_id, correlation_id=run_id)
+    await audit.log(
+        event_type=AuditEventType.PERFORMANCE_PARTITIONING_CAPTURED,
+        actor_id=user.id,
+        actor_email=user.email,
+        resource_type="partitioning",
+        resource_id=dialect,
+        details={
+            "run_id": run_id,
+            "captured_at": captured_at,
+            "error": error_message,
+        },
+        success=False,
+        error_message=error_message,
+        request_method="POST",
+        request_path="/api/v1/audit/performance/partitioning/evidence",
+    )
+    await db.commit()
+
+
 @router.post(
     "/performance/partitioning/evidence",
     response_model=PartitioningEvidenceCaptureResponse,
@@ -218,8 +274,45 @@ async def capture_partitioning_evidence(
     if tenant_id is None:
         raise HTTPException(status_code=403, detail="Tenant context is required")
 
-    payload = await _compute_partitioning_evidence(db)
     run_id = str(uuid4())
+    captured_at = datetime.now(timezone.utc).isoformat()
+    dialect = "unknown"
+    if getattr(db, "bind", None) is not None:
+        dialect = str(
+            getattr(getattr(db.bind, "dialect", None), "name", "") or "unknown"
+        )
+
+    try:
+        payload = await _compute_partitioning_evidence(db)
+    except PARTITIONING_CAPTURE_RECOVERABLE_EXCEPTIONS as exc:
+        logger.warning(
+            "partitioning_evidence_capture_failed",
+            tenant_id=str(tenant_id),
+            dialect=dialect,
+            error=str(exc),
+        )
+        await db.rollback()
+        try:
+            await _log_failed_partitioning_capture(
+                db=db,
+                user=user,
+                run_id=run_id,
+                captured_at=captured_at,
+                dialect=dialect,
+                error_message=str(exc),
+            )
+        except PARTITIONING_CAPTURE_RECOVERABLE_EXCEPTIONS as audit_exc:
+            logger.warning(
+                "partitioning_failure_audit_log_failed",
+                tenant_id=str(tenant_id),
+                error=str(audit_exc),
+            )
+            await db.rollback()
+        raise HTTPException(
+            status_code=503,
+            detail="Partitioning evidence capture failed because database state could not be inspected",
+        ) from exc
+
     audit = AuditLogger(db=db, tenant_id=tenant_id, correlation_id=run_id)
     event = await audit.log(
         event_type=AuditEventType.PERFORMANCE_PARTITIONING_CAPTURED,
@@ -229,7 +322,7 @@ async def capture_partitioning_evidence(
         resource_id=str(payload.dialect),
         details={
             "run_id": run_id,
-            "captured_at": datetime.now(timezone.utc).isoformat(),
+            "captured_at": captured_at,
             "partitioning": payload.model_dump(),
         },
         success=True,

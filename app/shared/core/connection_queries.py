@@ -69,22 +69,35 @@ async def list_connections(
     active_only: bool = False,
     with_for_update: bool = False,
     skip_locked: bool = False,
+    limit: int | None = None,
     providers: Iterable[str] | None = None,
 ) -> list[Any]:
     """
     Provider-agnostic connection loader used by scheduler/jobs.
     """
     connections: list[Any] = []
+    remaining_limit: int | None
+    if limit is None:
+        remaining_limit = None
+    else:
+        remaining_limit = max(1, int(limit))
     for _provider, model in _iter_model_pairs(providers):
+        if remaining_limit is not None and remaining_limit <= 0:
+            break
         stmt = select(model)
         if tenant_id is not None:
             stmt = stmt.where(model.tenant_id == tenant_id)
         if active_only:
             stmt = stmt.where(_active_clause_for_model(model))
+        if remaining_limit is not None:
+            stmt = stmt.limit(remaining_limit)
         if with_for_update:
             stmt = stmt.with_for_update(skip_locked=skip_locked)
         result = await db.execute(stmt)
-        connections.extend(result.scalars().all())
+        rows = list(result.scalars().all())
+        connections.extend(rows)
+        if remaining_limit is not None:
+            remaining_limit -= len(rows)
     return connections
 
 
@@ -108,6 +121,7 @@ async def list_active_connections_all_tenants(
     *,
     with_for_update: bool = False,
     skip_locked: bool = False,
+    limit: int | None = None,
     providers: Iterable[str] | None = None,
 ) -> list[Any]:
     return await list_connections(
@@ -115,5 +129,6 @@ async def list_active_connections_all_tenants(
         active_only=True,
         with_for_update=with_for_update,
         skip_locked=skip_locked,
+        limit=limit,
         providers=providers,
     )

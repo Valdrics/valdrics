@@ -27,7 +27,9 @@ __all__ = [
     "get_current_user_from_jwt",
     "bind_tenant_db_context",
     "get_current_user_with_db_context",
+    "require_platform_operator",
     "requires_role",
+    "requires_platform_role",
     "requires_role_with_db_context",
     "require_tenant_access",
     "UserRole",
@@ -437,6 +439,37 @@ def requires_role(required_role: str) -> Callable[[CurrentUser], CurrentUser]:
             )
 
         return user
+
+    return role_checker
+
+
+def require_platform_operator(user: CurrentUser) -> CurrentUser:
+    """
+    Restrict an endpoint to platform-scoped operators.
+
+    Tenant-bound workspace users must not access platform-global operational surfaces.
+    """
+    if user.tenant_id is not None:
+        logger.warning(
+            "platform_scope_required",
+            user_id=str(user.id),
+            tenant_id=str(user.tenant_id),
+            role=str(user.role),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Platform operator access is required",
+        )
+    return user
+
+
+@lru_cache(maxsize=128)
+def requires_platform_role(required_role: str) -> Callable[[CurrentUser], CurrentUser]:
+    """Role check plus platform-scope requirement for global operator endpoints."""
+    role_dependency = requires_role(required_role)
+
+    def role_checker(user: CurrentUser = Depends(role_dependency)) -> CurrentUser:
+        return require_platform_operator(user)
 
     return role_checker
 

@@ -92,6 +92,7 @@ class AttributionEngine:
         conditions: dict[str, Any],
         allocation: Any,
         is_active: bool = True,
+        commit: bool = True,
     ) -> AttributionRule:
         """Create and persist a tenant attribution rule."""
         normalized_type = self.normalize_rule_type(rule_type)
@@ -104,6 +105,7 @@ class AttributionEngine:
             conditions=conditions,
             allocation=allocation,
             is_active=is_active,
+            commit=commit,
         )
 
     async def update_rule(
@@ -111,6 +113,8 @@ class AttributionEngine:
         tenant_id: uuid.UUID,
         rule_id: uuid.UUID,
         updates: dict[str, Any],
+        *,
+        commit: bool = True,
     ) -> AttributionRule | None:
         """Update an existing attribution rule."""
         rule = await self.get_rule(tenant_id, rule_id)
@@ -131,17 +135,29 @@ class AttributionEngine:
             if field in updates and updates[field] is not None:
                 setattr(rule, field, updates[field])
 
-        await self.db.commit()
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
         await self.db.refresh(rule)
         return rule
 
-    async def delete_rule(self, tenant_id: uuid.UUID, rule_id: uuid.UUID) -> bool:
+    async def delete_rule(
+        self,
+        tenant_id: uuid.UUID,
+        rule_id: uuid.UUID,
+        *,
+        commit: bool = True,
+    ) -> bool:
         """Delete one tenant rule and return whether it existed."""
         rule = await self.get_rule(tenant_id, rule_id)
         if not rule:
             return False
         await self.db.delete(rule)
-        await self.db.commit()
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
         return True
 
     async def get_active_rules(self, tenant_id: uuid.UUID) -> list[AttributionRule]:

@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.sso_domain_mapping import SsoDomainMapping
@@ -370,6 +372,47 @@ async def test_identity_update_fails_when_audit_log_fails(
         },
     )
     assert response.status_code == 500
+
+
+@pytest.mark.asyncio
+async def test_identity_update_translates_commit_time_domain_conflict_to_409(
+    ac, db: AsyncSession
+) -> None:
+    tenant, _user, headers = await _seed_admin(
+        db, plan="growth", email="admin@example.com"
+    )
+    tenant_id = tenant.id
+    original_commit = db.commit
+
+    async def _failing_commit() -> None:
+        raise IntegrityError(
+            "insert into sso_domain_mappings",
+            params={},
+            orig=Exception("uq_sso_domain_mappings_domain"),
+        )
+
+    db.commit = AsyncMock(side_effect=_failing_commit)  # type: ignore[method-assign]
+    try:
+        response = await ac.put(
+            "/api/v1/settings/identity",
+            headers=headers,
+            json={
+                "sso_enabled": True,
+                "allowed_email_domains": ["example.com"],
+                "sso_federation_enabled": True,
+                "sso_federation_mode": "domain",
+                "scim_enabled": False,
+            },
+        )
+    finally:
+        db.commit = original_commit  # type: ignore[method-assign]
+
+    assert response.status_code == 409
+    assert "already configured for another tenant" in json.dumps(response.json()).lower()
+    identity = await db.scalar(
+        select(TenantIdentitySettings).where(TenantIdentitySettings.tenant_id == tenant_id)
+    )
+    assert identity is None
 
 
 @pytest.mark.asyncio

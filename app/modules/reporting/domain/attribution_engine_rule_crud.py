@@ -51,6 +51,7 @@ async def create_rule(
     conditions: dict[str, Any],
     allocation: Any,
     is_active: bool = True,
+    commit: bool = True,
 ) -> AttributionRule:
     """Create and persist a tenant attribution rule."""
     rule = AttributionRule(
@@ -63,7 +64,10 @@ async def create_rule(
         is_active=is_active,
     )
     db.add(rule)
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     await db.refresh(rule)
     return rule
 
@@ -75,6 +79,7 @@ async def update_rule(
     updates: dict[str, Any],
     *,
     normalize_rule_type_fn: Any,
+    commit: bool = True,
 ) -> AttributionRule | None:
     """Update an existing attribution rule."""
     rule = await get_rule(db, tenant_id, rule_id)
@@ -95,7 +100,10 @@ async def update_rule(
         if field in updates and updates[field] is not None:
             setattr(rule, field, updates[field])
 
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     await db.refresh(rule)
     return rule
 
@@ -104,13 +112,18 @@ async def delete_rule(
     db: AsyncSession,
     tenant_id: uuid.UUID,
     rule_id: uuid.UUID,
+    *,
+    commit: bool = True,
 ) -> bool:
     """Delete one tenant rule and return whether it existed."""
     rule = await get_rule(db, tenant_id, rule_id)
     if not rule:
         return False
     await db.delete(rule)
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     return True
 
 

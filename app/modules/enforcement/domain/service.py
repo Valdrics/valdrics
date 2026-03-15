@@ -39,6 +39,7 @@ from app.modules.enforcement.domain.reconciliation_flow_ops import (
     reconcile_reservation as _reconcile_reservation_impl,
 )
 from app.modules.enforcement.domain.policy_contract_ops import (
+    get_policy_snapshot as _get_policy_snapshot_impl,
     get_or_create_policy as _get_or_create_policy_impl,
     update_policy as _update_policy_impl,
 )
@@ -167,6 +168,18 @@ class EnforcementService(EnforcementServiceApprovalOps, EnforcementServicePrivat
                 self._apply_policy_contract_materialization
             ),
             to_decimal_fn=_to_decimal,
+        )
+
+    async def get_policy_snapshot(self, tenant_id: UUID) -> EnforcementPolicy | Any:
+        return await _get_policy_snapshot_impl(
+            db=self.db,
+            tenant_id=tenant_id,
+            policy_document_contract_backfill_required_fn=(
+                self._policy_document_contract_backfill_required
+            ),
+            materialize_policy_contract_fn=self._materialize_policy_contract,
+            to_decimal_fn=_to_decimal,
+            utcnow_fn=_utcnow,
         )
 
     async def update_policy(

@@ -158,13 +158,37 @@ async def test_reset_circuit_breaker_requires_admin(
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="member@valdrics.io", role=UserRole.MEMBER
+        id=user_id,
+        tenant_id=tenant_id,
+        email="member@valdrics.io",
+        role=UserRole.MEMBER,
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
         response = await async_client.post("/api/v1/settings/safety/reset")
         assert response.status_code in {401, 403}
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_reset_circuit_breaker_requires_tenant_context(
+    async_client: AsyncClient, mock_user_id, app
+):
+    user_id = uuid.UUID(str(mock_user_id))
+    mock_user = CurrentUser(
+        id=user_id,
+        tenant_id=None,
+        email="platform-admin@valdrics.io",
+        role=UserRole.ADMIN,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.post("/api/v1/settings/safety/reset")
+        assert response.status_code == 403
+        assert "Tenant context required" in response.text
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -190,6 +214,38 @@ async def test_get_safety_status_does_not_swallow_fatal_exceptions(
         finally:
             app.dependency_overrides.pop(get_current_user, None)
     assert _exception_group_contains(exc_info.value, _FatalTestSignal)
+
+
+@pytest.mark.asyncio
+async def test_reset_circuit_breaker_returns_success_when_audit_write_fails(
+    async_client: AsyncClient, mock_user_id, mock_tenant_id, app
+):
+    user_id = uuid.UUID(str(mock_user_id))
+    tenant_id = uuid.UUID(str(mock_tenant_id))
+    mock_user = CurrentUser(
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
+    )
+
+    mock_cb = AsyncMock()
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    with (
+        patch(
+            "app.shared.remediation.circuit_breaker.get_circuit_breaker",
+            return_value=mock_cb,
+        ),
+        patch(
+            "app.modules.governance.api.v1.settings.safety.audit_log",
+            side_effect=RuntimeError("db down"),
+        ),
+    ):
+        try:
+            response = await async_client.post("/api/v1/settings/safety/reset")
+            assert response.status_code == 200
+            assert response.json()["status"] == "reset"
+            mock_cb.reset.assert_awaited_once()
+        finally:
+            app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.asyncio

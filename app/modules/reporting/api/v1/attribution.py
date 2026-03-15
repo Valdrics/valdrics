@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.reporting.domain.attribution_engine import AttributionEngine
@@ -14,12 +15,46 @@ from app.shared.db.session import get_db
 from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLogger
 
 router = APIRouter(tags=["Attribution"])
+ATTRIBUTION_AUDIT_WRITE_RECOVERABLE_EXCEPTIONS = (
+    SQLAlchemyError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    AttributeError,
+)
 
 
 def _tenant_id_or_403(current_user: CurrentUser) -> UUID:
     if current_user.tenant_id is None:
         raise HTTPException(status_code=403, detail="Tenant context is required")
     return current_user.tenant_id
+
+
+async def _commit_after_audit_or_500(db: AsyncSession) -> None:
+    try:
+        await db.commit()
+    except ATTRIBUTION_AUDIT_WRITE_RECOVERABLE_EXCEPTIONS as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to persist attribution changes.",
+        ) from exc
+
+
+async def _write_attribution_audit_or_500(
+    *,
+    audit: AuditLogger,
+    db: AsyncSession,
+    **kwargs: Any,
+) -> None:
+    try:
+        await audit.log(**kwargs)
+    except ATTRIBUTION_AUDIT_WRITE_RECOVERABLE_EXCEPTIONS as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to persist attribution audit event.",
+        ) from exc
 
 
 class RuleBase(BaseModel):
@@ -105,9 +140,12 @@ async def create_rule(
         conditions=payload.conditions,
         allocation=payload.allocation,
         is_active=payload.is_active,
+        commit=False,
     )
     audit = AuditLogger(db, tenant_id=tenant_id)
-    await audit.log(
+    await _write_attribution_audit_or_500(
+        audit=audit,
+        db=db,
         event_type=AuditEventType.ATTRIBUTION_RULE_CREATED,
         actor_id=current_user.id,
         actor_email=current_user.email,
@@ -122,7 +160,7 @@ async def create_rule(
         request_method=request.method,
         request_path=str(request.url.path),
     )
-    await db.commit()
+    await _commit_after_audit_or_500(db)
     return RuleRead.model_validate(rule)
 
 
@@ -150,11 +188,13 @@ async def update_rule(
         if errors:
             raise HTTPException(status_code=422, detail="; ".join(errors))
 
-    updated = await engine.update_rule(tenant_id, rule_id, updates)
+    updated = await engine.update_rule(tenant_id, rule_id, updates, commit=False)
     if not updated:
         raise HTTPException(status_code=404, detail="Attribution rule not found")
     audit = AuditLogger(db, tenant_id=tenant_id)
-    await audit.log(
+    await _write_attribution_audit_or_500(
+        audit=audit,
+        db=db,
         event_type=AuditEventType.ATTRIBUTION_RULE_UPDATED,
         actor_id=current_user.id,
         actor_email=current_user.email,
@@ -164,7 +204,7 @@ async def update_rule(
         request_method=request.method,
         request_path=str(request.url.path),
     )
-    await db.commit()
+    await _commit_after_audit_or_500(db)
     return RuleRead.model_validate(updated)
 
 
@@ -179,11 +219,13 @@ async def delete_rule(
 ) -> Dict[str, Any]:
     tenant_id = _tenant_id_or_403(current_user)
     engine = AttributionEngine(db)
-    deleted = await engine.delete_rule(tenant_id, rule_id)
+    deleted = await engine.delete_rule(tenant_id, rule_id, commit=False)
     if not deleted:
         raise HTTPException(status_code=404, detail="Attribution rule not found")
     audit = AuditLogger(db, tenant_id=tenant_id)
-    await audit.log(
+    await _write_attribution_audit_or_500(
+        audit=audit,
+        db=db,
         event_type=AuditEventType.ATTRIBUTION_RULE_DELETED,
         actor_id=current_user.id,
         actor_email=current_user.email,
@@ -193,7 +235,7 @@ async def delete_rule(
         request_method=request.method,
         request_path=str(request.url.path),
     )
-    await db.commit()
+    await _commit_after_audit_or_500(db)
     return {"status": "deleted", "rule_id": str(rule_id)}
 
 
@@ -225,7 +267,9 @@ async def simulate_rule(
         sample_limit=payload.sample_limit,
     )
     audit = AuditLogger(db, tenant_id=tenant_id)
-    await audit.log(
+    await _write_attribution_audit_or_500(
+        audit=audit,
+        db=db,
         event_type=AuditEventType.ATTRIBUTION_RULE_SIMULATED,
         actor_id=current_user.id,
         actor_email=current_user.email,
@@ -240,7 +284,7 @@ async def simulate_rule(
         request_method=request.method,
         request_path=str(request.url.path),
     )
-    await db.commit()
+    await _commit_after_audit_or_500(db)
     return response
 
 
@@ -262,9 +306,12 @@ async def apply_rules(
         tenant_id,
         start_date=payload.start_date,
         end_date=payload.end_date,
+        commit=False,
     )
     audit = AuditLogger(db, tenant_id=tenant_id)
-    await audit.log(
+    await _write_attribution_audit_or_500(
+        audit=audit,
+        db=db,
         event_type=AuditEventType.ATTRIBUTION_RULES_APPLIED,
         actor_id=current_user.id,
         actor_email=current_user.email,
@@ -278,7 +325,7 @@ async def apply_rules(
         request_method=request.method,
         request_path=str(request.url.path),
     )
-    await db.commit()
+    await _commit_after_audit_or_500(db)
     return {"status": "completed", **stats}
 
 

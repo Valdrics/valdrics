@@ -34,6 +34,7 @@ def db() -> MagicMock:
     mock_db = MagicMock()
     mock_db.execute = AsyncMock()
     mock_db.commit = AsyncMock()
+    mock_db.rollback = AsyncMock()
 
     async def _refresh(obj: object, *args: object, **kwargs: object) -> None:
         # Emulate DB-side/default-populated fields for object-only unit tests.
@@ -48,14 +49,16 @@ def db() -> MagicMock:
 
 
 @pytest.mark.asyncio
-async def test_activeops_get_creates_default_when_missing(
+async def test_activeops_get_returns_default_snapshot_when_missing(
     user: CurrentUser, db: MagicMock
 ) -> None:
     db.execute.return_value = _scalar_result(None)
     response = await activeops.get_activeops_settings(user, db)
     assert response.auto_pilot_enabled is False
     assert response.min_confidence_threshold == 0.95
-    db.add.assert_called_once()
+    db.add.assert_not_called()
+    db.commit.assert_not_awaited()
+    db.refresh.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -95,7 +98,8 @@ async def test_carbon_get_and_update_branches(user: CurrentUser, db: MagicMock) 
     db.execute.return_value = _scalar_result(None)
     response = await carbon.get_carbon_settings(user, db)
     assert response.default_region == "global"
-    db.add.assert_called_once()
+    db.add.assert_not_called()
+    db.commit.assert_not_awaited()
 
     existing = SimpleNamespace(
         carbon_budget_kg=100.0,
@@ -128,17 +132,40 @@ async def test_notification_get_and_update_branches(
     db.execute.return_value = _scalar_result(None)
     created = await notifications.get_notification_settings(user, db)
     assert created.digest_schedule == "daily"
-    db.add.assert_called_once()
+    db.add.assert_not_called()
+    db.commit.assert_not_awaited()
 
     existing = SimpleNamespace(
         slack_enabled=True,
         slack_channel_override=None,
+        jira_enabled=False,
+        jira_base_url=None,
+        jira_email=None,
+        jira_project_key=None,
+        jira_issue_type="Task",
+        jira_api_token=None,
+        teams_enabled=False,
+        teams_webhook_url=None,
         digest_schedule="daily",
         digest_hour=9,
         digest_minute=0,
         alert_on_budget_warning=True,
         alert_on_budget_exceeded=True,
         alert_on_zombie_detected=True,
+        workflow_github_enabled=False,
+        workflow_github_owner=None,
+        workflow_github_repo=None,
+        workflow_github_workflow_id=None,
+        workflow_github_ref="main",
+        workflow_github_token=None,
+        workflow_gitlab_enabled=False,
+        workflow_gitlab_base_url="https://gitlab.com",
+        workflow_gitlab_project_id=None,
+        workflow_gitlab_ref="main",
+        workflow_gitlab_trigger_token=None,
+        workflow_webhook_enabled=False,
+        workflow_webhook_url=None,
+        workflow_webhook_bearer_token=None,
     )
     db.execute.return_value = _scalar_result(existing)
     update = notifications.NotificationSettingsUpdate(
@@ -162,6 +189,30 @@ async def test_notification_get_and_update_branches(
             update, user, db
         )
     assert created_again.slack_channel_override == "#ops"
+
+
+@pytest.mark.asyncio
+async def test_notification_partial_update_ignores_unset_slack_gate(
+    db: MagicMock,
+) -> None:
+    starter_user = CurrentUser(
+        id=uuid4(),
+        email="starter@example.com",
+        tenant_id=uuid4(),
+        tier=PricingTier.STARTER,
+    )
+    db.execute.return_value = _scalar_result(None)
+    update = notifications.NotificationSettingsUpdate(digest_schedule="weekly")
+
+    with patch.object(notifications, "audit_log"):
+        updated = await notifications.update_notification_settings(
+            update,
+            starter_user,
+            db,
+        )
+
+    assert updated.digest_schedule == "weekly"
+    assert updated.slack_enabled is False
 
 
 @pytest.mark.asyncio
@@ -212,12 +263,40 @@ async def test_test_slack_notification_error_and_success_paths(
 
 
 @pytest.mark.asyncio
+async def test_notification_tests_preserve_success_when_evidence_write_fails(
+    user: CurrentUser,
+    db: MagicMock,
+) -> None:
+    slack = AsyncMock()
+    slack.send_alert = AsyncMock(return_value=True)
+
+    with (
+        patch.object(
+            notifications,
+            "_record_acceptance_evidence",
+            new=AsyncMock(side_effect=RuntimeError("audit db down")),
+        ),
+        patch(
+            "app.modules.notifications.domain.get_tenant_slack_service",
+            new=AsyncMock(return_value=slack),
+        ),
+    ):
+        ok = await notifications.test_slack_notification(user, db)
+
+    assert ok["status"] == "success"
+    db.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_llm_get_update_and_models_paths(
     user: CurrentUser, db: MagicMock
 ) -> None:
     db.execute.return_value = _scalar_result(None)
     created = await llm.get_llm_settings(user, db)
     assert created.preferred_provider == "groq"
+    db.add.assert_not_called()
+    db.commit.assert_not_awaited()
+    db.refresh.assert_not_awaited()
 
     existing = SimpleNamespace(
         monthly_limit_usd=10.0,
@@ -273,6 +352,32 @@ async def test_llm_get_update_and_models_paths(
         models = await llm.get_llm_models()
     assert models["groq"] == ["m1", "m2"]
     assert models["openai"] == ["o1"]
+
+
+@pytest.mark.asyncio
+async def test_llm_update_preserves_omitted_existing_byok_fields(
+    user: CurrentUser, db: MagicMock
+) -> None:
+    existing = SimpleNamespace(
+        monthly_limit_usd=10.0,
+        alert_threshold_percent=80,
+        hard_limit=False,
+        preferred_provider="openai",
+        preferred_model="gpt-4o-mini",
+        openai_api_key="sk-existing",
+        claude_api_key=None,
+        google_api_key=None,
+        groq_api_key="gsk-existing",
+    )
+    db.execute.return_value = _scalar_result(existing)
+
+    update = llm.LLMSettingsUpdate(preferred_model="gpt-4.1-mini")
+    with patch.object(llm, "audit_log"):
+        updated = await llm.update_llm_settings(update, user, db)
+
+    assert updated.preferred_model == "gpt-4.1-mini"
+    assert existing.openai_api_key == "sk-existing"
+    assert existing.groq_api_key == "gsk-existing"
 
 
 @pytest.mark.asyncio

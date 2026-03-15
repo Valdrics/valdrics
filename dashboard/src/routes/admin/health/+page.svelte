@@ -64,7 +64,7 @@
 				fairUse = null;
 				fairUseError = '';
 				forbidden = true;
-				error = 'Admin role required to access system health metrics.';
+				error = 'Platform operator access is required to view system health metrics.';
 				return;
 			}
 
@@ -164,10 +164,10 @@
 <AuthGate authenticated={!!data.user} action="view system health metrics">
 	{#if forbidden}
 		<div class="card border-warning-500/50 bg-warning-500/10">
-			<h2 class="text-lg font-semibold mb-2">Admin Access Required</h2>
+			<h2 class="text-lg font-semibold mb-2">Platform Operator Access Required</h2>
 			<p class="text-ink-300 text-sm">
-				This dashboard is restricted to internal operations users with admin access. Contact your
-				workspace owner if you need access.
+				This dashboard is restricted to platform-scoped internal operators. Workspace admins do
+				not have access to platform-global health telemetry.
 			</p>
 		</div>
 	{:else if loading}

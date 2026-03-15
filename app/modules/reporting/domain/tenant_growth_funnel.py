@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import case, func, literal, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tenant_growth_funnel_snapshot import TenantGrowthFunnelSnapshot
@@ -46,6 +46,14 @@ _SNAPSHOT_DATETIME_FIELDS: tuple[str, ...] = (
     "created_at",
     "updated_at",
 )
+
+_TIER_RANKS: dict[str, int] = {
+    PricingTier.FREE.value: 0,
+    PricingTier.STARTER.value: 1,
+    PricingTier.GROWTH.value: 2,
+    PricingTier.PRO.value: 3,
+    PricingTier.ENTERPRISE.value: 4,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,9 +177,26 @@ def _build_update_values(
     source: str | None,
 ) -> dict[str, object]:
     stage_field = _STAGE_FIELD_MAP[stage]
+    existing_tier_rank = case(
+        *[
+            (TenantGrowthFunnelSnapshot.current_tier == tier_value, rank)
+            for tier_value, rank in _TIER_RANKS.items()
+        ],
+        else_=0,
+    )
+    incoming_tier_rank = case(
+        *[
+            (literal(current_tier.value) == tier_value, rank)
+            for tier_value, rank in _TIER_RANKS.items()
+        ],
+        else_=0,
+    )
     values: dict[str, object] = {
         "updated_at": datetime.now(timezone.utc),
-        "current_tier": current_tier.value,
+        "current_tier": case(
+            (existing_tier_rank >= incoming_tier_rank, TenantGrowthFunnelSnapshot.current_tier),
+            else_=current_tier.value,
+        ),
         stage_field: func.coalesce(
             getattr(TenantGrowthFunnelSnapshot, stage_field),
             occurred_at,
@@ -216,12 +241,14 @@ def _build_update_values(
                     TenantGrowthFunnelSnapshot.first_touch_at,
                     attribution.first_touch_at,
                 ),
-                "last_touch_at": func.coalesce(
-                    TenantGrowthFunnelSnapshot.last_touch_at,
-                    attribution.last_touch_at,
-                ),
             }
         )
+        if attribution.last_touch_at is not None:
+            values["last_touch_at"] = case(
+                (TenantGrowthFunnelSnapshot.last_touch_at.is_(None), attribution.last_touch_at),
+                (TenantGrowthFunnelSnapshot.last_touch_at >= attribution.last_touch_at, TenantGrowthFunnelSnapshot.last_touch_at),
+                else_=attribution.last_touch_at,
+            )
     normalized_provider = _normalize_token(provider, max_length=32)
     normalized_source = _normalize_token(source, max_length=64)
     if stage == "connection_verified":

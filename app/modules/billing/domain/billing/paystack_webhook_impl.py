@@ -136,6 +136,15 @@ class WebhookHandler:
             return None
         return normalized.quantize(Decimal("0.000001"), rounding=ROUND_HALF_UP)
 
+    @staticmethod
+    def _normalize_billing_cycle(value: Any) -> str | None:
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        if normalized in {"monthly", "annual"}:
+            return normalized
+        return None
+
     async def _handle_subscription_create(
         self,
         data: dict[str, Any],
@@ -247,38 +256,29 @@ class WebhookHandler:
         charge_reference = data.get("reference")
 
         tenant_id = None
+        existing_subscription = None
         if tenant_id_str:
             try:
                 tenant_id = UUID(tenant_id_str)
             except ValueError:
                 shared.logger.warning("invalid_tenant_id_in_metadata", tenant_id=tenant_id_str)
 
-        if not tenant_id and customer_email:
-            from app.models.tenant import User
-            from app.shared.core.security import generate_blind_index
+        if tenant_id is None and customer_code:
+            subscription_result = await self.db.execute(
+                select(TenantSubscription).where(
+                    TenantSubscription.paystack_customer_code == customer_code
+                )
+            )
+            existing_subscription = subscription_result.scalar_one_or_none()
+            if existing_subscription is not None:
+                tenant_id = existing_subscription.tenant_id
 
-            shared.logger.info(
-                "webhook_metadata_missing_attempting_email_lookup",
+        if tenant_id is None and customer_email:
+            shared.logger.warning(
+                "webhook_email_fallback_retired",
                 email_hash=shared.email_hash(customer_email),
+                reason="tenant-scoped blind indexes require authoritative tenant resolution",
             )
-            email_bidx = generate_blind_index(customer_email)
-
-            user_result = await self.db.execute(
-                select(User).where(User.email_bidx == email_bidx)
-            )
-            user = user_result.scalar_one_or_none()
-            if user:
-                tenant_id = user.tenant_id
-                shared.logger.info(
-                    "webhook_email_lookup_success",
-                    tenant_id=str(tenant_id),
-                    email_hash=shared.email_hash(customer_email),
-                )
-            else:
-                shared.logger.error(
-                    "webhook_email_lookup_failed",
-                    email_hash=shared.email_hash(customer_email),
-                )
 
         if not tenant_id:
             shared.logger.error(
@@ -301,12 +301,16 @@ class WebhookHandler:
                         tier=tier,
                     )
 
-            result = await self.db.execute(
-                select(TenantSubscription).where(
-                    TenantSubscription.tenant_id == tenant_id
+            sub: TenantSubscription | None
+            if existing_subscription is not None:
+                sub = existing_subscription
+            else:
+                result = await self.db.execute(
+                    select(TenantSubscription).where(
+                        TenantSubscription.tenant_id == tenant_id
+                    )
                 )
-            )
-            sub = result.scalar_one_or_none()
+                sub = result.scalar_one_or_none()
 
             if not sub:
                 import uuid
@@ -339,6 +343,11 @@ class WebhookHandler:
 
             if resolved_tier is not None:
                 sub.tier = resolved_tier.value
+            metadata_billing_cycle = self._normalize_billing_cycle(
+                metadata.get("billing_cycle")
+            )
+            if metadata_billing_cycle:
+                sub.billing_cycle = metadata_billing_cycle
             sub.status = shared.SubscriptionStatus.ACTIVE.value
             sub.billing_currency = charge_currency
             parsed_amount_subunits = self._parse_subunit_amount(charge_amount_raw)

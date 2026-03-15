@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { canSelfServeCheckout, getVisibleBillingPlans } from './billingPage';
+import {
+	BILLING_USAGE_ORDER,
+	canSelfServeCheckout,
+	getVisibleBillingPlans
+} from './billingPage';
 import { DEFAULT_PRICING_PLANS } from '../pricing/plans';
 
 describe('billing page plan rules', () => {
@@ -21,5 +25,10 @@ describe('billing page plan rules', () => {
 		expect(canSelfServeCheckout('starter', 'free')).toBe(true);
 		expect(canSelfServeCheckout('growth', 'starter')).toBe(true);
 		expect(canSelfServeCheckout('starter', 'growth')).toBe(false);
+	});
+
+	it('includes cloud plus connector families in billing usage order', () => {
+		expect(BILLING_USAGE_ORDER).toContain('platform');
+		expect(BILLING_USAGE_ORDER).toContain('hybrid');
 	});
 });

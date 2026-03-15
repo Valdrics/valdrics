@@ -6,7 +6,7 @@ from unittest.mock import patch
 from app.models.azure_connection import AzureConnection
 from app.shared.core.pricing import PricingTier
 
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, UserRole
 
 pytest_plugins = ("tests.unit.governance.connections_api_fixtures",)
 
@@ -30,6 +30,27 @@ async def test_create_azure_connection_success_on_starter(
     resp = await ac.post("/api/v1/settings/connections/azure", json=payload)
     assert resp.status_code == 201
     assert resp.json()["subscription_id"] == payload["subscription_id"]
+
+
+@pytest.mark.asyncio
+async def test_create_azure_connection_requires_admin(
+    ac, db, override_auth, auth_user
+):
+    tenant = await db.get(Tenant, auth_user.tenant_id)
+    tenant.plan = PricingTier.STARTER.value
+    await db.commit()
+    auth_user.tier = PricingTier.STARTER
+    auth_user.role = UserRole.MEMBER
+
+    payload = {
+        "name": "Azure Test",
+        "azure_tenant_id": str(uuid4()),
+        "client_id": str(uuid4()),
+        "subscription_id": str(uuid4()),
+        "client_secret": "secret",
+    }
+    resp = await ac.post("/api/v1/settings/connections/azure", json=payload)
+    assert resp.status_code == 403
 
 
 @pytest.mark.asyncio

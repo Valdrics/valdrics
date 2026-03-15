@@ -234,7 +234,7 @@ async def test_get_acceptance_kpis_includes_ledger_quality_metrics_when_data_exi
                 ),
             ),
             patch(
-                "app.modules.reporting.api.v1.costs._get_or_create_unit_settings",
+                "app.modules.reporting.api.v1.costs._get_unit_settings_snapshot",
                 new=AsyncMock(
                     return_value=SimpleNamespace(
                         default_request_volume=1000,
@@ -270,7 +270,7 @@ async def test_get_acceptance_kpis_includes_ledger_quality_metrics_when_data_exi
 
 
 @pytest.mark.asyncio
-async def test_get_acceptance_kpis_marks_unavailable_features(
+async def test_get_acceptance_kpis_requires_compliance_exports_entitlement(
     async_client: AsyncClient, app
 ):
     tenant_id = uuid.uuid4()
@@ -279,75 +279,17 @@ async def test_get_acceptance_kpis_marks_unavailable_features(
         id=user_id,
         tenant_id=tenant_id,
         email="q2-kpi-starter@valdrics.io",
-        role=UserRole.MEMBER,
+        role=UserRole.ADMIN,
         tier=PricingTier.STARTER,
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
     try:
-        with (
-            patch(
-                "app.modules.reporting.api.v1.costs._compute_ingestion_sla_metrics",
-                new=AsyncMock(
-                    return_value=costs_api.IngestionSLAResponse(
-                        window_hours=168,
-                        target_success_rate_percent=95.0,
-                        total_jobs=2,
-                        successful_jobs=1,
-                        failed_jobs=1,
-                        success_rate_percent=50.0,
-                        meets_sla=False,
-                        latest_completed_at="2026-02-13T10:00:00+00:00",
-                        avg_duration_seconds=200.0,
-                        p95_duration_seconds=300.0,
-                        records_ingested=12,
-                    )
-                ),
-            ),
-            patch(
-                "app.modules.reporting.api.v1.costs._compute_provider_recency_summaries",
-                new=AsyncMock(
-                    return_value=[
-                        costs_api.ProviderRecencyResponse(
-                            provider="aws",
-                            active_connections=1,
-                            recently_ingested=0,
-                            stale_connections=1,
-                            never_ingested=0,
-                            latest_ingested_at="2026-02-10T09:00:00+00:00",
-                            recency_target_hours=48,
-                            meets_recency_target=False,
-                        )
-                    ]
-                ),
-            ),
-            patch(
-                "app.modules.reporting.api.v1.costs._get_or_create_unit_settings",
-                new=AsyncMock(
-                    return_value=SimpleNamespace(
-                        default_request_volume=1000,
-                        default_workload_volume=100,
-                        default_customer_volume=20,
-                        anomaly_threshold_percent=20.0,
-                    )
-                ),
-            ),
-            patch(
-                "app.modules.reporting.api.v1.costs._window_total_cost",
-                new=AsyncMock(side_effect=[Decimal("500"), Decimal("300")]),
-            ),
-        ):
-            response = await async_client.get(
-                "/api/v1/costs/acceptance/kpis",
-                params={"start_date": "2026-01-01", "end_date": "2026-01-31"},
-            )
+        response = await async_client.get(
+            "/api/v1/costs/acceptance/kpis",
+            params={"start_date": "2026-01-01", "end_date": "2026-01-31"},
+        )
 
-        assert response.status_code == 200
-        payload = response.json()
-        by_key = {item["key"]: item for item in payload["metrics"]}
-        assert by_key["chargeback_coverage"]["available"] is False
-        assert "Growth tier" in by_key["chargeback_coverage"]["target"]
+        assert response.status_code == 403
     finally:
         app.dependency_overrides.pop(get_current_user, None)
-
-

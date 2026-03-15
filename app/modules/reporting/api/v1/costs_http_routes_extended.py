@@ -17,7 +17,7 @@ from app.modules.reporting.api.v1.costs_models import (
     UnitEconomicsSettingsResponse,
     UnitEconomicsSettingsUpdate,
 )
-from app.shared.core.auth import CurrentUser, get_current_user, requires_role
+from app.shared.core.auth import CurrentUser
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
 from app.shared.db.session import get_db
@@ -41,7 +41,9 @@ async def get_acceptance_kpis(
     chargeback_target_percent: float = Query(default=90.0, ge=0, le=100),
     max_unit_anomalies: int = Query(default=0, ge=0, le=100),
     response_format: str = Query(default="json", pattern="^(json|csv)$"),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(
+        requires_feature(FeatureFlag.COMPLIANCE_EXPORTS, required_role="admin")
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> Any:
     costs_api = _costs_api()
@@ -70,7 +72,9 @@ async def capture_acceptance_kpis(
     recency_target_hours: int = Query(default=48, ge=1, le=24 * 14),
     chargeback_target_percent: float = Query(default=90.0, ge=0, le=100),
     max_unit_anomalies: int = Query(default=0, ge=0, le=100),
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(
+        requires_feature(FeatureFlag.COMPLIANCE_EXPORTS, required_role="admin")
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> AcceptanceKpiEvidenceCaptureResponse:
     costs_api = _costs_api()
@@ -95,7 +99,9 @@ async def capture_acceptance_kpis(
 )
 async def list_acceptance_kpi_evidence(
     limit: int = Query(default=100, ge=1, le=500),
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(
+        requires_feature(FeatureFlag.COMPLIANCE_EXPORTS, required_role="admin")
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> AcceptanceKpiEvidenceListResponse:
     costs_api = _costs_api()
@@ -149,7 +155,7 @@ async def get_unit_economics(
     request_volume: Optional[float] = Query(default=None, gt=0),
     workload_volume: Optional[float] = Query(default=None, gt=0),
     customer_volume: Optional[float] = Query(default=None, gt=0),
-    alert_on_anomaly: bool = Query(default=True),
+    alert_on_anomaly: bool = Query(default=False),
     user: CurrentUser = Depends(requires_feature(FeatureFlag.UNIT_ECONOMICS)),
     db: AsyncSession = Depends(get_db),
 ) -> UnitEconomicsResponse:

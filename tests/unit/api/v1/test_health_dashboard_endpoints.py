@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
 
 from app.modules.governance.api.v1.health_dashboard import (
     get_investor_health_dashboard,
@@ -55,7 +56,7 @@ async def test_get_investor_health_dashboard_handler_success():
     """Handler returns assembled dashboard payload when cache is cold."""
     mock_admin = MagicMock()
     mock_admin.role = "admin"
-    mock_admin.tenant_id = uuid.uuid4()
+    mock_admin.tenant_id = None
     mock_db = AsyncMock()
 
     with (
@@ -269,7 +270,7 @@ async def test_get_investor_health_dashboard_returns_cached_payload():
     """Handler short-circuits expensive queries when cache payload is present."""
     mock_admin = MagicMock()
     mock_admin.role = "admin"
-    mock_admin.tenant_id = uuid.uuid4()
+    mock_admin.tenant_id = None
     mock_db = AsyncMock()
 
     cached_payload = InvestorHealthDashboard(
@@ -477,6 +478,21 @@ async def test_get_investor_health_dashboard_returns_cached_payload():
     license_mock.assert_not_awaited()
     landing_funnel_mock.assert_not_awaited()
     assert cache.set_called is False
+
+
+@pytest.mark.asyncio
+async def test_get_investor_health_dashboard_rejects_tenant_scoped_admin() -> None:
+    mock_admin = MagicMock()
+    mock_admin.id = uuid.uuid4()
+    mock_admin.role = "admin"
+    mock_admin.tenant_id = uuid.uuid4()
+    mock_db = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc:
+        await get_investor_health_dashboard(mock_admin, mock_db)
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "Platform operator access is required"
 
 
 @pytest.mark.asyncio

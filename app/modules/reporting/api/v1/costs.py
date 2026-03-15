@@ -45,6 +45,7 @@ from app.modules.reporting.api.v1.costs_metrics import (
     compute_license_governance_kpi as _compute_license_governance_kpi_impl,
     compute_provider_recency_summaries as _compute_provider_recency_summaries_impl,
     get_or_create_unit_settings as _get_or_create_unit_settings_impl,
+    get_unit_settings_snapshot as _get_unit_settings_snapshot_impl,
     is_connection_active_state as _is_connection_active_impl,
     settings_to_response as _settings_to_response_impl,
     window_total_cost as _window_total_cost_impl,
@@ -198,6 +199,7 @@ def _normalize_provider_filter(provider: str | None) -> str | None:
 
 _sanitize_csv_cell = sanitize_csv_cell
 _get_or_create_unit_settings = _get_or_create_unit_settings_impl
+_get_unit_settings_snapshot = _get_unit_settings_snapshot_impl
 _settings_to_response = _settings_to_response_impl
 _window_total_cost = _window_total_cost_impl
 _anomaly_to_response_item = anomaly_to_response_item
@@ -369,7 +371,7 @@ async def _compute_acceptance_kpis_payload(**kwargs: Any) -> AcceptanceKpisRespo
         compute_ingestion_sla_metrics_fn=_compute_ingestion_sla_metrics,
         compute_provider_recency_summaries_fn=_compute_provider_recency_summaries,
         compute_license_governance_kpi_fn=_compute_license_governance_kpi,
-        get_or_create_unit_settings_fn=_get_or_create_unit_settings,
+        get_unit_settings_snapshot_fn=_get_unit_settings_snapshot,
         window_total_cost_fn=_window_total_cost,
         get_settings_fn=get_settings,
         is_feature_enabled_fn=is_feature_enabled,
@@ -403,7 +405,7 @@ async def list_acceptance_kpi_evidence(**kwargs: Any) -> Any:
 async def get_unit_economics_settings(**kwargs: Any) -> Any:
     return await get_unit_economics_settings_impl(
         require_tenant_id=_require_tenant_id,
-        get_or_create_unit_settings=_get_or_create_unit_settings,
+        get_unit_settings_snapshot=_get_unit_settings_snapshot,
         settings_to_response=_settings_to_response,
         **kwargs,
     )
@@ -421,7 +423,7 @@ async def update_unit_economics_settings(**kwargs: Any) -> Any:
 async def get_unit_economics(**kwargs: Any) -> Any:
     return await get_unit_economics_impl(
         require_tenant_id=_require_tenant_id,
-        get_or_create_unit_settings=_get_or_create_unit_settings,
+        get_unit_settings_snapshot=_get_unit_settings_snapshot,
         window_total_cost=_window_total_cost,
         build_unit_metrics=_build_unit_metrics,
         **kwargs,

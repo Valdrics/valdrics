@@ -12,7 +12,9 @@ LLM-derived metrics and favors stable ledger-backed aggregates.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+import csv
+import io
+from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import UUID
@@ -25,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cloud import CloudAccount, CostRecord
 from app.models.enforcement import EnforcementDecision
+from app.modules.reporting.api.v1.costs_helpers import sanitize_csv_cell
 from app.modules.reporting.domain.savings_proof import SavingsProofService
 from app.shared.core.exceptions import ExternalAPIError
 from app.shared.core.pricing import (
@@ -123,6 +126,14 @@ class LeadershipKpiService:
 
         window_start = start_date
         window_end = end_date
+        security_window_start = datetime.combine(
+            start_date, time.min, tzinfo=timezone.utc
+        )
+        security_window_end = datetime.combine(
+            end_date + timedelta(days=1),
+            time.min,
+            tzinfo=timezone.utc,
+        )
         notes: list[str] = []
 
         base_filters: list[Any] = [
@@ -216,13 +227,11 @@ class LeadershipKpiService:
             .label("anomaly_signal_count"),
         ).where(
             EnforcementDecision.tenant_id == tenant_id,
-            EnforcementDecision.created_at >= window_start,
-            EnforcementDecision.created_at <= window_end,
+            EnforcementDecision.created_at >= security_window_start,
+            EnforcementDecision.created_at < security_window_end,
         )
         security_row = (await self.db.execute(security_stmt)).first()
-        security_high_risk_decisions = (
-            int(security_row[0] or 0) if security_row else 0
-        )
+        security_high_risk_decisions = int(security_row[0] or 0) if security_row else 0
         security_approval_required_decisions = (
             int(security_row[1] or 0) if security_row else 0
         )
@@ -295,30 +304,50 @@ class LeadershipKpiService:
 
     @staticmethod
     def render_csv(payload: LeadershipKpisResponse) -> str:
-        # Summary section.
-        lines: list[str] = []
-        lines.append(
-            "start_date,end_date,total_cost_usd,carbon_total_kgco2e,carbon_coverage_percent,savings_opportunity_monthly_usd,savings_realized_monthly_usd,security_high_risk_decisions,security_approval_required_decisions,security_anomaly_signal_decisions"
-        )
-        lines.append(
-            f"{payload.start_date},{payload.end_date},{payload.total_cost_usd:.4f},"
-            f"{payload.carbon_total_kgco2e:.4f},{payload.carbon_coverage_percent:.4f},"
-            f"{payload.savings_opportunity_monthly_usd:.2f},{payload.savings_realized_monthly_usd:.2f},"
-            f"{payload.security_high_risk_decisions},{payload.security_approval_required_decisions},"
-            f"{payload.security_anomaly_signal_decisions}"
-        )
-        lines.append("")
+        out = io.StringIO()
+        writer = csv.writer(out)
 
-        # Provider breakdown.
-        lines.append("provider,cost_usd")
+        writer.writerow(
+            [
+                "start_date",
+                "end_date",
+                "total_cost_usd",
+                "carbon_total_kgco2e",
+                "carbon_coverage_percent",
+                "savings_opportunity_monthly_usd",
+                "savings_realized_monthly_usd",
+                "security_high_risk_decisions",
+                "security_approval_required_decisions",
+                "security_anomaly_signal_decisions",
+            ]
+        )
+        writer.writerow(
+            [
+                sanitize_csv_cell(payload.start_date),
+                sanitize_csv_cell(payload.end_date),
+                f"{payload.total_cost_usd:.4f}",
+                f"{payload.carbon_total_kgco2e:.4f}",
+                f"{payload.carbon_coverage_percent:.4f}",
+                f"{payload.savings_opportunity_monthly_usd:.2f}",
+                f"{payload.savings_realized_monthly_usd:.2f}",
+                payload.security_high_risk_decisions,
+                payload.security_approval_required_decisions,
+                payload.security_anomaly_signal_decisions,
+            ]
+        )
+        writer.writerow([])
+
+        writer.writerow(["provider", "cost_usd"])
         for provider, cost in sorted(
-            payload.cost_by_provider.items(), key=lambda item: item[1], reverse=True
+            payload.cost_by_provider.items(),
+            key=lambda item: item[1],
+            reverse=True,
         ):
-            lines.append(f"{provider},{cost:.4f}")
-        lines.append("")
+            writer.writerow([sanitize_csv_cell(provider), f"{cost:.4f}"])
+        writer.writerow([])
 
-        # Top services.
-        lines.append("service,cost_usd")
+        writer.writerow(["service", "cost_usd"])
         for item in payload.top_services:
-            lines.append(f"{item.service},{item.cost_usd:.4f}")
-        return "\n".join(lines) + "\n"
+            writer.writerow([sanitize_csv_cell(item.service), f"{item.cost_usd:.4f}"])
+
+        return out.getvalue()

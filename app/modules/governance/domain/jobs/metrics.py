@@ -38,10 +38,15 @@ async def compute_job_slo(
     target_percent = float(target_success_rate_percent)
 
     window_start = datetime.now(timezone.utc) - timedelta(hours=window_hours_int)
+    terminal_timestamp = func.coalesce(
+        BackgroundJob.completed_at,
+        BackgroundJob.updated_at,
+        BackgroundJob.created_at,
+    )
     result = await db.execute(
         select(BackgroundJob).where(
             BackgroundJob.tenant_id == tenant_id,
-            BackgroundJob.created_at >= window_start,
+            terminal_timestamp >= window_start,
             sa.not_(BackgroundJob.is_deleted),
             BackgroundJob.status.in_(sorted(TERMINAL_JOB_STATUSES)),
         )

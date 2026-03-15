@@ -27,12 +27,16 @@ class GCPConnectionService:
         success = await adapter.verify_connection()
         if success:
             connection.is_active = True
+            connection.error_message = None
             await self.db.commit()
             return {"status": "success", "message": "GCP connection verified."}
         else:
             failure_message = getattr(adapter, "last_error", None) or (
                 "Failed to authenticate with GCP. Check Service Account JSON."
             )
+            connection.is_active = False
+            connection.error_message = failure_message
+            await self.db.commit()
             return {
                 "status": "failed",
                 "message": failure_message,

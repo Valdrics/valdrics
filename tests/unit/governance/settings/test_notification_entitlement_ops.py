@@ -120,3 +120,19 @@ def test_to_slack_policy_diagnostics_flags_tier_block_and_masks_readiness() -> N
     assert "tier_missing_slack_integration_feature" in diagnostics.reasons
     assert diagnostics.selected_channel == "#alerts"
     assert diagnostics.channel_source == "tenant_override"
+
+
+def test_to_slack_policy_diagnostics_missing_rows_fail_closed() -> None:
+    diagnostics = to_slack_policy_diagnostics(
+        remediation_settings=None,
+        notification_settings=None,
+        feature_allowed_by_tier=True,
+        has_bot_token=True,
+        has_default_channel=True,
+    )
+
+    assert diagnostics.ready is False
+    assert diagnostics.enabled_for_policy is False
+    assert diagnostics.enabled_in_notifications is False
+    assert "missing_remediation_settings" in diagnostics.reasons
+    assert "missing_notification_settings" in diagnostics.reasons

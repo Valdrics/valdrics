@@ -217,29 +217,34 @@ async def upsert_provider_invoice_impl(
             invoice_number=payload.invoice_number,
             status=payload.status,
             notes=payload.notes,
+            commit=False,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     audit = AuditLogger(db, tenant_id=tenant_id)
-    await audit.log(
-        event_type=AuditEventType.INVOICE_UPSERTED,
-        actor_id=user.id,
-        actor_email=user.email,
-        resource_type="provider_invoice",
-        resource_id=str(invoice.id),
-        details={
-            "provider": invoice.provider,
-            "period_start": invoice.period_start.isoformat(),
-            "period_end": invoice.period_end.isoformat(),
-            "currency": invoice.currency,
-            "total_amount_usd": float(invoice.total_amount_usd or 0),
-            "status": invoice.status,
-        },
-        request_method=request.method,
-        request_path=str(request.url.path),
-    )
-    await db.commit()
+    try:
+        await audit.log(
+            event_type=AuditEventType.INVOICE_UPSERTED,
+            actor_id=user.id,
+            actor_email=user.email,
+            resource_type="provider_invoice",
+            resource_id=str(invoice.id),
+            details={
+                "provider": invoice.provider,
+                "period_start": invoice.period_start.isoformat(),
+                "period_end": invoice.period_end.isoformat(),
+                "currency": invoice.currency,
+                "total_amount_usd": float(invoice.total_amount_usd or 0),
+                "status": invoice.status,
+            },
+            request_method=request.method,
+            request_path=str(request.url.path),
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
 
     return {
         "status": "success",
@@ -277,22 +282,27 @@ async def update_provider_invoice_status_impl(
         invoice_id=invoice_id,
         status=payload.status,
         notes=payload.notes,
+        commit=False,
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     audit = AuditLogger(db, tenant_id=tenant_id)
-    await audit.log(
-        event_type=AuditEventType.INVOICE_STATUS_UPDATED,
-        actor_id=user.id,
-        actor_email=user.email,
-        resource_type="provider_invoice",
-        resource_id=str(invoice_id),
-        details={"status": updated.status},
-        request_method=request.method,
-        request_path=str(request.url.path),
-    )
-    await db.commit()
+    try:
+        await audit.log(
+            event_type=AuditEventType.INVOICE_STATUS_UPDATED,
+            actor_id=user.id,
+            actor_email=user.email,
+            resource_type="provider_invoice",
+            resource_id=str(invoice_id),
+            details={"status": updated.status},
+            request_method=request.method,
+            request_path=str(request.url.path),
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
 
     return {
         "status": "success",
@@ -311,22 +321,30 @@ async def delete_provider_invoice_impl(
 ) -> Any:
     tenant_id = require_tenant_id(user)
     service = CostReconciliationService(db)
-    deleted = await service.delete_invoice(tenant_id=tenant_id, invoice_id=invoice_id)
+    deleted = await service.delete_invoice(
+        tenant_id=tenant_id,
+        invoice_id=invoice_id,
+        commit=False,
+    )
     if not deleted:
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     audit = AuditLogger(db, tenant_id=tenant_id)
-    await audit.log(
-        event_type=AuditEventType.INVOICE_DELETED,
-        actor_id=user.id,
-        actor_email=user.email,
-        resource_type="provider_invoice",
-        resource_id=str(invoice_id),
-        details={},
-        request_method=request.method,
-        request_path=str(request.url.path),
-    )
-    await db.commit()
+    try:
+        await audit.log(
+            event_type=AuditEventType.INVOICE_DELETED,
+            actor_id=user.id,
+            actor_email=user.email,
+            resource_type="provider_invoice",
+            resource_id=str(invoice_id),
+            details={},
+            request_method=request.method,
+            request_path=str(request.url.path),
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
     return {"status": "deleted", "invoice_id": str(invoice_id)}
 
 

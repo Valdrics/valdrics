@@ -13,6 +13,7 @@ from scripts import (
     emergency_disconnect,
     purge_simulation_data,
     rls_tooling,
+    simple_token,
     update_exchange_rates,
 )
 
@@ -74,6 +75,13 @@ def test_legacy_destructive_scripts_require_environment_match(
 
 def test_dev_bearer_token_is_retired(capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = dev_bearer_token.main()
+
+    assert exit_code == 2
+    assert "retired" in capsys.readouterr().err.lower()
+
+
+def test_simple_token_is_retired(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = simple_token.main()
 
     assert exit_code == 2
     assert "retired" in capsys.readouterr().err.lower()

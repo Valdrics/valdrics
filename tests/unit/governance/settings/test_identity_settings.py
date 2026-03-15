@@ -2,8 +2,10 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.tenant_identity_settings import TenantIdentitySettings
 from app.models.tenant import Tenant, User, UserRole
 from app.shared.core.auth import create_access_token
 
@@ -35,6 +37,12 @@ async def test_identity_settings_get_creates_default(ac: AsyncClient, db: AsyncS
     assert payload["sso_federation_provider_id"] is None
     assert payload["scim_enabled"] is False
     assert payload["has_scim_token"] is False
+    identity = await db.scalar(
+        select(TenantIdentitySettings).where(
+            TenantIdentitySettings.tenant_id == tenant_id
+        )
+    )
+    assert identity is None
 
 
 @pytest.mark.asyncio
@@ -199,6 +207,12 @@ async def test_identity_diagnostics_endpoint_returns_sso_and_scim_status(
     assert payload["sso"]["federation_mode"] == "domain"
     assert payload["sso"]["federation_ready"] is False
     assert payload["scim"]["available"] is False  # SCIM is Enterprise-only
+    identity = await db.scalar(
+        select(TenantIdentitySettings).where(
+            TenantIdentitySettings.tenant_id == tenant_id
+        )
+    )
+    assert identity is None
 
 
 @pytest.mark.asyncio
@@ -222,6 +236,12 @@ async def test_identity_sso_validation_endpoint_returns_computed_urls(
 
     res = await ac.get("/api/v1/settings/identity/sso/validation", headers=headers)
     assert res.status_code == 200
+    identity = await db.scalar(
+        select(TenantIdentitySettings).where(
+            TenantIdentitySettings.tenant_id == tenant_id
+        )
+    )
+    assert identity is None
     payload = res.json()
     assert payload["tier"] == "growth"
     assert payload["frontend_url"].startswith("http")

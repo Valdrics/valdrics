@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Protocol, Callable
 from uuid import UUID
 
@@ -48,6 +49,8 @@ PAYSTACK_AUDIT_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     TypeError,
     ValueError,
 )
+
+
 class BillingService:
     """Paystack billing operations."""
 
@@ -78,6 +81,48 @@ class BillingService:
 
     _to_decimal_usd = staticmethod(_to_decimal_usd_impl)
     _usd_to_subunit_cents = staticmethod(_usd_to_subunit_cents_impl)
+
+    @staticmethod
+    def _normalize_billing_cycle(billing_cycle: str | None) -> str:
+        normalized = str(billing_cycle or "monthly").strip().lower()
+        if normalized not in {"monthly", "annual"}:
+            raise ValueError(f"Invalid billing cycle: {billing_cycle}")
+        return normalized
+
+    async def _resolve_usd_price_decimal(
+        self,
+        *,
+        tier: PricingTier,
+        billing_cycle: str,
+    ) -> Decimal:
+        from app.models.pricing import PricingPlan
+        from app.shared.core.pricing import TIER_CONFIG
+
+        normalized_cycle = self._normalize_billing_cycle(billing_cycle)
+        plan_res = await self.db.execute(select(PricingPlan).where(PricingPlan.id == tier.value))
+        plan_obj = plan_res.scalar_one_or_none()
+
+        if plan_obj is not None and getattr(plan_obj, "price_usd", None) is not None:
+            monthly_price_decimal = self._to_decimal_usd(plan_obj.price_usd)
+            if normalized_cycle == "annual":
+                return self._to_decimal_usd(monthly_price_decimal * Decimal("10"))
+            return monthly_price_decimal
+
+        config = TIER_CONFIG.get(tier)
+        if not config:
+            raise ValueError(f"Invalid tier: {tier}")
+
+        price_cfg = config["price_usd"]
+        if isinstance(price_cfg, dict):
+            raw_price = (
+                price_cfg["annual"]
+                if normalized_cycle == "annual"
+                else price_cfg["monthly"]
+            )
+        else:
+            raw_price = price_cfg
+
+        return self._to_decimal_usd(raw_price)
 
     def _resolve_plan_code(self, *, tier: PricingTier, billing_cycle: str) -> str | None:
         mapping = {
@@ -160,22 +205,13 @@ class BillingService:
         if tier == PricingTier.FREE:
             raise ValueError("Cannot checkout free tier")
 
-        is_annual = billing_cycle.lower() == "annual"
-        from app.shared.core.pricing import TIER_CONFIG
-
-        config = TIER_CONFIG.get(tier)
-        if not config:
-            raise ValueError(f"Invalid tier: {tier}")
-
-        usd_price = (
-            config["price_usd"]["annual"]
-            if is_annual
-            else config["price_usd"]["monthly"]
-        )
-        usd_price_decimal = self._to_decimal_usd(usd_price)
-        usd_price_float = float(usd_price_decimal)
-
+        normalized_billing_cycle = self._normalize_billing_cycle(billing_cycle)
         checkout_currency = self._resolve_checkout_currency(currency)
+        usd_price_decimal = await self._resolve_usd_price_decimal(
+            tier=tier,
+            billing_cycle=normalized_billing_cycle,
+        )
+        usd_price_float = float(usd_price_decimal)
         fx_rate: float | None = None
         fx_provider: str | None = None
         amount_subunits: int
@@ -194,7 +230,7 @@ class BillingService:
             fx_provider = shared.PAYSTACK_USD_FX_PROVIDER
 
         plan_code = (
-            self._resolve_plan_code(tier=tier, billing_cycle=billing_cycle)
+            self._resolve_plan_code(tier=tier, billing_cycle=normalized_billing_cycle)
             if checkout_currency == shared.PAYSTACK_CHECKOUT_CURRENCY
             else None
         )
@@ -216,7 +252,7 @@ class BillingService:
                 metadata={
                     "tenant_id": str(tenant_id),
                     "tier": tier.value,
-                    "billing_cycle": billing_cycle,
+                    "billing_cycle": normalized_billing_cycle,
                     "usd_price": usd_price_float,
                     "currency": checkout_currency,
                     "amount_subunits": amount_subunits,
@@ -255,15 +291,15 @@ class BillingService:
                     resource_type="tenant_subscription",
                     resource_id=str(tenant_id),
                     details={
-                        "provider": "paystack",
-                        "tier": tier.value,
-                        "usd_price": usd_price_float,
+                    "provider": "paystack",
+                    "tier": tier.value,
+                    "usd_price": usd_price_float,
                         "exchange_rate": fx_rate,
                         "amount_subunits": amount_subunits,
                         "settlement_currency": checkout_currency,
                         "plan_code": plan_code,
                         "pricing_mode": pricing_mode,
-                        "billing_cycle": billing_cycle,
+                        "billing_cycle": normalized_billing_cycle,
                     },
                 )
             except PAYSTACK_AUDIT_RECOVERABLE_ERRORS as audit_exc:
@@ -278,6 +314,7 @@ class BillingService:
 
                 sub = TenantSubscription(id=uuid.uuid4(), tenant_id=tenant_id, tier=tier.value)
                 self.db.add(sub)
+            sub.billing_cycle = normalized_billing_cycle
             sub.billing_currency = checkout_currency
             sub.last_charge_amount_subunits = amount_subunits
             sub.last_charge_fx_rate = fx_rate
@@ -316,35 +353,42 @@ class BillingService:
             )
             return False
 
-        from app.models.pricing import PricingPlan
-
-        plan_res = await self.db.execute(
-            select(PricingPlan).where(PricingPlan.id == subscription.tier)
-        )
-        plan_obj = plan_res.scalar_one_or_none()
-
-        if plan_obj:
-            usd_price_decimal = self._to_decimal_usd(plan_obj.price_usd)
-        else:
-            from app.shared.core.pricing import TIER_CONFIG
-
-            try:
-                subscription_tier = PricingTier(subscription.tier)
-            except ValueError:
-                shared.logger.error(
-                    "renewal_failed_invalid_tier",
-                    tenant_id=str(subscription.tenant_id),
-                    tier=subscription.tier,
-                )
-                return False
-
-            config = TIER_CONFIG.get(subscription_tier)
-            if not config:
-                return False
-            price_cfg = config["price_usd"]
-            usd_price_decimal = self._to_decimal_usd(
-                price_cfg["monthly"] if isinstance(price_cfg, dict) else price_cfg
+        try:
+            subscription_tier = PricingTier(subscription.tier)
+        except ValueError:
+            shared.logger.error(
+                "renewal_failed_invalid_tier",
+                tenant_id=str(subscription.tenant_id),
+                tier=subscription.tier,
             )
+            return False
+
+        raw_billing_cycle = getattr(subscription, "billing_cycle", None)
+        if isinstance(raw_billing_cycle, str) and raw_billing_cycle.strip():
+            try:
+                renewal_billing_cycle = self._normalize_billing_cycle(raw_billing_cycle)
+            except ValueError:
+                shared.logger.warning(
+                    "renewal_invalid_billing_cycle_fallback",
+                    tenant_id=str(subscription.tenant_id),
+                    billing_cycle=raw_billing_cycle,
+                )
+                renewal_billing_cycle = "monthly"
+        else:
+            renewal_billing_cycle = "monthly"
+        try:
+            usd_price_decimal = await self._resolve_usd_price_decimal(
+                tier=subscription_tier,
+                billing_cycle=renewal_billing_cycle,
+            )
+        except ValueError as exc:
+            shared.logger.error(
+                "renewal_failed_missing_pricing",
+                tenant_id=str(subscription.tenant_id),
+                tier=subscription.tier,
+                error=str(exc),
+            )
+            return False
         usd_price_float = float(usd_price_decimal)
 
         raw_currency = getattr(subscription, "billing_currency", None)
@@ -436,6 +480,7 @@ class BillingService:
                     "tenant_id": str(subscription.tenant_id),
                     "type": "renewal",
                     "plan": subscription.tier,
+                    "billing_cycle": renewal_billing_cycle,
                     "currency": renewal_currency,
                     "exchange_rate": fx_rate,
                     "fx_provider": fx_provider,
@@ -449,6 +494,15 @@ class BillingService:
                 subscription.next_payment_date = await self._resolve_renewal_next_payment_date(
                     subscription, charge_data
                 )
+                charge_metadata = charge_data.get("metadata", {})
+                if isinstance(charge_metadata, dict):
+                    charge_billing_cycle = charge_metadata.get("billing_cycle")
+                    if charge_billing_cycle:
+                        subscription.billing_cycle = self._normalize_billing_cycle(
+                            charge_billing_cycle
+                        )
+                else:
+                    subscription.billing_cycle = renewal_billing_cycle
                 subscription.billing_currency = renewal_currency
                 subscription.last_charge_amount_subunits = amount_subunits
                 subscription.last_charge_fx_rate = fx_rate

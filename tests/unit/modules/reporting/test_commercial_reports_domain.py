@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -115,7 +116,9 @@ async def test_quarterly_report_validates_period_and_explicit_inputs() -> None:
 
 
 @pytest.mark.asyncio
-async def test_quarterly_report_explicit_window_calls_services_with_normalized_provider() -> None:
+async def test_quarterly_report_explicit_window_calls_services_with_normalized_provider() -> (
+    None
+):
     db = MagicMock()
     service = CommercialProofReportService(db)
     leadership = _leadership_payload()
@@ -245,3 +248,52 @@ def test_render_quarterly_csv_contains_sections() -> None:
         in csv_text
     )
     assert "top_services:service,cost_usd" in csv_text
+
+
+def test_render_quarterly_csv_sanitizes_formula_cells_and_quotes_commas() -> None:
+    payload = QuarterlyCommercialProofResponse(
+        period="explicit",
+        year=2026,
+        quarter=1,
+        start_date="2026-01-01",
+        end_date="2026-03-31",
+        as_of="2026-03-31T00:00:00+00:00",
+        tier="pro",
+        provider="aws",
+        leadership_kpis=_leadership_payload().model_copy(
+            update={
+                "cost_by_provider": {"aws,prod": 50.0},
+                "top_services": [
+                    LeadershipTopService(service='=HYPERLINK("x")', cost_usd=25.0),
+                    LeadershipTopService(service="Compute,Edge", cost_usd=10.0),
+                ],
+            }
+        ),
+        savings_proof=_savings_payload().model_copy(
+            update={
+                "breakdown": [
+                    SavingsProofBreakdownItem(
+                        provider="=calc()",
+                        opportunity_monthly_usd=10.0,
+                        realized_monthly_usd=5.0,
+                        open_recommendations=1,
+                        applied_recommendations=1,
+                        pending_remediations=0,
+                        completed_remediations=1,
+                    )
+                ]
+            }
+        ),
+        notes=[],
+    )
+
+    rows = list(
+        csv.reader(
+            CommercialProofReportService.render_quarterly_csv(payload).splitlines()
+        )
+    )
+
+    assert ["aws,prod", "50.0000"] in rows
+    assert ["'=calc()", "10.00", "5.00", "1", "1", "0", "1"] in rows
+    assert ['\'=HYPERLINK("x")', "25.0000"] in rows
+    assert ["Compute,Edge", "10.0000"] in rows

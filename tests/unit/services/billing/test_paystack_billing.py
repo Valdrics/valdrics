@@ -110,7 +110,9 @@ class TestBillingService:
             ):
                 mock_plan_res = MagicMock()
                 mock_plan_res.scalar_one_or_none.return_value = MagicMock(price_usd=10.0)
-                mock_db.execute.return_value = mock_plan_res
+                mock_sub_res = MagicMock()
+                mock_sub_res.scalar_one_or_none.return_value = None
+                mock_db.execute.side_effect = [mock_plan_res, mock_sub_res]
 
                 res = await service.create_checkout_session(
                     tenant_id, PricingTier.STARTER, "e@e.com", "http://callback"

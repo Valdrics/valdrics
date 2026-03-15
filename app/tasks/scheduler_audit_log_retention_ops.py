@@ -17,6 +17,14 @@ def _row_attr(row: Any, name: str) -> Any:
     return getattr(row, name, None)
 
 
+def _fetch_returned_rows(result: Any) -> list[Any]:
+    fetchall = getattr(result, "fetchall", None)
+    if not callable(fetchall):
+        return []
+    rows = fetchall()
+    return list(rows) if isinstance(rows, list) else []
+
+
 async def purge_expired_audit_logs(
     *,
     db: Any,
@@ -75,7 +83,8 @@ async def purge_expired_audit_logs(
             if not selected_rows:
                 break
 
-            key_pairs = []
+            key_pairs: list[tuple[Any, Any]] = []
+            selected_by_tenant: dict[Any, int] = defaultdict(int)
             for row in selected_rows:
                 log_id = _row_attr(row, "id")
                 event_timestamp = _row_attr(row, "event_timestamp")
@@ -86,16 +95,41 @@ async def purge_expired_audit_logs(
                     continue
                 key_pairs.append((log_id, event_timestamp))
                 if tenant_id is not None:
-                    deleted_by_tenant[tenant_id] += 1
+                    selected_by_tenant[tenant_id] += 1
 
             if not key_pairs:
                 break
 
+            returning_columns = [audit_log_model.id]
+            if tenant_id_column is not None:
+                returning_columns.append(tenant_id_column)
+
             delete_stmt = sa.delete(audit_log_model).where(
                 tuple_(audit_log_model.id, audit_log_model.event_timestamp).in_(key_pairs)
-            )
+            ).returning(*returning_columns)
             delete_result = await db.execute(delete_stmt)
-            deleted_count = extract_deleted_count(delete_result, fallback=len(key_pairs))
+            returned_rows = _fetch_returned_rows(delete_result)
+            if returned_rows:
+                deleted_count = len(returned_rows)
+                if tenant_id_column is not None:
+                    for row in returned_rows:
+                        tenant_id = _row_attr(row, "tenant_id")
+                        if tenant_id is not None:
+                            deleted_by_tenant[tenant_id] += 1
+            else:
+                deleted_count = extract_deleted_count(
+                    delete_result,
+                    fallback=len(key_pairs),
+                )
+                if tenant_id_column is not None and deleted_count >= len(key_pairs):
+                    for tenant_id, count in selected_by_tenant.items():
+                        deleted_by_tenant[tenant_id] += count
+                elif tenant_id_column is not None and 0 < deleted_count < len(key_pairs):
+                    logger.warning(
+                        "maintenance_audit_logs_partial_delete_attribution_skipped",
+                        selected=len(key_pairs),
+                        deleted=deleted_count,
+                    )
             if deleted_count == 0:
                 break
             total_deleted += deleted_count

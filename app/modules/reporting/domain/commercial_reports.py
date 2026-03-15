@@ -10,6 +10,8 @@ v1: Quarterly report templates (previous quarter by default).
 
 from __future__ import annotations
 
+import csv
+import io
 from calendar import monthrange
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
@@ -28,6 +30,7 @@ from app.modules.reporting.domain.savings_proof import (
     SavingsProofService,
 )
 from app.shared.core.pricing import PricingTier, normalize_tier
+from app.modules.reporting.api.v1.costs_helpers import sanitize_csv_cell
 
 logger = structlog.get_logger()
 
@@ -166,43 +169,75 @@ class CommercialProofReportService:
 
     @staticmethod
     def render_quarterly_csv(payload: QuarterlyCommercialProofResponse) -> str:
-        # Summary
-        lines: list[str] = []
-        lines.append(
-            "year,quarter,period,start_date,end_date,total_cost_usd,carbon_total_kgco2e,carbon_coverage_percent,opportunity_monthly_usd,realized_monthly_usd"
-        )
-        lines.append(
-            f"{payload.year},{payload.quarter},{payload.period},{payload.start_date},{payload.end_date},"
-            f"{payload.leadership_kpis.total_cost_usd:.4f},{payload.leadership_kpis.carbon_total_kgco2e:.4f},"
-            f"{payload.leadership_kpis.carbon_coverage_percent:.4f},{payload.savings_proof.opportunity_monthly_usd:.2f},"
-            f"{payload.savings_proof.realized_monthly_usd:.2f}"
-        )
-        lines.append("")
+        out = io.StringIO()
+        writer = csv.writer(out)
 
-        # Cost by provider (leadership KPI)
-        lines.append("cost_by_provider:provider,cost_usd")
+        writer.writerow(
+            [
+                "year",
+                "quarter",
+                "period",
+                "start_date",
+                "end_date",
+                "total_cost_usd",
+                "carbon_total_kgco2e",
+                "carbon_coverage_percent",
+                "opportunity_monthly_usd",
+                "realized_monthly_usd",
+            ]
+        )
+        writer.writerow(
+            [
+                payload.year,
+                payload.quarter,
+                sanitize_csv_cell(payload.period),
+                sanitize_csv_cell(payload.start_date),
+                sanitize_csv_cell(payload.end_date),
+                f"{payload.leadership_kpis.total_cost_usd:.4f}",
+                f"{payload.leadership_kpis.carbon_total_kgco2e:.4f}",
+                f"{payload.leadership_kpis.carbon_coverage_percent:.4f}",
+                f"{payload.savings_proof.opportunity_monthly_usd:.2f}",
+                f"{payload.savings_proof.realized_monthly_usd:.2f}",
+            ]
+        )
+        writer.writerow([])
+
+        writer.writerow(["cost_by_provider:provider", "cost_usd"])
         for provider, cost in sorted(
             payload.leadership_kpis.cost_by_provider.items(),
             key=lambda item: item[1],
             reverse=True,
         ):
-            lines.append(f"{provider},{cost:.4f}")
-        lines.append("")
+            writer.writerow([sanitize_csv_cell(provider), f"{cost:.4f}"])
+        writer.writerow([])
 
-        # Savings proof breakdown
-        lines.append(
-            "savings_by_provider:provider,opportunity_monthly_usd,realized_monthly_usd,open_recommendations,applied_recommendations,pending_remediations,completed_remediations"
+        writer.writerow(
+            [
+                "savings_by_provider:provider",
+                "opportunity_monthly_usd",
+                "realized_monthly_usd",
+                "open_recommendations",
+                "applied_recommendations",
+                "pending_remediations",
+                "completed_remediations",
+            ]
         )
         for item in payload.savings_proof.breakdown:
-            lines.append(
-                f"{item.provider},{item.opportunity_monthly_usd:.2f},{item.realized_monthly_usd:.2f},"
-                f"{item.open_recommendations},{item.applied_recommendations},"
-                f"{item.pending_remediations},{item.completed_remediations}"
+            writer.writerow(
+                [
+                    sanitize_csv_cell(item.provider),
+                    f"{item.opportunity_monthly_usd:.2f}",
+                    f"{item.realized_monthly_usd:.2f}",
+                    item.open_recommendations,
+                    item.applied_recommendations,
+                    item.pending_remediations,
+                    item.completed_remediations,
+                ]
             )
-        lines.append("")
+        writer.writerow([])
 
-        # Top services (leadership KPI)
-        lines.append("top_services:service,cost_usd")
+        writer.writerow(["top_services:service", "cost_usd"])
         for svc in payload.leadership_kpis.top_services:
-            lines.append(f"{svc.service},{svc.cost_usd:.4f}")
-        return "\n".join(lines) + "\n"
+            writer.writerow([sanitize_csv_cell(svc.service), f"{svc.cost_usd:.4f}"])
+
+        return out.getvalue()

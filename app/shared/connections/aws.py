@@ -1,6 +1,7 @@
 from typing import Any
 from urllib.parse import quote
 from uuid import UUID
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -157,27 +158,34 @@ class AWSConnectionService:
             success = await adapter.verify_connection()
             if success:
                 connection.status = "active"
+                connection.last_verified_at = datetime.now(timezone.utc)
+                connection.error_message = None
                 await self.db.commit()
                 return {
                     "status": "success",
                     "message": "Connection verified and active.",
                 }
             else:
-                connection.status = "error"
-                await self.db.commit()
                 failure_message = getattr(adapter, "last_error", None) or (
                     "Failed to assume role. Check IAM policy and Trust Relationship."
                 )
+                connection.status = "error"
+                connection.error_message = failure_message
+                await self.db.commit()
                 return {
                     "status": "failed",
                     "message": failure_message,
                 }
         except AdapterError as e:
             connection.status = "error"
+            connection.error_message = e.message
             await self.db.commit()
             return {"status": "error", "message": str(e), "code": e.code}
         except AWS_CONNECTION_VERIFY_RECOVERABLE_EXCEPTIONS as e:
             connection.status = "error"
+            connection.error_message = (
+                "An unexpected error occurred during verification."
+            )
             await self.db.commit()
             logger.error(
                 "aws_verification_unexpected_error",

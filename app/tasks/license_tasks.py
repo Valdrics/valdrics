@@ -19,7 +19,13 @@ from app.modules.governance.domain.scheduler.metrics import (
     BACKGROUND_JOBS_ENQUEUED_SCHEDULER as BACKGROUND_JOBS_ENQUEUED,
 )
 from app.modules.optimization.domain.license_governance import LicenseGovernanceService
+from app.shared.core.config import get_settings
 from app.shared.core.exceptions import ExternalAPIError
+from app.tasks.scheduler_runtime_ops import (
+    cap_scope_items,
+    coerce_positive_limit,
+    system_sweep_tenant_limit,
+)
 from app.tasks.scheduler_tasks import _open_db_session, run_async
 
 logger = structlog.get_logger()
@@ -64,10 +70,21 @@ async def _license_governance_sweep_logic() -> None:
             ):
                 begin_ctx = await begin_ctx
             async with begin_ctx:
-                result = await db.execute(
-                    sa.select(Tenant.id).with_for_update(skip_locked=True)
+                tenant_limit = system_sweep_tenant_limit(
+                    get_settings_fn=get_settings,
+                    coerce_positive_limit_fn=coerce_positive_limit,
                 )
-                tenant_ids = result.scalars().all()
+                result = await db.execute(
+                    sa.select(Tenant.id)
+                    .limit(tenant_limit + 1)
+                    .with_for_update(skip_locked=True)
+                )
+                tenant_ids = cap_scope_items(
+                    result.scalars().all(),
+                    scope="license_governance_tenants",
+                    limit=tenant_limit,
+                    logger=logger,
+                )
                 now = datetime.now(timezone.utc)
                 bucket_str = now.strftime("%Y-%m-%d")
                 jobs_enqueued = 0

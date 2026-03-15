@@ -28,6 +28,10 @@ async def test_zombie_analyzer_byok_resolution(zombie_analyzer):
     with (
         patch("app.shared.llm.zombie_analyzer.get_settings") as mock_settings,
         patch(
+            "app.shared.llm.zombie_analyzer.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.PRO),
+        ),
+        patch(
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
         patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
@@ -84,6 +88,10 @@ async def test_zombie_analyzer_claude_byok(zombie_analyzer):
     with (
         patch("app.shared.llm.zombie_analyzer.get_settings"),
         patch(
+            "app.shared.llm.zombie_analyzer.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.PRO),
+        ),
+        patch(
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
         patch("app.shared.llm.zombie_analyzer.LLMGuardrails") as mock_guardrails,
@@ -125,7 +133,7 @@ async def test_zombie_analyzer_claude_byok(zombie_analyzer):
             "claude",
             model="claude-3-opus",
             api_key="sk-ant-test",
-            max_output_tokens=512,
+            max_output_tokens=4096,
         )
 
 
@@ -143,6 +151,10 @@ async def test_zombie_analyzer_gemini_byok(zombie_analyzer):
 
     with (
         patch("app.shared.llm.zombie_analyzer.get_settings"),
+        patch(
+            "app.shared.llm.zombie_analyzer.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.PRO),
+        ),
         patch(
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
@@ -185,7 +197,7 @@ async def test_zombie_analyzer_gemini_byok(zombie_analyzer):
             "google",
             model="gemini-pro",
             api_key="sk-goog-test",
-            max_output_tokens=512,
+            max_output_tokens=4096,
         )
 
 
@@ -225,6 +237,10 @@ async def test_zombie_analyzer_groq_byok(zombie_analyzer):
 
     with (
         patch("app.shared.llm.zombie_analyzer.get_settings"),
+        patch(
+            "app.shared.llm.zombie_analyzer.get_tenant_tier",
+            new=AsyncMock(return_value=PricingTier.PRO),
+        ),
         patch(
             "app.shared.llm.factory.LLMFactory", new_callable=MagicMock
         ) as mock_factory,
@@ -267,7 +283,7 @@ async def test_zombie_analyzer_groq_byok(zombie_analyzer):
             "groq",
             model="llama-3",
             api_key="sk-groq-test",
-            max_output_tokens=512,
+            max_output_tokens=4096,
         )
 
 
@@ -645,6 +661,34 @@ async def test_zombie_analyzer_get_effective_config_unknown_provider_no_byok() -
 
     assert provider == "custom-provider"
     assert model == "custom-model"
+    assert key is None
+
+
+@pytest.mark.asyncio
+async def test_zombie_analyzer_get_effective_config_ignores_byok_when_tier_disallows() -> None:
+    analyzer = ZombieAnalyzer(MagicMock())
+    tenant_id = uuid4()
+    mock_budget = MagicMock(
+        preferred_provider="groq",
+        preferred_model="llama-3.3-70b-versatile",
+        groq_api_key="gsk-disabled-tier-key",
+    )
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_budget
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = mock_result
+
+    with patch("app.shared.llm.zombie_analyzer.get_tier_limit", return_value=False):
+        provider, model, key = await analyzer._get_effective_llm_config(
+            db=mock_db,
+            tenant_id=tenant_id,
+            provider=None,
+            model=None,
+            tenant_tier=PricingTier.PRO,
+        )
+
+    assert provider == "groq"
+    assert model == "llama-3.3-70b-versatile"
     assert key is None
 
 

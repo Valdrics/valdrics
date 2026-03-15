@@ -55,6 +55,24 @@ async def test_update_notification_settings_jira_requires_growth_tier(
 
 
 @pytest.mark.asyncio
+async def test_update_notification_settings_partial_non_slack_update_does_not_require_slack(
+    async_client: AsyncClient,
+    app,
+    make_current_user,
+    override_current_user,
+) -> None:
+    with override_current_user(app, make_current_user(tier=PricingTier.STARTER)):
+        response = await async_client.put(
+            "/api/v1/settings/notifications",
+            json={"digest_schedule": "weekly"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["digest_schedule"] == "weekly"
+    assert response.json()["slack_enabled"] is False
+
+
+@pytest.mark.asyncio
 async def test_update_notification_settings_rejects_unsafe_jira_base_url(
     async_client: AsyncClient,
     app,

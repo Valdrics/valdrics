@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -328,9 +329,7 @@ def test_reconciliation_normalizers_cover_error_and_unknown_paths() -> None:
         == "unknown"
     )
     assert (
-        CostReconciliationService._normalize_cloud_plus_source(
-            "explorer", "aws"
-        )
+        CostReconciliationService._normalize_cloud_plus_source("explorer", "aws")
         == "unknown"
     )
 
@@ -351,6 +350,41 @@ def test_render_restatement_runs_csv_path() -> None:
     assert "ingestion_batch_id,entry_count,net_delta_usd" in csv_payload
     assert "batch-1" in csv_payload
     assert "hash-a" in csv_payload
+
+
+def test_reconciliation_csv_renderers_sanitize_formula_cells() -> None:
+    entries = [
+        {
+            "usage_date": "2026-01-01",
+            "recorded_at": "2026-01-02T00:00:00+00:00",
+            "service": "=CMD()",
+            "region": "us-east-1",
+            "old_cost": 10.0,
+            "new_cost": 12.0,
+            "delta_usd": 2.0,
+            "reason": "+restatement",
+            "cost_record_id": "id-1",
+            "ingestion_batch_id": "batch-1",
+        }
+    ]
+    rows = list(
+        csv.reader(
+            CostReconciliationService._render_restatements_csv(entries).splitlines()
+        )
+    )
+
+    assert [
+        "2026-01-01",
+        "2026-01-02T00:00:00+00:00",
+        "'=CMD()",
+        "us-east-1",
+        "10.0",
+        "12.0",
+        "2.0",
+        "'+restatement",
+        "id-1",
+        "batch-1",
+    ] in rows
 
 
 @pytest.mark.asyncio
@@ -393,7 +427,9 @@ async def test_get_restatement_runs_with_csv_export_and_provider_filter() -> Non
 
 
 @pytest.mark.asyncio
-async def test_generate_close_package_with_invoice_summary_and_restatement_truncation() -> None:
+async def test_generate_close_package_with_invoice_summary_and_restatement_truncation() -> (
+    None
+):
     db = MagicMock()
     lifecycle_row = SimpleNamespace(
         total_records=20,
@@ -610,7 +646,9 @@ async def test_invoice_exchange_rate_and_reconciliation_summary_paths(db) -> Non
     with pytest.raises(ValueError, match="Invalid exchange rate for CHF->USD"):
         await service._invoice_total_to_usd(Decimal("100"), "CHF")
 
-    with pytest.raises(ValueError, match="Missing exchange rate for invoice currency GBP"):
+    with pytest.raises(
+        ValueError, match="Missing exchange rate for invoice currency GBP"
+    ):
         await service._invoice_total_to_usd(Decimal("100"), "GBP")
 
     missing_invoice_summary = await service.get_invoice_reconciliation_summary(

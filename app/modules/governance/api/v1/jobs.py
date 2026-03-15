@@ -18,7 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from app.shared.db.session import get_db, async_session_maker, mark_session_system_context
-from app.shared.core.auth import CurrentUser, requires_role
+from app.shared.core.auth import CurrentUser, requires_platform_role, requires_role
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
 from app.models.background_job import BackgroundJob, JobStatus, JobType
@@ -200,7 +200,7 @@ async def get_job_slo(
 @standard_limit
 async def process_pending_jobs(
     request: Request,
-    _user: Annotated[CurrentUser, Depends(requires_role("admin"))],
+    _user: Annotated[CurrentUser, Depends(requires_platform_role("admin"))],
     db: AsyncSession = Depends(get_db),
     limit: int = Query(default=10, ge=1, le=50, description="Max jobs to process"),
 ) -> ProcessJobsResponse:
@@ -210,6 +210,7 @@ async def process_pending_jobs(
     This endpoint is typically called by the authenticated internal scheduler,
     but can be triggered manually by admins.
     """
+    await mark_session_system_context(db)
     processor = JobProcessor(db)
     results = await processor.process_pending_jobs(limit=limit)
 
@@ -223,7 +224,7 @@ async def process_pending_jobs(
 @router.post("/enqueue", response_model=JobResponse)
 async def enqueue_new_job(
     request: EnqueueJobRequest,
-    user: Annotated[CurrentUser, Depends(requires_role("member"))],
+    user: Annotated[CurrentUser, Depends(requires_role("admin"))],
     db: AsyncSession = Depends(get_db),
 ) -> JobResponse:
     """
@@ -232,19 +233,16 @@ async def enqueue_new_job(
     Job types:
     - finops_analysis: Run FinOps analysis
     - zombie_scan: Scan for zombie resources
-    - notification: Send notification
     """
     # Validate job type - Item N1: Prevent enqueuing internal system jobs
-    USER_CREATABLE_JOBS = {
-        JobType.FINOPS_ANALYSIS,
-        JobType.ZOMBIE_SCAN,
-        JobType.NOTIFICATION,
-    }
+    USER_CREATABLE_JOBS = {JobType.FINOPS_ANALYSIS, JobType.ZOMBIE_SCAN}
     if request.job_type not in USER_CREATABLE_JOBS:
         raise HTTPException(
             status_code=403,
             detail=f"Unauthorized job type. Users can only enqueue: {[t.value for t in USER_CREATABLE_JOBS]}",
         )
+    if user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context required")
 
     job = await enqueue_job(
         db=db,

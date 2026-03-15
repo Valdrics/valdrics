@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
+from sqlalchemy import select
 
 from app.models.cloud import CloudAccount, CostRecord
 from app.models.tenant import Tenant, User, UserRole
@@ -103,6 +104,12 @@ async def test_unit_economics_settings_lifecycle(async_client, app, db, admin_us
         data = response.json()
         assert data["default_request_volume"] == 1000.0
         assert data["anomaly_threshold_percent"] == 20.0
+        settings_row = await db.scalar(
+            select(UnitEconomicsSettings).where(
+                UnitEconomicsSettings.tenant_id == admin_user.tenant_id
+            )
+        )
+        assert settings_row is None
 
         update_response = await async_client.put(
             "/api/v1/costs/unit-economics/settings",
@@ -152,7 +159,11 @@ async def test_unit_economics_reports_anomalies_and_dispatches_alert(
         ) as mock_alert:
             response = await async_client.get(
                 "/api/v1/costs/unit-economics",
-                params={"start_date": "2026-02-01", "end_date": "2026-02-07"},
+                params={
+                    "start_date": "2026-02-01",
+                    "end_date": "2026-02-07",
+                    "alert_on_anomaly": "true",
+                },
             )
 
         assert response.status_code == 200
@@ -206,6 +217,37 @@ async def test_unit_economics_allows_alert_suppression(
 
 
 @pytest.mark.asyncio
+async def test_unit_economics_get_is_read_only_by_default(
+    async_client, app, db, admin_user
+):
+    app.dependency_overrides[get_current_user] = lambda: admin_user
+    try:
+        await _seed_costs(db, admin_user.tenant_id)
+
+        with patch(
+            "app.modules.reporting.api.v1.costs.NotificationDispatcher.send_alert",
+            new=AsyncMock(),
+        ) as mock_alert:
+            response = await async_client.get(
+                "/api/v1/costs/unit-economics",
+                params={"start_date": "2026-02-01", "end_date": "2026-02-07"},
+            )
+
+        assert response.status_code == 200
+        assert response.json()["alert_dispatched"] is False
+        assert mock_alert.await_count == 0
+
+        settings_row = await db.scalar(
+            select(UnitEconomicsSettings).where(
+                UnitEconomicsSettings.tenant_id == admin_user.tenant_id
+            )
+        )
+        assert settings_row is None
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
 async def test_unit_economics_settings_update_requires_admin(
     async_client, app, member_user
 ):
@@ -216,5 +258,23 @@ async def test_unit_economics_settings_update_requires_admin(
             json={"default_request_volume": 123.0},
         )
         assert response.status_code == 403
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_unit_economics_settings_get_is_read_only_for_member(
+    async_client, app, db, member_user
+):
+    app.dependency_overrides[get_current_user] = lambda: member_user
+    try:
+        response = await async_client.get("/api/v1/costs/unit-economics/settings")
+        assert response.status_code == 200
+        settings_row = await db.scalar(
+            select(UnitEconomicsSettings).where(
+                UnitEconomicsSettings.tenant_id == member_user.tenant_id
+            )
+        )
+        assert settings_row is None
     finally:
         app.dependency_overrides.pop(get_current_user, None)

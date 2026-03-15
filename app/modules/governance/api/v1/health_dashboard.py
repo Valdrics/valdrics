@@ -40,7 +40,12 @@ from app.modules.governance.api.v1.health_dashboard_ops import (
 from app.modules.governance.api.v1.landing_funnel_health_ops import (
     get_landing_funnel_health as _get_landing_funnel_health_impl,
 )
-from app.shared.core.auth import CurrentUser, requires_role
+from app.shared.core.auth import (
+    CurrentUser,
+    require_platform_operator,
+    requires_platform_role,
+    requires_role,
+)
 from app.shared.core.cache import get_cache_service
 from app.shared.core.config import get_settings
 from app.shared.core.ops_metrics import LLM_BUDGET_BURN_RATE
@@ -70,7 +75,7 @@ FAIR_USE_RUNTIME_CACHE_TTL = timedelta(seconds=20)
 
 @router.get("", response_model=InvestorHealthDashboard)
 async def get_investor_health_dashboard(
-    _user: Annotated[CurrentUser, Depends(requires_role("admin"))],
+    _user: Annotated[CurrentUser, Depends(requires_platform_role("admin"))],
     db: AsyncSession = Depends(get_db),
 ) -> InvestorHealthDashboard:
     """
@@ -83,6 +88,7 @@ async def get_investor_health_dashboard(
     - LLM usage and costs
     - Cloud + Cloud+ connection reliability
     """
+    require_platform_operator(_user)
     now = datetime.now(timezone.utc)
     tenant_scope = str(_user.tenant_id) if _user.tenant_id else "global"
     cache_key = f"api:health-dashboard:{tenant_scope}"

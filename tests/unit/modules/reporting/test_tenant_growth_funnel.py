@@ -178,3 +178,53 @@ async def test_paid_activation_sets_paid_milestone_without_duplicate_pql(
     assert paid_snapshot.pql_qualified_at == base_time + timedelta(minutes=30)
     assert paid_snapshot.paid_activated_at == base_time + timedelta(minutes=45)
     assert paid_snapshot.current_tier == PricingTier.PRO.value
+
+
+@pytest.mark.asyncio
+async def test_growth_funnel_preserves_highest_tier_and_advances_last_touch(
+    growth_db_session: AsyncSession,
+) -> None:
+    tenant = Tenant(id=uuid4(), name="Late Events Tenant", plan=PricingTier.FREE.value)
+    growth_db_session.add(tenant)
+    await growth_db_session.commit()
+
+    first_touch = datetime(2026, 3, 1, tzinfo=timezone.utc)
+    later_touch = datetime(2026, 3, 5, tzinfo=timezone.utc)
+    paid_at = datetime(2026, 3, 4, tzinfo=timezone.utc)
+
+    await record_tenant_growth_funnel_stage(
+        growth_db_session,
+        tenant_id=tenant.id,
+        stage="tenant_onboarded",
+        occurred_at=first_touch,
+        current_tier=PricingTier.FREE,
+        attribution=normalize_growth_funnel_attribution(
+            first_touch_at=first_touch,
+            last_touch_at=first_touch,
+            utm_source="google",
+        ),
+        commit=False,
+    )
+    paid_snapshot = await record_tenant_growth_funnel_stage(
+        growth_db_session,
+        tenant_id=tenant.id,
+        stage="paid_activated",
+        occurred_at=paid_at,
+        current_tier=PricingTier.PRO,
+        commit=False,
+    )
+    assert paid_snapshot.current_tier == PricingTier.PRO.value
+
+    refreshed = await record_tenant_growth_funnel_stage(
+        growth_db_session,
+        tenant_id=tenant.id,
+        stage="pricing_viewed",
+        occurred_at=datetime(2026, 3, 2, tzinfo=timezone.utc),
+        current_tier=PricingTier.FREE,
+        attribution=normalize_growth_funnel_attribution(last_touch_at=later_touch),
+        commit=True,
+    )
+
+    assert refreshed.current_tier == PricingTier.PRO.value
+    assert refreshed.last_touch_at == later_touch
+    assert refreshed.first_touch_at == first_touch

@@ -466,6 +466,9 @@ async def test_policy_budget_credit_endpoint_wrappers_cover_response_paths(monke
         def __init__(self, _db) -> None:
             del _db
 
+        async def get_policy_snapshot(self, _tenant_id):
+            return policy_row
+
         async def get_or_create_policy(self, _tenant_id):
             return policy_row
 
@@ -494,6 +497,7 @@ async def test_policy_budget_credit_endpoint_wrappers_cover_response_paths(monke
 
     get_policy_resp = await policy_api.get_policy(current_user=user, db=db)
     assert get_policy_resp.policy_document_sha256 == "c" * 64
+    db.commit.assert_not_awaited()
 
     upsert_policy_resp = await policy_api.upsert_policy(
         payload=PolicyUpdateRequest(policy_document=policy_document),

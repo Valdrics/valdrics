@@ -230,6 +230,7 @@ async def test_create_checkout_session_invalid_tier_raises(
     with patch("app.modules.billing.domain.billing.paystack_service_impl.PaystackClient"):
         service = BillingService(mock_db)
     with patch("app.shared.core.pricing.TIER_CONFIG", {}):
+        mock_db.execute.return_value = _scalar_result(None)
         with pytest.raises(ValueError, match="Invalid tier"):
             await service.create_checkout_session(
                 tenant_id=uuid4(),
@@ -590,11 +591,9 @@ async def test_handle_charge_success_email_fallback_paths(
 ) -> None:
     handler = WebhookHandler(mock_db)
     tenant_id = uuid4()
-    user = MagicMock(tenant_id=tenant_id)
-    existing_sub = MagicMock(tier=PricingTier.STARTER.value)
+    existing_sub = MagicMock(tenant_id=tenant_id, tier=PricingTier.STARTER.value)
 
     with (
-        patch("app.shared.core.security.generate_blind_index", return_value="BIDX"),
         patch(
             "app.modules.billing.domain.billing.paystack_shared.encrypt_string",
             return_value="enc-auth",
@@ -604,10 +603,7 @@ async def test_handle_charge_success_email_fallback_paths(
             new=AsyncMock(),
         ),
     ):
-        mock_db.execute.side_effect = [
-            _scalar_result(user),
-            _scalar_result(existing_sub),
-        ]
+        mock_db.execute.side_effect = [_scalar_result(existing_sub)]
         await handler._handle_charge_success(
             {
                 "metadata": {},
@@ -621,18 +617,98 @@ async def test_handle_charge_success_email_fallback_paths(
     # Email fallback fails -> no tenant -> return early
     mock_db.execute.reset_mock()
     mock_db.execute.side_effect = None
-    with patch("app.shared.core.security.generate_blind_index", return_value="BIDX"):
-        mock_db.execute.return_value = _scalar_result(None)
-        with pytest.raises(
-            WebhookRetryableError, match="charge.success could not resolve tenant"
-        ):
-            await handler._handle_charge_success(
-                {
-                    "metadata": {},
-                    "customer": {"customer_code": "CUS2", "email": "none@example.com"},
-                    "reference": "REF-NONE",
-                }
-            )
+    mock_db.execute.side_effect = [_scalar_result(None)]
+    with pytest.raises(
+        WebhookRetryableError, match="charge.success could not resolve tenant"
+    ):
+        await handler._handle_charge_success(
+            {
+                "metadata": {},
+                "customer": {"customer_code": "CUS2", "email": "none@example.com"},
+                "reference": "REF-NONE",
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_checkout_session_prefers_db_plan_pricing_for_annual_checkout(
+    mock_db: MagicMock,
+    configured_settings: None,
+) -> None:
+    fx_runtime = MagicMock()
+    fx_runtime.get_ngn_rate = AsyncMock(return_value=1500.0)
+    fx_runtime.convert_usd_to_ngn.return_value = 180000
+    service = BillingService(
+        mock_db, exchange_rate_service_factory=lambda _db: fx_runtime
+    )
+    service.client.initialize_transaction = AsyncMock(
+        return_value={
+            "data": {
+                "authorization_url": "https://pay.example/checkout",
+                "reference": "REFANNUAL1",
+            }
+        }
+    )
+
+    mock_db.execute.side_effect = [
+        _scalar_result(MagicMock(price_usd=12.0)),
+        _scalar_result(None),
+    ]
+
+    result = await service.create_checkout_session(
+        tenant_id=uuid4(),
+        tier=PricingTier.STARTER,
+        email="user@example.com",
+        callback_url="https://callback.example.com",
+        billing_cycle="annual",
+        currency="NGN",
+    )
+
+    assert result["reference"] == "REFANNUAL1"
+    init_kwargs = service.client.initialize_transaction.await_args.kwargs
+    assert init_kwargs["amount_kobo"] == 180000
+    assert init_kwargs["metadata"]["usd_price"] == 120.0
+    assert init_kwargs["metadata"]["billing_cycle"] == "annual"
+
+
+@pytest.mark.asyncio
+async def test_charge_renewal_uses_persisted_annual_cycle_for_db_pricing(
+    mock_db: MagicMock,
+    configured_settings: None,
+) -> None:
+    service = BillingService(mock_db)
+    sub = MagicMock(
+        id=uuid4(),
+        paystack_auth_code="enc-auth",
+        tenant_id=uuid4(),
+        tier=PricingTier.STARTER.value,
+        billing_cycle="annual",
+        billing_currency="USD",
+    )
+    mock_user = MagicMock(email="enc-email")
+    mock_db.execute.side_effect = [
+        _scalar_result(MagicMock(price_usd=12.0)),
+        _scalar_result(mock_user),
+    ]
+
+    with (
+        patch(
+            "app.modules.billing.domain.billing.paystack_shared.decrypt_string",
+            return_value="AUTH",
+        ),
+        patch("app.shared.core.security.decrypt_string", return_value="user@example.com"),
+        patch.object(
+            service.client,
+            "charge_authorization",
+            new=AsyncMock(return_value={"status": True, "data": {"status": "success"}}),
+        ) as mock_charge,
+    ):
+        ok = await service.charge_renewal(sub)
+
+    assert ok is True
+    assert mock_charge.await_args is not None
+    assert mock_charge.await_args.kwargs["amount_kobo"] == 12000
+    assert mock_charge.await_args.kwargs["metadata"]["billing_cycle"] == "annual"
 
 
 @pytest.mark.asyncio

@@ -21,6 +21,7 @@ def _job(
     scheduled_for: datetime,
     started_at: datetime | None = None,
     completed_at: datetime | None = None,
+    updated_at: datetime | None = None,
     is_deleted: bool = False,
 ) -> BackgroundJob:
     return BackgroundJob(
@@ -31,6 +32,7 @@ def _job(
         created_at=created_at,
         started_at=started_at,
         completed_at=completed_at,
+        updated_at=updated_at or completed_at or started_at or created_at,
         is_deleted=is_deleted,
     )
 
@@ -149,8 +151,9 @@ async def test_compute_job_slo_normalizes_naive_started_and_completed_timestamps
     db, test_tenant
 ) -> None:
     created_at = datetime.now(timezone.utc) - timedelta(hours=1)
-    naive_started = datetime(2026, 2, 1, 9, 0, 0)
-    naive_completed = datetime(2026, 2, 1, 9, 4, 0)
+    started_at = created_at - timedelta(minutes=4)
+    naive_started = started_at.replace(tzinfo=None)
+    naive_completed = created_at.replace(tzinfo=None)
     db.add(
         _job(
             tenant_id=test_tenant.id,
@@ -177,6 +180,38 @@ async def test_compute_job_slo_normalizes_naive_started_and_completed_timestamps
     assert metric["latest_completed_at"] == naive_completed.replace(
         tzinfo=timezone.utc
     ).isoformat()
+
+
+@pytest.mark.asyncio
+async def test_compute_job_slo_uses_terminal_time_for_window_membership(
+    db, test_tenant
+) -> None:
+    now = datetime.now(timezone.utc)
+    db.add(
+        _job(
+            tenant_id=test_tenant.id,
+            job_type="finops_analysis",
+            status=JobStatus.COMPLETED.value,
+            created_at=now - timedelta(days=3),
+            scheduled_for=now - timedelta(days=3),
+            started_at=now - timedelta(hours=2),
+            completed_at=now - timedelta(hours=1),
+            updated_at=now - timedelta(hours=1),
+        )
+    )
+    await db.commit()
+
+    payload = await compute_job_slo(
+        db,
+        tenant_id=test_tenant.id,
+        window_hours=24,
+        target_success_rate_percent=95,
+    )
+
+    assert len(payload["metrics"]) == 1
+    assert payload["metrics"][0]["job_type"] == "finops_analysis"
+    assert payload["metrics"][0]["total_jobs"] == 1
+    assert payload["metrics"][0]["successful_jobs"] == 1
 
 
 @pytest.mark.asyncio

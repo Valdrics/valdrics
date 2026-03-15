@@ -54,17 +54,18 @@ async def remediation_sweep_logic(
                             "scheduler.remediation_sweep.load_connections",
                             retry_count=retry_count,
                         ):
+                            connection_limit = system_sweep_connection_limit_fn()
                             connections = await list_active_connections_all_tenants_fn(
                                 db,
                                 with_for_update=True,
                                 skip_locked=True,
+                                limit=connection_limit + 1,
                             )
                             connections = [
                                 conn
                                 for conn in connections
                                 if is_connection_active_fn(conn)
                             ]
-                            connection_limit = system_sweep_connection_limit_fn()
                             connections = cap_scope_items_fn(
                                 connections,
                                 scope="remediation_connections",

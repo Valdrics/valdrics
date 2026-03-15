@@ -19,6 +19,28 @@ from app.modules.governance.api.v1.scim_models import (
 from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLogger
 
 
+async def _audit_and_commit_group_change(
+    *,
+    db: AsyncSession,
+    tenant_id: UUID,
+    audit_kwargs: dict[str, Any],
+    scim_error_factory: Callable[[int, str, str | None], Exception],
+    conflict_message: str | None = None,
+) -> None:
+    audit = AuditLogger(db, tenant_id)
+    try:
+        await audit.log(**audit_kwargs)
+        await db.commit()
+    except IntegrityError as exc:
+        await db.rollback()
+        if conflict_message is None:
+            raise
+        raise scim_error_factory(409, conflict_message, "uniqueness") from exc
+    except Exception:
+        await db.rollback()
+        raise
+
+
 async def list_groups_route(
     *,
     db: AsyncSession,
@@ -29,7 +51,9 @@ async def list_groups_route(
     base_url: str,
     parse_group_filter_fn: Callable[[str], tuple[str, str] | None],
     normalize_scim_group_fn: Callable[[str], str],
-    load_group_member_refs_map_fn: Callable[..., Awaitable[dict[UUID, list[dict[str, Any]]]]],
+    load_group_member_refs_map_fn: Callable[
+        ..., Awaitable[dict[UUID, list[dict[str, Any]]]]
+    ],
     scim_group_resource_fn: Callable[..., dict[str, Any]],
     scim_error_factory: Callable[[int, str, str | None], Exception],
 ) -> ScimListResponse:
@@ -96,7 +120,9 @@ async def create_group_route(
     resolve_member_user_ids_fn: Callable[..., Awaitable[set[UUID]]],
     set_group_memberships_fn: Callable[..., Awaitable[set[UUID]]],
     recompute_entitlements_for_users_fn: Callable[..., Awaitable[None]],
-    load_group_member_refs_map_fn: Callable[..., Awaitable[dict[UUID, list[dict[str, Any]]]]],
+    load_group_member_refs_map_fn: Callable[
+        ..., Awaitable[dict[UUID, list[dict[str, Any]]]]
+    ],
     scim_group_resource_fn: Callable[..., dict[str, Any]],
     scim_error_factory: Callable[[int, str, str | None], Exception],
 ) -> JSONResponse:
@@ -143,24 +169,27 @@ async def create_group_route(
             db, tenant_id=tenant_id, user_ids=impacted
         )
 
-    await db.commit()
-    audit = AuditLogger(db, tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_GROUP_CREATED,
-        actor_id=None,
-        resource_type="scim_group",
-        resource_id=str(group.id),
-        details={
-            "display_name": display,
-            "external_id_provided": bool(external_id),
-            "members_provided": body.members is not None,
-            "members_count": len(member_user_ids),
-            "members_missing_count": missing_member_count,
+    await _audit_and_commit_group_change(
+        db=db,
+        tenant_id=tenant_id,
+        audit_kwargs={
+            "event_type": AuditEventType.SCIM_GROUP_CREATED,
+            "actor_id": None,
+            "resource_type": "scim_group",
+            "resource_id": str(group.id),
+            "details": {
+                "display_name": display,
+                "external_id_provided": bool(external_id),
+                "members_provided": body.members is not None,
+                "members_count": len(member_user_ids),
+                "members_missing_count": missing_member_count,
+            },
+            "request_method": "SCIM",
+            "request_path": "/scim/v2/Groups",
         },
-        request_method="SCIM",
-        request_path="/scim/v2/Groups",
+        scim_error_factory=scim_error_factory,
+        conflict_message="Group already exists",
     )
-    await db.commit()
 
     member_map = await load_group_member_refs_map_fn(
         db,
@@ -189,7 +218,9 @@ async def put_group_route(
     resolve_member_user_ids_fn: Callable[..., Awaitable[set[UUID]]],
     set_group_memberships_fn: Callable[..., Awaitable[set[UUID]]],
     recompute_entitlements_for_users_fn: Callable[..., Awaitable[None]],
-    load_group_member_refs_map_fn: Callable[..., Awaitable[dict[UUID, list[dict[str, Any]]]]],
+    load_group_member_refs_map_fn: Callable[
+        ..., Awaitable[dict[UUID, list[dict[str, Any]]]]
+    ],
     scim_group_resource_fn: Callable[..., dict[str, Any]],
     scim_error_factory: Callable[[int, str, str | None], Exception],
 ) -> JSONResponse:
@@ -242,30 +273,28 @@ async def put_group_route(
                 db, tenant_id=tenant_id, user_ids=impacted
             )
 
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise scim_error_factory(409, "Group already exists", "uniqueness") from exc
-
-    audit = AuditLogger(db, tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_GROUP_UPDATED,
-        actor_id=None,
-        resource_type="scim_group",
-        resource_id=str(group.id),
-        details={
-            "display_name": display,
-            "external_id_provided": bool(external_id),
-            "members_provided": body.members is not None,
-            "members_count": len(member_user_ids),
-            "members_missing_count": missing_member_count,
-            "members_impacted_count": len(impacted),
+    await _audit_and_commit_group_change(
+        db=db,
+        tenant_id=tenant_id,
+        audit_kwargs={
+            "event_type": AuditEventType.SCIM_GROUP_UPDATED,
+            "actor_id": None,
+            "resource_type": "scim_group",
+            "resource_id": str(group.id),
+            "details": {
+                "display_name": display,
+                "external_id_provided": bool(external_id),
+                "members_provided": body.members is not None,
+                "members_count": len(member_user_ids),
+                "members_missing_count": missing_member_count,
+                "members_impacted_count": len(impacted),
+            },
+            "request_method": "SCIM",
+            "request_path": f"/scim/v2/Groups/{group.id}",
         },
-        request_method="SCIM",
-        request_path=f"/scim/v2/Groups/{group.id}",
+        scim_error_factory=scim_error_factory,
+        conflict_message="Group already exists",
     )
-    await db.commit()
 
     member_map = await load_group_member_refs_map_fn(
         db,
@@ -297,7 +326,9 @@ async def patch_group_route(
     set_group_memberships_fn: Callable[..., Awaitable[set[UUID]]],
     load_group_member_user_ids_fn: Callable[..., Awaitable[set[UUID]]],
     recompute_entitlements_for_users_fn: Callable[..., Awaitable[None]],
-    load_group_member_refs_map_fn: Callable[..., Awaitable[dict[UUID, list[dict[str, Any]]]]],
+    load_group_member_refs_map_fn: Callable[
+        ..., Awaitable[dict[UUID, list[dict[str, Any]]]]
+    ],
     scim_group_resource_fn: Callable[..., dict[str, Any]],
     scim_error_factory: Callable[[int, str, str | None], Exception],
 ) -> JSONResponse:
@@ -334,27 +365,25 @@ async def patch_group_route(
             db, tenant_id=tenant_id, user_ids=impacted_user_ids
         )
 
-    try:
-        await db.commit()
-    except IntegrityError as exc:
-        await db.rollback()
-        raise scim_error_factory(409, "Group already exists", "uniqueness") from exc
-
-    audit = AuditLogger(db, tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_GROUP_UPDATED,
-        actor_id=None,
-        resource_type="scim_group",
-        resource_id=str(group.id),
-        details={
-            "display_name": str(group.display_name),
-            "external_id_provided": bool(getattr(group, "external_id", None)),
-            "members_impacted_count": len(impacted_user_ids),
+    await _audit_and_commit_group_change(
+        db=db,
+        tenant_id=tenant_id,
+        audit_kwargs={
+            "event_type": AuditEventType.SCIM_GROUP_UPDATED,
+            "actor_id": None,
+            "resource_type": "scim_group",
+            "resource_id": str(group.id),
+            "details": {
+                "display_name": str(group.display_name),
+                "external_id_provided": bool(getattr(group, "external_id", None)),
+                "members_impacted_count": len(impacted_user_ids),
+            },
+            "request_method": "SCIM",
+            "request_path": f"/scim/v2/Groups/{group.id}",
         },
-        request_method="SCIM",
-        request_path=f"/scim/v2/Groups/{group.id}",
+        scim_error_factory=scim_error_factory,
+        conflict_message="Group already exists",
     )
-    await db.commit()
 
     member_map = await load_group_member_refs_map_fn(
         db,
@@ -407,21 +436,22 @@ async def delete_group_route(
     await recompute_entitlements_for_users_fn(
         db, tenant_id=tenant_id, user_ids=impacted_user_ids
     )
-    await db.commit()
-
-    audit = AuditLogger(db, tenant_id)
-    await audit.log(
-        event_type=AuditEventType.SCIM_GROUP_DELETED,
-        actor_id=None,
-        resource_type="scim_group",
-        resource_id=str(group.id),
-        details={
-            "display_name": str(getattr(group, "display_name", "") or ""),
-            "members_impacted_count": len(impacted_user_ids),
+    await _audit_and_commit_group_change(
+        db=db,
+        tenant_id=tenant_id,
+        audit_kwargs={
+            "event_type": AuditEventType.SCIM_GROUP_DELETED,
+            "actor_id": None,
+            "resource_type": "scim_group",
+            "resource_id": str(group.id),
+            "details": {
+                "display_name": str(getattr(group, "display_name", "") or ""),
+                "members_impacted_count": len(impacted_user_ids),
+            },
+            "request_method": "SCIM",
+            "request_path": f"/scim/v2/Groups/{group.id}",
         },
-        request_method="SCIM",
-        request_path=f"/scim/v2/Groups/{group.id}",
+        scim_error_factory=scim_error_factory,
     )
-    await db.commit()
 
     return JSONResponse(status_code=204, content={})

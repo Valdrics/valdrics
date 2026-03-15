@@ -154,7 +154,7 @@ async def test_get_unit_economics_skips_alert_when_flag_disabled_with_anomaly() 
     with (
         patch.object(
             costs_api,
-            "_get_or_create_unit_settings",
+            "_get_unit_settings_snapshot",
             new=AsyncMock(
                 return_value=standard_unit_settings(anomaly_threshold_percent=15.0)
             ),

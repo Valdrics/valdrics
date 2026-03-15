@@ -183,16 +183,23 @@ async def test_request_data_erasure_success(mock_db, owner_user):
     tenant_lookup.scalar_one_or_none.return_value = MagicMock(id=owner_user.tenant_id)
 
     delete_result = MagicMock()
-    delete_result.rowcount = 5
+    delete_result.rowcount = 1
 
-    # Keep this resilient as deletion scope grows (Cloud+ connectors, etc.).
-    mock_db.execute.side_effect = [tenant_lookup] + [delete_result] * 40
+    execute_results = [tenant_lookup]
 
+    async def _execute(*_args, **_kwargs):
+        if execute_results:
+            return execute_results.pop(0)
+        return delete_result
+
+    mock_db.execute.side_effect = _execute
     res = await request_data_erasure(
         owner_user, mock_db, confirmation="DELETE ALL MY DATA"
     )
 
     assert res["status"] == "erasure_complete"
+    assert "tenant record" in res["message"].lower()
+    assert res["retained_records"]["system_audit_summary"] is True
     assert mock_db.commit.called
 
 

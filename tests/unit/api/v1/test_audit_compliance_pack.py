@@ -241,6 +241,155 @@ async def test_export_compliance_pack_can_include_focus_export(
 
 
 @pytest.mark.asyncio
+async def test_export_compliance_pack_absent_settings_do_not_claim_enabled_controls(
+    async_client, app, db, test_tenant
+):
+    from app.shared.core.auth import CurrentUser, get_current_user, UserRole
+    from app.shared.core.pricing import PricingTier
+
+    owner_user = CurrentUser(
+        id=uuid4(),
+        email="owner-empty@valdrics.io",
+        tenant_id=test_tenant.id,
+        role=UserRole.OWNER,
+        tier=PricingTier.PRO,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: owner_user
+    try:
+        resp = await async_client.get("/api/v1/audit/compliance-pack")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert resp.status_code == 200
+    zf = zipfile.ZipFile(io.BytesIO(resp.content))
+
+    notif_snapshot = json.loads(zf.read("notification_settings.json").decode("utf-8"))
+    remediation_snapshot = json.loads(
+        zf.read("remediation_settings.json").decode("utf-8")
+    )
+
+    assert notif_snapshot["exists"] is False
+    assert notif_snapshot["slack_enabled"] is False
+    assert notif_snapshot["alert_on_budget_warning"] is False
+    assert notif_snapshot["alert_on_budget_exceeded"] is False
+    assert remediation_snapshot["exists"] is False
+    assert remediation_snapshot["policy_enabled"] is False
+    assert remediation_snapshot["policy_block_production_destructive"] is False
+    assert remediation_snapshot["policy_violation_notify_slack"] is False
+
+
+@pytest.mark.asyncio
+async def test_export_compliance_pack_filters_json_evidence_by_requested_window(
+    async_client, app, db, test_tenant
+):
+    from app.modules.governance.domain.security.audit_log import (
+        AuditEventType,
+        AuditLog,
+    )
+    from app.shared.core.auth import CurrentUser, UserRole, get_current_user
+    from app.shared.core.pricing import PricingTier
+
+    owner_user = CurrentUser(
+        id=uuid4(),
+        email="owner-window@valdrics.io",
+        tenant_id=test_tenant.id,
+        role=UserRole.OWNER,
+        tier=PricingTier.PRO,
+    )
+    february_event_at = datetime(2026, 2, 15, 12, 0, tzinfo=timezone.utc)
+    march_event_at = datetime(2026, 3, 3, 12, 0, tzinfo=timezone.utc)
+
+    db.add_all(
+        [
+            AuditLog(
+                tenant_id=test_tenant.id,
+                event_type=AuditEventType.INTEGRATION_TEST_SLACK.value,
+                event_timestamp=february_event_at,
+                actor_id=owner_user.id,
+                actor_email=owner_user.email,
+                resource_type="integration",
+                resource_id="slack",
+                success=True,
+                details={
+                    "channel": "slack",
+                    "status_code": 200,
+                    "result_message": "february",
+                },
+            ),
+            AuditLog(
+                tenant_id=test_tenant.id,
+                event_type=AuditEventType.INTEGRATION_TEST_SLACK.value,
+                event_timestamp=march_event_at,
+                actor_id=owner_user.id,
+                actor_email=owner_user.email,
+                resource_type="integration",
+                resource_id="slack",
+                success=True,
+                details={
+                    "channel": "slack",
+                    "status_code": 200,
+                    "result_message": "march",
+                },
+            ),
+            AuditLog(
+                tenant_id=test_tenant.id,
+                event_type=AuditEventType.ACCEPTANCE_KPIS_CAPTURED.value,
+                event_timestamp=february_event_at,
+                actor_id=owner_user.id,
+                actor_email=owner_user.email,
+                resource_type="governance",
+                resource_id="acceptance_kpis",
+                success=True,
+                details={
+                    "thresholds": {"passed": True},
+                    "acceptance_kpis": {"window": "february"},
+                },
+            ),
+            AuditLog(
+                tenant_id=test_tenant.id,
+                event_type=AuditEventType.ACCEPTANCE_KPIS_CAPTURED.value,
+                event_timestamp=march_event_at,
+                actor_id=owner_user.id,
+                actor_email=owner_user.email,
+                resource_type="governance",
+                resource_id="acceptance_kpis",
+                success=True,
+                details={
+                    "thresholds": {"passed": True},
+                    "acceptance_kpis": {"window": "march"},
+                },
+            ),
+        ]
+    )
+    await db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: owner_user
+    try:
+        resp = await async_client.get(
+            "/api/v1/audit/compliance-pack"
+            "?start_date=2026-02-01T00:00:00Z"
+            "&end_date=2026-02-28T23:59:59Z"
+        )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert resp.status_code == 200
+    zf = zipfile.ZipFile(io.BytesIO(resp.content))
+    integration_evidence = json.loads(
+        zf.read("integration_acceptance_evidence.json").decode("utf-8")
+    )
+    acceptance_kpis_evidence = json.loads(
+        zf.read("acceptance_kpis_evidence.json").decode("utf-8")
+    )
+
+    assert [item["message"] for item in integration_evidence] == ["february"]
+    assert [item["acceptance_kpis"]["window"] for item in acceptance_kpis_evidence] == [
+        "february"
+    ]
+
+
+@pytest.mark.asyncio
 async def test_export_compliance_pack_can_include_savings_proof_and_close_package(
     async_client, app, db, test_tenant
 ):

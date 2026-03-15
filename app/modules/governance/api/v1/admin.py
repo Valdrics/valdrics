@@ -30,7 +30,11 @@ from app.modules.governance.api.v1.landing_funnel_health_ops import (
     load_rollup_window_summary as _load_rollup_window_summary,
     window_stage_count as _window_stage_count,
 )
-from app.shared.core.auth import CurrentUser, requires_role
+from app.shared.core.auth import (
+    CurrentUser,
+    require_platform_operator,
+    requires_platform_role,
+)
 
 router = APIRouter(tags=["Admin Utilities"])
 logger = structlog.get_logger()
@@ -185,10 +189,10 @@ async def get_landing_campaign_metrics(
     days: int = Query(default=30, ge=1, le=120),
     limit: int = Query(default=50, ge=1, le=500),
     db: AsyncSession = Depends(get_system_db),
-    user: CurrentUser = Depends(requires_role("admin")),
+    user: CurrentUser = Depends(requires_platform_role("admin")),
 ) -> LandingCampaignMetricsResponse:
     del request
-    del user
+    require_platform_operator(user)
 
     window_end = datetime.now(timezone.utc).date()
     window_start = window_end - timedelta(days=days - 1)
@@ -342,8 +346,25 @@ async def get_landing_campaign_metrics(
         existing.last_seen_at = row.last_seen_at or existing.last_seen_at
         item_map[key] = existing
 
+    def _campaign_has_window_activity(item: LandingCampaignMetricsRow) -> bool:
+        return any(
+            value > 0
+            for value in (
+                item.total_events,
+                item.cta_events,
+                item.signup_intent_events,
+                item.onboarded_tenants,
+                item.connected_tenants,
+                item.first_value_tenants,
+                item.pql_tenants,
+                item.pricing_view_tenants,
+                item.checkout_started_tenants,
+                item.paid_tenants,
+            )
+        )
+
     all_items = sorted(
-        item_map.values(),
+        [item for item in item_map.values() if _campaign_has_window_activity(item)],
         key=lambda item: (
             item.total_events,
             item.paid_tenants,

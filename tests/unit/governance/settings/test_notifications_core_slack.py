@@ -5,6 +5,7 @@ from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 
 from app.models.notification_settings import NotificationSettings
 from app.shared.core.pricing import PricingTier
@@ -14,17 +15,25 @@ from app.shared.core.auth import UserRole
 @pytest.mark.asyncio
 async def test_get_notification_settings_creates_default(
     async_client: AsyncClient,
+    db,
     app,
     make_current_user,
     override_current_user,
 ) -> None:
+    admin = make_current_user(role=UserRole.ADMIN, tier=PricingTier.GROWTH)
     with override_current_user(
-        app, make_current_user(role=UserRole.ADMIN, tier=PricingTier.GROWTH)
+        app, admin
     ):
         response = await async_client.get("/api/v1/settings/notifications")
 
     assert response.status_code == 200
     assert response.json()["slack_enabled"] is True
+    settings = await db.scalar(
+        select(NotificationSettings).where(
+            NotificationSettings.tenant_id == admin.tenant_id
+        )
+    )
+    assert settings is None
 
 
 @pytest.mark.asyncio
@@ -255,6 +264,27 @@ async def test_update_notification_settings_requires_growth_tier_for_slack(
 
     assert response.status_code == 403
     assert "slack_integration" in response.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_update_notification_settings_allows_low_tier_partial_non_slack_update(
+    async_client: AsyncClient,
+    app,
+    make_current_user,
+    override_current_user,
+) -> None:
+    with override_current_user(
+        app, make_current_user(role=UserRole.ADMIN, tier=PricingTier.STARTER)
+    ):
+        response = await async_client.put(
+            "/api/v1/settings/notifications",
+            json={"digest_schedule": "weekly"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["digest_schedule"] == "weekly"
+    assert payload["slack_enabled"] is False
 
 
 @pytest.mark.asyncio

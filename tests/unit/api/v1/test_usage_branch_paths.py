@@ -300,6 +300,33 @@ async def test_get_workload_metering_counts_active_connections_and_providers() -
 
 
 @pytest.mark.asyncio
+async def test_get_workload_metering_filters_last_scan_to_supported_job_types() -> None:
+    tenant_id = uuid4()
+    today_start = datetime(2026, 2, 26, 0, 0, tzinfo=timezone.utc)
+    scan_completed_at = datetime(2026, 2, 26, 10, 0, tzinfo=timezone.utc)
+    db = MagicMock()
+    db.execute = AsyncMock(
+        return_value=_one_result(
+            SimpleNamespace(
+                cost_analysis_calls=0,
+                zombie_scans=1,
+                last_scan=scan_completed_at,
+            )
+        )
+    )
+
+    with patch.object(usage_api, "list_tenant_connections", new=AsyncMock(return_value=[])):
+        metrics = await usage_api._get_workload_metering(db, tenant_id, today_start)
+
+    statement = db.execute.await_args.args[0]
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "background_jobs.job_type IN ('finops_analysis', 'zombie_scan')" in compiled
+    assert metrics.zombie_scans_today == 1
+    assert metrics.finops_analysis_jobs_today == 0
+    assert metrics.last_scan_at == scan_completed_at.isoformat()
+
+
+@pytest.mark.asyncio
 async def test_get_feature_usage_paid_tier_with_enum_like_plan_and_slack_enabled() -> None:
     db = MagicMock()
     db.execute = AsyncMock(

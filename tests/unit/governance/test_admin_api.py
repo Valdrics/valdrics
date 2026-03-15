@@ -3,6 +3,7 @@ import pytest_asyncio
 from fastapi import Request, HTTPException
 from unittest.mock import MagicMock, patch, AsyncMock
 from datetime import datetime, timezone, timedelta
+from types import SimpleNamespace
 from uuid import uuid4
 from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -226,7 +227,7 @@ async def test_reconcile_tenant_costs_success():
 @pytest.mark.asyncio
 async def test_get_landing_campaign_metrics_aggregates_by_campaign(campaign_db: AsyncSession):
     request = MagicMock(spec=Request)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc) - timedelta(days=1)
     today = now.date()
 
     campaign_db.add_all(
@@ -288,7 +289,7 @@ async def test_get_landing_campaign_metrics_aggregates_by_campaign(campaign_db: 
         days=30,
         limit=10,
         db=campaign_db,
-        user=MagicMock(),
+        user=SimpleNamespace(tenant_id=None),
     )
 
     assert result.total_events == 23
@@ -309,7 +310,7 @@ async def test_get_landing_campaign_metrics_merges_authenticated_funnel_progress
     campaign_db: AsyncSession,
 ):
     request = MagicMock(spec=Request)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc) - timedelta(days=1)
     today = now.date()
 
     launch_tenant = Tenant(id=uuid4(), name="Launch Co", plan=PricingTier.GROWTH.value)
@@ -363,7 +364,7 @@ async def test_get_landing_campaign_metrics_merges_authenticated_funnel_progress
         days=30,
         limit=10,
         db=campaign_db,
-        user=MagicMock(),
+        user=SimpleNamespace(tenant_id=None),
     )
 
     assert result.total_events == 5
@@ -496,7 +497,7 @@ async def test_get_landing_campaign_metrics_flags_critical_funnel_dropoffs(
         days=30,
         limit=10,
         db=campaign_db,
-        user=MagicMock(),
+        user=SimpleNamespace(tenant_id=None),
     )
 
     assert result.weekly_current.onboarded_tenants == 4
@@ -509,3 +510,98 @@ async def test_get_landing_campaign_metrics_flags_critical_funnel_dropoffs(
     assert result.weekly_previous.first_value_tenants == 2
     assert result.funnel_alerts[0].status == "critical"
     assert result.funnel_alerts[1].status == "critical"
+
+
+@pytest.mark.asyncio
+async def test_get_landing_campaign_metrics_weekly_window_uses_completed_days_only(
+    campaign_db: AsyncSession,
+):
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            fixed = cls(2026, 3, 10, 10, 0, tzinfo=timezone.utc)
+            if tz is None:
+                return fixed.replace(tzinfo=None)
+            return fixed.astimezone(tz)
+
+    request = MagicMock(spec=Request)
+    completed_day = _FixedDateTime.now(timezone.utc).date() - timedelta(days=7)
+    partial_today = _FixedDateTime.now(timezone.utc).date()
+    completed_timestamp = datetime(2026, 3, 3, 12, 0, tzinfo=timezone.utc)
+    partial_today_timestamp = datetime(2026, 3, 10, 9, 0, tzinfo=timezone.utc)
+
+    completed_tenant = Tenant(
+        id=uuid4(),
+        name="Completed Window",
+        plan=PricingTier.STARTER.value,
+    )
+    partial_tenant = Tenant(
+        id=uuid4(),
+        name="Partial Day",
+        plan=PricingTier.STARTER.value,
+    )
+    campaign_db.add_all([completed_tenant, partial_tenant])
+    campaign_db.add_all(
+        [
+            LandingTelemetryDailyRollup(
+                event_date=completed_day,
+                event_name="landing_view",
+                section="landing",
+                funnel_stage="view",
+                utm_source="google",
+                utm_medium="cpc",
+                utm_campaign="launch",
+                event_count=5,
+                first_seen_at=completed_timestamp,
+                last_seen_at=completed_timestamp,
+            ),
+            LandingTelemetryDailyRollup(
+                event_date=partial_today,
+                event_name="landing_view",
+                section="landing",
+                funnel_stage="view",
+                utm_source="google",
+                utm_medium="cpc",
+                utm_campaign="launch",
+                event_count=100,
+                first_seen_at=partial_today_timestamp,
+                last_seen_at=partial_today_timestamp,
+            ),
+            TenantGrowthFunnelSnapshot(
+                tenant_id=completed_tenant.id,
+                utm_source="google",
+                utm_medium="cpc",
+                utm_campaign="launch",
+                current_tier=PricingTier.STARTER.value,
+                tenant_onboarded_at=completed_timestamp,
+                created_at=completed_timestamp,
+                updated_at=completed_timestamp,
+            ),
+            TenantGrowthFunnelSnapshot(
+                tenant_id=partial_tenant.id,
+                utm_source="google",
+                utm_medium="cpc",
+                utm_campaign="launch",
+                current_tier=PricingTier.STARTER.value,
+                tenant_onboarded_at=partial_today_timestamp,
+                created_at=partial_today_timestamp,
+                updated_at=partial_today_timestamp,
+            ),
+        ]
+    )
+    await campaign_db.commit()
+
+    with patch("app.modules.governance.api.v1.admin.datetime", _FixedDateTime):
+        result = await get_landing_campaign_metrics(
+            request=request,
+            days=30,
+            limit=10,
+            db=campaign_db,
+            user=SimpleNamespace(tenant_id=None),
+        )
+
+    assert result.total_events == 105
+    assert result.total_onboarded_tenants == 2
+    assert result.weekly_current.total_events == 5
+    assert result.weekly_current.onboarded_tenants == 1
+    assert result.weekly_previous.total_events == 0

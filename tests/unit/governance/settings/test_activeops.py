@@ -2,6 +2,7 @@ import pytest
 import uuid
 from httpx import AsyncClient
 from unittest.mock import AsyncMock, MagicMock, patch
+from sqlalchemy import select
 from app.models.remediation_settings import RemediationSettings
 from app.models.tenant import UserRole
 from app.shared.core.auth import CurrentUser, get_current_user
@@ -9,10 +10,10 @@ from app.shared.core.auth import CurrentUser, get_current_user
 
 
 @pytest.mark.asyncio
-async def test_get_activeops_settings_creates_default(
+async def test_get_activeops_settings_returns_default_without_persisting(
     async_client: AsyncClient, db, mock_user_id, mock_tenant_id, app
 ):
-    """GET /activeops should create default settings if they don't exist."""
+    """GET /activeops should return defaults without creating settings rows."""
     user_id = uuid.UUID(str(mock_user_id))
     tenant_id = uuid.UUID(str(mock_tenant_id))
     mock_user = CurrentUser(
@@ -25,19 +26,29 @@ async def test_get_activeops_settings_creates_default(
         assert response.status_code == 200
         data = response.json()
         assert data["auto_pilot_enabled"] is False
+
+        result = await db.execute(
+            select(RemediationSettings).where(
+                RemediationSettings.tenant_id == tenant_id
+            )
+        )
+        assert result.scalar_one_or_none() is None
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
 
 @pytest.mark.asyncio
-async def test_get_activeops_settings_creates_default_for_new_tenant(
+async def test_get_activeops_settings_member_read_is_side_effect_free(
     async_client: AsyncClient, db, app
 ):
-    """Ensure GET /activeops creates defaults for a fresh tenant."""
+    """Member GET /activeops should not materialize remediation settings rows."""
     user_id = uuid.uuid4()
     tenant_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="fresh@valdrics.io", role=UserRole.ADMIN
+        id=user_id,
+        tenant_id=tenant_id,
+        email="member@valdrics.io",
+        role=UserRole.MEMBER,
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
@@ -47,6 +58,13 @@ async def test_get_activeops_settings_creates_default_for_new_tenant(
         data = response.json()
         assert data["auto_pilot_enabled"] is False
         assert data["min_confidence_threshold"] == 0.95
+
+        result = await db.execute(
+            select(RemediationSettings).where(
+                RemediationSettings.tenant_id == tenant_id
+            )
+        )
+        assert result.scalar_one_or_none() is None
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

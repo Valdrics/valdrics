@@ -21,6 +21,7 @@ from app.schemas.connections import (
     SaaSConnectionCreate,
 )
 from app.shared.core.auth import CurrentUser
+from app.shared.core.exceptions import AdapterError
 from app.shared.core.pricing import PricingTier
 
 
@@ -203,6 +204,33 @@ async def test_sync_aws_org_requires_management_account(
 
 
 @pytest.mark.asyncio
+async def test_sync_aws_org_requires_active_management_account(
+    user: CurrentUser, db: MagicMock
+) -> None:
+    db.execute.return_value = _scalar_result(
+        SimpleNamespace(is_management_account=True, status="pending")
+    )
+    with pytest.raises(HTTPException) as exc:
+        await aws_discovery_api.sync_aws_org(uuid4(), user, db)
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_sync_aws_org_propagates_sync_failure(
+    user: CurrentUser, db: MagicMock
+) -> None:
+    db.execute.return_value = _scalar_result(
+        SimpleNamespace(is_management_account=True, status="active")
+    )
+    with patch(
+        "app.modules.governance.api.v1.settings.connections_setup_aws_discovery.OrganizationsDiscoveryService.sync_accounts",
+        new=AsyncMock(side_effect=AdapterError("boom")),
+    ):
+        with pytest.raises(AdapterError):
+            await aws_discovery_api.sync_aws_org(uuid4(), user, db)
+
+
+@pytest.mark.asyncio
 async def test_list_discovered_accounts_returns_empty_when_no_management_connection(
     user: CurrentUser, db: MagicMock
 ) -> None:
@@ -312,6 +340,39 @@ async def test_create_gcp_connection_workload_identity_failure(
             await cloud_api.create_gcp_connection(MagicMock(), payload, db, user)
     assert exc.value.status_code == 400
     assert "verification failed" in exc.value.detail.lower()
+
+
+@pytest.mark.asyncio
+async def test_create_gcp_connection_workload_identity_passes_billing_scope(
+    user: CurrentUser, db: MagicMock
+) -> None:
+    payload = GCPConnectionCreate(
+        name="GCP Workload Identity",
+        project_id="project-2",
+        auth_method="workload_identity",
+        billing_project_id="billing-proj",
+        billing_dataset="billing_ds",
+        billing_table="billing_tbl",
+    )
+    db.scalar.return_value = None
+    with (
+        patch.object(
+            cloud_api, "check_multi_cloud_tier", return_value=PricingTier.STARTER
+        ),
+        patch(
+            "app.shared.connections.oidc.OIDCService.verify_gcp_access",
+            new=AsyncMock(return_value=(False, "no access")),
+        ) as mock_verify,
+    ):
+        with pytest.raises(HTTPException):
+            await cloud_api.create_gcp_connection(MagicMock(), payload, db, user)
+    mock_verify.assert_awaited_once_with(
+        project_id="project-2",
+        tenant_id=str(user.tenant_id),
+        billing_project_id="billing-proj",
+        billing_dataset="billing_ds",
+        billing_table="billing_tbl",
+    )
 
 
 @pytest.mark.asyncio

@@ -53,7 +53,9 @@ def test_settings_to_response_and_connection_active_delegate() -> None:
     assert out.anomaly_threshold_percent == 35.0
 
     connection = SimpleNamespace(status="active")
-    with patch.object(costs_metrics, "is_connection_active", return_value=True) as mocked:
+    with patch.object(
+        costs_metrics, "is_connection_active", return_value=True
+    ) as mocked:
         assert costs_metrics.is_connection_active_state(connection) is True
     mocked.assert_called_once_with(connection)
 
@@ -154,7 +156,9 @@ def test_build_provider_recency_summary_handles_naive_stale_never_and_recent() -
 
 
 @pytest.mark.asyncio
-async def test_compute_provider_recency_summaries_iterates_all_provider_models() -> None:
+async def test_compute_provider_recency_summaries_iterates_all_provider_models() -> (
+    None
+):
     tenant_id = uuid4()
     db = MagicMock()
     db.execute = AsyncMock(side_effect=[_scalars_result([]) for _ in range(7)])
@@ -180,7 +184,9 @@ async def test_compute_provider_recency_summaries_iterates_all_provider_models()
             meets_recency_target=False,
         )
 
-    with patch.object(costs_metrics, "build_provider_recency_summary", side_effect=_fake_builder):
+    with patch.object(
+        costs_metrics, "build_provider_recency_summary", side_effect=_fake_builder
+    ):
         summaries = await costs_metrics.compute_provider_recency_summaries(
             db, tenant_id, recency_target_hours=24
         )
@@ -283,7 +289,10 @@ async def test_compute_ingestion_sla_metrics_normalizes_naive_job_timestamps() -
     assert out.success_rate_percent == 100.0
     assert out.avg_duration_seconds == 300.0
     assert out.p95_duration_seconds == 300.0
-    assert out.latest_completed_at == naive_completed.replace(tzinfo=timezone.utc).isoformat()
+    assert (
+        out.latest_completed_at
+        == naive_completed.replace(tzinfo=timezone.utc).isoformat()
+    )
 
 
 @pytest.mark.asyncio
@@ -327,7 +336,9 @@ async def test_compute_license_governance_kpi_no_active_connections() -> None:
 
 
 @pytest.mark.asyncio
-async def test_compute_license_governance_kpi_active_connections_and_cycle_time() -> None:
+async def test_compute_license_governance_kpi_active_connections_and_cycle_time() -> (
+    None
+):
     tenant_id = uuid4()
     db = MagicMock()
     db.scalar = AsyncMock(return_value=2)
@@ -351,7 +362,10 @@ async def test_compute_license_governance_kpi_active_connections_and_cycle_time(
                     (naive_created, naive_executed),
                     (aware_created, aware_executed),
                     (None, aware_executed),
-                    (aware_executed, aware_created),  # executed before created -> ignored
+                    (
+                        aware_executed,
+                        aware_created,
+                    ),  # executed before created -> ignored
                 ]
             ),
         ]
@@ -375,3 +389,38 @@ async def test_compute_license_governance_kpi_active_connections_and_cycle_time(
     assert metric.details["in_flight_ratio_percent"] == 10.0
     assert metric.details["avg_time_to_complete_hours"] == 5.0
     assert "80.00% completion" in metric.actual
+
+
+@pytest.mark.asyncio
+async def test_compute_license_governance_kpi_window_uses_execution_activity() -> None:
+    db = MagicMock()
+    db.scalar = AsyncMock(return_value=1)
+    db.execute = AsyncMock(
+        side_effect=[
+            _one_result(
+                SimpleNamespace(
+                    total_requests=1,
+                    completed_requests=1,
+                    failed_requests=0,
+                    in_flight_requests=0,
+                )
+            ),
+            _all_result([]),
+        ]
+    )
+
+    await costs_metrics.compute_license_governance_kpi(
+        db=db,
+        tenant_id=uuid4(),
+        start_date=date(2026, 2, 1),
+        end_date=date(2026, 2, 28),
+    )
+
+    counts_sql = str(db.execute.await_args_list[0].args[0]).lower()
+    completed_sql = str(db.execute.await_args_list[1].args[0]).lower()
+    expected_fragment = (
+        "coalesce(remediation_requests.executed_at, "
+        "remediation_requests.updated_at, remediation_requests.created_at)"
+    )
+    assert expected_fragment in counts_sql
+    assert expected_fragment in completed_sql

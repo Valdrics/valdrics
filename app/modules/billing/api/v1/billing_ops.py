@@ -4,11 +4,13 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Dict
 
 from fastapi import HTTPException, Request
-from sqlalchemy import func, literal, select, union_all
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.billing.api.v1.billing_models import ConnectionUsageItem
+from app.shared.core.connection_queries import list_tenant_connections
+from app.shared.core.provider import normalize_provider
 
 
 BILLING_PLAN_RECOVERABLE_ERRORS = (
@@ -172,52 +174,16 @@ async def load_billing_usage(
     tenant_id: Any,
     tier: Any,
 ) -> dict[str, ConnectionUsageItem]:
-    from app.models.aws_connection import AWSConnection
-    from app.models.azure_connection import AzureConnection
-    from app.models.gcp_connection import GCPConnection
-    from app.models.license_connection import LicenseConnection
-    from app.models.saas_connection import SaaSConnection
     from app.shared.core.pricing import get_tier_limit
 
-    count_rows = union_all(
-        select(
-            literal("aws").label("provider"),
-            func.count().label("connected"),
-        )
-        .select_from(AWSConnection)
-        .where(AWSConnection.tenant_id == tenant_id),
-        select(
-            literal("azure").label("provider"),
-            func.count().label("connected"),
-        )
-        .select_from(AzureConnection)
-        .where(AzureConnection.tenant_id == tenant_id),
-        select(
-            literal("gcp").label("provider"),
-            func.count().label("connected"),
-        )
-        .select_from(GCPConnection)
-        .where(GCPConnection.tenant_id == tenant_id),
-        select(
-            literal("saas").label("provider"),
-            func.count().label("connected"),
-        )
-        .select_from(SaaSConnection)
-        .where(SaaSConnection.tenant_id == tenant_id),
-        select(
-            literal("license").label("provider"),
-            func.count().label("connected"),
-        )
-        .select_from(LicenseConnection)
-        .where(LicenseConnection.tenant_id == tenant_id),
-    )
-    counts_subquery = count_rows.subquery()
-    counts_result = await db.execute(
-        select(counts_subquery.c.provider, counts_subquery.c.connected)
-    )
-    counts_map = {
-        str(row.provider): int(row.connected or 0) for row in counts_result.all()
-    }
+    providers = ("aws", "azure", "gcp", "saas", "license", "platform", "hybrid")
+    counts_map = {provider: 0 for provider in providers}
+    if tenant_id is not None:
+        active_connections = await list_tenant_connections(db, tenant_id, active_only=True)
+        for connection in active_connections:
+            provider = normalize_provider(getattr(connection, "provider", None))
+            if provider in counts_map:
+                counts_map[provider] += 1
 
     return {
         "aws": _usage_item(
@@ -239,6 +205,14 @@ async def load_billing_usage(
         "license": _usage_item(
             counts_map.get("license", 0),
             get_tier_limit(tier, "max_license_connections"),
+        ),
+        "platform": _usage_item(
+            counts_map.get("platform", 0),
+            get_tier_limit(tier, "max_platform_connections"),
+        ),
+        "hybrid": _usage_item(
+            counts_map.get("hybrid", 0),
+            get_tier_limit(tier, "max_hybrid_connections"),
         ),
     }
 

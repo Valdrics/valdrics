@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -182,7 +183,9 @@ async def test_get_savings_proof_drilldown_json_and_csv_paths() -> None:
         service = MagicMock()
         service.drilldown = AsyncMock(return_value=payload)
         service_cls.return_value = service
-        service_cls.render_drilldown_csv.return_value = "key,value\nsavings_plan,120.0\n"
+        service_cls.render_drilldown_csv.return_value = (
+            "key,value\nsavings_plan,120.0\n"
+        )
 
         json_response = await savings_api.get_savings_proof_drilldown(
             start_date=date(2026, 2, 1),
@@ -378,4 +381,44 @@ async def test_list_realized_savings_events_json_and_csv_paths() -> None:
     assert isinstance(csv_response, Response)
     csv_text = csv_response.body.decode()
     assert "realized_monthly_savings_usd" in csv_text
-    assert "72.0" in csv_text
+
+
+@pytest.mark.asyncio
+async def test_list_realized_savings_events_csv_sanitizes_formula_cells() -> None:
+    request_id = uuid4()
+    event = SimpleNamespace(
+        remediation_request_id=request_id,
+        provider="=AWS",
+        account_id=uuid4(),
+        resource_id="Compute,Edge",
+        region="us-east-1",
+        method="+post_action_delta",
+        baseline_start_date=date(2026, 1, 1),
+        baseline_end_date=date(2026, 1, 7),
+        measurement_start_date=date(2026, 1, 8),
+        measurement_end_date=date(2026, 1, 14),
+        baseline_avg_daily_cost_usd=Decimal("10.50"),
+        measurement_avg_daily_cost_usd=Decimal("8.10"),
+        realized_monthly_savings_usd=Decimal("72.00"),
+        confidence_score=Decimal("0.91"),
+        computed_at=datetime(2026, 2, 28, 10, 0, tzinfo=timezone.utc),
+    )
+    executed_at = datetime(2026, 2, 20, 9, 0, tzinfo=timezone.utc)
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_all_result([(event, executed_at)]))
+
+    csv_response = await savings_api.list_realized_savings_events(
+        start_date=date(2026, 2, 1),
+        end_date=date(2026, 2, 28),
+        provider=None,
+        response_format="csv",
+        limit=200,
+        current_user=_user(),
+        db=db,
+    )
+
+    rows = list(csv.reader(csv_response.body.decode().splitlines()))
+    assert rows[1][1] == "'=AWS"
+    assert rows[1][3] == "Compute,Edge"
+    assert rows[1][5] == "'+post_action_delta"
+    assert rows[1][13] == "72.0"

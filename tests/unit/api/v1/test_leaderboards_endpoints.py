@@ -75,6 +75,26 @@ async def test_leaderboard_empty_for_period_7d() -> None:
 
 
 @pytest.mark.asyncio
+async def test_leaderboard_period_filter_uses_completion_timestamp() -> None:
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_result([]))
+    cache = _Cache(enabled=False, cached_payload=None)
+
+    with patch.object(leaderboards_api, "get_cache_service", return_value=cache):
+        await leaderboards_api.get_leaderboard(
+            request=object(),
+            period="7d",
+            current_user=_user(),
+            db=db,
+        )
+
+    query = db.execute.await_args.args[0]
+    query_sql = str(query).lower()
+    assert "coalesce(remediation_requests.executed_at" in query_sql
+    assert "remediation_requests.created_at >=" not in query_sql
+
+
+@pytest.mark.asyncio
 async def test_leaderboard_allows_starter_tier() -> None:
     db = MagicMock()
     db.execute = AsyncMock(return_value=_result([]))
@@ -278,12 +298,16 @@ async def test_leaderboard_replay_is_deterministic_for_same_inputs() -> None:
 
 
 @pytest.mark.asyncio
-async def test_leaderboard_endpoint_allows_starter_tier(async_client: AsyncClient) -> None:
+async def test_leaderboard_endpoint_allows_starter_tier(
+    async_client: AsyncClient,
+) -> None:
     app.dependency_overrides[get_current_user] = lambda: _user(tier=PricingTier.STARTER)
     cache = _Cache(enabled=False, cached_payload=None)
     try:
         with patch.object(leaderboards_api, "get_cache_service", return_value=cache):
-            response = await async_client.get("/api/v1/leaderboards", params={"period": "30d"})
+            response = await async_client.get(
+                "/api/v1/leaderboards", params={"period": "30d"}
+            )
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -296,7 +320,9 @@ async def test_leaderboard_endpoint_denies_when_feature_gate_fails(
 ) -> None:
     app.dependency_overrides[get_current_user] = lambda: _user(tier=PricingTier.STARTER)
     try:
-        with patch("app.shared.core.dependencies.is_feature_enabled", return_value=False):
+        with patch(
+            "app.shared.core.dependencies.is_feature_enabled", return_value=False
+        ):
             response = await async_client.get(
                 "/api/v1/leaderboards",
                 params={"period": "30d"},

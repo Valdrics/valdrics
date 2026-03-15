@@ -225,7 +225,12 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                             cohort=target_cohort.value,
                             retry_count=retry_count,
                         ):
-                            query = sa.select(Tenant).with_for_update(skip_locked=True)
+                            tenant_limit = _system_sweep_tenant_limit()
+                            query = (
+                                sa.select(Tenant)
+                                .limit(tenant_limit + 1)
+                                .with_for_update(skip_locked=True)
+                            )
 
                             if target_cohort == TenantCohort.HIGH_VALUE:
                                 query = query.where(Tenant.plan.in_(["enterprise", "pro"]))
@@ -237,7 +242,6 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
 
                             result = await db.execute(query)
                             cohort_tenants = result.scalars().all()
-                            tenant_limit = _system_sweep_tenant_limit()
                             cohort_tenants = _cap_scope_items(
                                 cohort_tenants,
                                 scope=f"cohort:{target_cohort.value}",

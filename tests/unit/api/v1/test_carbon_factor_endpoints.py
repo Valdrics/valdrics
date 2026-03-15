@@ -22,28 +22,18 @@ def _make_factor_payload(
 async def test_carbon_factor_stage_activate_and_list(
     async_client, app, db, test_tenant
 ):
-    from app.models.tenant import User
     from app.shared.core.auth import CurrentUser, get_current_user, UserRole
     from app.shared.core.pricing import PricingTier
 
-    admin_user = CurrentUser(
+    platform_admin = CurrentUser(
         id=uuid.uuid4(),
         email="admin-carbon-factors@valdrics.io",
-        tenant_id=test_tenant.id,
+        tenant_id=None,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
-    db.add(
-        User(
-            id=admin_user.id,
-            tenant_id=test_tenant.id,
-            email=admin_user.email,
-            role=UserRole.ADMIN,
-        )
-    )
-    await db.commit()
 
-    app.dependency_overrides[get_current_user] = lambda: admin_user
+    app.dependency_overrides[get_current_user] = lambda: platform_admin
     try:
         active_resp = await async_client.get("/api/v1/carbon/factors/active")
         assert active_resp.status_code == 200
@@ -90,28 +80,18 @@ async def test_carbon_factor_stage_activate_and_list(
 
 @pytest.mark.asyncio
 async def test_carbon_factor_auto_activate_latest(async_client, app, db, test_tenant):
-    from app.models.tenant import User
     from app.shared.core.auth import CurrentUser, get_current_user, UserRole
     from app.shared.core.pricing import PricingTier
 
-    admin_user = CurrentUser(
+    platform_admin = CurrentUser(
         id=uuid.uuid4(),
         email="admin-carbon-auto@valdrics.io",
-        tenant_id=test_tenant.id,
+        tenant_id=None,
         role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
-    db.add(
-        User(
-            id=admin_user.id,
-            tenant_id=test_tenant.id,
-            email=admin_user.email,
-            role=UserRole.ADMIN,
-        )
-    )
-    await db.commit()
 
-    app.dependency_overrides[get_current_user] = lambda: admin_user
+    app.dependency_overrides[get_current_user] = lambda: platform_admin
     try:
         active_resp = await async_client.get("/api/v1/carbon/factors/active")
         assert active_resp.status_code == 200
@@ -140,5 +120,42 @@ async def test_carbon_factor_auto_activate_latest(async_client, app, db, test_te
         new_active = new_active_resp.json()
         assert new_active["id"] != old_active_id
         assert new_active["id"] == staged["id"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_carbon_factor_endpoints_reject_tenant_admin(
+    async_client, app, test_tenant
+):
+    from app.shared.core.auth import CurrentUser, get_current_user, UserRole
+    from app.shared.core.pricing import PricingTier
+
+    tenant_admin = CurrentUser(
+        id=uuid.uuid4(),
+        email="tenant-admin-carbon@valdrics.io",
+        tenant_id=test_tenant.id,
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: tenant_admin
+    try:
+        active_resp = await async_client.get("/api/v1/carbon/factors/active")
+        assert active_resp.status_code == 403
+        assert "Platform operator access is required" in active_resp.text
+
+        stage_resp = await async_client.post(
+            "/api/v1/carbon/factors",
+            json={
+                "payload": _make_factor_payload(
+                    factor_version="2026-03-15-denied",
+                    factor_timestamp="2026-03-15",
+                    default_intensity=410,
+                ),
+                "message": "should be denied",
+            },
+        )
+        assert stage_resp.status_code == 403
     finally:
         app.dependency_overrides.pop(get_current_user, None)

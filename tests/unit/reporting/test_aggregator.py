@@ -348,6 +348,32 @@ async def test_get_governance_report(mock_db, tenant_id):
 
 
 @pytest.mark.asyncio
+async def test_get_governance_report_empty_window_returns_zero(mock_db, tenant_id):
+    row = MagicMock()
+    row.total_untagged_cost = None
+    row.untagged_count = 0
+    mock_result = MagicMock()
+    mock_result.one.return_value = row
+
+    mock_total_result = MagicMock()
+    mock_total_result.scalar.return_value = None
+    mock_db.execute.side_effect = [mock_total_result, mock_result]
+
+    with patch(
+        "app.modules.reporting.domain.attribution_engine.AttributionEngine"
+    ) as mock_engine_cls:
+        mock_engine = mock_engine_cls.return_value
+        mock_engine.get_unallocated_analysis = AsyncMock(return_value=[])
+        res = await CostAggregator.get_governance_report(
+            mock_db, tenant_id, date(2026, 1, 1), date(2026, 1, 31)
+        )
+
+    assert res["total_cost"] == 0.0
+    assert res["unallocated_percentage"] == 0.0
+    assert res["status"] == "healthy"
+
+
+@pytest.mark.asyncio
 async def test_get_cached_breakdown_hit(mock_db, tenant_id):
     row = MagicMock()
     row.service = "S3"

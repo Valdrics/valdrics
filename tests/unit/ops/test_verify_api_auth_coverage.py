@@ -24,11 +24,11 @@ def test_collect_auth_coverage_detects_unprotected_private_route() -> None:
     assert violations[0].path == "/api/v1/demo/private"
 
 
-def test_collect_auth_coverage_exempts_public_prefix_routes() -> None:
+def test_collect_auth_coverage_exempts_only_known_public_routes() -> None:
     app = FastAPI()
     router = APIRouter()
 
-    @router.get("/status")
+    @router.post("/sso/discovery")
     async def public_status() -> dict[str, str]:
         return {"status": "ok"}
 
@@ -36,6 +36,22 @@ def test_collect_auth_coverage_exempts_public_prefix_routes() -> None:
 
     violations = collect_auth_coverage_violations(app)
     assert violations == []
+
+
+def test_collect_auth_coverage_detects_unprotected_unknown_public_subpath() -> None:
+    app = FastAPI()
+    router = APIRouter()
+
+    @router.get("/secret-admin-export")
+    async def public_status() -> dict[str, str]:
+        return {"status": "ok"}
+
+    app.include_router(router, prefix="/api/v1/public")
+
+    violations = collect_auth_coverage_violations(app)
+    assert len(violations) == 1
+    assert violations[0].method == "GET"
+    assert violations[0].path == "/api/v1/public/secret-admin-export"
 
 
 def test_collect_auth_coverage_passes_current_application_routes() -> None:

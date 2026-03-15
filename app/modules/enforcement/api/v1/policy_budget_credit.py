@@ -71,8 +71,7 @@ async def get_policy(
         feature=FeatureFlag.POLICY_CONFIGURATION,
     )
     service = EnforcementService(db)
-    policy = await service.get_or_create_policy(tenant_or_403(current_user))
-    await db.commit()
+    policy = await service.get_policy_snapshot(tenant_or_403(current_user))
     return _policy_to_response(policy)
 
 

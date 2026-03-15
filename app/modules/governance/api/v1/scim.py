@@ -171,9 +171,22 @@ async def get_scim_context(request: Request) -> ScimContext:
                 403, "SCIM is disabled for this tenant", scim_type="forbidden"
             )
 
-        tenant_plan = (
-            await db.execute(select(Tenant.plan).where(Tenant.id == tenant_id))
-        ).scalar_one_or_none()
+        tenant_row = (
+            await db.execute(
+                select(Tenant.plan, Tenant.is_deleted).where(Tenant.id == tenant_id)
+            )
+        ).first()
+        if tenant_row is None:
+            raise ScimError(401, "Unauthorized", scim_type="invalidToken")
+
+        tenant_plan, tenant_is_deleted = tenant_row
+        if bool(tenant_is_deleted):
+            raise ScimError(
+                403,
+                "Access denied: Account is deactivated.",
+                scim_type="forbidden",
+            )
+
         tier = normalize_tier(tenant_plan)
         if not is_feature_enabled(tier, FeatureFlag.SCIM):
             raise ScimError(403, "SCIM requires Enterprise tier", scim_type="forbidden")

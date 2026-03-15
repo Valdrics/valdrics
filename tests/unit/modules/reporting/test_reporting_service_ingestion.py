@@ -32,7 +32,9 @@ async def test_ingest_costs_single_connection(
         patch(
             "app.modules.reporting.domain.service.CostPersistenceService"
         ) as mock_persistence,
-        patch("app.modules.reporting.domain.service.AttributionEngine") as mock_attribution,
+        patch(
+            "app.modules.reporting.domain.service.AttributionEngine"
+        ) as mock_attribution,
     ):
         attach_stream(mock_adapter, {"cost_usd": "10.0"}, {"cost_usd": "20.0"})
 
@@ -83,6 +85,44 @@ async def test_ingest_costs_multiple_connections(
 
     assert result["status"] == "completed"
     assert result["connections_processed"] == 2
+
+
+@pytest.mark.asyncio
+async def test_ingest_costs_processes_only_active_connections(
+    mock_db,
+    mock_aws_connection: MagicMock,
+    mock_saas_connection: MagicMock,
+    configure_connection_queries,
+    attach_stream,
+    make_persistence_stub,
+) -> None:
+    tenant_id = str(uuid.uuid4())
+    mock_aws_connection.tenant_id = tenant_id
+    mock_saas_connection.tenant_id = tenant_id
+    mock_aws_connection.status = "active"
+    mock_saas_connection.is_active = False
+    configure_connection_queries(
+        aws=[mock_aws_connection],
+        saas=[mock_saas_connection],
+    )
+    mock_adapter = AsyncMock()
+    service = _service_with_adapter(mock_db, mock_adapter)
+
+    with (
+        patch(
+            "app.modules.reporting.domain.service.CostPersistenceService"
+        ) as mock_persistence,
+        patch("app.modules.reporting.domain.service.AttributionEngine"),
+    ):
+        attach_stream(mock_adapter, {"cost_usd": "100.0"})
+        mock_persistence.return_value = make_persistence_stub(records_saved=1)
+
+        result = await service.ingest_costs_for_tenant(tenant_id)
+
+    assert result["status"] == "completed"
+    assert result["connections_processed"] == 1
+    assert len(result["details"]) == 1
+    assert result["details"][0]["provider"] == "aws"
 
 
 @pytest.mark.asyncio

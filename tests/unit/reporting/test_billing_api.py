@@ -13,6 +13,7 @@ from app.models.tenant import UserRole
 from app.shared.core.currency import ExchangeRateUnavailableError
 from uuid import uuid4
 from types import SimpleNamespace
+from app.modules.billing.api.v1 import billing_ops
 
 transport = ASGITransport(app=app)
 
@@ -133,36 +134,54 @@ async def test_get_billing_usage_exposes_connection_counts_and_limits(
     mock_db, mock_user
 ):
     mock_user.tier = PricingTier.PRO
+    active_connections = [
+        SimpleNamespace(provider="aws"),
+        SimpleNamespace(provider="aws"),
+        SimpleNamespace(provider="azure"),
+        SimpleNamespace(provider="saas"),
+        SimpleNamespace(provider="saas"),
+        SimpleNamespace(provider="saas"),
+        SimpleNamespace(provider="platform"),
+        SimpleNamespace(provider="hybrid"),
+    ]
 
-    async def execute_side_effect(statement, *args, **kwargs):
-        sql = str(statement)
-        assert "aws_connections" in sql
-        assert "azure_connections" in sql
-        assert "gcp_connections" in sql
-        assert "saas_connections" in sql
-        assert "license_connections" in sql
-        result = MagicMock()
-        result.all.return_value = [
-            SimpleNamespace(provider="aws", connected=2),
-            SimpleNamespace(provider="azure", connected=1),
-            SimpleNamespace(provider="gcp", connected=0),
-            SimpleNamespace(provider="saas", connected=3),
-            SimpleNamespace(provider="license", connected=0),
-        ]
-        return result
-
-    mock_db.execute.side_effect = execute_side_effect
-
-    async with AsyncClient(transport=transport, base_url="https://test") as ac:
-        response = await ac.get("/api/v1/billing/usage")
+    with patch.object(
+        billing_ops,
+        "list_tenant_connections",
+        new=AsyncMock(return_value=active_connections),
+    ) as list_connections_mock:
+        async with AsyncClient(transport=transport, base_url="https://test") as ac:
+            response = await ac.get("/api/v1/billing/usage")
 
     assert response.status_code == 200
     payload = response.json()
     assert payload["tier"] == PricingTier.PRO.value
+    list_connections_mock.assert_awaited_once_with(
+        mock_db,
+        mock_user.tenant_id,
+        active_only=True,
+    )
     assert payload["connections"]["aws"]["connected"] == 2
     assert payload["connections"]["aws"]["limit"] == 25
     assert payload["connections"]["saas"]["connected"] == 3
     assert payload["connections"]["saas"]["limit"] == 10
+    assert payload["connections"]["platform"]["connected"] == 1
+    assert payload["connections"]["platform"]["limit"] == 10
+    assert payload["connections"]["hybrid"]["connected"] == 1
+    assert payload["connections"]["hybrid"]["limit"] == 10
+
+
+@pytest.mark.asyncio
+async def test_load_billing_usage_returns_zeroes_without_tenant_context(mock_db):
+    usage = await billing_ops.load_billing_usage(
+        mock_db,
+        tenant_id=None,
+        tier=PricingTier.PRO,
+    )
+
+    assert usage["aws"].connected == 0
+    assert usage["platform"].connected == 0
+    assert usage["hybrid"].connected == 0
 
 
 # --- Checkout Tests ---
@@ -270,6 +289,7 @@ async def test_cancel_subscription_no_tenant(mock_user):
 @pytest.mark.asyncio
 async def test_update_exchange_rate_new(mock_db, mock_user):
     mock_user.role = UserRole.ADMIN
+    mock_user.tenant_id = None
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute.return_value = mock_result
@@ -282,6 +302,7 @@ async def test_update_exchange_rate_new(mock_db, mock_user):
 @pytest.mark.asyncio
 async def test_update_exchange_rate_update(mock_db, mock_user):
     mock_user.role = UserRole.ADMIN
+    mock_user.tenant_id = None
     rate = MagicMock(spec=ExchangeRate)
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = rate
@@ -295,6 +316,7 @@ async def test_update_exchange_rate_update(mock_db, mock_user):
 @pytest.mark.asyncio
 async def test_get_exchange_rate_not_found(mock_db, mock_user):
     mock_user.role = UserRole.ADMIN
+    mock_user.tenant_id = None
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute.return_value = mock_result
@@ -312,6 +334,7 @@ async def test_get_exchange_rate_non_official_provider_flags_unsafe(mock_db, moc
     from datetime import datetime, timezone
 
     mock_user.role = UserRole.ADMIN
+    mock_user.tenant_id = None
     rate = MagicMock(spec=ExchangeRate)
     rate.rate = 1500.0
     rate.provider = "manual"
@@ -338,6 +361,7 @@ async def test_get_exchange_rate_stale_official_provider_flags_unsafe(
     from datetime import datetime, timedelta, timezone
 
     mock_user.role = UserRole.ADMIN
+    mock_user.tenant_id = None
     rate = MagicMock(spec=ExchangeRate)
     rate.rate = 1500.0
     rate.provider = "cbn_nfem"
@@ -364,6 +388,7 @@ async def test_get_exchange_rate_stale_official_provider_flags_unsafe(
 @pytest.mark.asyncio
 async def test_update_pricing_plan_success(mock_db, mock_user):
     mock_user.role = UserRole.ADMIN
+    mock_user.tenant_id = None
     plan = MagicMock(spec=PricingPlan)
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = plan
@@ -380,6 +405,7 @@ async def test_update_pricing_plan_success(mock_db, mock_user):
 @pytest.mark.asyncio
 async def test_update_pricing_plan_not_found(mock_db, mock_user):
     mock_user.role = UserRole.ADMIN
+    mock_user.tenant_id = None
     mock_result = MagicMock()
     mock_result.scalar_one_or_none.return_value = None
     mock_db.execute.return_value = mock_result
@@ -388,6 +414,33 @@ async def test_update_pricing_plan_not_found(mock_db, mock_user):
             "/api/v1/billing/admin/plans/invalid", json={"price_usd": 15.0}
         )
     assert response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_billing_admin_rates_require_platform_scope(mock_user):
+    mock_user.role = UserRole.ADMIN
+    mock_user.tenant_id = uuid4()
+
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
+        response = await ac.get("/api/v1/billing/admin/rates")
+
+    assert response.status_code == 403
+    assert "Platform operator access is required" in response.text
+
+
+@pytest.mark.asyncio
+async def test_billing_admin_plan_updates_require_platform_scope(mock_user):
+    mock_user.role = UserRole.ADMIN
+    mock_user.tenant_id = uuid4()
+
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
+        response = await ac.post(
+            "/api/v1/billing/admin/plans/starter",
+            json={"price_usd": 15.0},
+        )
+
+    assert response.status_code == 403
+    assert "Platform operator access is required" in response.text
 
 
 # --- Webhook Tests ---

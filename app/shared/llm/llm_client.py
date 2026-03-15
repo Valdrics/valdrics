@@ -23,6 +23,7 @@ from app.shared.core.constants import LLMProvider
 from app.shared.core.exceptions import AIAnalysisError, BudgetExceededError
 from app.shared.core.pricing import PricingTier
 from app.shared.core.config import get_settings
+from app.shared.core.pricing import get_tier_limit, normalize_tier
 from app.shared.llm.budget_manager import BudgetStatus, LLMBudgetManager
 from app.shared.llm.factory import LLMFactory
 
@@ -44,6 +45,7 @@ async def setup_client_and_usage(
     db: Optional[AsyncSession],
     provider: Optional[str],
     model: Optional[str],
+    tenant_tier: PricingTier | str | None = None,
     budget_manager: Any = LLMBudgetManager,
     llm_budget_model: Any = LLMBudget,
     settings_provider: Callable[[], Any] = get_settings,
@@ -74,7 +76,22 @@ async def setup_client_and_usage(
             requested_provider = _normalize_provider(provider) or _normalize_provider(
                 budget.preferred_provider
             )
-            byok_key = keys.get(requested_provider)
+            resolved_tier = tenant_tier
+            if resolved_tier is None:
+                raw_budget_tier = getattr(budget, "tenant_tier", None)
+                if isinstance(raw_budget_tier, (PricingTier, str)):
+                    resolved_tier = raw_budget_tier
+            if resolved_tier is None:
+                byok_key = keys.get(requested_provider)
+            elif bool(get_tier_limit(normalize_tier(resolved_tier), "byok_enabled")):
+                byok_key = keys.get(requested_provider)
+            elif any(value for value in keys.values()):
+                logger_obj.info(
+                    "llm_byok_disabled_for_tier",
+                    tenant_id=str(tenant_id),
+                    provider=requested_provider,
+                    tier=getattr(normalize_tier(resolved_tier), "value", "free"),
+                )
 
     valid_models: dict[str, list[str]] = {
         LLMProvider.OPENAI.value: [

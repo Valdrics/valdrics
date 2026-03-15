@@ -107,28 +107,25 @@ def _generate_scim_token() -> str:
     return secrets.token_urlsafe(48)
 
 
-async def _get_or_create_identity_settings(
+async def _get_identity_settings_snapshot(
     db: AsyncSession, *, tenant_id: UUID
 ) -> TenantIdentitySettings:
     stmt = select(TenantIdentitySettings).where(
         TenantIdentitySettings.tenant_id == tenant_id
     )
     identity = (await db.execute(stmt)).scalar_one_or_none()
-    if identity:
+    if identity is not None:
         return identity
 
-    identity = TenantIdentitySettings(
+    return TenantIdentitySettings(
         tenant_id=tenant_id,
         sso_enabled=False,
         allowed_email_domains=[],
         sso_federation_enabled=False,
         sso_federation_mode="domain",
         scim_enabled=False,
+        scim_group_mappings=[],
     )
-    db.add(identity)
-    await db.commit()
-    await db.refresh(identity)
-    return identity
 
 
 class ScimGroupMapping(BaseModel):
@@ -278,9 +275,9 @@ async def get_identity_settings(
     db: AsyncSession = Depends(get_db),
 ) -> IdentitySettingsResponse:
     """
-    Get (or create) identity settings for this tenant.
+    Get identity settings for this tenant.
     """
-    identity = await _get_or_create_identity_settings(
+    identity = await _get_identity_settings_snapshot(
         db, tenant_id=cast(UUID, current_user.tenant_id)
     )
     return IdentitySettingsResponse(
@@ -318,7 +315,7 @@ async def get_identity_diagnostics(
     - Token rotation hygiene signals
     """
     tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
-    identity = await _get_or_create_identity_settings(
+    identity = await _get_identity_settings_snapshot(
         db, tenant_id=cast(UUID, current_user.tenant_id)
     )
     payload = _build_identity_diagnostics_payload_impl(
@@ -357,7 +354,7 @@ async def get_sso_federation_validation(
     """
     tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     settings = get_settings()
-    identity = await _get_or_create_identity_settings(
+    identity = await _get_identity_settings_snapshot(
         db, tenant_id=cast(UUID, current_user.tenant_id)
     )
     payload = _build_sso_federation_validation_payload_impl(

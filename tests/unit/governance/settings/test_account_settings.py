@@ -171,3 +171,62 @@ async def test_close_account_is_idempotent(async_client, db, app):
         assert response.json()["status"] == "already_closed"
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_close_account_idempotent_reports_identity_revoked_consistently(
+    async_client, db, app
+):
+    tenant_id = uuid.uuid4()
+    owner_id = uuid.uuid4()
+
+    db.add(
+        Tenant(
+            id=tenant_id,
+            name="Closed Tenant With Identity Row",
+            plan="enterprise",
+            is_deleted=True,
+            deleted_at=datetime.now(timezone.utc),
+        )
+    )
+    db.add(
+        User(
+            id=owner_id,
+            tenant_id=tenant_id,
+            email="owner-identity@valdrics.io",
+            role=UserRole.OWNER.value,
+            is_active=False,
+        )
+    )
+    db.add(
+        TenantIdentitySettings(
+            tenant_id=tenant_id,
+            sso_enabled=False,
+            allowed_email_domains=[],
+            sso_federation_enabled=False,
+            scim_enabled=False,
+            scim_bearer_token=None,
+            scim_group_mappings=[],
+        )
+    )
+    await db.commit()
+
+    mock_user = CurrentUser(
+        id=owner_id,
+        tenant_id=tenant_id,
+        email="owner-identity@valdrics.io",
+        role=UserRole.OWNER,
+        tier=PricingTier.ENTERPRISE,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.post(
+            "/api/v1/settings/account/close",
+            json={"confirmation": "CLOSE TENANT ACCOUNT"},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "already_closed"
+        assert payload["identity_revoked"] is True
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)

@@ -74,11 +74,13 @@ class _FakeDB:
         self.flush_effect = flush_effect
         self.commit_effects = list(commit_effects or [])
         self.added: list[Any] = []
+        self.executed_statements: list[Any] = []
         self.rollback_calls = 0
         self.commit_calls = 0
         self.no_autoflush = _NoAutoflush()
 
     async def execute(self, _stmt: Any) -> _FakeResult:
+        self.executed_statements.append(_stmt)
         if not self._execute_results:
             return _FakeResult()
         nxt = self._execute_results.pop(0)
@@ -200,7 +202,7 @@ async def test_scim_schema_and_user_filter_direct_branches() -> None:
 
     ctx = _ctx()
     user = _user("target@example.com")
-    list_db = _FakeDB([_FakeResult(values=[user])])
+    list_db = _FakeDB([_FakeResult(one=1), _FakeResult(values=[user])])
     with patch.object(
         scim,
         "_load_user_group_refs_map",
@@ -215,6 +217,11 @@ async def test_scim_schema_and_user_filter_direct_branches() -> None:
             db=list_db,
         )
     assert payload.totalResults == 1
+    compiled = str(
+        list_db.executed_statements[1].compile(compile_kwargs={"literal_binds": True})
+    )
+    assert "ORDER BY users.id ASC" in compiled
+    assert "LIMIT 10" in compiled
 
     with pytest.raises(scim.ScimError, match="Resource not found"):
         await scim.get_user(
@@ -230,7 +237,7 @@ async def test_scim_user_direct_list_get_create_paths() -> None:
     ctx = _ctx()
     user = _user("list@example.com")
 
-    list_db = _FakeDB([_FakeResult(values=[user])])
+    list_db = _FakeDB([_FakeResult(one=1), _FakeResult(values=[user])])
     with patch.object(
         scim,
         "_load_user_group_refs_map",
@@ -284,7 +291,7 @@ async def test_scim_user_direct_list_get_create_paths() -> None:
             )
     assert commit_conflict_db.rollback_calls == 1
 
-    ok_db = _FakeDB(commit_effects=[None, None])
+    ok_db = _FakeDB(commit_effects=[None])
     with (
         patch.object(scim, "_apply_scim_group_mappings", new=AsyncMock()),
         patch.object(scim, "_load_user_group_refs_map", new=AsyncMock(return_value={})),
@@ -298,6 +305,7 @@ async def test_scim_user_direct_list_get_create_paths() -> None:
             db=ok_db,
         )
     assert response.status_code == 201
+    assert ok_db.commit_calls == 1
 
 
 @pytest.mark.asyncio
@@ -314,7 +322,9 @@ async def test_scim_user_direct_put_patch_delete_paths() -> None:
             db=_FakeDB([_FakeResult(one=None)]),
         )
 
-    put_conflict_db = _FakeDB([_FakeResult(one=user)], commit_effects=[_integrity_error()])
+    put_conflict_db = _FakeDB(
+        [_FakeResult(one=user)], commit_effects=[_integrity_error()]
+    )
     with patch.object(scim, "_apply_scim_group_mappings", new=AsyncMock()):
         with pytest.raises(scim.ScimError, match="User already exists"):
             await scim.put_user(
@@ -326,7 +336,7 @@ async def test_scim_user_direct_put_patch_delete_paths() -> None:
             )
     assert put_conflict_db.rollback_calls == 1
 
-    put_ok_db = _FakeDB([_FakeResult(one=user)], commit_effects=[None, None])
+    put_ok_db = _FakeDB([_FakeResult(one=user)], commit_effects=[None])
     with (
         patch.object(scim, "_apply_scim_group_mappings", new=AsyncMock()),
         patch.object(scim, "_load_user_group_refs_map", new=AsyncMock(return_value={})),
@@ -341,6 +351,7 @@ async def test_scim_user_direct_put_patch_delete_paths() -> None:
             db=put_ok_db,
         )
     assert response.status_code == 200
+    assert put_ok_db.commit_calls == 1
 
     patch_user_not_found_db = _FakeDB([_FakeResult(one=None)])
     with pytest.raises(scim.ScimError, match="Resource not found"):
@@ -348,14 +359,18 @@ async def test_scim_user_direct_put_patch_delete_paths() -> None:
             request=_request(f"/scim/v2/Users/{user.id}", method="PATCH"),
             user_id=str(user.id),
             body=ScimPatchRequest(
-                Operations=[ScimPatchOperation(op="replace", path="active", value=False)]
+                Operations=[
+                    ScimPatchOperation(op="replace", path="active", value=False)
+                ]
             ),
             ctx=ctx,
             db=patch_user_not_found_db,
         )
 
     patch_invalid_groups_db = _FakeDB([_FakeResult(one=user)])
-    with patch.object(scim, "_load_user_group_refs_map", new=AsyncMock(return_value={})):
+    with patch.object(
+        scim, "_load_user_group_refs_map", new=AsyncMock(return_value={})
+    ):
         with pytest.raises(scim.ScimError, match="groups patch value must be a list"):
             await scim.patch_user(
                 request=_request(f"/scim/v2/Users/{user.id}", method="PATCH"),
@@ -374,15 +389,15 @@ async def test_scim_user_direct_put_patch_delete_paths() -> None:
             )
 
     patch_unsupported_groups_db = _FakeDB([_FakeResult(one=user)])
-    with patch.object(scim, "_load_user_group_refs_map", new=AsyncMock(return_value={})):
+    with patch.object(
+        scim, "_load_user_group_refs_map", new=AsyncMock(return_value={})
+    ):
         with pytest.raises(scim.ScimError, match="Unsupported patch op for groups"):
             await scim.patch_user(
                 request=_request(f"/scim/v2/Users/{user.id}", method="PATCH"),
                 user_id=str(user.id),
                 body=SimpleNamespace(
-                    Operations=[
-                        SimpleNamespace(op="move", path="groups", value=[])
-                    ]
+                    Operations=[SimpleNamespace(op="move", path="groups", value=[])]
                 ),
                 ctx=ctx,
                 db=patch_unsupported_groups_db,
@@ -396,14 +411,16 @@ async def test_scim_user_direct_put_patch_delete_paths() -> None:
             request=_request(f"/scim/v2/Users/{user.id}", method="PATCH"),
             user_id=str(user.id),
             body=ScimPatchRequest(
-                Operations=[ScimPatchOperation(op="replace", path="active", value=False)]
+                Operations=[
+                    ScimPatchOperation(op="replace", path="active", value=False)
+                ]
             ),
             ctx=ctx,
             db=patch_commit_conflict_db,
         )
     assert patch_commit_conflict_db.rollback_calls == 1
 
-    patch_ok_db = _FakeDB([_FakeResult(one=user)], commit_effects=[None, None])
+    patch_ok_db = _FakeDB([_FakeResult(one=user)], commit_effects=[None])
     existing_group_id = uuid4()
     new_group_id = uuid4()
     with (
@@ -449,7 +466,7 @@ async def test_scim_user_direct_put_patch_delete_paths() -> None:
             db=_FakeDB([_FakeResult(one=None)]),
         )
 
-    delete_ok_db = _FakeDB([_FakeResult(one=user)], commit_effects=[None, None])
+    delete_ok_db = _FakeDB([_FakeResult(one=user)], commit_effects=[None])
     with patch("app.modules.governance.api.v1.scim.AuditLogger") as audit_logger_cls:
         audit_logger_cls.return_value.log = AsyncMock()
         response = await scim.delete_user(
@@ -458,6 +475,7 @@ async def test_scim_user_direct_put_patch_delete_paths() -> None:
             db=delete_ok_db,
         )
     assert response.status_code == 204
+    assert delete_ok_db.commit_calls == 1
 
 
 @pytest.mark.asyncio
@@ -486,12 +504,17 @@ async def test_scim_apply_mappings_and_patch_user_remove_groups_branches() -> No
     assert user.role == "member"
     assert user.persona == "engineering"
 
-    patch_db = _FakeDB([_FakeResult(one=user)], commit_effects=[None, None])
+    patch_db = _FakeDB([_FakeResult(one=user)], commit_effects=[None])
     with (
         patch.object(
             scim,
             "_load_user_group_refs_map",
-            new=AsyncMock(side_effect=[{user.id: [{"value": str(uuid4()), "display": "Old"}]}, {user.id: []}]),
+            new=AsyncMock(
+                side_effect=[
+                    {user.id: [{"value": str(uuid4()), "display": "Old"}]},
+                    {user.id: []},
+                ]
+            ),
         ),
         patch.object(scim, "_apply_scim_group_mappings", new=AsyncMock()),
         patch("app.modules.governance.api.v1.scim.AuditLogger") as audit_logger_cls,
@@ -549,7 +572,7 @@ async def test_scim_groups_direct_list_create_get_put_paths() -> None:
             db=_FakeDB(flush_effect=_integrity_error()),
         )
 
-    create_without_members_db = _FakeDB(commit_effects=[None, None])
+    create_without_members_db = _FakeDB(commit_effects=[None])
     with (
         patch.object(
             scim,
@@ -566,12 +589,17 @@ async def test_scim_groups_direct_list_create_get_put_paths() -> None:
             db=create_without_members_db,
         )
     assert create_without_members_response.status_code == 201
+    assert create_without_members_db.commit_calls == 1
 
     member_id = uuid4()
-    create_db = _FakeDB(commit_effects=[None, None])
+    create_db = _FakeDB(commit_effects=[None])
     with (
-        patch.object(scim, "_resolve_member_user_ids", new=AsyncMock(return_value={member_id})),
-        patch.object(scim, "_set_group_memberships", new=AsyncMock(return_value={member_id})),
+        patch.object(
+            scim, "_resolve_member_user_ids", new=AsyncMock(return_value={member_id})
+        ),
+        patch.object(
+            scim, "_set_group_memberships", new=AsyncMock(return_value={member_id})
+        ),
         patch.object(
             scim,
             "_recompute_entitlements_for_users",
@@ -595,6 +623,7 @@ async def test_scim_groups_direct_list_create_get_put_paths() -> None:
             db=create_db,
         )
     assert response.status_code == 201
+    assert create_db.commit_calls == 1
 
     with pytest.raises(scim.ScimError, match="Resource not found"):
         await scim.get_group(
@@ -636,7 +665,9 @@ async def test_scim_groups_direct_list_create_get_put_paths() -> None:
             db=_FakeDB([_FakeResult(one=group)]),
         )
 
-    put_conflict_db = _FakeDB([_FakeResult(one=group)], commit_effects=[_integrity_error()])
+    put_conflict_db = _FakeDB(
+        [_FakeResult(one=group)], commit_effects=[_integrity_error()]
+    )
     with pytest.raises(scim.ScimError, match="Group already exists"):
         await scim.put_group(
             request=_request(f"/scim/v2/Groups/{group.id}", method="PUT"),
@@ -646,7 +677,7 @@ async def test_scim_groups_direct_list_create_get_put_paths() -> None:
             db=put_conflict_db,
         )
 
-    put_without_members_db = _FakeDB([_FakeResult(one=group)], commit_effects=[None, None])
+    put_without_members_db = _FakeDB([_FakeResult(one=group)], commit_effects=[None])
     with (
         patch.object(
             scim,
@@ -664,11 +695,16 @@ async def test_scim_groups_direct_list_create_get_put_paths() -> None:
             db=put_without_members_db,
         )
     assert put_without_members_response.status_code == 200
+    assert put_without_members_db.commit_calls == 1
 
-    put_ok_db = _FakeDB([_FakeResult(one=group)], commit_effects=[None, None])
+    put_ok_db = _FakeDB([_FakeResult(one=group)], commit_effects=[None])
     with (
-        patch.object(scim, "_resolve_member_user_ids", new=AsyncMock(return_value={member_id})),
-        patch.object(scim, "_set_group_memberships", new=AsyncMock(return_value={member_id})),
+        patch.object(
+            scim, "_resolve_member_user_ids", new=AsyncMock(return_value={member_id})
+        ),
+        patch.object(
+            scim, "_set_group_memberships", new=AsyncMock(return_value={member_id})
+        ),
         patch.object(
             scim,
             "_recompute_entitlements_for_users",
@@ -694,6 +730,7 @@ async def test_scim_groups_direct_list_create_get_put_paths() -> None:
             db=put_ok_db,
         )
     assert put_response.status_code == 200
+    assert put_ok_db.commit_calls == 1
 
 
 @pytest.mark.asyncio
@@ -708,7 +745,9 @@ async def test_scim_patch_group_direct_variants_and_delete_paths() -> None:
             request=_request("/scim/v2/Groups/not-a-uuid", method="PATCH"),
             group_id="not-a-uuid",
             body=ScimPatchRequest(
-                Operations=[ScimPatchOperation(op="replace", path="displayName", value="x")]
+                Operations=[
+                    ScimPatchOperation(op="replace", path="displayName", value="x")
+                ]
             ),
             ctx=ctx,
             db=_FakeDB(),
@@ -719,7 +758,9 @@ async def test_scim_patch_group_direct_variants_and_delete_paths() -> None:
             request=_request("/scim/v2/Groups/missing", method="PATCH"),
             group_id=str(uuid4()),
             body=ScimPatchRequest(
-                Operations=[ScimPatchOperation(op="replace", path="displayName", value="x")]
+                Operations=[
+                    ScimPatchOperation(op="replace", path="displayName", value="x")
+                ]
             ),
             ctx=ctx,
             db=_FakeDB([_FakeResult(one=None)]),
@@ -749,7 +790,9 @@ async def test_scim_patch_group_direct_variants_and_delete_paths() -> None:
             group_id=str(group.id),
             body=SimpleNamespace(
                 Operations=[
-                    SimpleNamespace(op="replace", path=None, value={"displayName": "   "})
+                    SimpleNamespace(
+                        op="replace", path=None, value={"displayName": "   "}
+                    )
                 ]
             ),
             ctx=ctx,
@@ -769,17 +812,40 @@ async def test_scim_patch_group_direct_variants_and_delete_paths() -> None:
         )
 
     validation_cases: list[tuple[Any, str]] = [
-        (ScimPatchOperation(op="remove", path="displayName", value=None), "cannot be removed"),
-        (ScimPatchOperation(op="replace", path="displayName", value=123), "must be string"),
-        (ScimPatchOperation(op="replace", path="displayName", value="   "), "is required"),
-        (ScimPatchOperation(op="replace", path="externalId", value=123), "must be string"),
         (
-            ScimPatchOperation(op="replace", path="members", value={"value": str(user_id)}),
+            ScimPatchOperation(op="remove", path="displayName", value=None),
+            "cannot be removed",
+        ),
+        (
+            ScimPatchOperation(op="replace", path="displayName", value=123),
+            "must be string",
+        ),
+        (
+            ScimPatchOperation(op="replace", path="displayName", value="   "),
+            "is required",
+        ),
+        (
+            ScimPatchOperation(op="replace", path="externalId", value=123),
+            "must be string",
+        ),
+        (
+            ScimPatchOperation(
+                op="replace", path="members", value={"value": str(user_id)}
+            ),
             "must be a list",
         ),
-        (ScimPatchOperation(op="add", path="members", value=1), "must be list or object"),
-        (ScimPatchOperation(op="remove", path="members", value=1), "must be list or object"),
-        (ScimPatchOperation(op="replace", path="name", value="x"), "Unsupported patch path"),
+        (
+            ScimPatchOperation(op="add", path="members", value=1),
+            "must be list or object",
+        ),
+        (
+            ScimPatchOperation(op="remove", path="members", value=1),
+            "must be list or object",
+        ),
+        (
+            ScimPatchOperation(op="replace", path="name", value="x"),
+            "Unsupported patch path",
+        ),
     ]
     for operation, expected in validation_cases:
         with pytest.raises(scim.ScimError, match=expected):
@@ -802,7 +868,7 @@ async def test_scim_patch_group_direct_variants_and_delete_paths() -> None:
             db=_FakeDB([_FakeResult(one=group)]),
         )
 
-    patch_ok_db = _FakeDB([_FakeResult(one=group)], commit_effects=[None, None])
+    patch_ok_db = _FakeDB([_FakeResult(one=group)], commit_effects=[None])
     with (
         patch.object(
             scim,
@@ -810,7 +876,9 @@ async def test_scim_patch_group_direct_variants_and_delete_paths() -> None:
             new=AsyncMock(return_value={user_id}),
         ),
         patch.object(
-            scim, "_resolve_member_user_ids", new=AsyncMock(return_value={second_user_id})
+            scim,
+            "_resolve_member_user_ids",
+            new=AsyncMock(return_value={second_user_id}),
         ),
         patch.object(
             scim,
@@ -876,21 +944,28 @@ async def test_scim_patch_group_direct_variants_and_delete_paths() -> None:
                     ScimPatchOperation(op="remove", path="members", value=None),
                     ScimPatchOperation(op="replace", path="externalId", value="ext-2"),
                     ScimPatchOperation(op="remove", path="externalId", value=None),
-                    ScimPatchOperation(op="replace", path="displayName", value="Final Name"),
+                    ScimPatchOperation(
+                        op="replace", path="displayName", value="Final Name"
+                    ),
                 ]
             ),
             ctx=ctx,
             db=patch_ok_db,
         )
     assert patch_response.status_code == 200
+    assert patch_ok_db.commit_calls == 1
 
-    patch_conflict_db = _FakeDB([_FakeResult(one=group)], commit_effects=[_integrity_error()])
+    patch_conflict_db = _FakeDB(
+        [_FakeResult(one=group)], commit_effects=[_integrity_error()]
+    )
     with pytest.raises(scim.ScimError, match="Group already exists"):
         await scim.patch_group(
             request=_request(f"/scim/v2/Groups/{group.id}", method="PATCH"),
             group_id=str(group.id),
             body=ScimPatchRequest(
-                Operations=[ScimPatchOperation(op="replace", path="displayName", value="X")]
+                Operations=[
+                    ScimPatchOperation(op="replace", path="displayName", value="X")
+                ]
             ),
             ctx=ctx,
             db=patch_conflict_db,
@@ -904,7 +979,9 @@ async def test_scim_patch_group_direct_variants_and_delete_paths() -> None:
             db=_FakeDB([_FakeResult(one=None)]),
         )
 
-    delete_ok_db = _FakeDB([_FakeResult(one=group), _FakeResult()], commit_effects=[None, None])
+    delete_ok_db = _FakeDB(
+        [_FakeResult(one=group), _FakeResult()], commit_effects=[None]
+    )
     with (
         patch.object(
             scim,
@@ -925,3 +1002,45 @@ async def test_scim_patch_group_direct_variants_and_delete_paths() -> None:
             db=delete_ok_db,
         )
     assert delete_response.status_code == 204
+    assert delete_ok_db.commit_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_scim_mutations_rollback_when_audit_logging_fails() -> None:
+    ctx = _ctx()
+    user_db = _FakeDB(commit_effects=[None])
+
+    with (
+        patch.object(scim, "_apply_scim_group_mappings", new=AsyncMock()),
+        patch.object(scim, "_load_user_group_refs_map", new=AsyncMock(return_value={})),
+        patch("app.modules.governance.api.v1.scim.AuditLogger") as audit_logger_cls,
+    ):
+        audit_logger_cls.return_value.log = AsyncMock(
+            side_effect=RuntimeError("audit boom")
+        )
+        with pytest.raises(RuntimeError, match="audit boom"):
+            await scim.create_user(
+                request=_request("/scim/v2/Users", method="POST"),
+                body=ScimUserCreate(userName="audit-fail@example.com", active=True),
+                ctx=ctx,
+                db=user_db,
+            )
+    assert user_db.rollback_calls == 1
+    assert user_db.commit_calls == 0
+
+    group_db = _FakeDB(commit_effects=[None])
+    with patch(
+        "app.modules.governance.api.v1.scim_group_route_ops.AuditLogger"
+    ) as audit_logger_cls:
+        audit_logger_cls.return_value.log = AsyncMock(
+            side_effect=RuntimeError("audit boom")
+        )
+        with pytest.raises(RuntimeError, match="audit boom"):
+            await scim.create_group(
+                request=_request("/scim/v2/Groups", method="POST"),
+                body=ScimGroupCreate(displayName="Audit Fail Group"),
+                ctx=ctx,
+                db=group_db,
+            )
+    assert group_db.rollback_calls == 1
+    assert group_db.commit_calls == 0

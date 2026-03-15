@@ -168,7 +168,7 @@ async def aggregate_usage_baseline(
     category_key = _normalize_scope_key(canonical_charge_category)
 
     safe_lookback = max(1, min(int(lookback_days or 30), 365))
-    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=safe_lookback)
+    lookback_start = datetime.now(timezone.utc) - timedelta(days=safe_lookback)
 
     base_stmt = (
         select(
@@ -180,7 +180,7 @@ async def aggregate_usage_baseline(
         .select_from(CostRecord)
         .join(CloudAccount, CostRecord.account_id == CloudAccount.id)
         .where(CostRecord.tenant_id == tenant_id)
-        .where(CostRecord.recorded_at >= thirty_days_ago.date())
+        .where(CostRecord.recorded_at >= lookback_start.date())
     )
     if provider_key:
         base_stmt = base_stmt.where(CloudAccount.provider == provider_key)
@@ -233,7 +233,7 @@ async def aggregate_usage_baseline(
 
         values = list(daily_totals.values())
         non_zero = [v for v in values if v > 0]
-        expected_days = 30
+        expected_days = safe_lookback
         observed_days = len(daily_totals)
         coverage_ratio = min(1.0, observed_days / expected_days) if expected_days else 0.0
 
@@ -257,7 +257,7 @@ async def aggregate_usage_baseline(
     else:
         values = list(bucket_totals.values())
         non_zero = [v for v in values if v > 0]
-        expected_hours = 30 * 24
+        expected_hours = safe_lookback * 24
         coverage_ratio = min(1.0, observed_buckets / expected_hours) if expected_hours else 0.0
 
         average_hourly_spend = float(fmean(values)) if values else 0.0
@@ -334,6 +334,7 @@ class OptimizationService(BaseService):
 
         usage_cache: dict[tuple[str | None, str | None], Dict[str, Any]] = {}
         all_recommendations: list[StrategyRecommendation] = []
+        state_changed = False
 
         for strategy in strategies:
             strategy_impl = self._get_strategy_impl(strategy)
@@ -390,9 +391,6 @@ class OptimizationService(BaseService):
                 )
                 continue
 
-            if not recs:
-                continue
-
             # Replace existing OPEN recs for this strategy (idempotent scan behavior).
             await self.db.execute(
                 sa.delete(StrategyRecommendation).where(
@@ -401,10 +399,14 @@ class OptimizationService(BaseService):
                     StrategyRecommendation.status == "open",
                 )
             )
+            state_changed = True
+            if not recs:
+                continue
             all_recommendations.extend(recs)
 
         if all_recommendations:
             self.db.add_all(all_recommendations)
+        if state_changed:
             await self.db.commit()
 
         return all_recommendations

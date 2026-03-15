@@ -22,7 +22,8 @@ async def get_governance_report(
         CostRecord.tenant_id == tenant_id,
         CostRecord.recorded_at >= start_date,
         CostRecord.recorded_at <= end_date,
-        (CostRecord.allocated_to.is_(None)) | (CostRecord.allocated_to == "Unallocated"),
+        (CostRecord.allocated_to.is_(None))
+        | (CostRecord.allocated_to == "Unallocated"),
     )
 
     total_stmt = select(func.sum(CostRecord.cost_usd)).where(
@@ -32,13 +33,15 @@ async def get_governance_report(
     )
 
     total_res = await db.execute(total_stmt)
-    total_cost = total_res.scalar() or Decimal("0.01")
+    total_cost = total_res.scalar() or Decimal("0")
 
     result = await db.execute(stmt)
     row = result.one()
 
     untagged_cost = row.total_untagged_cost or Decimal(0)
-    untagged_percent = (untagged_cost / total_cost) * 100
+    untagged_percent = (
+        (untagged_cost / total_cost) * 100 if total_cost > 0 else Decimal("0")
+    )
 
     from app.modules.reporting.domain.attribution_engine import AttributionEngine
 
@@ -63,4 +66,3 @@ async def get_governance_report(
             else None
         ),
     }
-

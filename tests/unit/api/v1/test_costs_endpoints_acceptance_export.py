@@ -18,7 +18,7 @@ async def test_get_acceptance_kpis_csv_export(async_client: AsyncClient, app):
         id=user_id,
         tenant_id=tenant_id,
         email="q2-kpi-csv@valdrics.io",
-        role=UserRole.MEMBER,
+        role=UserRole.ADMIN,
         tier=PricingTier.PRO,
     )
 
@@ -75,7 +75,7 @@ async def test_get_acceptance_kpis_csv_export(async_client: AsyncClient, app):
                 ),
             ),
             patch(
-                "app.modules.reporting.api.v1.costs._get_or_create_unit_settings",
+                "app.modules.reporting.api.v1.costs._get_unit_settings_snapshot",
                 new=AsyncMock(
                     return_value=SimpleNamespace(
                         default_request_volume=1000,
@@ -182,7 +182,7 @@ async def test_capture_acceptance_kpis_persists_audit_evidence(
                 ),
             ),
             patch(
-                "app.modules.reporting.api.v1.costs._get_or_create_unit_settings",
+                "app.modules.reporting.api.v1.costs._get_unit_settings_snapshot",
                 new=AsyncMock(
                     return_value=SimpleNamespace(
                         default_request_volume=1000,

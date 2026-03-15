@@ -70,7 +70,9 @@ async def test_numeric_normalization_helpers() -> None:
 async def test_get_cloud_plus_provider_health_caps_error_counts() -> None:
     db = AsyncMock()
     db.execute.return_value = _result_one(
-        SimpleNamespace(total_connections=5, active_connections=3, errored_connections=9)
+        SimpleNamespace(
+            total_connections=5, active_connections=3, errored_connections=9
+        )
     )
 
     snapshot = await hd._get_cloud_plus_provider_health(db, AzureConnection)
@@ -85,7 +87,9 @@ async def test_get_cloud_plus_provider_health_caps_error_counts() -> None:
 async def test_get_aws_provider_health_uses_status_fields() -> None:
     db = AsyncMock()
     db.execute.return_value = _result_one(
-        SimpleNamespace(total_connections=4, active_connections=2, errored_connections=1)
+        SimpleNamespace(
+            total_connections=4, active_connections=2, errored_connections=1
+        )
     )
 
     snapshot = await hd._get_aws_provider_health(db)
@@ -117,10 +121,13 @@ async def test_get_cloud_connection_health_aggregates_provider_snapshots() -> No
         inactive_connections=0,
         errored_connections=0,
     )
-    with patch.object(hd, "_get_aws_provider_health", new=AsyncMock(return_value=aws)), patch.object(
-        hd,
-        "_get_cloud_plus_provider_health",
-        new=AsyncMock(side_effect=[azure, gcp]),
+    with (
+        patch.object(hd, "_get_aws_provider_health", new=AsyncMock(return_value=aws)),
+        patch.object(
+            hd,
+            "_get_cloud_plus_provider_health",
+            new=AsyncMock(side_effect=[azure, gcp]),
+        ),
     ):
         summary = await hd._get_cloud_connection_health(db)
 
@@ -197,6 +204,30 @@ async def test_get_tenant_metrics_coerces_nulls_to_zero() -> None:
     assert metrics.free_tenants == 2
     assert metrics.paid_tenants == 1
     assert metrics.churn_risk == 0
+
+
+@pytest.mark.asyncio
+async def test_get_tenant_metrics_excludes_soft_deleted_tenants() -> None:
+    db = AsyncMock()
+    db.execute.return_value = _result_one(
+        SimpleNamespace(
+            total_tenants=1,
+            active_last_24h=1,
+            active_last_7d=1,
+            free_tenants=1,
+            paid_tenants=0,
+            churn_risk=0,
+        )
+    )
+
+    metrics = await hd._get_tenant_metrics(db, datetime.now(timezone.utc))
+
+    statement = db.execute.await_args.args[0]
+    compiled = str(statement.compile(compile_kwargs={"literal_binds": True}))
+    assert "tenants.is_deleted IS false" in compiled
+    assert metrics.total_tenants == 1
+    assert metrics.free_tenants == 1
+    assert metrics.paid_tenants == 0
 
 
 @pytest.mark.asyncio
@@ -291,7 +322,10 @@ async def test_get_license_governance_health_rates_and_duration() -> None:
         _result_all(
             [
                 (now - timedelta(hours=4), now - timedelta(hours=1)),
-                (datetime.now() - timedelta(hours=2), datetime.now() - timedelta(hours=1)),
+                (
+                    datetime.now() - timedelta(hours=2),
+                    datetime.now() - timedelta(hours=1),
+                ),
                 (now - timedelta(hours=1), now - timedelta(hours=2)),
                 (None, now),
             ]
@@ -308,6 +342,40 @@ async def test_get_license_governance_health_rates_and_duration() -> None:
     assert metrics.completion_rate_percent == 50.0
     assert metrics.failure_rate_percent == 25.0
     assert metrics.avg_time_to_complete_hours == 2.0
+
+
+@pytest.mark.asyncio
+async def test_get_license_governance_health_uses_completion_activity_window() -> None:
+    now = datetime.now(timezone.utc)
+    db = AsyncMock()
+    db.scalar.return_value = 1
+    db.execute.side_effect = [
+        _result_one(
+            SimpleNamespace(
+                created_requests=2,
+                completed_requests=1,
+                failed_requests=0,
+                in_flight_requests=1,
+            )
+        ),
+        _result_all([(now - timedelta(days=7), now - timedelta(hours=2))]),
+    ]
+
+    await hd._get_license_governance_health(db, now)
+
+    counts_stmt = db.execute.await_args_list[0].args[0]
+    completed_stmt = db.execute.await_args_list[1].args[0]
+    counts_sql = str(counts_stmt.compile(compile_kwargs={"literal_binds": True}))
+    completed_sql = str(completed_stmt.compile(compile_kwargs={"literal_binds": True}))
+
+    assert (
+        "coalesce(remediation_requests.executed_at, remediation_requests.updated_at, remediation_requests.created_at)"
+        in counts_sql
+    )
+    assert (
+        "coalesce(remediation_requests.executed_at, remediation_requests.updated_at, remediation_requests.created_at)"
+        in completed_sql
+    )
 
 
 @pytest.mark.asyncio
@@ -337,73 +405,111 @@ async def test_get_license_governance_health_zero_denominator() -> None:
 @pytest.mark.asyncio
 async def test_dashboard_cache_decode_failure_falls_back_to_fresh_payload() -> None:
     user = MagicMock()
-    user.tenant_id = uuid4()
+    user.tenant_id = None
     db = AsyncMock()
     cache = _EnabledCache({"invalid": "payload"})
 
-    with patch.object(hd, "get_cache_service", return_value=cache), patch.object(
-        hd, "_get_tenant_metrics", new=AsyncMock(return_value=TenantMetrics(
-            total_tenants=1,
-            active_last_24h=1,
-            active_last_7d=1,
-            free_tenants=1,
-            paid_tenants=0,
-            churn_risk=0,
-        ))
-    ), patch.object(
-        hd, "_get_job_queue_health", new=AsyncMock(return_value=JobQueueHealth(
-            pending_jobs=0,
-            running_jobs=0,
-            failed_last_24h=0,
-            dead_letter_count=0,
-            avg_processing_time_ms=0.0,
-            p50_processing_time_ms=0.0,
-            p95_processing_time_ms=0.0,
-            p99_processing_time_ms=0.0,
-        ))
-    ), patch.object(
-        hd, "_get_llm_usage_metrics", new=AsyncMock(return_value=LLMUsageMetrics(
-            total_requests_24h=0,
-            cache_hit_rate=0.85,
-            estimated_cost_24h=0.0,
-            budget_utilization=0.0,
-        ))
-    ), patch.object(
-        hd, "_get_cloud_connection_health", new=AsyncMock(return_value=CloudConnectionHealth(
-            total_connections=0,
-            active_connections=0,
-            inactive_connections=0,
-            errored_connections=0,
-            providers={},
-        ))
-    ), patch.object(
-        hd, "_get_cloud_plus_connection_health", new=AsyncMock(return_value=CloudPlusConnectionHealth(
-            total_connections=0,
-            active_connections=0,
-            inactive_connections=0,
-            errored_connections=0,
-            providers={},
-        ))
-    ), patch.object(
-        hd, "_get_license_governance_health", new=AsyncMock(return_value=LicenseGovernanceHealth(
-            window_hours=24,
-            active_license_connections=0,
-            requests_created_24h=0,
-            requests_completed_24h=0,
-            requests_failed_24h=0,
-            requests_in_flight=0,
-            completion_rate_percent=0.0,
-            failure_rate_percent=0.0,
-            avg_time_to_complete_hours=None,
-        ))
-    ), patch.object(
-        hd, "_get_landing_funnel_health", new=AsyncMock(return_value=LandingFunnelHealth(
-            weekly_current=LandingFunnelWindowSummary(),
-            weekly_previous=LandingFunnelWindowSummary(),
-            weekly_delta=LandingFunnelWeeklyDelta(),
-            alerts=[],
-        ))
-    ), patch.object(hd.logger, "warning") as warning_mock:
+    with (
+        patch.object(hd, "get_cache_service", return_value=cache),
+        patch.object(
+            hd,
+            "_get_tenant_metrics",
+            new=AsyncMock(
+                return_value=TenantMetrics(
+                    total_tenants=1,
+                    active_last_24h=1,
+                    active_last_7d=1,
+                    free_tenants=1,
+                    paid_tenants=0,
+                    churn_risk=0,
+                )
+            ),
+        ),
+        patch.object(
+            hd,
+            "_get_job_queue_health",
+            new=AsyncMock(
+                return_value=JobQueueHealth(
+                    pending_jobs=0,
+                    running_jobs=0,
+                    failed_last_24h=0,
+                    dead_letter_count=0,
+                    avg_processing_time_ms=0.0,
+                    p50_processing_time_ms=0.0,
+                    p95_processing_time_ms=0.0,
+                    p99_processing_time_ms=0.0,
+                )
+            ),
+        ),
+        patch.object(
+            hd,
+            "_get_llm_usage_metrics",
+            new=AsyncMock(
+                return_value=LLMUsageMetrics(
+                    total_requests_24h=0,
+                    cache_hit_rate=0.85,
+                    estimated_cost_24h=0.0,
+                    budget_utilization=0.0,
+                )
+            ),
+        ),
+        patch.object(
+            hd,
+            "_get_cloud_connection_health",
+            new=AsyncMock(
+                return_value=CloudConnectionHealth(
+                    total_connections=0,
+                    active_connections=0,
+                    inactive_connections=0,
+                    errored_connections=0,
+                    providers={},
+                )
+            ),
+        ),
+        patch.object(
+            hd,
+            "_get_cloud_plus_connection_health",
+            new=AsyncMock(
+                return_value=CloudPlusConnectionHealth(
+                    total_connections=0,
+                    active_connections=0,
+                    inactive_connections=0,
+                    errored_connections=0,
+                    providers={},
+                )
+            ),
+        ),
+        patch.object(
+            hd,
+            "_get_license_governance_health",
+            new=AsyncMock(
+                return_value=LicenseGovernanceHealth(
+                    window_hours=24,
+                    active_license_connections=0,
+                    requests_created_24h=0,
+                    requests_completed_24h=0,
+                    requests_failed_24h=0,
+                    requests_in_flight=0,
+                    completion_rate_percent=0.0,
+                    failure_rate_percent=0.0,
+                    avg_time_to_complete_hours=None,
+                )
+            ),
+        ),
+        patch.object(
+            hd,
+            "_get_landing_funnel_health",
+            new=AsyncMock(
+                return_value=LandingFunnelHealth(
+                    weekly_current=LandingFunnelWindowSummary(),
+                    weekly_previous=LandingFunnelWindowSummary(),
+                    weekly_delta=LandingFunnelWeeklyDelta(),
+                    alerts=[],
+                )
+            ),
+        ),
+        patch.object(hd.logger, "warning") as warning_mock,
+    ):
         payload = await hd.get_investor_health_dashboard(user, db)
 
     assert payload.system.status == "healthy"
@@ -426,11 +532,16 @@ async def test_fair_use_runtime_tier_lookup_failure_and_cache_set() -> None:
         LLM_FAIR_USE_CONCURRENCY_LEASE_TTL_SECONDS="10",
     )
 
-    with patch.object(hd, "get_cache_service", return_value=cache), patch.object(
-        hd, "get_settings", return_value=settings
-    ), patch.object(
-        hd, "get_tenant_tier", new=AsyncMock(side_effect=RuntimeError("tier lookup failed"))
-    ) as tier_mock, patch.object(hd.logger, "warning") as warning_mock:
+    with (
+        patch.object(hd, "get_cache_service", return_value=cache),
+        patch.object(hd, "get_settings", return_value=settings),
+        patch.object(
+            hd,
+            "get_tenant_tier",
+            new=AsyncMock(side_effect=RuntimeError("tier lookup failed")),
+        ) as tier_mock,
+        patch.object(hd.logger, "warning") as warning_mock,
+    ):
         payload = await hd.get_llm_fair_use_runtime(user, db)
 
     assert payload.guards_enabled is True
@@ -462,9 +573,11 @@ async def test_fair_use_runtime_global_scope_skips_tier_lookup() -> None:
         LLM_FAIR_USE_CONCURRENCY_LEASE_TTL_SECONDS=180,
     )
 
-    with patch.object(hd, "get_cache_service", return_value=cache), patch.object(
-        hd, "get_settings", return_value=settings
-    ), patch.object(hd, "get_tenant_tier", new=AsyncMock()) as tier_mock:
+    with (
+        patch.object(hd, "get_cache_service", return_value=cache),
+        patch.object(hd, "get_settings", return_value=settings),
+        patch.object(hd, "get_tenant_tier", new=AsyncMock()) as tier_mock,
+    ):
         payload = await hd.get_llm_fair_use_runtime(user, db)
 
     assert payload.tenant_tier == PricingTier.FREE.value

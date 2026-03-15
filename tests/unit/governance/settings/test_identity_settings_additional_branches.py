@@ -38,7 +38,7 @@ async def test_get_identity_settings_creates_default_record(
     ac,
     db: AsyncSession,
 ) -> None:
-    _tenant, _user, headers = await _seed_admin(db, plan="growth")
+    tenant, _user, headers = await _seed_admin(db, plan="growth")
 
     response = await ac.get("/api/v1/settings/identity", headers=headers)
     assert response.status_code == 200
@@ -50,6 +50,12 @@ async def test_get_identity_settings_creates_default_record(
     assert payload["sso_federation_mode"] == "domain"
     assert payload["scim_enabled"] is False
     assert payload["has_scim_token"] is False
+    identity = await db.scalar(
+        select(TenantIdentitySettings).where(
+            TenantIdentitySettings.tenant_id == tenant.id
+        )
+    )
+    assert identity is None
 
 
 @pytest.mark.asyncio
@@ -57,7 +63,7 @@ async def test_identity_diagnostics_creates_default_record_when_missing(
     ac,
     db: AsyncSession,
 ) -> None:
-    _tenant, _user, headers = await _seed_admin(db, plan="growth")
+    tenant, _user, headers = await _seed_admin(db, plan="growth")
 
     response = await ac.get("/api/v1/settings/identity/diagnostics", headers=headers)
     assert response.status_code == 200
@@ -67,6 +73,12 @@ async def test_identity_diagnostics_creates_default_record_when_missing(
     assert payload["sso"]["federation_enabled"] is False
     assert payload["scim"]["enabled"] is False
     assert payload["recommendations"] == []
+    identity = await db.scalar(
+        select(TenantIdentitySettings).where(
+            TenantIdentitySettings.tenant_id == tenant.id
+        )
+    )
+    assert identity is None
 
 
 @pytest.mark.asyncio
@@ -269,4 +281,3 @@ async def test_identity_rotate_scim_token_creates_settings_when_missing(
     assert identity is not None
     assert bool(identity.scim_enabled) is True
     assert bool(identity.scim_bearer_token)
-

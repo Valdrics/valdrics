@@ -5,9 +5,10 @@ from unittest.mock import patch
 from sqlalchemy import select
 
 from app.models.aws_connection import AWSConnection
+from app.shared.core.exceptions import AdapterError
 from app.shared.core.pricing import PricingTier
 
-from app.models.tenant import Tenant
+from app.models.tenant import Tenant, UserRole
 
 pytest_plugins = ("tests.unit.governance.connections_api_fixtures",)
 
@@ -118,6 +119,21 @@ async def test_create_aws_connection(ac, override_auth, auth_user, db):
 
 
 @pytest.mark.asyncio
+async def test_create_aws_connection_requires_admin(ac, override_auth, auth_user):
+    auth_user.role = UserRole.MEMBER
+    payload = {
+        "aws_account_id": "123456789012",
+        "role_arn": "arn:aws:iam::123456789012:role/Valdrics",
+        "external_id": "vx-12345678901234567890123456789012",
+        "region": "us-east-1",
+    }
+
+    resp = await ac.post("/api/v1/settings/connections/aws", json=payload)
+
+    assert resp.status_code == 403
+
+
+@pytest.mark.asyncio
 async def test_create_management_aws_connection_requires_growth(
     ac, override_auth, auth_user
 ):
@@ -222,6 +238,50 @@ async def test_sync_aws_org_not_management(ac, db, override_auth, auth_user):
 
     resp = await ac.post(f"/api/v1/settings/connections/aws/{conn.id}/sync-org")
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_sync_aws_org_requires_active_management_connection(
+    ac, db, override_auth, auth_user
+):
+    auth_user.tier = PricingTier.GROWTH
+    conn = AWSConnection(
+        tenant_id=auth_user.tenant_id,
+        aws_account_id="776655443322",
+        role_arn="arn:aws:iam::776655443322:role/Valdrics",
+        external_id="vx-77665544332277665544332277665544",
+        is_management_account=True,
+        status="pending",
+    )
+    db.add(conn)
+    await db.commit()
+
+    resp = await ac.post(f"/api/v1/settings/connections/aws/{conn.id}/sync-org")
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_sync_aws_org_surfaces_sync_failure(
+    ac, db, override_auth, auth_user
+):
+    auth_user.tier = PricingTier.GROWTH
+    conn = AWSConnection(
+        tenant_id=auth_user.tenant_id,
+        aws_account_id="101122223333",
+        role_arn="arn:aws:iam::101122223333:role/Valdrics",
+        external_id="vx-10112222333310112222333310112222",
+        is_management_account=True,
+        status="active",
+    )
+    db.add(conn)
+    await db.commit()
+
+    with patch(
+        "app.shared.connections.organizations.OrganizationsDiscoveryService.sync_accounts",
+        side_effect=AdapterError("AccessDenied during org sync"),
+    ):
+        resp = await ac.post(f"/api/v1/settings/connections/aws/{conn.id}/sync-org")
+    assert resp.status_code == 502
 
 
 @pytest.mark.asyncio

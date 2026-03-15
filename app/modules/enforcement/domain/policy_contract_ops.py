@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID
 
@@ -351,6 +352,121 @@ async def get_or_create_policy(
 
     await db.flush()
     return policy
+
+
+async def get_policy_snapshot(
+    *,
+    db: AsyncSession,
+    tenant_id: UUID,
+    policy_document_contract_backfill_required_fn: Callable[[EnforcementPolicy], bool],
+    materialize_policy_contract_fn: Callable[..., Any],
+    to_decimal_fn: Callable[..., Decimal],
+    utcnow_fn: Callable[[], Any],
+) -> EnforcementPolicy | Any:
+    policy = (
+        await db.execute(
+            select(EnforcementPolicy).where(EnforcementPolicy.tenant_id == tenant_id)
+        )
+    ).scalar_one_or_none()
+    if policy is None:
+        policy = EnforcementPolicy(tenant_id=tenant_id)
+
+    if not policy_document_contract_backfill_required_fn(policy):
+        return policy
+
+    require_approval_for_prod = getattr(policy, "require_approval_for_prod", None)
+    require_approval_for_nonprod = getattr(
+        policy,
+        "require_approval_for_nonprod",
+        None,
+    )
+    enforce_prod_requester_reviewer_separation = getattr(
+        policy,
+        "enforce_prod_requester_reviewer_separation",
+        None,
+    )
+    enforce_nonprod_requester_reviewer_separation = getattr(
+        policy,
+        "enforce_nonprod_requester_reviewer_separation",
+        None,
+    )
+    policy_version = getattr(policy, "policy_version", None)
+
+    materialized = materialize_policy_contract_fn(
+        terraform_mode=policy.terraform_mode or EnforcementMode.SOFT,
+        terraform_mode_prod=policy.terraform_mode_prod or EnforcementMode.SOFT,
+        terraform_mode_nonprod=policy.terraform_mode_nonprod or EnforcementMode.SOFT,
+        k8s_admission_mode=policy.k8s_admission_mode or EnforcementMode.SOFT,
+        k8s_admission_mode_prod=policy.k8s_admission_mode_prod or EnforcementMode.SOFT,
+        k8s_admission_mode_nonprod=policy.k8s_admission_mode_nonprod
+        or EnforcementMode.SOFT,
+        require_approval_for_prod=(
+            True if require_approval_for_prod is None else bool(require_approval_for_prod)
+        ),
+        require_approval_for_nonprod=(
+            False
+            if require_approval_for_nonprod is None
+            else bool(require_approval_for_nonprod)
+        ),
+        plan_monthly_ceiling_usd=policy.plan_monthly_ceiling_usd,
+        enterprise_monthly_ceiling_usd=policy.enterprise_monthly_ceiling_usd,
+        auto_approve_below_monthly_usd=to_decimal_fn(
+            policy.auto_approve_below_monthly_usd,
+            default=Decimal("25"),
+        ),
+        hard_deny_above_monthly_usd=to_decimal_fn(
+            policy.hard_deny_above_monthly_usd,
+            default=Decimal("5000"),
+        ),
+        default_ttl_seconds=int(policy.default_ttl_seconds or 900),
+        enforce_prod_requester_reviewer_separation=(
+            True
+            if enforce_prod_requester_reviewer_separation is None
+            else bool(enforce_prod_requester_reviewer_separation)
+        ),
+        enforce_nonprod_requester_reviewer_separation=(
+            False
+            if enforce_nonprod_requester_reviewer_separation is None
+            else bool(enforce_nonprod_requester_reviewer_separation)
+        ),
+        approval_routing_rules=(
+            list(policy.approval_routing_rules)
+            if isinstance(policy.approval_routing_rules, list)
+            else []
+        ),
+        policy_document=(
+            cast(Mapping[str, Any], policy.policy_document)
+            if isinstance(policy.policy_document, Mapping)
+            else None
+        ),
+    )
+    return SimpleNamespace(
+        terraform_mode=materialized.terraform_mode,
+        terraform_mode_prod=materialized.terraform_mode_prod,
+        terraform_mode_nonprod=materialized.terraform_mode_nonprod,
+        k8s_admission_mode=materialized.k8s_admission_mode,
+        k8s_admission_mode_prod=materialized.k8s_admission_mode_prod,
+        k8s_admission_mode_nonprod=materialized.k8s_admission_mode_nonprod,
+        require_approval_for_prod=materialized.require_approval_for_prod,
+        require_approval_for_nonprod=materialized.require_approval_for_nonprod,
+        enforce_prod_requester_reviewer_separation=(
+            materialized.enforce_prod_requester_reviewer_separation
+        ),
+        enforce_nonprod_requester_reviewer_separation=(
+            materialized.enforce_nonprod_requester_reviewer_separation
+        ),
+        plan_monthly_ceiling_usd=materialized.plan_monthly_ceiling_usd,
+        enterprise_monthly_ceiling_usd=materialized.enterprise_monthly_ceiling_usd,
+        auto_approve_below_monthly_usd=materialized.auto_approve_below_monthly_usd,
+        hard_deny_above_monthly_usd=materialized.hard_deny_above_monthly_usd,
+        default_ttl_seconds=materialized.default_ttl_seconds,
+        approval_routing_rules=materialized.approval_routing_rules,
+        policy_document_schema_version=materialized.policy_document_schema_version,
+        policy_document_sha256=materialized.policy_document_sha256,
+        policy_document=materialized.policy_document,
+        policy_version=int(policy_version or 1),
+        updated_at=getattr(policy, "updated_at", None) or utcnow_fn(),
+    )
 
 
 async def update_policy(

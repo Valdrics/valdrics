@@ -325,6 +325,7 @@ class FinOpsAnalyzer:
                 effective_db,
                 provider,
                 effective_model,
+                tenant_tier=tenant_tier,
                 input_text=formatted_data,
             )
             try:
@@ -398,6 +399,7 @@ class FinOpsAnalyzer:
         db: Optional[AsyncSession],
         provider: Optional[str],
         model: Optional[str],
+        tenant_tier: PricingTier | None = None,
         input_text: Optional[str] = None,
     ) -> tuple[str, str, Optional[str]]:
         _ = input_text
@@ -406,6 +408,7 @@ class FinOpsAnalyzer:
             db=db,
             provider=provider,
             model=model,
+            tenant_tier=tenant_tier,
             budget_manager=LLMBudgetManager,
             llm_budget_model=LLMBudget,
             settings_provider=get_settings,

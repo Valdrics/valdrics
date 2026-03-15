@@ -11,12 +11,6 @@ async def test_capture_and_list_ingestion_persistence_evidence(
     from app.shared.core.auth import CurrentUser, get_current_user, UserRole
     from app.shared.core.pricing import PricingTier
     from app.models.tenant import User
-    from app.modules.governance.domain.security.audit_log import (
-        AuditEventType,
-        AuditLog,
-    )
-    from sqlalchemy import select
-
     admin_user = CurrentUser(
         id=uuid.uuid4(),
         email="admin-ingest@valdrics.io",
@@ -59,28 +53,6 @@ async def test_capture_and_list_ingestion_persistence_evidence(
             "/api/v1/audit/performance/ingestion/persistence/evidence",
             json=payload,
         )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["status"] == "captured"
-        assert body["benchmark"]["records_requested"] == 100_000
-        assert body["benchmark"]["provider"] == "aws"
-
-        list_resp = await async_client.get(
-            "/api/v1/audit/performance/ingestion/persistence/evidence",
-            params={"limit": 10},
-        )
-        assert list_resp.status_code == 200
-        listed = list_resp.json()
-        assert listed["total"] >= 1
-        assert listed["items"][0]["benchmark"]["provider"] == "aws"
-
-        row = await db.scalar(
-            select(AuditLog).where(
-                AuditLog.tenant_id == test_tenant.id,
-                AuditLog.event_type
-                == AuditEventType.PERFORMANCE_INGESTION_PERSISTENCE_CAPTURED.value,
-            )
-        )
-        assert row is not None
+        assert resp.status_code == 410
     finally:
         app.dependency_overrides.pop(get_current_user, None)

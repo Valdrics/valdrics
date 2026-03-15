@@ -28,7 +28,10 @@ def override_auth(mock_jwt_user):
 @pytest.mark.asyncio
 async def test_onboard_success(async_client: AsyncClient, db_session, mock_jwt_user):
     """Test successful onboarding creates tenant and user."""
-    onboard_data = {"tenant_name": "Test Tenant", "admin_email": "admin@example.com"}
+    onboard_data = {
+        "tenant_name": "Test Tenant",
+        "admin_email": mock_jwt_user.email,
+    }
 
     response = await async_client.post("/api/v1/settings/onboard", json=onboard_data)
     assert response.status_code == 200
@@ -48,6 +51,25 @@ async def test_onboard_success(async_client: AsyncClient, db_session, mock_jwt_u
     db_user = result.scalar_one()
     assert db_user.tenant_id == UUID(tenant_id)
     assert db_user.email == mock_jwt_user.email
+
+
+@pytest.mark.asyncio
+async def test_onboard_rejects_mismatched_admin_email(
+    async_client: AsyncClient, mock_jwt_user
+):
+    response = await async_client.post(
+        "/api/v1/settings/onboard",
+        json={
+            "tenant_name": "Mismatch Tenant",
+            "admin_email": "other-admin@example.com",
+        },
+    )
+
+    assert response.status_code == 400
+    assert (
+        "admin_email must match the authenticated user email"
+        in response.json()["error"]
+    )
 
 
 @pytest.mark.asyncio

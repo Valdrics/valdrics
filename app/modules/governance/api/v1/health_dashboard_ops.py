@@ -66,7 +66,7 @@ async def get_tenant_metrics(db: AsyncSession, now: datetime) -> TenantMetrics:
                 | (Tenant.last_accessed_at.is_(None)),
             )
             .label("churn_risk"),
-        )
+        ).where(Tenant.is_deleted.is_(False))
     )
     row = result.one()
 
@@ -316,6 +316,11 @@ async def get_license_governance_health(
 ) -> LicenseGovernanceHealth:
     """Calculate license governance throughput and reliability over a rolling window."""
     window_start = now - timedelta(hours=window_hours)
+    activity_at = func.coalesce(
+        RemediationRequest.executed_at,
+        RemediationRequest.updated_at,
+        RemediationRequest.created_at,
+    )
     in_flight_statuses = (
         RemediationStatus.PENDING,
         RemediationStatus.PENDING_APPROVAL,
@@ -345,7 +350,7 @@ async def get_license_governance_health(
             .label("in_flight_requests"),
         ).where(
             RemediationRequest.action == RemediationAction.RECLAIM_LICENSE_SEAT,
-            RemediationRequest.created_at >= window_start,
+            activity_at >= window_start,
         )
     )
     counts_row = counts_result.one()
@@ -370,7 +375,7 @@ async def get_license_governance_health(
             select(RemediationRequest.created_at, RemediationRequest.executed_at).where(
                 RemediationRequest.action == RemediationAction.RECLAIM_LICENSE_SEAT,
                 RemediationRequest.status == RemediationStatus.COMPLETED,
-                RemediationRequest.created_at >= window_start,
+                activity_at >= window_start,
                 RemediationRequest.executed_at.is_not(None),
             )
         )

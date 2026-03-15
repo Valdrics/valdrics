@@ -21,6 +21,19 @@ REQUIRED_CONTROL_IDS: tuple[str, ...] = (
 )
 
 ALLOWED_STATUSES: set[str] = {"implemented_baseline", "partial", "planned"}
+BASELINE_REQUIRED_STATUS = "implemented_baseline"
+CONTROL_EVIDENCE_PREFIXES: dict[str, tuple[str, ...]] = {
+    control_id: (
+        "app/modules/enforcement/domain/",
+        "tests/unit/enforcement/",
+    )
+    for control_id in REQUIRED_CONTROL_IDS
+}
+CONTROL_EVIDENCE_PREFIXES["JWT-KEY-ROTATION-FALLBACK"] = (
+    "app/modules/enforcement/domain/",
+    "tests/unit/enforcement/",
+    "docs/runbooks/",
+)
 
 
 def _repo_root() -> Path:
@@ -74,6 +87,11 @@ def validate_checklist(checklist: dict[str, Any], *, repo_root: Path) -> None:
                 f"Control {control_id} has invalid status: {status!r}; "
                 f"allowed={sorted(ALLOWED_STATUSES)}"
             )
+        if control_id in REQUIRED_CONTROL_IDS and status != BASELINE_REQUIRED_STATUS:
+            raise ValueError(
+                f"Control {control_id} must be {BASELINE_REQUIRED_STATUS!r} "
+                f"for release-gate verification"
+            )
 
         title = control.get("title")
         if not isinstance(title, str) or not title.strip():
@@ -87,6 +105,7 @@ def validate_checklist(checklist: dict[str, Any], *, repo_root: Path) -> None:
         if not isinstance(evidence, list) or not evidence:
             raise ValueError(f"Control {control_id} must include evidence paths")
 
+        normalized_evidence_paths: list[str] = []
         for raw_path in evidence:
             if not isinstance(raw_path, str) or not raw_path.strip():
                 raise ValueError(f"Control {control_id} has invalid evidence path entry")
@@ -100,6 +119,16 @@ def validate_checklist(checklist: dict[str, Any], *, repo_root: Path) -> None:
                 raise ValueError(
                     f"Control {control_id} evidence path does not exist: {raw_path}"
                 )
+            normalized_evidence_paths.append(rel_path.as_posix())
+
+        required_prefixes = CONTROL_EVIDENCE_PREFIXES.get(control_id)
+        if required_prefixes is not None:
+            for prefix in required_prefixes:
+                if not any(path.startswith(prefix) for path in normalized_evidence_paths):
+                    raise ValueError(
+                        f"Control {control_id} evidence must include at least one path "
+                        f"under {prefix}"
+                    )
 
     missing = sorted(set(REQUIRED_CONTROL_IDS) - seen_ids)
     if missing:

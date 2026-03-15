@@ -8,6 +8,7 @@ import pytest
 
 from app.modules.reporting.api.v1 import currency as currency_api
 from app.shared.core.auth import CurrentUser, UserRole
+from app.shared.core.currency import ExchangeRateUnavailableError
 from app.shared.core.pricing import PricingTier
 
 
@@ -40,7 +41,9 @@ async def test_get_all_rates_uses_supported_currencies() -> None:
 
 @pytest.mark.asyncio
 async def test_convert_currency_formats_and_uppercases_target() -> None:
+    settings = SimpleNamespace(SUPPORTED_CURRENCIES=["USD", "NGN", "EUR"])
     with (
+        patch.object(currency_api, "get_settings", return_value=settings),
         patch(
             "app.shared.core.currency.convert_usd",
             new=AsyncMock(return_value=1500.0),
@@ -60,5 +63,43 @@ async def test_convert_currency_formats_and_uppercases_target() -> None:
     assert response["converted_amount"] == 1500.0
     assert response["target_currency"] == "NGN"
     assert response["formatted"] == "₦1,500.00"
-    convert_mock.assert_awaited_once_with(1.0, "ngn")
-    format_mock.assert_awaited_once_with(1.0, "ngn")
+    convert_mock.assert_awaited_once_with(1.0, "NGN", strict=True)
+    format_mock.assert_awaited_once_with(1.0, "NGN", strict=True)
+
+
+@pytest.mark.asyncio
+async def test_convert_currency_rejects_unsupported_target() -> None:
+    settings = SimpleNamespace(SUPPORTED_CURRENCIES=["USD", "NGN", "EUR"])
+
+    with patch.object(currency_api, "get_settings", return_value=settings):
+        with pytest.raises(currency_api.HTTPException) as exc_info:
+            await currency_api.convert_currency(
+                amount=1.0,
+                to="JPY",
+                current_user=_user(),
+            )
+
+    assert exc_info.value.status_code == 400
+    assert "Unsupported target currency" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_convert_currency_surfaces_unavailable_exchange_rate() -> None:
+    settings = SimpleNamespace(SUPPORTED_CURRENCIES=["USD", "NGN", "EUR"])
+
+    with (
+        patch.object(currency_api, "get_settings", return_value=settings),
+        patch(
+            "app.shared.core.currency.convert_usd",
+            new=AsyncMock(side_effect=ExchangeRateUnavailableError("no live rate")),
+        ),
+    ):
+        with pytest.raises(currency_api.HTTPException) as exc_info:
+            await currency_api.convert_currency(
+                amount=1.0,
+                to="EUR",
+                current_user=_user(),
+            )
+
+    assert exc_info.value.status_code == 503
+    assert "Exchange rate unavailable for EUR" in str(exc_info.value.detail)

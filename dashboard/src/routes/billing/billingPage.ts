@@ -21,14 +21,24 @@ export type BillingUsage = {
 	generated_at: string;
 };
 
-export const BILLING_USAGE_ORDER = ['aws', 'azure', 'gcp', 'saas', 'license'] as const;
+export const BILLING_USAGE_ORDER = [
+	'aws',
+	'azure',
+	'gcp',
+	'saas',
+	'license',
+	'platform',
+	'hybrid'
+] as const;
 
 export const BILLING_USAGE_LABELS: Record<(typeof BILLING_USAGE_ORDER)[number], string> = {
 	aws: 'AWS accounts',
 	azure: 'Azure tenants',
 	gcp: 'GCP projects',
 	saas: 'SaaS connections',
-	license: 'License connections'
+	license: 'License connections',
+	platform: 'Platform connections',
+	hybrid: 'Hybrid connections'
 };
 
 const PLAN_RANK = new Map<string, number>([

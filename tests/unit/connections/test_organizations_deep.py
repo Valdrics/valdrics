@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
+from datetime import timezone
 from app.shared.connections.organizations import OrganizationsDiscoveryService
 from app.models.aws_connection import AWSConnection
 from app.models.discovered_account import DiscoveredAccount
@@ -84,6 +85,9 @@ class TestOrganizationsDiscoveryDeep:
             assert count == 1
             assert mock_db.add.called
             assert mock_db.commit.called
+            added_account = mock_db.add.call_args.args[0]
+            assert added_account.last_discovered_at is not None
+            assert added_account.last_discovered_at.tzinfo == timezone.utc
 
     @pytest.mark.asyncio
     async def test_sync_accounts_update_existing(self, mock_db):
@@ -131,6 +135,53 @@ class TestOrganizationsDiscoveryDeep:
 
             await OrganizationsDiscoveryService.sync_accounts(mock_db, conn)
             assert existing_acc.name == "NewName"
+            assert existing_acc.last_discovered_at is not None
+
+    @pytest.mark.asyncio
+    async def test_sync_accounts_marks_missing_existing_rows_stale(self, mock_db):
+        conn = AWSConnection(
+            id=uuid4(),
+            is_management_account=True,
+            aws_account_id="123",
+            role_arn="arn:aws:role",
+            external_id="eid",
+        )
+
+        mock_sts = MagicMock()
+        mock_sts.assume_role = AsyncMock(
+            return_value={
+                "Credentials": {
+                    "AccessKeyId": "A",
+                    "SecretAccessKey": "S",
+                    "SessionToken": "T",
+                }
+            }
+        )
+        mock_sts.__aenter__ = AsyncMock(return_value=mock_sts)
+        mock_sts.__aexit__ = AsyncMock()
+
+        mock_org = MagicMock()
+        mock_org.__aenter__ = AsyncMock(return_value=mock_org)
+        mock_org.__aexit__ = AsyncMock()
+
+        mock_paginator = MagicMock()
+        mock_paginator.paginate.return_value = MockPaginator([{"Accounts": []}])
+        mock_org.get_paginator.return_value = mock_paginator
+
+        existing_acc = DiscoveredAccount(account_id="456", name="OldName", status="discovered")
+        mock_db.execute.return_value.scalars.return_value.all.return_value = [
+            existing_acc
+        ]
+
+        with patch("aioboto3.Session") as mock_session_class:
+            mock_session = mock_session_class.return_value
+            mock_session.client.side_effect = (
+                lambda s, **k: mock_sts if s == "sts" else mock_org
+            )
+
+            count = await OrganizationsDiscoveryService.sync_accounts(mock_db, conn)
+            assert count == 0
+            assert existing_acc.status == "stale"
 
     @pytest.mark.asyncio
     async def test_sync_accounts_exception_handling_propagates(self, mock_db):

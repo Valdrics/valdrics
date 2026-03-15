@@ -110,6 +110,7 @@ async def test_create_rule_rejects_invalid_payload() -> None:
 async def test_create_rule_success_logs_and_commits() -> None:
     db = MagicMock()
     db.commit = AsyncMock()
+    db.rollback = AsyncMock()
     user = _user()
     payload = attribution_api.RuleCreateRequest(
         name="EC2 Direct",
@@ -143,6 +144,8 @@ async def test_create_rule_success_logs_and_commits() -> None:
 
     assert response.name == "EC2 Direct"
     assert response.priority == 1
+    engine.create_rule.assert_awaited_once()
+    assert engine.create_rule.await_args.kwargs["commit"] is False
     audit.log.assert_awaited_once()
     db.commit.assert_awaited_once()
 
@@ -226,6 +229,7 @@ async def test_update_rule_returns_404_when_update_misses() -> None:
 async def test_update_rule_success_logs_and_commits() -> None:
     db = MagicMock()
     db.commit = AsyncMock()
+    db.rollback = AsyncMock()
     user = _user()
     rule_id = uuid4()
     payload = attribution_api.RuleUpdateRequest(priority=2, is_active=False)
@@ -254,6 +258,7 @@ async def test_update_rule_success_logs_and_commits() -> None:
 
     assert response.priority == 2
     assert response.is_active is False
+    assert engine.update_rule.await_args.kwargs["commit"] is False
     audit.log.assert_awaited_once()
     db.commit.assert_awaited_once()
 
@@ -262,6 +267,7 @@ async def test_update_rule_success_logs_and_commits() -> None:
 async def test_update_rule_success_with_rule_type_change_validation_path() -> None:
     db = MagicMock()
     db.commit = AsyncMock()
+    db.rollback = AsyncMock()
     user = _user()
     rule_id = uuid4()
     payload = attribution_api.RuleUpdateRequest(
@@ -298,6 +304,7 @@ async def test_update_rule_success_with_rule_type_change_validation_path() -> No
 
     assert response.rule_type == "PERCENTAGE"
     engine.validate_rule_payload.assert_called_once()
+    assert engine.update_rule.await_args.kwargs["commit"] is False
     audit.log.assert_awaited_once()
     db.commit.assert_awaited_once()
 
@@ -324,6 +331,7 @@ async def test_delete_rule_not_found_and_success_paths() -> None:
     # success
     db = MagicMock()
     db.commit = AsyncMock()
+    db.rollback = AsyncMock()
     with (
         patch.object(attribution_api, "AttributionEngine") as engine_cls,
         patch.object(attribution_api, "AuditLogger") as audit_cls,
@@ -342,6 +350,7 @@ async def test_delete_rule_not_found_and_success_paths() -> None:
             current_user=user,
         )
     assert response["status"] == "deleted"
+    assert engine.delete_rule.await_args.kwargs["commit"] is False
     audit.log.assert_awaited_once()
     db.commit.assert_awaited_once()
 
@@ -397,6 +406,7 @@ async def test_simulate_rule_success_logs_and_commits() -> None:
     user = _user()
     db = MagicMock()
     db.commit = AsyncMock()
+    db.rollback = AsyncMock()
     payload = attribution_api.RuleSimulationRequest(
         rule_type="DIRECT",
         conditions={"service": "AmazonEC2"},
@@ -449,6 +459,7 @@ async def test_apply_rules_invalid_window_and_success() -> None:
 
     db = MagicMock()
     db.commit = AsyncMock()
+    db.rollback = AsyncMock()
     payload_ok = attribution_api.ApplyAttributionRequest(
         start_date=date(2026, 2, 1),
         end_date=date(2026, 2, 1),
@@ -474,7 +485,49 @@ async def test_apply_rules_invalid_window_and_success() -> None:
         )
     assert response["status"] == "completed"
     assert response["records_processed"] == 1
+    assert engine.apply_rules_to_tenant.await_args.kwargs["commit"] is False
     db.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_rule_rolls_back_when_audit_write_fails() -> None:
+    db = MagicMock()
+    db.commit = AsyncMock()
+    db.rollback = AsyncMock()
+    user = _user()
+    payload = attribution_api.RuleCreateRequest(
+        name="EC2 Direct",
+        priority=1,
+        rule_type="DIRECT",
+        conditions={"service": "AmazonEC2"},
+        allocation={"bucket": "Platform"},
+        is_active=True,
+    )
+
+    with (
+        patch.object(attribution_api, "AttributionEngine") as engine_cls,
+        patch.object(attribution_api, "AuditLogger") as audit_cls,
+    ):
+        engine = MagicMock()
+        engine.validate_rule_payload = MagicMock(return_value=[])
+        engine.create_rule = AsyncMock(return_value=_rule())
+        engine_cls.return_value = engine
+
+        audit = MagicMock()
+        audit.log = AsyncMock(side_effect=RuntimeError("audit failed"))
+        audit_cls.return_value = audit
+
+        with pytest.raises(HTTPException) as exc:
+            await attribution_api.create_rule(
+                request=_request("/api/v1/attribution/rules"),
+                payload=payload,
+                db=db,
+                current_user=user,
+            )
+
+    assert exc.value.status_code == 500
+    db.rollback.assert_awaited_once()
+    db.commit.assert_not_awaited()
 
 
 @pytest.mark.asyncio

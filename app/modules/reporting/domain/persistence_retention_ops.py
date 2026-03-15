@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import and_, delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cloud import CostRecord
@@ -39,7 +39,15 @@ async def cleanup_old_cost_records(
     while True:
         select_stmt = (
             select(CostRecord.id)
-            .where(CostRecord.timestamp < cutoff_date)
+            .where(
+                or_(
+                    CostRecord.timestamp < cutoff_date,
+                    and_(
+                        CostRecord.timestamp.is_(None),
+                        CostRecord.recorded_at < cutoff_date.date(),
+                    ),
+                )
+            )
             .limit(batch_size)
         )
         result = await db.execute(select_stmt)
@@ -225,4 +233,3 @@ async def finalize_cost_record_batch(
     )
 
     return {"records_finalized": count}
-

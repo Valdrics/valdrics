@@ -218,6 +218,8 @@ async def maybe_schedule_grace_period_execution(
     if request.status != RemediationStatus.APPROVED or bypass_grace_period:
         return False
 
+    original_status = request.status
+    original_scheduled_execution_at = getattr(request, "scheduled_execution_at", None)
     hours = 24
     if action == RemediationAction.RECLAIM_LICENSE_SEAT:
         hours = (
@@ -227,37 +229,44 @@ async def maybe_schedule_grace_period_execution(
     scheduled_at = datetime.now(timezone.utc) + timedelta(hours=hours)
     request.status = RemediationStatus.SCHEDULED
     request.scheduled_execution_at = scheduled_at
-    await db.commit()
+
+    from app.models.background_job import JobType
+    from app.modules.governance.domain.jobs.processor import enqueue_job
+
+    try:
+        await enqueue_job(
+            db=db,
+            job_type=JobType.REMEDIATION,
+            tenant_id=tenant_id,
+            payload={"request_id": str(request_id)},
+            scheduled_for=scheduled_at,
+            auto_commit=False,
+        )
+        await audit_logger.log(
+            event_type=remediation_module.AuditEventType.REMEDIATION_EXECUTION_STARTED,
+            actor_id=actor_id,
+            resource_id=resource_id,
+            resource_type=resource_type,
+            success=True,
+            details={
+                "request_id": str(request_id),
+                "action": action_value,
+                "scheduled_execution_at": scheduled_at.isoformat(),
+                "note": f"Resource scheduled for execution after {hours}h grace period.",
+            },
+        )
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        request.status = original_status
+        request.scheduled_execution_at = original_scheduled_execution_at
+        raise
 
     logger.info(
         "remediation_scheduled_grace_period",
         request_id=str(request_id),
         scheduled_at=scheduled_at.isoformat(),
         grace_hours=hours,
-    )
-    await audit_logger.log(
-        event_type=remediation_module.AuditEventType.REMEDIATION_EXECUTION_STARTED,
-        actor_id=actor_id,
-        resource_id=resource_id,
-        resource_type=resource_type,
-        success=True,
-        details={
-            "request_id": str(request_id),
-            "action": action_value,
-            "scheduled_execution_at": scheduled_at.isoformat(),
-            "note": f"Resource scheduled for execution after {hours}h grace period.",
-        },
-    )
-
-    from app.models.background_job import JobType
-    from app.modules.governance.domain.jobs.processor import enqueue_job
-
-    await enqueue_job(
-        db=db,
-        job_type=JobType.REMEDIATION,
-        tenant_id=tenant_id,
-        payload={"request_id": str(request_id)},
-        scheduled_for=scheduled_at,
     )
     return True
 

@@ -96,6 +96,12 @@ async def get_leaderboard(
         days = int(period.replace("d", ""))
         start_date = datetime.now(timezone.utc) - timedelta(days=days)
 
+    completed_at = func.coalesce(
+        RemediationRequest.executed_at,
+        RemediationRequest.updated_at,
+        RemediationRequest.created_at,
+    )
+
     # Query COMPLETED remediations grouped by approver
     # Join with User table to get email instead of UUID
     query = (
@@ -117,7 +123,7 @@ async def get_leaderboard(
     )
 
     if start_date:
-        query = query.where(RemediationRequest.created_at >= start_date)
+        query = query.where(completed_at >= start_date)
 
     result = await db.execute(query)
     rows = result.fetchall()

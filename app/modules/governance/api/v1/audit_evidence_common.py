@@ -71,6 +71,7 @@ async def capture_evidence_event(
     payload: Any,
     success: bool,
     request_path: str,
+    verification_status: str = "server_verified",
 ) -> tuple[str, Any]:
     from uuid import uuid4
 
@@ -90,6 +91,7 @@ async def capture_evidence_event(
         details={
             "run_id": run_id,
             "captured_at": captured_at,
+            "verification_status": verification_status,
             payload_key: payload.model_dump(),
         },
         success=bool(success),

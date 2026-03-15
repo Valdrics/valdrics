@@ -139,6 +139,8 @@ async def export_compliance_pack_bundle(
         tenant_id=actor.tenant_id,
         event_types=accepted_event_types,
         limit=int(evidence_limit),
+        start_date=start_date,
+        end_date=end_date,
     )
 
     payload_specs: tuple[tuple[str, str, str, bool], ...] = (
@@ -214,6 +216,8 @@ async def export_compliance_pack_bundle(
         db=db,
         tenant_id=actor.tenant_id,
         evidence_limit=int(evidence_limit),
+        start_date=start_date,
+        end_date=end_date,
         payload_specs=payload_specs,
         collect_payload_evidence=collect_payload_evidence,
     )

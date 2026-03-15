@@ -2,11 +2,20 @@
 Tests for CarbonBudgetService - Budget Alerts
 """
 
+from collections.abc import AsyncGenerator
 import pytest
+import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from datetime import date, datetime, timezone
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+
+from app.models.carbon_settings import CarbonSettings
+from app.models.tenant import Tenant
 from app.modules.reporting.domain.budget_alerts import CarbonBudgetService
+from app.shared.core.pricing import PricingTier
 
 
 @pytest.fixture
@@ -20,6 +29,28 @@ def mock_db():
 @pytest.fixture
 def carbon_service(mock_db):
     return CarbonBudgetService(mock_db)
+
+
+@pytest_asyncio.fixture
+async def carbon_db_session() -> AsyncGenerator[AsyncSession, None]:
+    engine = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        echo=False,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with engine.begin() as conn:
+        await conn.run_sync(Tenant.__table__.create)
+        await conn.run_sync(CarbonSettings.__table__.create)
+
+    session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_maker() as session:
+        try:
+            yield session
+        finally:
+            await session.rollback()
+            await session.close()
+    await engine.dispose()
 
 
 @pytest.mark.asyncio
@@ -162,6 +193,29 @@ async def test_mark_alert_sent(carbon_service, mock_db):
 
     mock_db.execute.assert_called_once()
     mock_db.commit.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_mark_alert_sent_persists_status_on_real_model(
+    carbon_db_session: AsyncSession,
+) -> None:
+    tenant_id = uuid4()
+    carbon_db_session.add(
+        Tenant(id=tenant_id, name="Carbon Tenant", plan=PricingTier.FREE.value)
+    )
+    carbon_db_session.add(CarbonSettings(tenant_id=tenant_id))
+    await carbon_db_session.commit()
+
+    service = CarbonBudgetService(carbon_db_session)
+    await service.mark_alert_sent(tenant_id, "warning")
+
+    saved = (
+        await carbon_db_session.execute(
+            select(CarbonSettings).where(CarbonSettings.tenant_id == tenant_id)
+        )
+    ).scalar_one()
+    assert saved.last_alert_sent is not None
+    assert saved.last_alert_status == "warning"
 
 
 @pytest.mark.asyncio

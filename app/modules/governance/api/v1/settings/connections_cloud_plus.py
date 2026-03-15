@@ -47,7 +47,7 @@ router = APIRouter()
 async def create_saas_connection(
     request: Request,
     data: SaaSConnectionCreate,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> SaaSConnection:
     tenant_id = _require_tenant_id(current_user)
@@ -109,7 +109,7 @@ async def create_saas_connection(
 async def verify_saas_connection(
     request: Request,
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     check_cloud_plus_tier(current_user)
@@ -131,7 +131,7 @@ async def list_saas_connections(
 @router.delete("/saas/{connection_id}", status_code=204)
 async def delete_saas_connection(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     tenant_id = _require_tenant_id(current_user)
@@ -171,7 +171,7 @@ async def delete_saas_connection(
 async def create_license_connection(
     request: Request,
     data: LicenseConnectionCreate,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> LicenseConnection:
     tenant_id = _require_tenant_id(current_user)
@@ -233,7 +233,7 @@ async def create_license_connection(
 async def verify_license_connection(
     request: Request,
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     check_cloud_plus_tier(current_user)
@@ -255,7 +255,7 @@ async def list_license_connections(
 @router.delete("/license/{connection_id}", status_code=204)
 async def delete_license_connection(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     tenant_id = _require_tenant_id(current_user)
@@ -295,7 +295,7 @@ async def delete_license_connection(
 async def create_platform_connection(
     request: Request,
     data: PlatformConnectionCreate,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> PlatformConnection:
     tenant_id = _require_tenant_id(current_user)
@@ -358,7 +358,7 @@ async def create_platform_connection(
 async def verify_platform_connection(
     request: Request,
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     check_cloud_plus_tier(current_user)
@@ -380,7 +380,7 @@ async def list_platform_connections(
 @router.delete("/platform/{connection_id}", status_code=204)
 async def delete_platform_connection(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     tenant_id = _require_tenant_id(current_user)
@@ -420,7 +420,7 @@ async def delete_platform_connection(
 async def create_hybrid_connection(
     request: Request,
     data: HybridConnectionCreate,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> HybridConnection:
     tenant_id = _require_tenant_id(current_user)
@@ -483,7 +483,7 @@ async def create_hybrid_connection(
 async def verify_hybrid_connection(
     request: Request,
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     check_cloud_plus_tier(current_user)
@@ -505,7 +505,7 @@ async def list_hybrid_connections(
 @router.delete("/hybrid/{connection_id}", status_code=204)
 async def delete_hybrid_connection(
     connection_id: UUID,
-    current_user: CurrentUser = Depends(requires_role_with_db_context("member")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     tenant_id = _require_tenant_id(current_user)

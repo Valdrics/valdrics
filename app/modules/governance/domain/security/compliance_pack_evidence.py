@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Iterable
 from uuid import UUID
 
@@ -28,21 +29,36 @@ def _base_evidence_item(row: Any) -> dict[str, Any]:
     }
 
 
+def _apply_evidence_window(
+    stmt: Any,
+    *,
+    start_date: datetime | None,
+    end_date: datetime | None,
+) -> Any:
+    if start_date is not None:
+        stmt = stmt.where(AuditLog.event_timestamp >= start_date)
+    if end_date is not None:
+        stmt = stmt.where(AuditLog.event_timestamp <= end_date)
+    return stmt
+
+
 async def collect_integration_evidence(
     *,
     db: AsyncSession,
     tenant_id: UUID,
     event_types: Iterable[str],
     limit: int,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
 ) -> list[dict[str, Any]]:
     event_type_values = [str(item) for item in event_types]
     stmt = (
         select(AuditLog)
         .where(AuditLog.tenant_id == tenant_id)
         .where(AuditLog.event_type.in_(event_type_values))
-        .order_by(desc(AuditLog.event_timestamp))
-        .limit(int(limit))
     )
+    stmt = _apply_evidence_window(stmt, start_date=start_date, end_date=end_date)
+    stmt = stmt.order_by(desc(AuditLog.event_timestamp)).limit(int(limit))
     rows = (await db.execute(stmt)).scalars().all()
     items: list[dict[str, Any]] = []
     for row in rows:
@@ -64,14 +80,16 @@ async def collect_payload_evidence(
     payload_key: str,
     limit: int,
     include_thresholds: bool = False,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
 ) -> list[dict[str, Any]]:
     stmt = (
         select(AuditLog)
         .where(AuditLog.tenant_id == tenant_id)
         .where(AuditLog.event_type == event_type)
-        .order_by(desc(AuditLog.event_timestamp))
-        .limit(int(limit))
     )
+    stmt = _apply_evidence_window(stmt, start_date=start_date, end_date=end_date)
+    stmt = stmt.order_by(desc(AuditLog.event_timestamp)).limit(int(limit))
     rows = (await db.execute(stmt)).scalars().all()
     items: list[dict[str, Any]] = []
     for row in rows:
@@ -97,7 +115,7 @@ async def collect_settings_snapshots(
     ).scalar_one_or_none()
     notif_snapshot: dict[str, Any] = {
         "exists": bool(notif),
-        "slack_enabled": bool(getattr(notif, "slack_enabled", True)) if notif else True,
+        "slack_enabled": bool(getattr(notif, "slack_enabled", False)) if notif else False,
         "slack_channel_override": getattr(notif, "slack_channel_override", None)
         if notif
         else None,
@@ -176,15 +194,15 @@ async def collect_settings_snapshots(
         else "daily",
         "digest_hour": int(getattr(notif, "digest_hour", 9)) if notif else 9,
         "digest_minute": int(getattr(notif, "digest_minute", 0)) if notif else 0,
-        "alert_on_budget_warning": bool(getattr(notif, "alert_on_budget_warning", True))
+        "alert_on_budget_warning": bool(getattr(notif, "alert_on_budget_warning", False))
         if notif
-        else True,
-        "alert_on_budget_exceeded": bool(getattr(notif, "alert_on_budget_exceeded", True))
+        else False,
+        "alert_on_budget_exceeded": bool(getattr(notif, "alert_on_budget_exceeded", False))
         if notif
-        else True,
-        "alert_on_zombie_detected": bool(getattr(notif, "alert_on_zombie_detected", True))
+        else False,
+        "alert_on_zombie_detected": bool(getattr(notif, "alert_on_zombie_detected", False))
         if notif
-        else True,
+        else False,
     }
 
     remediation_settings = (
@@ -220,29 +238,29 @@ async def collect_settings_snapshots(
         )
         if remediation_settings
         else 0.0,
-        "policy_enabled": bool(getattr(remediation_settings, "policy_enabled", True))
+        "policy_enabled": bool(getattr(remediation_settings, "policy_enabled", False))
         if remediation_settings
-        else True,
+        else False,
         "policy_block_production_destructive": bool(
-            getattr(remediation_settings, "policy_block_production_destructive", True)
+            getattr(remediation_settings, "policy_block_production_destructive", False)
         )
         if remediation_settings
-        else True,
+        else False,
         "policy_require_gpu_override": bool(
-            getattr(remediation_settings, "policy_require_gpu_override", True)
+            getattr(remediation_settings, "policy_require_gpu_override", False)
         )
         if remediation_settings
-        else True,
+        else False,
         "policy_low_confidence_warn_threshold": float(
             getattr(remediation_settings, "policy_low_confidence_warn_threshold", 0.90)
         )
         if remediation_settings
         else 0.90,
         "policy_violation_notify_slack": bool(
-            getattr(remediation_settings, "policy_violation_notify_slack", True)
+            getattr(remediation_settings, "policy_violation_notify_slack", False)
         )
         if remediation_settings
-        else True,
+        else False,
         "policy_violation_notify_jira": bool(
             getattr(remediation_settings, "policy_violation_notify_jira", False)
         )

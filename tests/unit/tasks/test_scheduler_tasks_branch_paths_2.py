@@ -243,6 +243,8 @@ async def test_cohort_analysis_caps_tenant_scope_when_limit_exceeded() -> None:
         mock_datetime.now.return_value = datetime(2026, 2, 1, 11, 0, tzinfo=timezone.utc)
         await st._cohort_analysis_logic(TenantCohort.DORMANT)
 
+    select_stmt = db.execute.call_args_list[0].args[0]
+    assert getattr(getattr(select_stmt, "_limit_clause", None), "value", None) == 3
     mock_logger.warning.assert_any_call(
         "scheduler_scope_capped",
         scope="cohort:dormant",
@@ -379,7 +381,7 @@ async def test_remediation_sweep_caps_connection_scope_when_limit_exceeded() -> 
         patch(
             "app.tasks.scheduler_tasks._load_active_remediation_connections",
             new=AsyncMock(return_value=connections),
-        ),
+        ) as mock_load_connections,
         patch("app.tasks.scheduler_tasks.resolve_provider_from_connection", return_value="aws"),
         patch("app.tasks.scheduler_tasks.normalize_provider", return_value="aws"),
         patch("app.tasks.scheduler_tasks.resolve_connection_region", return_value="global"),
@@ -397,6 +399,7 @@ async def test_remediation_sweep_caps_connection_scope_when_limit_exceeded() -> 
     ):
         await st._remediation_sweep_logic()
 
+    assert mock_load_connections.await_args.kwargs["limit"] == 2
     mock_logger.warning.assert_any_call(
         "scheduler_scope_capped",
         scope="remediation_connections",
@@ -406,6 +409,44 @@ async def test_remediation_sweep_caps_connection_scope_when_limit_exceeded() -> 
     )
     # single insert after capping to one connection
     assert db.execute.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_acceptance_sweep_bounds_locked_query_before_capping() -> None:
+    db = AsyncMock()
+    _configure_sync_begin(db)
+    tenants = [SimpleNamespace(id=uuid4()) for _ in range(3)]
+    db.execute.side_effect = [
+        _scalars_result(tenants),
+        _rowcount_result(1),
+        _rowcount_result(1),
+    ]
+
+    with (
+        patch("app.tasks.scheduler_tasks._open_db_session", return_value=_db_cm(db)),
+        patch(
+            "app.tasks.scheduler_tasks.get_settings",
+            return_value=SimpleNamespace(
+                SCHEDULER_SYSTEM_SWEEP_MAX_TENANTS=2,
+                SCHEDULER_SYSTEM_SWEEP_MAX_CONNECTIONS=5000,
+            ),
+        ),
+        patch("app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED"),
+        patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_RUNS"),
+        patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_DURATION"),
+        patch("app.tasks.scheduler_tasks.logger") as mock_logger,
+    ):
+        await st._acceptance_sweep_logic()
+
+    select_stmt = db.execute.call_args_list[0].args[0]
+    assert getattr(getattr(select_stmt, "_limit_clause", None), "value", None) == 3
+    mock_logger.warning.assert_any_call(
+        "scheduler_scope_capped",
+        scope="acceptance_tenants",
+        total_items=3,
+        capped_items=2,
+        limit=2,
+    )
 
 
 @pytest.mark.asyncio

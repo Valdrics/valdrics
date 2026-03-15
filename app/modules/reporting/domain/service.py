@@ -24,7 +24,10 @@ from app.models.hybrid_connection import HybridConnection
 from app.models.cloud import CloudAccount
 from app.shared.core.service import BaseService
 from app.shared.core.async_utils import maybe_call
-from app.shared.core.connection_state import resolve_connection_profile
+from app.shared.core.connection_state import (
+    is_connection_active,
+    resolve_connection_profile,
+)
 from app.shared.core.exceptions import ValdricsException
 
 logger = structlog.get_logger()
@@ -104,9 +107,13 @@ class ReportingService(BaseService):
 
         persistence = CostPersistenceService(self.db)
         results = []
+        active_connections: list[Any] = []
 
         # 1. Sync CloudAccount registry
         for conn in connections:
+            connection_is_active = is_connection_active(conn)
+            if connection_is_active:
+                active_connections.append(conn)
             profile = resolve_connection_profile(conn)
             profile_is_production = profile.get("is_production")
             is_production = (
@@ -124,7 +131,7 @@ class ReportingService(BaseService):
                     name=getattr(conn, "name", f"{conn.provider.upper()} Connection"),
                     is_production=is_production,
                     criticality=criticality if isinstance(criticality, str) else None,
-                    is_active=True,
+                    is_active=connection_is_active,
                 )
                 .on_conflict_do_update(
                     index_elements=["id"],
@@ -137,14 +144,18 @@ class ReportingService(BaseService):
                         "criticality": (
                             criticality if isinstance(criticality, str) else None
                         ),
+                        "is_active": connection_is_active,
                     },
                 )
             )
             await self.db.execute(stmt)
         # Redundant commit removed (BE-TRANS-1)
 
+        if not active_connections:
+            return {"status": "skipped", "reason": "no_active_connections"}
+
         # 2. Ingest per connection
-        for conn in connections:
+        for conn in active_connections:
             try:
                 run_id = uuid.uuid4()
                 adapter = self._adapter_resolver(conn)
@@ -223,6 +234,6 @@ class ReportingService(BaseService):
 
         return {
             "status": "completed",
-            "connections_processed": len(connections),
+            "connections_processed": len(active_connections),
             "details": results,
         }

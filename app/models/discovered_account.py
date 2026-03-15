@@ -41,7 +41,7 @@ class DiscoveredAccount(Base):
         nullable=True,
     )
 
-    # status: "discovered", "linked", "ignored"
+    # status: "discovered", "linked", "ignored", "stale"
     status: Mapped[str] = mapped_column(
         String(20), default="discovered", server_default="discovered"
     )

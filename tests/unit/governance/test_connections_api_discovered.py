@@ -173,6 +173,70 @@ async def test_list_discovered_accounts_sorted(ac, db, override_auth, auth_user)
 
 
 @pytest.mark.asyncio
+async def test_list_discovered_accounts_excludes_stale(ac, db, override_auth, auth_user):
+    auth_user.tier = PricingTier.GROWTH
+    mgmt = AWSConnection(
+        tenant_id=auth_user.tenant_id,
+        aws_account_id="333344445555",
+        role_arn="arn",
+        external_id="vx-3333",
+        is_management_account=True,
+        status="active",
+    )
+    db.add(mgmt)
+    await db.commit()
+
+    stale = DiscoveredAccount(
+        management_connection_id=mgmt.id,
+        account_id="111122223333",
+        name="Stale",
+        status="stale",
+        last_discovered_at=datetime.now(timezone.utc),
+    )
+    fresh = DiscoveredAccount(
+        management_connection_id=mgmt.id,
+        account_id="444455556666",
+        name="Fresh",
+        status="discovered",
+        last_discovered_at=datetime.now(timezone.utc),
+    )
+    db.add_all([stale, fresh])
+    await db.commit()
+
+    resp = await ac.get("/api/v1/settings/connections/aws/discovered")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [row["account_id"] for row in data] == ["444455556666"]
+
+
+@pytest.mark.asyncio
+async def test_link_discovered_account_rejects_stale(ac, db, override_auth, auth_user):
+    auth_user.tier = PricingTier.GROWTH
+    mgmt = AWSConnection(
+        tenant_id=auth_user.tenant_id,
+        aws_account_id="121212121212",
+        role_arn="arn",
+        external_id="vx-1212",
+        is_management_account=True,
+        status="active",
+    )
+    db.add(mgmt)
+    await db.commit()
+
+    stale = DiscoveredAccount(
+        management_connection_id=mgmt.id,
+        account_id="343434343434",
+        name="Removed",
+        status="stale",
+    )
+    db.add(stale)
+    await db.commit()
+
+    resp = await ac.post(f"/api/v1/settings/connections/aws/discovered/{stale.id}/link")
+    assert resp.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_list_discovered_accounts_requires_growth(ac, override_auth, auth_user):
     auth_user.tier = PricingTier.STARTER
 

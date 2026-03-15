@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, select
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.shared.core.async_utils import maybe_await
@@ -18,6 +18,15 @@ IDENTITY_AUDIT_WRITE_RECOVERABLE_EXCEPTIONS = (
     ValueError,
     AttributeError,
 )
+
+
+def _is_sso_domain_conflict_error(exc: IntegrityError) -> bool:
+    error_text = str(getattr(exc, "orig", exc)).lower()
+    return (
+        "uq_sso_domain_mappings_domain" in error_text
+        or "sso_domain_mappings.domain" in error_text
+        or "unique constraint" in error_text and "domain" in error_text
+    )
 
 
 async def _write_identity_audit_or_raise(
@@ -243,7 +252,20 @@ async def update_identity_settings_route(
         request_method="PUT",
         request_path="/api/v1/settings/identity",
     )
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        await maybe_await(db.rollback())
+        if _is_sso_domain_conflict_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "One or more allowed_email_domains are already configured for "
+                    "another tenant. Remove the conflicting domain(s) or contact "
+                    "support."
+                ),
+            ) from exc
+        raise
     await db.refresh(identity)
 
     logger.info(

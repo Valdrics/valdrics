@@ -18,7 +18,7 @@ from app.modules.reporting.api.v1.costs_metrics import (
     compute_ingestion_sla_metrics,
     compute_license_governance_kpi,
     compute_provider_recency_summaries,
-    get_or_create_unit_settings,
+    get_unit_settings_snapshot,
     window_total_cost,
 )
 from app.modules.reporting.api.v1.costs_models import (
@@ -47,6 +47,20 @@ def resolve_user_tier(user: CurrentUser) -> PricingTier:
     return normalize_tier(getattr(user, "tier", PricingTier.FREE))
 
 
+def _window_bounds(
+    start_date: date,
+    end_date: date,
+) -> tuple[datetime, datetime]:
+    start_dt = datetime.combine(start_date, datetime.min.time()).replace(
+        tzinfo=timezone.utc
+    )
+    end_dt_exclusive = datetime.combine(
+        end_date + timedelta(days=1),
+        datetime.min.time(),
+    ).replace(tzinfo=timezone.utc)
+    return start_dt, end_dt_exclusive
+
+
 async def compute_acceptance_kpis_payload(
     *,
     start_date: date,
@@ -69,12 +83,10 @@ async def compute_acceptance_kpis_payload(
     compute_license_governance_kpi_fn: Callable[
         ..., Awaitable[AcceptanceKpiMetric]
     ] = compute_license_governance_kpi,
-    get_or_create_unit_settings_fn: Callable[..., Awaitable[Any]] = (
-        get_or_create_unit_settings
+    get_unit_settings_snapshot_fn: Callable[..., Awaitable[Any]] = (
+        get_unit_settings_snapshot
     ),
-    window_total_cost_fn: Callable[..., Awaitable[Any]] = (
-        window_total_cost
-    ),
+    window_total_cost_fn: Callable[..., Awaitable[Any]] = (window_total_cost),
     get_settings_fn: Callable[[], Any] = get_settings,
     is_feature_enabled_fn: Callable[..., bool] = is_feature_enabled,
 ) -> AcceptanceKpisResponse:
@@ -84,6 +96,7 @@ async def compute_acceptance_kpis_payload(
     tenant_id = require_tenant_id(current_user)
     tier = resolve_user_tier(current_user)
     metrics: list[AcceptanceKpiMetric] = []
+    window_start, window_end_exclusive = _window_bounds(start_date, end_date)
 
     if is_feature_enabled_fn(tier, FeatureFlag.INGESTION_SLA):
         ingestion = await compute_ingestion_sla_metrics_fn(
@@ -175,19 +188,65 @@ async def compute_acceptance_kpis_payload(
         )
     )
 
+    from app.modules.governance.domain.security.audit_log import (
+        AuditEventType,
+        AuditLog,
+    )
+
+    latest_isolation_verification = await db.scalar(
+        select(AuditLog)
+        .where(
+            AuditLog.tenant_id == tenant_id,
+            AuditLog.event_type
+            == AuditEventType.TENANCY_ISOLATION_VERIFICATION_CAPTURED.value,
+            AuditLog.event_timestamp >= window_start,
+            AuditLog.event_timestamp < window_end_exclusive,
+        )
+        .order_by(AuditLog.event_timestamp.desc())
+        .limit(1)
+    )
+    if latest_isolation_verification is None:
+        isolation_actual = (
+            "No tenant-isolation verification evidence captured in window"
+        )
+        isolation_meets_target = False
+        isolation_details: dict[str, Any] = {
+            "verification_status": "MISSING",
+            "window_start": window_start.isoformat(),
+            "window_end_exclusive": window_end_exclusive.isoformat(),
+        }
+    else:
+        observed_at = latest_isolation_verification.event_timestamp
+        if observed_at.tzinfo is None:
+            observed_at = observed_at.replace(tzinfo=timezone.utc)
+        isolation_meets_target = bool(
+            getattr(latest_isolation_verification, "success", False)
+        )
+        isolation_actual = (
+            f"Verified at {observed_at.isoformat()}"
+            if isolation_meets_target
+            else f"Latest verification failed at {observed_at.isoformat()}"
+        )
+        isolation_details = {
+            "verification_status": "PASS" if isolation_meets_target else "FAILED",
+            "event_id": str(getattr(latest_isolation_verification, "id", "")),
+            "captured_at": observed_at.isoformat(),
+            "correlation_id": getattr(
+                latest_isolation_verification, "correlation_id", None
+            ),
+            "window_start": window_start.isoformat(),
+            "window_end_exclusive": window_end_exclusive.isoformat(),
+        }
+
     metrics.append(
         AcceptanceKpiMetric(
             key="tenant_isolation_proof",
-            label="Tenant Isolation (RLS) Verification",
+            label="Tenant Isolation Verification Evidence",
             available=True,
-            target="Strict path-based and row-level isolation active",
-            actual="Isolation verified for current session",
-            meets_target=tenant_id is not None,
-            details={
-                "isolation_strategy": "RLS + Tenant-Scoped DAO",
-                "tenant_id": str(tenant_id),
-                "verification_status": "PASS",
-            },
+            target="Successful tenant-isolation verification captured in requested window",
+            actual=isolation_actual,
+            meets_target=isolation_meets_target,
+            details=isolation_details,
         )
     )
 
@@ -209,34 +268,27 @@ async def compute_acceptance_kpis_payload(
         )
     )
 
-    from app.models.tenant import User
-
-    user_count_stmt = select(func.count(User.id)).where(
-        User.tenant_id == tenant_id, User.is_active
-    )
-    active_user_count = await db.scalar(user_count_stmt) or 0
-
     metrics.append(
         AcceptanceKpiMetric(
             key="user_access_review_proof",
-            label="User Access Control Review",
-            available=True,
-            target="Active users tracked for audit",
-            actual=f"{active_user_count} active users",
-            meets_target=active_user_count > 0,
+            label="User Access Review Evidence",
+            available=False,
+            target="Operator-captured user access review evidence in requested window",
+            actual="No automated user-access review evidence source is available",
+            meets_target=False,
             details={
-                "active_user_count": active_user_count,
-                "audit_timestamp": datetime.now(timezone.utc).isoformat(),
+                "requires_manual_evidence": True,
+                "window_start": window_start.isoformat(),
+                "window_end_exclusive": window_end_exclusive.isoformat(),
             },
         )
     )
 
-    from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLog
-
     remediation_stmt = select(func.count(AuditLog.id)).where(
         AuditLog.tenant_id == tenant_id,
         AuditLog.event_type == AuditEventType.REMEDIATION_EXECUTED.value,
-        AuditLog.event_timestamp >= datetime.combine(start_date, datetime.min.time()),
+        AuditLog.event_timestamp >= window_start,
+        AuditLog.event_timestamp < window_end_exclusive,
         AuditLog.success,
     )
     remediation_count = await db.scalar(remediation_stmt) or 0
@@ -244,21 +296,22 @@ async def compute_acceptance_kpis_payload(
     metrics.append(
         AcceptanceKpiMetric(
             key="change_governance_proof",
-            label="Change Governance & Remediation Proof",
+            label="Change Governance Audit Evidence",
             available=True,
-            target="Remediation actions documented in audit trail",
-            actual=f"{remediation_count} actions captured",
-            meets_target=True,
+            target=">=1 successful remediation execution audit event in requested window",
+            actual=f"{remediation_count} successful remediation execution events",
+            meets_target=remediation_count > 0,
             details={
                 "period_remediations": remediation_count,
-                "evidence_type": "Immutable Audit Log",
-                "integrity_check": "Verified via Partition Key",
+                "evidence_type": "AuditLog.remediation.executed",
+                "window_start": window_start.isoformat(),
+                "window_end_exclusive": window_end_exclusive.isoformat(),
             },
         )
     )
 
     if is_feature_enabled_fn(tier, FeatureFlag.UNIT_ECONOMICS):
-        unit_settings = await get_or_create_unit_settings_fn(db, tenant_id)
+        unit_settings = await get_unit_settings_snapshot_fn(db, tenant_id)
         total_cost = await window_total_cost_fn(db, tenant_id, start_date, end_date)
         window_days = (end_date - start_date).days + 1
         baseline_end = start_date - timedelta(days=1)

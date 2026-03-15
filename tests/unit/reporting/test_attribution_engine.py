@@ -166,6 +166,46 @@ async def test_apply_rules_to_tenant(mock_db, engine, tenant_id):
 
 
 @pytest.mark.asyncio
+async def test_create_rule_allows_deferred_commit(mock_db, engine, tenant_id):
+    created_rule = MagicMock(spec=AttributionRule)
+
+    with patch.object(
+        attribution_engine_module,
+        "_create_rule_impl",
+        new=AsyncMock(return_value=created_rule),
+    ) as create_impl:
+        response = await engine.create_rule(
+            tenant_id,
+            name="Deferred",
+            priority=1,
+            rule_type="DIRECT",
+            conditions={},
+            allocation={"bucket": "Platform"},
+            is_active=True,
+            commit=False,
+        )
+
+    assert response is created_rule
+    assert create_impl.await_args.kwargs["commit"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_and_delete_rule_allow_deferred_commit(mock_db, engine, tenant_id):
+    rule_id = uuid4()
+    updated_rule = MagicMock(spec=AttributionRule)
+    updated_rule.id = rule_id
+
+    with patch.object(engine, "get_rule", new=AsyncMock(return_value=updated_rule)):
+        updated = await engine.update_rule(tenant_id, rule_id, {"priority": 2}, commit=False)
+        deleted = await engine.delete_rule(tenant_id, rule_id, commit=False)
+
+    assert updated is updated_rule
+    assert deleted is True
+    assert updated_rule.priority == 2
+    mock_db.flush.assert_awaited()
+
+
+@pytest.mark.asyncio
 async def test_get_allocation_summary(mock_db, engine, tenant_id):
     row = MagicMock()
     row.allocated_to = "Team-A"

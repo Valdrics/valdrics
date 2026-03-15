@@ -44,6 +44,37 @@ async def test_policy_notification_diagnostics_missing_config(
 
 
 @pytest.mark.asyncio
+async def test_policy_notification_diagnostics_missing_rows_fail_closed_even_with_env_defaults(
+    async_client: AsyncClient,
+    app,
+    make_current_user,
+    override_current_user,
+) -> None:
+    mock_settings = Settings()
+    mock_settings.SLACK_BOT_TOKEN = "xoxb-test"
+    mock_settings.SLACK_CHANNEL_ID = "C12345"
+
+    with (
+        override_current_user(app, make_current_user(tier=PricingTier.PRO)),
+        patch("app.shared.core.config.get_settings", return_value=mock_settings),
+    ):
+        response = await async_client.get(
+            "/api/v1/settings/notifications/policy-diagnostics"
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["has_activeops_settings"] is False
+    assert data["has_notification_settings"] is False
+    assert data["policy_enabled"] is False
+    assert data["slack"]["ready"] is False
+    assert data["slack"]["enabled_for_policy"] is False
+    assert data["slack"]["enabled_in_notifications"] is False
+    assert "missing_remediation_settings" in data["slack"]["reasons"]
+    assert "missing_notification_settings" in data["slack"]["reasons"]
+
+
+@pytest.mark.asyncio
 async def test_policy_notification_diagnostics_ready(
     async_client: AsyncClient,
     db,

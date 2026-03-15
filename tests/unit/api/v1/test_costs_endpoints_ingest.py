@@ -343,7 +343,11 @@ async def test_get_unit_economics_alert_failure_is_non_fatal(
         ):
             response = await async_client.get(
                 "/api/v1/costs/unit-economics",
-                params={"start_date": "2026-02-01", "end_date": "2026-02-07"},
+                params={
+                    "start_date": "2026-02-01",
+                    "end_date": "2026-02-07",
+                    "alert_on_anomaly": "true",
+                },
             )
 
         assert response.status_code == 200

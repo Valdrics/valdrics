@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Query
+from typing import NoReturn
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.governance.api.v1.audit_evidence_common import (
@@ -21,6 +23,19 @@ from app.modules.governance.api.v1.audit_schemas import (
 from app.shared.db.session import get_db
 
 router = APIRouter(tags=["Audit"])
+
+_RETIRED_OPERATOR_CAPTURE_DETAIL = (
+    "Operator-submitted evidence capture is retired. Use a server-verified "
+    "evidence workflow instead."
+)
+
+
+def _raise_retired_operator_capture(user: AdminComplianceUser) -> NoReturn:
+    require_tenant_id(user)
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail=_RETIRED_OPERATOR_CAPTURE_DETAIL,
+    )
 
 
 @router.post("/jobs/slo/evidence", response_model=JobSLOEvidenceCaptureResponse)
@@ -88,24 +103,8 @@ async def capture_tenant_isolation_evidence(
     user: AdminComplianceUser,
     db: AsyncSession = Depends(get_db),
 ) -> TenantIsolationEvidenceCaptureResponse:
-    run_id, event = await capture_evidence_event(
-        user=user,
-        db=db,
-        event_type_attr="TENANCY_ISOLATION_VERIFICATION_CAPTURED",
-        resource_type="tenancy",
-        resource_id="tenant_isolation_verification",
-        payload_key="tenant_isolation",
-        payload=payload,
-        success=bool(payload.passed),
-        request_path="/api/v1/audit/tenancy/isolation/evidence",
-    )
-    return TenantIsolationEvidenceCaptureResponse(
-        status="captured",
-        event_id=str(event.id),
-        run_id=run_id,
-        captured_at=event.event_timestamp.isoformat(),
-        tenant_isolation=payload,
-    )
+    _ = (payload, db)
+    return _raise_retired_operator_capture(user)
 
 
 @router.get(
@@ -127,4 +126,3 @@ async def list_tenant_isolation_evidence(
         warning_event="tenant_isolation_evidence_invalid_payload",
     )
     return TenantIsolationEvidenceListResponse(total=len(items), items=items)
-

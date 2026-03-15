@@ -358,78 +358,95 @@ async def test_capture_partitioning_requires_tenant_context() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("func", "payload", "expected_success", "response_attr"),
-    [
-        (
-            audit_api.capture_load_test_evidence,
-            _load_test_payload(True),
-            True,
-            "load_test",
-        ),
-        (
-            audit_api.capture_ingestion_persistence_evidence,
-            _ingestion_persistence_payload(False),
-            False,
-            "benchmark",
-        ),
-        (
-            audit_api.capture_ingestion_persistence_evidence,
-            _ingestion_persistence_payload(None),
-            True,
-            "benchmark",
-        ),
-        (
-            audit_api.capture_ingestion_soak_evidence,
-            _ingestion_soak_payload(None, jobs_failed=1),
-            False,
-            "ingestion_soak",
-        ),
-        (
-            audit_api.capture_ingestion_soak_evidence,
-            _ingestion_soak_payload(True, jobs_failed=1),
-            True,
-            "ingestion_soak",
-        ),
-        (
-            audit_api.capture_identity_idp_smoke_evidence,
-            _identity_smoke_payload(False),
-            False,
-            "identity_smoke",
-        ),
-        (
-            audit_api.capture_sso_federation_validation_evidence,
-            _sso_validation_payload(True),
-            True,
-            "sso_federation_validation",
-        ),
-        (
-            audit_api.capture_tenant_isolation_evidence,
-            _tenant_isolation_payload(False),
-            False,
-            "tenant_isolation",
-        ),
-    ],
-)
-async def test_capture_evidence_logs_expected_success_signal(
-    func,
-    payload,
-    expected_success: bool,
-    response_attr: str,
-    monkeypatch,
-) -> None:
+async def test_capture_job_slo_logs_expected_success_signal(monkeypatch) -> None:
     from app.modules.governance.domain.security import audit_log as audit_log_module
+    from app.modules.governance.domain.jobs import metrics as metrics_module
 
     _RecordingAuditLogger.calls.clear()
     monkeypatch.setattr(audit_log_module, "AuditLogger", _RecordingAuditLogger)
+    monkeypatch.setattr(
+        metrics_module,
+        "compute_job_slo",
+        AsyncMock(
+            return_value={
+                "window_hours": 24,
+                "target_success_rate_percent": 95.0,
+                "overall_meets_slo": False,
+                "metrics": [
+                    {
+                        "job_type": "ingestion",
+                        "window_hours": 24,
+                        "target_success_rate_percent": 95.0,
+                        "total_jobs": 5,
+                        "successful_jobs": 4,
+                        "failed_jobs": 1,
+                        "success_rate_percent": 80.0,
+                        "meets_slo": False,
+                    }
+                ],
+            }
+        ),
+    )
+    monkeypatch.setattr(
+        metrics_module,
+        "compute_job_backlog_snapshot",
+        AsyncMock(
+            return_value={
+                "captured_at": "2026-01-01T00:00:00+00:00",
+                "pending": 1,
+                "running": 0,
+                "completed": 4,
+                "failed": 1,
+                "dead_letter": 0,
+            }
+        ),
+    )
 
     mock_db = AsyncMock()
-    response = await func(payload, _admin_user(uuid4()), mock_db)
+    response = await audit_api.capture_job_slo_evidence(
+        audit_api.JobSLOEvidenceCaptureRequest(),
+        _admin_user(uuid4()),
+        mock_db,
+    )
 
     assert response.status == "captured"
-    assert getattr(response, response_attr) is not None
-    assert _RecordingAuditLogger.calls[-1]["success"] is expected_success
+    assert response.job_slo.overall_meets_slo is False
+    assert _RecordingAuditLogger.calls[-1]["success"] is False
+    assert (
+        _RecordingAuditLogger.calls[-1]["details"]["verification_status"]
+        == "server_verified"
+    )
     mock_db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("func", "payload"),
+    [
+        (audit_api.capture_load_test_evidence, _load_test_payload(True)),
+        (
+            audit_api.capture_ingestion_persistence_evidence,
+            _ingestion_persistence_payload(True),
+        ),
+        (
+            audit_api.capture_ingestion_soak_evidence,
+            _ingestion_soak_payload(True, jobs_failed=0),
+        ),
+        (audit_api.capture_identity_idp_smoke_evidence, _identity_smoke_payload(True)),
+        (
+            audit_api.capture_sso_federation_validation_evidence,
+            _sso_validation_payload(True),
+        ),
+        (
+            audit_api.capture_tenant_isolation_evidence,
+            _tenant_isolation_payload(True),
+        ),
+    ],
+)
+async def test_operator_submitted_capture_endpoints_are_retired(func, payload) -> None:
+    with pytest.raises(HTTPException) as exc:
+        await func(payload, _admin_user(uuid4()), AsyncMock())
+    assert exc.value.status_code == 410
 
 
 @pytest.mark.asyncio
@@ -563,7 +580,7 @@ async def test_capture_carbon_assurance_uses_active_factor_payload(monkeypatch) 
 
 
 @pytest.mark.asyncio
-async def test_capture_carbon_assurance_falls_back_when_factor_service_fails(
+async def test_capture_carbon_assurance_fails_closed_when_factor_service_fails(
     monkeypatch,
 ) -> None:
     from app.modules.governance.domain.security import audit_log as audit_log_module
@@ -594,17 +611,47 @@ async def test_capture_carbon_assurance_falls_back_when_factor_service_fails(
     )
 
     mock_db = AsyncMock()
-    response = await audit_api.capture_carbon_assurance_evidence(
-        audit_api.CarbonAssuranceEvidenceCaptureRequest(runner="api"),
-        _admin_user(uuid4()),
-        mock_db,
+    with pytest.raises(HTTPException) as exc:
+        await audit_api.capture_carbon_assurance_evidence(
+            audit_api.CarbonAssuranceEvidenceCaptureRequest(runner="api"),
+            _admin_user(uuid4()),
+            mock_db,
+        )
+
+    assert exc.value.status_code == 503
+    assert _RecordingAuditLogger.calls[-1]["success"] is False
+    assert _RecordingAuditLogger.calls[-1]["error_message"] == "factor service unavailable"
+    mock_db.rollback.assert_awaited()
+    mock_db.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_capture_partitioning_logs_failure_when_catalog_probe_fails(
+    monkeypatch,
+) -> None:
+    from app.modules.governance.domain.security import audit_log as audit_log_module
+
+    _RecordingAuditLogger.calls.clear()
+    monkeypatch.setattr(audit_log_module, "AuditLogger", _RecordingAuditLogger)
+    monkeypatch.setattr(
+        audit_partitioning_api,
+        "_compute_partitioning_evidence",
+        AsyncMock(side_effect=RuntimeError("catalog unavailable")),
     )
 
-    assert response.status == "captured"
-    assert response.carbon_assurance.factor_set_id is None
-    assert response.carbon_assurance.factor_set_status is None
-    assert response.carbon_assurance.snapshot["fallback"] is True
-    assert _RecordingAuditLogger.calls[-1]["success"] is True
+    mock_db = AsyncMock()
+    mock_db.bind = SimpleNamespace(dialect=SimpleNamespace(name="postgresql"))
+
+    with pytest.raises(HTTPException) as exc:
+        await audit_api.capture_partitioning_evidence(
+            _admin_user(uuid4()),
+            mock_db,
+        )
+
+    assert exc.value.status_code == 503
+    assert _RecordingAuditLogger.calls[-1]["success"] is False
+    assert _RecordingAuditLogger.calls[-1]["error_message"] == "catalog unavailable"
+    mock_db.rollback.assert_awaited()
     mock_db.commit.assert_awaited()
 
 

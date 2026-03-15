@@ -611,6 +611,58 @@ async def test_public_sales_inquiry_deduplicates_recent_matching_payloads(
 
 
 @pytest.mark.asyncio
+async def test_public_sales_inquiry_keeps_distinct_campaign_attribution(
+    async_client: AsyncClient, db: AsyncSession
+) -> None:
+    base_payload = {
+        "name": "Buyer One",
+        "email": "buyer@example.com",
+        "company": "Example Inc",
+        "timeline": "this_quarter",
+        "interestArea": "plan_fit",
+    }
+    first_payload = {
+        **base_payload,
+        "source": "google-search",
+        "referrer": "https://google.com/search?q=valdrics",
+        "utmSource": "google",
+        "utmMedium": "cpc",
+        "utmCampaign": "spring-launch",
+    }
+    second_payload = {
+        **base_payload,
+        "source": "linkedin-sponsored",
+        "referrer": "https://linkedin.com/feed/update/test",
+        "utmSource": "linkedin",
+        "utmMedium": "paid_social",
+        "utmCampaign": "exec-targeting",
+    }
+
+    with patch(
+        "app.modules.governance.api.v1.public_marketing.get_operational_email_service",
+        return_value=SimpleNamespace(),
+    ):
+        first = await async_client.post(
+            "/api/v1/public/marketing/talk-to-sales", json=first_payload
+        )
+        second = await async_client.post(
+            "/api/v1/public/marketing/talk-to-sales", json=second_payload
+        )
+
+    assert first.status_code == 202
+    assert second.status_code == 202
+    assert second.json()["inquiryId"] != first.json()["inquiryId"]
+    inquiries = (
+        await db.execute(
+            select(PublicSalesInquiry).order_by(PublicSalesInquiry.created_at.asc())
+        )
+    ).scalars().all()
+    assert len(inquiries) == 2
+    assert inquiries[0].source == "google-search"
+    assert inquiries[1].source == "linkedin-sponsored"
+
+
+@pytest.mark.asyncio
 async def test_public_sales_inquiry_honeypot_returns_accepted_without_persisting(
     async_client: AsyncClient, db: AsyncSession
 ) -> None:

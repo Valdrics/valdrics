@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 from uuid import uuid4
+from datetime import datetime
 from app.shared.connections.aws import AWSConnectionService
 from app.shared.adapters.aws_multitenant import MultiTenantAWSAdapter
 from app.shared.connections.azure import AzureConnectionService
@@ -40,6 +41,9 @@ class TestCloudConnectionsDeep:
             res = await service.verify_connection(conn_id, tenant_id)
             assert res["status"] == "success"
             assert mock_conn.status == "active"
+            assert mock_conn.last_verified_at is not None
+            assert isinstance(mock_conn.last_verified_at, datetime)
+            assert mock_conn.error_message is None
             assert mock_db.commit.called
 
     @pytest.mark.asyncio
@@ -55,7 +59,12 @@ class TestCloudConnectionsDeep:
     @pytest.mark.asyncio
     async def test_aws_verify_connection_failed_adapter(self, mock_db):
         service = AWSConnectionService(mock_db)
-        mock_conn = AWSConnection(id=uuid4(), status="pending", region="us-east-1")
+        mock_conn = AWSConnection(
+            id=uuid4(),
+            status="pending",
+            region="us-east-1",
+            error_message="old error",
+        )
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
@@ -71,6 +80,7 @@ class TestCloudConnectionsDeep:
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "failed"
             assert mock_conn.status == "error"
+            assert mock_conn.error_message == "AWS trust policy rejected AssumeRole request"
             assert (
                 res["message"] == "AWS trust policy rejected AssumeRole request"
             )
@@ -95,6 +105,7 @@ class TestCloudConnectionsDeep:
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "error"
             assert res["code"] == "AUTH_FAILED"
+            assert mock_conn.error_message == "IAM Error"
 
     @pytest.mark.asyncio
     async def test_aws_verify_connection_unexpected_error_propagates(self, mock_db):
@@ -116,7 +127,7 @@ class TestCloudConnectionsDeep:
     @pytest.mark.asyncio
     async def test_azure_verify_connection_success(self, mock_db):
         service = AzureConnectionService(mock_db)
-        mock_conn = AzureConnection(id=uuid4(), is_active=False)
+        mock_conn = AzureConnection(id=uuid4(), is_active=False, error_message="stale failure")
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
@@ -128,6 +139,8 @@ class TestCloudConnectionsDeep:
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "success"
             assert mock_conn.is_active is True
+            assert mock_conn.error_message is None
+            mock_db.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_azure_verify_connection_not_found(self, mock_db):
@@ -141,7 +154,11 @@ class TestCloudConnectionsDeep:
     @pytest.mark.asyncio
     async def test_azure_verify_connection_failed(self, mock_db):
         service = AzureConnectionService(mock_db)
-        mock_conn = AzureConnection(id=uuid4(), is_active=False)
+        mock_conn = AzureConnection(
+            id=uuid4(),
+            is_active=True,
+            error_message="old error",
+        )
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
@@ -154,11 +171,14 @@ class TestCloudConnectionsDeep:
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "failed"
             assert res["message"] == "Azure service principal secret expired"
+            assert mock_conn.is_active is False
+            assert mock_conn.error_message == "Azure service principal secret expired"
+            mock_db.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_gcp_verify_connection_success(self, mock_db):
         service = GCPConnectionService(mock_db)
-        mock_conn = GCPConnection(id=uuid4(), is_active=False)
+        mock_conn = GCPConnection(id=uuid4(), is_active=False, error_message="stale failure")
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
@@ -170,6 +190,8 @@ class TestCloudConnectionsDeep:
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "success"
             assert mock_conn.is_active is True
+            assert mock_conn.error_message is None
+            mock_db.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_gcp_verify_connection_not_found(self, mock_db):
@@ -183,7 +205,11 @@ class TestCloudConnectionsDeep:
     @pytest.mark.asyncio
     async def test_gcp_verify_connection_failed(self, mock_db):
         service = GCPConnectionService(mock_db)
-        mock_conn = GCPConnection(id=uuid4(), is_active=False)
+        mock_conn = GCPConnection(
+            id=uuid4(),
+            is_active=True,
+            error_message="old error",
+        )
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_conn
         mock_db.execute.return_value = mock_result
@@ -196,6 +222,9 @@ class TestCloudConnectionsDeep:
             res = await service.verify_connection(mock_conn.id, uuid4())
             assert res["status"] == "failed"
             assert res["message"] == "GCP service account key disabled"
+            assert mock_conn.is_active is False
+            assert mock_conn.error_message == "GCP service account key disabled"
+            mock_db.commit.assert_awaited_once()
 
     def test_aws_setup_templates(self):
         with patch(

@@ -1,6 +1,7 @@
 import pytest
 import uuid
 from httpx import AsyncClient
+from sqlalchemy import select
 from app.models.llm import LLMBudget
 from app.models.tenant import UserRole
 from app.shared.core.auth import (
@@ -12,14 +13,17 @@ from unittest.mock import patch
 
 
 @pytest.mark.asyncio
-async def test_get_llm_settings_creates_default(
-    async_client: AsyncClient, db, mock_user_id, mock_tenant_id, app
+async def test_get_llm_settings_is_read_only_for_missing_budget(
+    async_client: AsyncClient, db, app
 ):
-    """GET /llm should create default budget if it doesn't exist."""
-    user_id = uuid.UUID(str(mock_user_id))
-    tenant_id = uuid.UUID(str(mock_tenant_id))
+    """GET /llm should return defaults without creating a budget row."""
+    user_id = uuid.uuid4()
+    tenant_id = uuid.uuid4()
     mock_user = CurrentUser(
-        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
+        id=user_id,
+        tenant_id=tenant_id,
+        email="member@valdrics.io",
+        role=UserRole.MEMBER,
     )
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
@@ -27,6 +31,11 @@ async def test_get_llm_settings_creates_default(
         response = await async_client.get("/api/v1/settings/llm")
         assert response.status_code == 200
         assert response.json()["monthly_limit_usd"] == 10.0
+
+        result = await db.execute(
+            select(LLMBudget).where(LLMBudget.tenant_id == tenant_id)
+        )
+        assert result.scalar_one_or_none() is None
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -58,6 +67,55 @@ async def test_update_llm_settings(
         response = await async_client.put("/api/v1/settings/llm", json=update_data)
         assert response.status_code == 200
         assert response.json()["monthly_limit_usd"] == 50.0
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_update_llm_settings_preserves_omitted_existing_keys(
+    async_client: AsyncClient, db, app
+):
+    """Partial PUT /llm should preserve stored BYOK keys that were not sent."""
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    mock_user = CurrentUser(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="admin@valdrics.io",
+        role=UserRole.ADMIN,
+    )
+
+    budget = LLMBudget(
+        tenant_id=tenant_id,
+        monthly_limit_usd=10.0,
+        alert_threshold_percent=80,
+        hard_limit=False,
+        preferred_provider="openai",
+        preferred_model="gpt-4o",
+        openai_api_key="sk-existing",
+        groq_api_key="gsk-existing",
+    )
+    db.add(budget)
+    await db.commit()
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.put(
+            "/api/v1/settings/llm",
+            json={"preferred_model": "gpt-4o-mini"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["preferred_model"] == "gpt-4o-mini"
+        assert data["has_openai_key"] is True
+        assert data["has_groq_key"] is True
+
+        refreshed = await db.get(LLMBudget, budget.id)
+        assert refreshed is not None
+        assert refreshed.preferred_provider == "openai"
+        assert float(refreshed.monthly_limit_usd) == 10.0
+        assert refreshed.openai_api_key == "sk-existing"
+        assert refreshed.groq_api_key == "gsk-existing"
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
@@ -256,6 +314,68 @@ async def test_update_llm_settings_validation_failure(async_client: AsyncClient,
                 "hard_limit": False,
                 "preferred_provider": "invalid",
                 "preferred_model": "gpt-4o-mini",
+            },
+        )
+        assert response.status_code == 422
+        assert response.json()["code"] == "VALIDATION_ERROR"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_update_llm_settings_accepts_512_char_api_keys(
+    async_client: AsyncClient, db, mock_user_id, mock_tenant_id, app
+):
+    user_id = uuid.UUID(str(mock_user_id))
+    tenant_id = uuid.UUID(str(mock_tenant_id))
+    mock_user = CurrentUser(
+        id=user_id, tenant_id=tenant_id, email="test@valdrics.io", role=UserRole.ADMIN
+    )
+
+    budget = LLMBudget(
+        tenant_id=tenant_id, monthly_limit_usd=10.0, preferred_provider="groq"
+    )
+    db.add(budget)
+    await db.commit()
+
+    long_key = "k" * 512
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.put(
+            "/api/v1/settings/llm",
+            json={
+                "monthly_limit_usd": 50.0,
+                "preferred_provider": "openai",
+                "openai_api_key": long_key,
+            },
+        )
+        assert response.status_code == 200
+        assert response.json()["has_openai_key"] is True
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_update_llm_settings_rejects_keys_longer_than_512(
+    async_client: AsyncClient, app
+):
+    admin = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=uuid.uuid4(),
+        email="admin@llm.io",
+        role=UserRole.ADMIN,
+    )
+    app.dependency_overrides[get_current_user] = lambda: admin
+    try:
+        response = await async_client.put(
+            "/api/v1/settings/llm",
+            json={
+                "monthly_limit_usd": 10.0,
+                "alert_threshold_percent": 80,
+                "hard_limit": False,
+                "preferred_provider": "openai",
+                "preferred_model": "gpt-4o-mini",
+                "openai_api_key": "k" * 513,
             },
         )
         assert response.status_code == 422

@@ -9,12 +9,6 @@ async def test_capture_and_list_load_test_evidence(async_client, app, db, test_t
     from app.shared.core.auth import CurrentUser, get_current_user, UserRole
     from app.shared.core.pricing import PricingTier
     from app.models.tenant import User
-    from app.modules.governance.domain.security.audit_log import (
-        AuditEventType,
-        AuditLog,
-    )
-    from sqlalchemy import select
-
     admin_user = CurrentUser(
         id=uuid.uuid4(),
         email="admin-perf@valdrics.io",
@@ -89,27 +83,6 @@ async def test_capture_and_list_load_test_evidence(async_client, app, db, test_t
         resp = await async_client.post(
             "/api/v1/audit/performance/load-test/evidence", json=payload
         )
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["status"] == "captured"
-        assert body["load_test"]["profile"] == "ops"
-        assert body["load_test"]["rounds"] == 2
-
-        list_resp = await async_client.get(
-            "/api/v1/audit/performance/load-test/evidence", params={"limit": 10}
-        )
-        assert list_resp.status_code == 200
-        listed = list_resp.json()
-        assert listed["total"] >= 1
-        assert listed["items"][0]["load_test"]["target_url"] == "http://127.0.0.1:8000"
-
-        row = await db.scalar(
-            select(AuditLog).where(
-                AuditLog.tenant_id == test_tenant.id,
-                AuditLog.event_type
-                == AuditEventType.PERFORMANCE_LOAD_TEST_CAPTURED.value,
-            )
-        )
-        assert row is not None
+        assert resp.status_code == 410
     finally:
         app.dependency_overrides.pop(get_current_user, None)

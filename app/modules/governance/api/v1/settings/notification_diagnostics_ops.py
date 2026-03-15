@@ -83,11 +83,23 @@ def to_slack_policy_diagnostics(
     has_bot_token: bool,
     has_default_channel: bool,
 ) -> SlackPolicyDiagnostics:
-    policy_enabled = bool(getattr(remediation_settings, "policy_enabled", True))
-    policy_notify_slack = bool(
-        getattr(remediation_settings, "policy_violation_notify_slack", True)
+    has_remediation_settings = remediation_settings is not None
+    has_notification_settings = notification_settings is not None
+    policy_enabled = (
+        bool(getattr(remediation_settings, "policy_enabled", False))
+        if has_remediation_settings
+        else False
     )
-    slack_enabled = bool(getattr(notification_settings, "slack_enabled", True))
+    policy_notify_slack = (
+        bool(getattr(remediation_settings, "policy_violation_notify_slack", False))
+        if has_remediation_settings
+        else False
+    )
+    slack_enabled = (
+        bool(getattr(notification_settings, "slack_enabled", False))
+        if has_notification_settings
+        else False
+    )
     channel_override = getattr(notification_settings, "slack_channel_override", None)
     has_channel_override = bool(channel_override)
 
@@ -104,6 +116,10 @@ def to_slack_policy_diagnostics(
     )
 
     reasons: list[str] = []
+    if not has_remediation_settings:
+        reasons.append("missing_remediation_settings")
+    if not has_notification_settings:
+        reasons.append("missing_notification_settings")
     if not policy_enabled:
         reasons.append("policy_disabled")
     if not policy_notify_slack:
@@ -137,9 +153,17 @@ def to_jira_policy_diagnostics(
     *,
     feature_allowed_by_tier: bool,
 ) -> JiraPolicyDiagnostics:
-    policy_enabled = bool(getattr(remediation_settings, "policy_enabled", True))
-    policy_notify_jira = bool(
-        getattr(remediation_settings, "policy_violation_notify_jira", False)
+    has_remediation_settings = remediation_settings is not None
+    has_notification_settings = notification_settings is not None
+    policy_enabled = (
+        bool(getattr(remediation_settings, "policy_enabled", False))
+        if has_remediation_settings
+        else False
+    )
+    policy_notify_jira = (
+        bool(getattr(remediation_settings, "policy_violation_notify_jira", False))
+        if has_remediation_settings
+        else False
     )
     jira_enabled = bool(
         getattr(notification_settings, "jira_enabled", False)
@@ -155,6 +179,10 @@ def to_jira_policy_diagnostics(
     ).strip() or "Task"
 
     reasons: list[str] = []
+    if not has_remediation_settings:
+        reasons.append("missing_remediation_settings")
+    if not has_notification_settings:
+        reasons.append("missing_notification_settings")
     if not policy_enabled:
         reasons.append("policy_disabled")
     if not policy_notify_jira:

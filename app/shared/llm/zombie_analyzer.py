@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.shared.core.config import get_settings
-from app.shared.core.pricing import get_tenant_tier, get_tier_limit
+from app.shared.core.pricing import PricingTier, get_tenant_tier, get_tier_limit, normalize_tier
 from app.shared.llm.budget_manager import LLMBudgetManager
 from app.shared.llm.guardrails import LLMGuardrails, ZombieAnalysisResult
 
@@ -302,7 +302,13 @@ class ZombieAnalyzer:
             effective_provider,
             effective_model,
             byok_key,
-        ) = await self._get_effective_llm_config(db, tenant_id, provider, model)
+        ) = await self._get_effective_llm_config(
+            db,
+            tenant_id,
+            provider,
+            model,
+            tenant_tier=tier,
+        )
 
         # 2. Build/Get LLM Instance
         current_llm = self.llm
@@ -390,6 +396,7 @@ class ZombieAnalyzer:
         tenant_id: Optional[UUID],
         provider: Optional[str],
         model: Optional[str],
+        tenant_tier: PricingTier | str | None = None,
     ) -> tuple[str, str, Optional[str]]:
         """Resolves the best provider, model, and optional BYOK key."""
         effective_provider = provider
@@ -409,14 +416,45 @@ class ZombieAnalyzer:
 
                 # Extract BYOK key if applicable
                 prov = effective_provider or get_settings().LLM_PROVIDER
-                if prov == "openai":
-                    byok_key = budget.openai_api_key
-                elif prov in ["claude", "anthropic"]:
-                    byok_key = budget.claude_api_key
-                elif prov == "google":
-                    byok_key = budget.google_api_key
-                elif prov == "groq":
-                    byok_key = budget.groq_api_key
+                resolved_tier = tenant_tier
+                raw_budget_tier = getattr(budget, "tenant_tier", None)
+                if resolved_tier is None and isinstance(
+                    raw_budget_tier, (PricingTier, str)
+                ):
+                    resolved_tier = raw_budget_tier
+
+                if resolved_tier is None:
+                    if prov == "openai":
+                        byok_key = budget.openai_api_key
+                    elif prov in ["claude", "anthropic"]:
+                        byok_key = budget.claude_api_key
+                    elif prov == "google":
+                        byok_key = budget.google_api_key
+                    elif prov == "groq":
+                        byok_key = budget.groq_api_key
+                elif bool(get_tier_limit(normalize_tier(resolved_tier), "byok_enabled")):
+                    if prov == "openai":
+                        byok_key = budget.openai_api_key
+                    elif prov in ["claude", "anthropic"]:
+                        byok_key = budget.claude_api_key
+                    elif prov == "google":
+                        byok_key = budget.google_api_key
+                    elif prov == "groq":
+                        byok_key = budget.groq_api_key
+                elif any(
+                    [
+                        budget.openai_api_key,
+                        budget.claude_api_key,
+                        budget.google_api_key,
+                        budget.groq_api_key,
+                    ]
+                ):
+                    logger.info(
+                        "zombie_analyzer_byok_disabled_for_tier",
+                        tenant_id=str(tenant_id),
+                        provider=str(prov),
+                        tier=normalize_tier(resolved_tier).value,
+                    )
 
         effective_provider = effective_provider or get_settings().LLM_PROVIDER
         effective_model = effective_model or "llama-3.3-70b-versatile"

@@ -236,7 +236,9 @@ async def get_landing_funnel_health(
     *,
     now: datetime,
 ) -> LandingFunnelHealth:
-    weekly_current_end = now.date()
+    # Compare fully completed UTC days only so the "current week" and "previous week"
+    # are both normalized seven-day windows instead of "week to date" vs full week.
+    weekly_current_end = now.date() - timedelta(days=1)
     weekly_current_start = weekly_current_end - timedelta(days=6)
     weekly_previous_end = weekly_current_start - timedelta(days=1)
     weekly_previous_start = weekly_previous_end - timedelta(days=6)

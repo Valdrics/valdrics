@@ -101,3 +101,22 @@ async def test_ingest_costs_no_active_connections(
 
     assert result["status"] == "skipped"
     assert result["reason"] == "no_active_connections"
+
+
+@pytest.mark.asyncio
+async def test_ingest_costs_skips_inactive_connections(
+    mock_db,
+    mock_aws_connection: MagicMock,
+    configure_connection_queries,
+) -> None:
+    tenant_id = mock_aws_connection.tenant_id
+    mock_aws_connection.status = "inactive"
+    configure_connection_queries(aws=[mock_aws_connection])
+
+    adapter_resolver = MagicMock()
+    service = ReportingService(mock_db, adapter_resolver=adapter_resolver)
+    result = await service.ingest_costs_for_tenant(tenant_id)
+
+    assert result["status"] == "skipped"
+    assert result["reason"] == "no_active_connections"
+    adapter_resolver.assert_not_called()

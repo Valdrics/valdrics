@@ -58,6 +58,7 @@ async def upsert_invoice_impl(
     invoice_number: str | None = None,
     status: str | None = None,
     notes: str | None = None,
+    commit: bool = True,
 ) -> ProviderInvoice:
     normalized_provider = service._normalize_provider(provider)
     if start_date > end_date:
@@ -65,7 +66,9 @@ async def upsert_invoice_impl(
 
     currency_key = (currency or "USD").strip().upper() or "USD"
     total_amount_dec = Decimal(str(total_amount or 0))
-    total_amount_usd = await service._invoice_total_to_usd(total_amount_dec, currency_key)
+    total_amount_usd = await service._invoice_total_to_usd(
+        total_amount_dec, currency_key
+    )
 
     existing_result = await service.db.execute(
         select(ProviderInvoice).where(
@@ -95,17 +98,30 @@ async def upsert_invoice_impl(
     if notes is not None:
         invoice.notes = notes
 
-    await service.db.commit()
+    await service.db.flush()
+    if commit:
+        await service.db.commit()
     await service.db.refresh(invoice)
     return cast(ProviderInvoice, invoice)
 
 
-async def delete_invoice_impl(service: Any, tenant_id: UUID, invoice_id: UUID) -> bool:
-    invoice = cast(ProviderInvoice | None, await service.get_invoice(tenant_id, invoice_id))
+async def delete_invoice_impl(
+    service: Any,
+    tenant_id: UUID,
+    invoice_id: UUID,
+    *,
+    commit: bool = True,
+) -> bool:
+    invoice = cast(
+        ProviderInvoice | None, await service.get_invoice(tenant_id, invoice_id)
+    )
     if invoice is None:
         return False
     await service.db.delete(invoice)
-    await service.db.commit()
+    if commit:
+        await service.db.commit()
+    else:
+        await service.db.flush()
     return True
 
 
@@ -116,6 +132,7 @@ async def update_invoice_status_impl(
     *,
     status: str,
     notes: str | None = None,
+    commit: bool = True,
 ) -> ProviderInvoice | None:
     invoice = await service.get_invoice(tenant_id, invoice_id)
     if invoice is None:
@@ -123,12 +140,16 @@ async def update_invoice_status_impl(
     invoice.status = str(status).strip().lower()
     if notes is not None:
         invoice.notes = notes
-    await service.db.commit()
+    await service.db.flush()
+    if commit:
+        await service.db.commit()
     await service.db.refresh(invoice)
     return cast(ProviderInvoice | None, invoice)
 
 
-async def invoice_total_to_usd_impl(service: Any, amount: Decimal, currency: str) -> Decimal:
+async def invoice_total_to_usd_impl(
+    service: Any, amount: Decimal, currency: str
+) -> Decimal:
     currency_key = (currency or "USD").strip().upper()
     if currency_key == "USD":
         return amount
@@ -230,7 +251,9 @@ async def get_invoice_reconciliation_summary_impl(
             "total_amount_usd": float(invoice.total_amount_usd or 0),
             "status": invoice.status,
             "notes": invoice.notes,
-            "updated_at": invoice.updated_at.isoformat() if invoice.updated_at else None,
+            "updated_at": invoice.updated_at.isoformat()
+            if invoice.updated_at
+            else None,
         },
         "ledger_final_cost_usd": float(ledger_usd),
         "delta_usd": float(delta_usd),
