@@ -6,6 +6,7 @@
 
 	interface ZombieFinding {
 		provider: 'aws' | 'azure' | 'gcp';
+		finding_id?: string;
 		resource_id: string;
 		resource_type?: string;
 		monthly_cost?: string | number;
@@ -246,12 +247,17 @@
 									type="button"
 									class="btn btn-ghost text-xs hover:bg-accent-500/20 hover:text-accent-400"
 									onclick={() => onRemediate(finding)}
-									disabled={remediating === finding.resource_id}
+									disabled={remediating === finding.resource_id || !finding.finding_id}
+									title={!finding.finding_id
+										? 'Persisted finding binding missing. Use the latest scan output before remediation.'
+										: undefined}
 								>
 									{#if remediating === finding.resource_id}
 										<span class="animate-pulse">...</span>
 									{:else}
-										{finding.recommended_action || 'Review'}
+										{finding.finding_id
+											? finding.recommended_action || 'Review'
+											: 'Unavailable'}
 									{/if}
 								</button>
 							</div>

@@ -265,6 +265,8 @@ async def test_list_realized_savings_events_json_and_csv_paths() -> None:
 
     event_one = SimpleNamespace(
         remediation_request_id=uuid4(),
+        finding_id=uuid4(),
+        finding_category="idle_instances",
         provider="aws",
         account_id=uuid4(),
         resource_id="i-123",
@@ -282,6 +284,8 @@ async def test_list_realized_savings_events_json_and_csv_paths() -> None:
     )
     event_two = SimpleNamespace(
         remediation_request_id=uuid4(),
+        finding_id=None,
+        finding_category=None,
         provider="aws",
         account_id=None,
         resource_id=None,
@@ -315,6 +319,7 @@ async def test_list_realized_savings_events_json_and_csv_paths() -> None:
     )
     assert len(events) == 2
     assert events[0].provider == "aws"
+    assert events[0].finding_category == "idle_instances"
     assert events[1].executed_at is None
 
     response = await list_realized_savings_events(
@@ -329,3 +334,6 @@ async def test_list_realized_savings_events_json_and_csv_paths() -> None:
     assert isinstance(response, Response)
     assert response.media_type == "text/csv"
     assert "realized_monthly_savings_usd" in response.body.decode()
+    assert "finding_category" in response.body.decode()
+    assert str(event_one.remediation_request_id) in response.body.decode()
+    assert str(event_one.finding_id) in response.body.decode()

@@ -30,6 +30,7 @@ from sqlalchemy import (
     DateTime,
     func,
     Uuid as PG_UUID,
+    text,
 )
 
 # from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -41,6 +42,7 @@ from app.shared.db.base import Base
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from app.models.optimization import OptimizationFinding
     from app.models.tenant import Tenant, User
 
 
@@ -104,6 +106,21 @@ class RemediationRequest(Base):
     __tablename__ = "remediation_requests"
     __table_args__ = (
         Index("ix_remediation_tenant_resource", "tenant_id", "resource_id"),
+        Index(
+            "uix_remediation_requests_open_finding_action",
+            "tenant_id",
+            "finding_id",
+            "action",
+            unique=True,
+            postgresql_where=text(
+                "finding_id IS NOT NULL AND status IN "
+                "('PENDING', 'PENDING_APPROVAL', 'APPROVED', 'SCHEDULED', 'EXECUTING')"
+            ),
+            sqlite_where=text(
+                "finding_id IS NOT NULL AND status IN "
+                "('PENDING', 'PENDING_APPROVAL', 'APPROVED', 'SCHEDULED', 'EXECUTING')"
+            ),
+        ),
     )
 
     # Primary Key
@@ -126,6 +143,12 @@ class RemediationRequest(Base):
     connection_id: Mapped[Optional[UUID]] = mapped_column(
         PG_UUID(), nullable=True
     )  # ID of the specific cloud connection
+    finding_id: Mapped[Optional[UUID]] = mapped_column(
+        PG_UUID(),
+        ForeignKey("optimization_findings.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     region: Mapped[str] = mapped_column(String(20), nullable=False, default="global")
 
     # Action details
@@ -198,6 +221,9 @@ class RemediationRequest(Base):
     action_parameters: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSON().with_variant(JSONB, "postgresql"), nullable=True
     )
+    finding_snapshot: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -215,6 +241,7 @@ class RemediationRequest(Base):
     reviewed_by: Mapped[Optional["User"]] = relationship(
         "User", foreign_keys=[reviewed_by_user_id]
     )
+    finding: Mapped[Optional["OptimizationFinding"]] = relationship("OptimizationFinding")
 
     def __repr__(self) -> str:
         return f"<RemediationRequest {self.resource_id} [{self.status.value}]>"

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 
 	import type { PageData } from './$types';
@@ -21,13 +22,13 @@
 	}
 </script>
 
-<svelte:head>
-	<title>System Status | Valdrics</title>
-	<meta
-		name="description"
-		content="Current service status for Valdrics core platform dependencies and automated health checks."
-	/>
-</svelte:head>
+<PublicPageMeta
+	title="System Status"
+	description="Current service status for Valdrics core platform dependencies and automated health checks."
+	pageType="WebPage"
+	pageSection="Status"
+	keywords={['system status', 'service health', 'incident readiness', 'platform health']}
+/>
 
 <PublicMarketingPage
 	kicker="Status"

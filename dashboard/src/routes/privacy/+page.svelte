@@ -1,10 +1,14 @@
-<svelte:head>
-	<title>Privacy Policy | Valdrics</title>
-	<meta
-		name="description"
-		content="Valdrics privacy policy covering processing scope, retention, security controls, and data subject rights for cloud and software spend governance workflows."
-	/>
-</svelte:head>
+<script lang="ts">
+	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
+</script>
+
+<PublicPageMeta
+	title="Privacy Policy"
+	description="Valdrics privacy policy covering processing scope, retention, security controls, and data subject rights for cloud and software spend governance workflows."
+	pageType="WebPage"
+	pageSection="Privacy"
+	keywords={['privacy policy', 'data retention', 'data subject rights', 'security controls']}
+/>
 
 <article class="mx-auto max-w-4xl px-6 py-12 space-y-8">
 	<header class="space-y-3">

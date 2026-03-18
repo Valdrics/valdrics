@@ -1,13 +1,20 @@
 import pytest
 import boto3
 from moto import mock_aws
+from decimal import Decimal
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 from sqlalchemy import select
 from httpx import AsyncClient
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from app.models.tenant import Tenant, User, UserRole
 from app.models.aws_connection import AWSConnection
+from app.models.optimization import FindingStatus, OptimizationFinding
+from app.models.realized_savings import RealizedSavingsEvent
 from app.models.remediation import RemediationRequest, RemediationStatus
+from app.modules.reporting.domain.realized_savings import RealizedSavingsService
 from app.shared.core.pricing import PricingTier
 from tests.utils import create_test_token
 
@@ -145,24 +152,75 @@ async def test_remediation_lifecycle_full(
         with pytest.MonkeyPatch.context() as mp:
             mp.setattr(aioboto3.Session, "client", mock_client)
             mp.setattr(MultiTenantAWSAdapter, "get_credentials", mock_get_credentials)
+            fake_detector = SimpleNamespace(
+                provider_name="aws",
+                get_credentials=AsyncMock(
+                    return_value={
+                        "AccessKeyId": "testing",
+                        "SecretAccessKey": "testing",
+                        "SessionToken": "testing",
+                    }
+                ),
+                scan_all=AsyncMock(
+                    return_value={
+                        "idle_instances": [
+                            {
+                                "resource_id": instance_id,
+                                "resource_type": "ec2_instance",
+                                "monthly_cost": 15.5,
+                            }
+                        ]
+                    }
+                ),
+            )
+            mp.setattr(
+                "app.modules.optimization.domain.service.ZombieDetectorFactory",
+                SimpleNamespace(get_detector=lambda *_args, **_kwargs: fake_detector),
+            )
+            mp.setattr(
+                "app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery.get_enabled_regions",
+                AsyncMock(return_value=["us-east-1"]),
+            )
 
             # 1. Run Scan
             response = await ac.get("/api/v1/zombies?region=us-east-1", headers=headers)
             assert response.status_code == 200
+            scan_payload = response.json()
+            finding_id = None
+            for bucket in scan_payload.values():
+                if not isinstance(bucket, list):
+                    continue
+                for item in bucket:
+                    if not isinstance(item, dict):
+                        continue
+                    if item.get("resource_id") != instance_id:
+                        continue
+                    finding_id = item.get("finding_id")
+                    if finding_id:
+                        break
+                if finding_id:
+                    break
+            assert finding_id
 
             # 2. Request Remediation
             req_payload = {
-                "resource_id": instance_id,
-                "resource_type": "EC2 Instance",
+                "finding_id": finding_id,
                 "action": "terminate_instance",
-                "provider": "aws",
-                "estimated_savings": 15.50,
             }
             response = await ac.post(
                 "/api/v1/zombies/request", json=req_payload, headers=headers
             )
             assert response.status_code == 200
             request_id = response.json()["request_id"]
+
+            duplicate_response = await ac.post(
+                "/api/v1/zombies/request", json=req_payload, headers=headers
+            )
+            assert duplicate_response.status_code == 409
+            assert (
+                duplicate_response.json()["error"]["code"]
+                == "remediation_request_duplicate_open_finding"
+            )
 
             # 3. Approve
             response = await ac.post(
@@ -197,3 +255,45 @@ async def test_remediation_lifecycle_full(
             )
             rem = result.scalar_one()
             assert rem.status == RemediationStatus.COMPLETED
+            assert rem.finding_id is not None
+            rem.executed_at = datetime.now(timezone.utc) - timedelta(days=2)
+
+            finding_result = await db.execute(
+                select(OptimizationFinding).where(
+                    OptimizationFinding.id == UUID(finding_id)
+                )
+            )
+            finding = finding_result.scalar_one()
+            assert finding.status == FindingStatus.RESOLVED
+
+            service = RealizedSavingsService(db)
+            with pytest.MonkeyPatch.context() as savings_mp:
+                savings_mp.setattr(
+                    service,
+                    "_window_cost",
+                    AsyncMock(side_effect=[(Decimal("12.00"), 1), (Decimal("3.00"), 1)]),
+                )
+                event = await service.compute_for_request(
+                    tenant_id=setup_opt_data["tenant"].id,
+                    request=rem,
+                    baseline_days=1,
+                    measurement_days=1,
+                    gap_days=0,
+                    monthly_multiplier_days=30,
+                    require_final=False,
+                )
+
+            assert event is not None
+            assert event.finding_id == rem.finding_id
+            assert event.finding_category == "idle_instances"
+            assert event.realized_monthly_savings_usd == Decimal("270.00")
+            await db.commit()
+
+            event_result = await db.execute(
+                select(RealizedSavingsEvent).where(
+                    RealizedSavingsEvent.remediation_request_id == rem.id
+                )
+            )
+            persisted_event = event_result.scalar_one()
+            assert persisted_event.finding_id == rem.finding_id
+            assert persisted_event.finding_category == "idle_instances"

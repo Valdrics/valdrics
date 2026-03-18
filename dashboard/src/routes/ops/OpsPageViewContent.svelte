@@ -15,6 +15,7 @@
 		JobStatus,
 		PendingRequest,
 		PolicyPreview,
+		RemediationHistoryItem,
 		StrategyRecommendation
 	} from './opsTypes';
 	import { formatDate, formatUsd, policyDecisionClass } from './opsUtils';
@@ -29,6 +30,7 @@
 	let refreshingStrategies = $state(false);
 	let actingId = $state<string | null>(null);
 	let pendingRequests = $state<PendingRequest[]>([]);
+	let remediationHistory = $state<RemediationHistoryItem[]>([]);
 	let jobStatus = $state<JobStatus | null>(null);
 	let jobs = $state<JobRecord[]>([]);
 	let recommendations = $state<StrategyRecommendation[]>([]);
@@ -61,6 +63,7 @@
 			const headers = getHeaders();
 			const results = await Promise.allSettled([
 				getWithTimeout(edgeApiPath('/zombies/pending'), headers),
+				getWithTimeout(edgeApiPath('/zombies/history'), headers),
 				getWithTimeout(edgeApiPath('/jobs/status'), headers),
 				getWithTimeout(edgeApiPath('/jobs/list?limit=20'), headers),
 				getWithTimeout(edgeApiPath('/strategies/recommendations?status=open'), headers)
@@ -72,11 +75,13 @@
 					: null;
 
 			const pendingRes = responseOrNull(0);
-			const statusRes = responseOrNull(1);
-			const jobsRes = responseOrNull(2);
-			const recsRes = responseOrNull(3);
+			const historyRes = responseOrNull(1);
+			const statusRes = responseOrNull(2);
+			const jobsRes = responseOrNull(3);
+			const recsRes = responseOrNull(4);
 
 			pendingRequests = pendingRes?.ok ? ((await pendingRes.json()).requests ?? []) : [];
+			remediationHistory = historyRes?.ok ? ((await historyRes.json()).requests ?? []) : [];
 			jobStatus = statusRes?.ok ? await statusRes.json() : null;
 			jobs = jobsRes?.ok ? await jobsRes.json() : [];
 			recommendations = recsRes?.ok ? await recsRes.json() : [];
@@ -317,11 +322,12 @@
 
 			<OpsOperationalHealthSection {data} />
 
-			<OpsBacklogSection
-				{pendingRequests}
-				{processingJobs}
-				{jobs}
-				{recommendations}
+	<OpsBacklogSection
+		{pendingRequests}
+		recentCompletions={remediationHistory}
+		{processingJobs}
+		{jobs}
+		{recommendations}
 				{refreshingStrategies}
 				{actingId}
 				{formatDate}

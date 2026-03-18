@@ -36,9 +36,10 @@ def user_id():
 @pytest.mark.asyncio
 async def test_create_remediation_request(mock_db, tenant_id, user_id):
     service = RemediationService(mock_db)
-
-    # Mock connection check bypass or return None
-    mock_db.execute.return_value.scalar_one_or_none.return_value = None
+    connection_id = uuid4()
+    service.get_by_id = AsyncMock(
+        return_value=MagicMock(id=connection_id, tenant_id=tenant_id, status="active")
+    )
 
     request = await service.create_request(
         tenant_id=tenant_id,
@@ -48,6 +49,7 @@ async def test_create_remediation_request(mock_db, tenant_id, user_id):
         action=RemediationAction.DELETE_VOLUME,
         estimated_savings=15.5,
         provider="aws",
+        connection_id=connection_id,
     )
 
     assert request.tenant_id == tenant_id
@@ -63,6 +65,10 @@ async def test_create_request_overwrites_user_supplied_system_policy_context(
     mock_db, tenant_id, user_id
 ):
     service = RemediationService(mock_db)
+    connection_id = uuid4()
+    service.get_by_id = AsyncMock(
+        return_value=MagicMock(id=connection_id, tenant_id=tenant_id, status="active")
+    )
 
     with patch.object(
         service,
@@ -82,6 +88,7 @@ async def test_create_request_overwrites_user_supplied_system_policy_context(
             action=RemediationAction.DELETE_VOLUME,
             estimated_savings=15.5,
             provider="aws",
+            connection_id=connection_id,
             parameters={
                 "keep_this": "yes",
                 "_system_policy_context": {"is_production": False, "source": "user"},
@@ -393,7 +400,7 @@ async def test_generate_iac_plan_free_tier(mock_db, tenant_id):
 
 
 @pytest.mark.asyncio
-async def test_resolve_credentials_azure_uses_active_connection_when_id_missing(
+async def test_resolve_credentials_azure_requires_explicit_connection_binding(
     mock_db, tenant_id
 ):
     service = RemediationService(mock_db, credentials={"fallback": "x"})
@@ -405,24 +412,13 @@ async def test_resolve_credentials_azure_uses_active_connection_when_id_missing(
     )
     req.connection_id = None
 
-    azure_conn = MagicMock()
-    azure_conn.azure_tenant_id = "tenant-123"
-    azure_conn.client_id = "client-123"
-    azure_conn.client_secret = "secret-123"
-    azure_conn.subscription_id = "sub-123"
-
-    mock_res = MagicMock()
-    mock_res.scalar_one_or_none.return_value = azure_conn
-    mock_db.execute.return_value = mock_res
-
     creds = await service._resolve_credentials(req)
-    assert creds["tenant_id"] == "tenant-123"
-    assert creds["client_id"] == "client-123"
-    assert "fallback" not in creds
+    assert creds == {}
+    mock_db.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_resolve_credentials_saas_falls_back_when_no_connection_id(
+async def test_resolve_credentials_saas_requires_explicit_connection_binding(
     mock_db, tenant_id
 ):
     service = RemediationService(mock_db, credentials={"fallback_token": "abc"})
@@ -434,12 +430,9 @@ async def test_resolve_credentials_saas_falls_back_when_no_connection_id(
     )
     req.connection_id = None
 
-    mock_res = MagicMock()
-    mock_res.scalar_one_or_none.return_value = None
-    mock_db.execute.return_value = mock_res
-
     creds = await service._resolve_credentials(req)
-    assert creds == {"fallback_token": "abc"}
+    assert creds == {}
+    mock_db.execute.assert_not_awaited()
 
 
 @pytest.mark.asyncio

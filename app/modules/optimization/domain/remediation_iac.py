@@ -132,4 +132,8 @@ async def bulk_generate_iac_plan_for_requests(
         "# Valdrics Bulk IaC Remediation Plan\n"
         f"# Generated: {datetime.now(timezone.utc).isoformat()}\n\n"
     )
-    return header + "\n\n" + "\n" + "-" * 40 + "\n".join(plans)
+    if not plans:
+        return header
+
+    separator = "\n" + ("-" * 40) + "\n"
+    return header + separator + separator.join(plans)

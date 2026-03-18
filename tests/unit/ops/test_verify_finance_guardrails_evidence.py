@@ -136,6 +136,18 @@ def test_verify_finance_guardrails_rejects_missing_required_tier(tmp_path: Path)
         verify_evidence(evidence_path=path)
 
 
+def test_verify_finance_guardrails_rejects_duplicate_tier(tmp_path: Path) -> None:
+    payload = _valid_payload()
+    payload["tier_unit_economics"] = [
+        *payload["tier_unit_economics"],
+        dict(payload["tier_unit_economics"][0]),
+    ]
+    path = tmp_path / "finance.json"
+    _write(path, payload)
+    with pytest.raises(ValueError, match="duplicate tier: starter"):
+        verify_evidence(evidence_path=path)
+
+
 def test_verify_finance_guardrails_rejects_too_old_artifact(tmp_path: Path) -> None:
     path = tmp_path / "finance.json"
     _write(path, _valid_payload())

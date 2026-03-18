@@ -20,12 +20,15 @@ def test_key_rotation_drill_pack_has_required_evidence_markers() -> None:
         "source_pre_rotation_tokens_accepted:",
         "source_post_rotation_new_tokens_accepted:",
         "source_rollback_validation_passed:",
+        "source_endpoint_replay_tamper_guard:",
         "fallback_verification_passed: true",
         "rollback_validation_passed: true",
+        "endpoint_replay_tamper_guard: true",
         "post_drill_status: PASS",
         "test_consume_approval_token_accepts_primary_secret",
         "test_consume_approval_token_accepts_new_primary_secret_after_rotation",
         "test_consume_approval_token_accepts_rollback_fallback_secret",
+        "test_consume_approval_token_endpoint_rejects_replay_and_tamper",
     )
     for snippet in required_snippets:
         assert snippet in raw

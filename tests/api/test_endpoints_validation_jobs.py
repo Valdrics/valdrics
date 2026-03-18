@@ -38,7 +38,7 @@ class TestInputValidation:
         ac.app.dependency_overrides[FeatureFlag.AUTO_REMEDIATION] = lambda: True
 
         # Missing required fields
-        incomplete_data = {"resource_type": "ec2_instance"}
+        incomplete_data = {"action": "stop_instance"}
 
         response = await ac.post("/api/v1/zombies/request", json=incomplete_data)
 
@@ -72,11 +72,8 @@ class TestInputValidation:
 
         # Invalid action enum value
         invalid_data = {
-            "resource_id": "i-test123",
-            "resource_type": "ec2_instance",
+            "finding_id": str(uuid4()),
             "action": "invalid_action_name",
-            "provider": "aws",
-            "estimated_savings": 50.0,
         }
 
         response = await ac.post("/api/v1/zombies/request", json=invalid_data)
@@ -183,5 +180,4 @@ class TestBackgroundJobsAPI:
         # Clean up overrides
         ac.app.dependency_overrides.pop(get_current_user, None)
         ac.app.dependency_overrides.pop(require_tenant_access, None)
-
 

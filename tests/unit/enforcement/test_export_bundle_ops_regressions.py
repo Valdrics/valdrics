@@ -78,18 +78,23 @@ async def test_build_export_bundle_collapses_computed_context_lineage_across_gen
         normalize_policy_document_schema_version_fn=lambda value: value or "unknown",
         normalize_policy_document_sha256_fn=lambda value: value or "0" * 64,
         computed_context_snapshot_fn=lambda payload: dict(payload or {}),
+        parse_iso_datetime_fn=lambda value: (
+            datetime.fromisoformat(value)
+            if isinstance(value, str)
+            else value
+        ),
         json_default_fn=lambda value: value.isoformat()
         if isinstance(value, datetime)
         else str(value),
         render_decisions_csv_fn=lambda _rows: "decisions",
         render_approvals_csv_fn=lambda _rows: "approvals",
         export_events_counter=export_events_counter,
-        utcnow_fn=lambda: datetime(2026, 3, 14, 12, 0, tzinfo=timezone.utc),
     )
 
     assert len(bundle["computed_context_lineage"]) == 1
     assert bundle["computed_context_lineage"][0]["decision_count"] == 2
     assert bundle["computed_context_lineage"][0]["generated_at"] == snapshot_one["generated_at"]
+    assert bundle["generated_at"] == datetime.fromisoformat(snapshot_two["generated_at"])
 
 
 def test_build_signed_export_manifest_payload_signs_generated_at() -> None:

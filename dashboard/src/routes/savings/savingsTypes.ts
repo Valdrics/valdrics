@@ -47,3 +47,24 @@ export type SavingsProofDrilldownResponse = {
 	limit: number;
 	notes: string[];
 };
+
+export type RealizedSavingsEvent = {
+	remediation_request_id: string;
+	finding_id: string | null;
+	finding_category: string | null;
+	provider: string;
+	account_id: string | null;
+	resource_id: string | null;
+	region: string | null;
+	method: string;
+	executed_at: string | null;
+	baseline_start_date: string;
+	baseline_end_date: string;
+	measurement_start_date: string;
+	measurement_end_date: string;
+	baseline_avg_daily_cost_usd: number;
+	measurement_avg_daily_cost_usd: number;
+	realized_monthly_savings_usd: number;
+	confidence_score: number | null;
+	computed_at: string;
+};

@@ -97,10 +97,8 @@ class TestZombiesEndpoint:
         response = await ac.post(
             "/api/v1/zombies/request",
             json={
-                "resource_id": "test-123",
-                "resource_type": "volume",
+                "finding_id": "00000000-0000-0000-0000-000000000001",
                 "action": "delete_volume",
-                "estimated_savings": 10.0,
             },
         )
 

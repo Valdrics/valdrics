@@ -27,6 +27,7 @@ REQUIRED_BOOL_FIELDS: tuple[str, ...] = (
     "rollback_validation_passed",
     "replay_protection_intact",
     "alert_pipeline_verified",
+    "endpoint_replay_tamper_guard",
 )
 
 REQUIRED_SOURCE_FIELDS: tuple[str, ...] = tuple(

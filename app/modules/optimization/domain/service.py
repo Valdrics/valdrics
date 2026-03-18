@@ -342,6 +342,16 @@ class ZombieService(BaseService):
             build_architectural_inefficiency_payload(all_zombies)
         )
 
+        from app.modules.optimization.domain.findings import (
+            persist_scan_findings_with_guard,
+        )
+
+        await persist_scan_findings_with_guard(
+            self,
+            tenant_id=tenant_id,
+            scan_payload=all_zombies,
+        )
+
         if analyze and not all_zombies.get("scan_timeout"):
             all_zombies["ai_analysis"] = await enqueue_zombie_analysis(
                 db=self.db,

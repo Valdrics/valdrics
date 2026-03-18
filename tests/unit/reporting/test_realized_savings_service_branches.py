@@ -23,7 +23,12 @@ def _request(
     executed_at: datetime | None = None,
     connection_id=None,
     resource_id: str = "i-123",
+    finding_id=None,
+    finding_category: str | None = None,
 ):
+    snapshot = None
+    if finding_category is not None:
+        snapshot = {"category": finding_category}
     return SimpleNamespace(
         id=uuid4(),
         tenant_id=tenant_id,
@@ -31,6 +36,8 @@ def _request(
         executed_at=executed_at,
         connection_id=connection_id,
         resource_id=resource_id,
+        finding_id=finding_id,
+        finding_snapshot=snapshot,
         provider="aws",
         region="us-east-1",
         updated_at=executed_at,
@@ -174,14 +181,19 @@ async def test_compute_for_request_skips_future_measurement_or_incomplete_window
 async def test_compute_for_request_updates_existing_event_and_clamps_negative_delta() -> None:
     tenant_id = uuid4()
     account_id = uuid4()
+    finding_id = uuid4()
     request = _request(
         tenant_id=tenant_id,
         executed_at=datetime.now(timezone.utc) - timedelta(days=40),
         connection_id=account_id,
+        finding_id=finding_id,
+        finding_category="idle_instances",
     )
 
     existing = SimpleNamespace(
         provider="old",
+        finding_id=None,
+        finding_category=None,
         account_id=None,
         resource_id=None,
         region=None,
@@ -225,6 +237,8 @@ async def test_compute_for_request_updates_existing_event_and_clamps_negative_de
 
     assert result is existing
     assert existing.provider == "aws"
+    assert existing.finding_id == finding_id
+    assert existing.finding_category == "idle_instances"
     assert existing.account_id == account_id
     assert existing.realized_avg_daily_savings_usd == Decimal("0")
     assert existing.realized_monthly_savings_usd == Decimal("0")
@@ -237,10 +251,13 @@ async def test_compute_for_request_updates_existing_event_and_clamps_negative_de
 async def test_compute_for_request_creates_new_event_when_missing() -> None:
     tenant_id = uuid4()
     account_id = uuid4()
+    finding_id = uuid4()
     request = _request(
         tenant_id=tenant_id,
         executed_at=datetime.now(timezone.utc) - timedelta(days=40),
         connection_id=account_id,
+        finding_id=finding_id,
+        finding_category="unattached_volumes",
     )
 
     db = MagicMock()
@@ -263,6 +280,8 @@ async def test_compute_for_request_creates_new_event_when_missing() -> None:
         )
 
     assert isinstance(result, RealizedSavingsEvent)
+    assert result.finding_id == finding_id
+    assert result.finding_category == "unattached_volumes"
     assert result.realized_avg_daily_savings_usd == Decimal("15")
     assert result.realized_monthly_savings_usd == Decimal("450")
     db.add.assert_called_once_with(result)

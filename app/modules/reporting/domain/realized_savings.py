@@ -118,6 +118,12 @@ class RealizedSavingsService:
         resource_id = str(getattr(request, "resource_id", "") or "").strip()
         if not resource_id:
             return None
+        finding_id = getattr(request, "finding_id", None)
+        finding_snapshot = getattr(request, "finding_snapshot", None)
+        finding_category: str | None = None
+        if isinstance(finding_snapshot, dict):
+            category_raw = str(finding_snapshot.get("category") or "").strip()
+            finding_category = category_raw or None
 
         executed_at = request.executed_at
         executed_day = executed_at.date()
@@ -215,6 +221,8 @@ class RealizedSavingsService:
             existing = RealizedSavingsEvent(
                 tenant_id=tenant_id,
                 remediation_request_id=request.id,
+                finding_id=finding_id,
+                finding_category=finding_category,
                 provider=str(request.provider or "").strip().lower() or "unknown",
                 account_id=account_id,
                 resource_id=resource_id,
@@ -243,6 +251,8 @@ class RealizedSavingsService:
             existing.provider = (
                 str(request.provider or "").strip().lower() or existing.provider
             )
+            existing.finding_id = finding_id
+            existing.finding_category = finding_category
             existing.account_id = account_id
             existing.resource_id = resource_id
             existing.region = str(getattr(request, "region", "") or None)

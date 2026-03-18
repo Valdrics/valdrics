@@ -192,4 +192,33 @@ describe('ops page unit economics interactions', () => {
 		const executeButton = within(dialog).getByRole('button', { name: 'Awaiting Approval' });
 		expect(executeButton.hasAttribute('disabled')).toBe(true);
 	});
+
+	it('shows recent completed remediations with resolved finding status', async () => {
+		setupOpsGetMocks({
+			history: [
+				{
+					id: 'd1a2b3c4-1111-2222-3333-444455556666',
+					status: 'completed',
+					resource_id: 'i-resolved-1',
+					resource_type: 'EC2 Instance',
+					action: 'terminate_instance',
+					finding_status: 'resolved',
+					finding_category: 'idle_instances',
+					executed_at: '2026-02-12T10:15:00Z',
+					created_at: '2026-02-12T10:00:00Z',
+					estimated_savings: 42
+				}
+			]
+		});
+
+		render(Page, { data: testOpsPageData });
+
+		await screen.findByText('Recent completions');
+		const resourceCell = await screen.findByText('i-resolved-1');
+		const row = resourceCell.closest('tr');
+		expect(row).toBeTruthy();
+		expect(within(row as HTMLTableRowElement).getByText('idle_instances')).toBeTruthy();
+		expect(within(row as HTMLTableRowElement).getByText('Resolved')).toBeTruthy();
+		expect(within(row as HTMLTableRowElement).getByText('Completed')).toBeTruthy();
+	});
 });

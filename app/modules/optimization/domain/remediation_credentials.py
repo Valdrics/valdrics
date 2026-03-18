@@ -8,7 +8,10 @@ from sqlalchemy import select
 
 from app.models.remediation import RemediationRequest
 from app.shared.core.connection_queries import get_connection_model
-from app.shared.core.connection_state import resolve_connection_region
+from app.shared.core.connection_state import (
+    is_connection_active,
+    resolve_connection_region,
+)
 from app.shared.core.provider import normalize_provider
 
 logger = structlog.get_logger()
@@ -44,25 +47,32 @@ async def resolve_connection_credentials(
     def _coerce_list(value: Any) -> list[Any]:
         return list(value) if isinstance(value, list) else []
 
-    stmt = select(connection_model).where(connection_model.tenant_id == tenant_id)
-    if connection_id:
-        stmt = stmt.where(connection_model.id == connection_id)
-    else:
-        if hasattr(connection_model, "status"):
-            stmt = stmt.where(connection_model.status == "active")
-        elif hasattr(connection_model, "is_active"):
-            stmt = stmt.where(connection_model.is_active.is_(True))
+    if not connection_id:
+        logger.warning(
+            "remediation_credentials_missing_connection_binding",
+            tenant_id=str(tenant_id),
+            provider=provider,
+        )
+        return {}
 
-        order_clauses = []
-        if hasattr(connection_model, "last_verified_at"):
-            order_clauses.append(connection_model.last_verified_at.desc())
-        order_clauses.append(connection_model.id.desc())
-        stmt = stmt.order_by(*order_clauses)
+    stmt = (
+        select(connection_model)
+        .where(connection_model.tenant_id == tenant_id)
+        .where(connection_model.id == connection_id)
+    )
 
     result = await service.db.execute(stmt)
     connection = await service._scalar_one_or_none(result)
     if connection is None:
         return missing_connection_result
+    if not is_connection_active(connection):
+        logger.warning(
+            "remediation_credentials_inactive_connection",
+            tenant_id=str(tenant_id),
+            provider=provider,
+            connection_id=str(connection_id),
+        )
+        return {}
 
     if provider == "aws":
         role_arn = getattr(connection, "role_arn", None)

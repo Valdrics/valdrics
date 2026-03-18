@@ -125,7 +125,8 @@ async def get_savings_proof_drilldown(
         default=None, pattern="^(aws|azure|gcp|saas|license|platform|hybrid)$"
     ),
     dimension: str = Query(
-        default="strategy_type", pattern="^(provider|strategy_type|remediation_action)$"
+        default="strategy_type",
+        pattern="^(provider|strategy_type|remediation_action|finding_category)$",
     ),
     limit: int = Query(default=50, ge=1, le=200),
     response_format: str = Query(default="json", pattern="^(json|csv)$"),
@@ -260,6 +261,8 @@ async def compute_realized_savings(
 
 class RealizedSavingsEventResponse(BaseModel):
     remediation_request_id: str
+    finding_id: str | None
+    finding_category: str | None
     provider: str
     account_id: str | None
     resource_id: str | None
@@ -330,13 +333,20 @@ async def list_realized_savings_events(
     )
     events: list[RealizedSavingsEventResponse] = []
     for event, executed_at in rows:
+        finding_id = getattr(event, "finding_id", None)
+        finding_category = getattr(event, "finding_category", None)
+        account_id = getattr(event, "account_id", None)
+        resource_id = getattr(event, "resource_id", None)
+        region = getattr(event, "region", None)
         events.append(
             RealizedSavingsEventResponse(
                 remediation_request_id=str(event.remediation_request_id),
+                finding_id=str(finding_id) if finding_id else None,
+                finding_category=str(finding_category) if finding_category else None,
                 provider=str(event.provider),
-                account_id=str(event.account_id) if event.account_id else None,
-                resource_id=str(event.resource_id) if event.resource_id else None,
-                region=str(event.region) if event.region else None,
+                account_id=str(account_id) if account_id else None,
+                resource_id=str(resource_id) if resource_id else None,
+                region=str(region) if region else None,
                 method=str(event.method),
                 executed_at=executed_at.isoformat()
                 if isinstance(executed_at, datetime)
@@ -364,6 +374,8 @@ async def list_realized_savings_events(
     if response_format == "csv":
         header = [
             "remediation_request_id",
+            "finding_id",
+            "finding_category",
             "provider",
             "account_id",
             "resource_id",

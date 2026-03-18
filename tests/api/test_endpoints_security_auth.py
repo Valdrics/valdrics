@@ -198,11 +198,8 @@ class TestAuthorizationAndAuthentication:
         response = await ac.post(
             "/api/v1/zombies/request",
             json={
-                "resource_id": "test",
-                "resource_type": "ec2_instance",
+                "finding_id": str(uuid4()),
                 "action": "stop_instance",
-                "provider": "aws",
-                "estimated_savings": 50.0,
             },
         )
 
@@ -213,4 +210,3 @@ class TestAuthorizationAndAuthentication:
         ac.app.dependency_overrides.pop(get_current_user, None)
         ac.app.dependency_overrides.pop(require_tenant_access, None)
         ac.app.dependency_overrides.pop(dep, None)
-

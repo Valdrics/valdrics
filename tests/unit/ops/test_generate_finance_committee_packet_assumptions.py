@@ -73,3 +73,14 @@ def test_derive_assumptions_inputs_rejects_invalid_subscription_rows() -> None:
         match=r"telemetry\.tier_subscription_snapshot\[0\] must be an object",
     ):
         derive_assumptions_inputs(telemetry=telemetry)
+
+
+def test_derive_assumptions_inputs_rejects_duplicate_tier_rows() -> None:
+    telemetry = _telemetry_payload()
+    first_row = dict(telemetry["tier_subscription_snapshot"][0])
+    telemetry["tier_subscription_snapshot"] = [
+        *telemetry["tier_subscription_snapshot"],
+        first_row,
+    ]
+    with pytest.raises(ValueError, match="duplicate tier: starter"):
+        derive_assumptions_inputs(telemetry=telemetry)

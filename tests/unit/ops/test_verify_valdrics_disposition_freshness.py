@@ -24,8 +24,8 @@ RUNTIME_PROBE_RESULTS = [
     {
         "probe_id": "module_size_budget",
         "command": "python scripts/verify_python_module_size_budget.py --enforcement-mode strict",
-        "passed": True,
-        "output_excerpt": "ok",
+        "passed": False,
+        "output_excerpt": "size budget exceeded",
     },
     {
         "probe_id": "dependency_locking",
@@ -64,19 +64,26 @@ def _write(path: Path, payload: dict[str, object]) -> None:
 
 
 def _valid_payload() -> dict[str, object]:
+    probe_pass_by_id = {
+        str(item["probe_id"]): bool(item["passed"])
+        for item in RUNTIME_PROBE_RESULTS
+    }
     dispositions: list[dict[str, object]] = []
     for finding_id in DEFAULT_REQUIRED_FINDING_IDS:
+        control_probe_ids = CONTROL_PROBES_BY_FINDING[finding_id]
+        all_control_probes_passed = all(
+            probe_pass_by_id.get(probe_id, False) for probe_id in control_probe_ids
+        )
         item: dict[str, object] = {
             "finding_id": finding_id,
-            "status": "documented_exception",
+            "status": "documented_exception" if all_control_probes_passed else "planned_refactor",
             "owner": "platform-owner@valdrics.io",
             "review_by": "2026-03-31",
             "rationale": f"{finding_id} disposition rationale recorded for release gate.",
             "exit_criteria": f"{finding_id} closure criteria tracked in remediation backlog.",
-            "control_probe_ids": CONTROL_PROBES_BY_FINDING[finding_id],
+            "control_probe_ids": control_probe_ids,
         }
-        if finding_id in {"VAL-ADAPT-001", "VAL-ADAPT-002+"}:
-            item["status"] = "planned_refactor"
+        if item["status"] == "planned_refactor":
             item["backlog_ref"] = "VAL-ADAPT-002+"
         dispositions.append(item)
 
@@ -165,6 +172,41 @@ def test_verify_valdrics_disposition_freshness_rejects_missing_runtime_probe_res
     _write(path, payload)
 
     with pytest.raises(ValueError, match="runtime_probe_results must be a non-empty array"):
+        verify_disposition_register(
+            register_path=path,
+            max_artifact_age_days=45.0,
+            max_review_window_days=120.0,
+            as_of=AS_OF_UTC,
+        )
+
+
+def test_verify_valdrics_disposition_freshness_rejects_documented_exception_with_failed_probe(
+    tmp_path: Path,
+) -> None:
+    payload = _valid_payload()
+    payload["dispositions"][2]["status"] = "documented_exception"
+    payload["runtime_probe_results"][3]["passed"] = False
+    path = tmp_path / "valdrics-disposition.json"
+    _write(path, payload)
+
+    with pytest.raises(ValueError, match="documented_exception must reference only passing"):
+        verify_disposition_register(
+            register_path=path,
+            max_artifact_age_days=45.0,
+            max_review_window_days=120.0,
+            as_of=AS_OF_UTC,
+        )
+
+
+def test_verify_valdrics_disposition_freshness_rejects_planned_refactor_without_failed_probe(
+    tmp_path: Path,
+) -> None:
+    payload = _valid_payload()
+    payload["runtime_probe_results"][1]["passed"] = True
+    path = tmp_path / "valdrics-disposition.json"
+    _write(path, payload)
+
+    with pytest.raises(ValueError, match="planned_refactor must reference at least one failing"):
         verify_disposition_register(
             register_path=path,
             max_artifact_age_days=45.0,

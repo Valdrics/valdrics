@@ -42,12 +42,12 @@ def _feature_evidence_for_file(*, token: str, raw: str) -> bool:
 
 def _feature_runtime_gate_for_file(*, token: str, raw: str) -> bool:
     patterns = (
-        rf"requires_feature\([^\n]*{re.escape(token)}",
-        rf"is_feature_enabled\([^\n]*{re.escape(token)}",
+        rf"requires_feature\([^)]*{re.escape(token)}",
+        rf"is_feature_enabled\([^)]*{re.escape(token)}",
         rf"require_feature_or_403\([^)]*{re.escape(token)}",
         rf"require_features_or_403\([^)]*{re.escape(token)}",
     )
-    return any(re.search(pattern, raw, flags=re.DOTALL) for pattern in patterns)
+    return any(re.search(pattern, raw) for pattern in patterns)
 
 
 def collect_enforceability(*, repo_root: Path) -> dict[FeatureFlag, EnforceabilityEvidence]:

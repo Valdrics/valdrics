@@ -11,7 +11,9 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.remediation import RemediationRequest, RemediationStatus
+from app.models.optimization import FindingStatus
 from app.modules.governance.domain.security.remediation_policy import PolicyDecision, RemediationPolicyEngine
+from app.modules.optimization.domain.findings import validate_request_finding_binding
 from app.modules.optimization.domain.remediation_execute_helpers import (
     apply_execution_result,
     build_remediation_context,
@@ -27,6 +29,7 @@ from app.shared.core.exceptions import (
     ExternalAPIError,
     KillSwitchTriggeredError,
     ResourceNotFoundError,
+    ValdricsException,
 )
 from app.shared.core.ops_metrics import REMEDIATION_DURATION_SECONDS
 from app.shared.core.pricing import PricingTier
@@ -52,6 +55,7 @@ REMEDIATION_ACTION_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
 REMEDIATION_EXECUTION_RECOVERABLE_EXCEPTIONS: tuple[type[BaseException], ...] = (
     ExternalAPIError,
     KillSwitchTriggeredError,
+    ValdricsException,
     *_REMEDIATION_COMMON_RECOVERABLE_EXCEPTIONS,
 )
 
@@ -95,23 +99,30 @@ async def execute_remediation_request(
     if not provider:
         raise ValueError("Invalid or missing provider on remediation request")
     actor_id = str(getattr(request, "reviewed_by_user_id", None) or SYSTEM_USER_ID)
-
-    action = coerce_remediation_action(
-        request,
-        recoverable_errors=REMEDIATION_ACTION_PARSE_RECOVERABLE_EXCEPTIONS,
-    )
-    action_value = action.value
-
-    savings_value = normalize_estimated_savings(
-        getattr(request, "estimated_monthly_savings", Decimal("0"))
-    )
+    finding_id = str(getattr(request, "finding_id", None) or "")
 
     audit_logger = remediation_module.AuditLogger(
         db=service.db, tenant_id=str(tenant_id)
     )
     grace_period_bypassed = False
+    action_value = str(getattr(getattr(request, "action", None), "value", "") or "")
+    savings_value = normalize_estimated_savings(
+        getattr(request, "estimated_monthly_savings", Decimal("0"))
+    )
+    bound_finding = None
 
     try:
+        bound_finding = await validate_request_finding_binding(
+            service,
+            tenant_id=tenant_id,
+            request=request,
+        )
+
+        action = coerce_remediation_action(
+            request,
+            recoverable_errors=REMEDIATION_ACTION_PARSE_RECOVERABLE_EXCEPTIONS,
+        )
+        action_value = action.value
         safety = remediation_module.SafetyGuardrailService(service.db)
         await safety.check_all_guards(tenant_id, savings_value)
 
@@ -153,6 +164,7 @@ async def execute_remediation_request(
             "request_id": str(request_id),
             "action": action_value,
             "stage": "pre_execution",
+            "finding_id": finding_id or None,
             "tier": tier_value,
             "policy": policy_evaluation.to_dict(),
             "policy_context_source": (
@@ -227,6 +239,7 @@ async def execute_remediation_request(
                 "action": action_value,
                 "triggered_by": "background_worker",
                 "grace_period_bypassed": grace_period_bypassed,
+                "finding_id": finding_id or None,
             },
         )
 
@@ -253,6 +266,9 @@ async def execute_remediation_request(
         execution_result = await strategy.execute(resource_id, context)
 
         apply_execution_result(request=request, execution_result=execution_result)
+        if request.status == RemediationStatus.COMPLETED and bound_finding is not None:
+            bound_finding.status = FindingStatus.RESOLVED
+            bound_finding.resolved_at = request.executed_at or datetime.now(timezone.utc)
 
         logger.info(
             "remediation_executed",
@@ -274,6 +290,7 @@ async def execute_remediation_request(
                 "execution_status": execution_result.status.value,
                 "backup_id": request.backup_resource_id,
                 "savings": float(savings_value),
+                "finding_id": finding_id or None,
             },
         )
 
@@ -293,7 +310,11 @@ async def execute_remediation_request(
             resource_type=resource_type,
             success=False,
             error_message=str(exc),
-            details={"request_id": str(request_id), "action": action_value},
+            details={
+                "request_id": str(request_id),
+                "action": action_value,
+                "finding_id": finding_id or None,
+            },
         )
 
         logger.error(

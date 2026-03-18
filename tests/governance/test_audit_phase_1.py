@@ -38,10 +38,8 @@ async def test_csrf_middleware_behavior() -> None:
         response = await ac.post(
             "/api/v1/zombies/request",
             json={
-                "resource_id": "test",
-                "resource_type": "instance",
+                "finding_id": "00000000-0000-0000-0000-000000000001",
                 "action": "delete_volume",
-                "estimated_savings": 10,
             },
         )
         # Expect 401 (no auth) - CSRF is checked after auth in FastAPI

@@ -54,6 +54,8 @@
 				href={toAppPath('/')}
 				class="public-brand flex items-center gap-2"
 				aria-label="Valdrics home"
+				data-sveltekit-preload-data="hover"
+				data-sveltekit-preload-code="hover"
 			>
 				<CloudLogo provider="valdrics" size={40} emphasizeMark={true} />
 				<img
@@ -107,6 +109,8 @@
 											href={toAppPath(resourceLink.href)}
 											role="menuitem"
 											class="public-nav-dropdown-item"
+											data-sveltekit-preload-data="hover"
+											data-sveltekit-preload-code="hover"
 											onclick={closePublicResourcesMenu}
 										>
 											{resourceLink.label}
@@ -116,20 +120,44 @@
 							{/if}
 						</div>
 					{:else}
-						<a href={toAppPath(link.href)} class="public-nav-link">{link.label}</a>
+						<a
+							href={toAppPath(link.href)}
+							class="public-nav-link"
+							data-sveltekit-preload-data="hover"
+							data-sveltekit-preload-code="hover"
+						>
+							{link.label}
+						</a>
 					{/if}
 				{/each}
 			</div>
 
 			<div class="public-nav-secondary items-center gap-2">
-				<a href={toAppPath('/enterprise')} class="btn btn-secondary text-sm px-4 py-2">
+				<a
+					href={toAppPath('/enterprise')}
+					class="btn btn-secondary text-sm px-4 py-2"
+					data-sveltekit-preload-data="hover"
+					data-sveltekit-preload-code="hover"
+				>
 					Enterprise Path
 				</a>
-				<a href={toAppPath('/auth/login')} class="btn btn-primary text-sm px-4 py-2">Start Free</a>
+				<a
+					href={toAppPath('/auth/login')}
+					class="btn btn-primary text-sm px-4 py-2"
+					data-sveltekit-preload-data="hover"
+					data-sveltekit-preload-code="hover"
+				>
+					Start Free
+				</a>
 			</div>
 
 			<div class="public-nav-mobile flex items-center gap-2">
-				<a href={toAppPath('/auth/login')} class="btn btn-primary public-nav-mobile-cta">
+				<a
+					href={toAppPath('/auth/login')}
+					class="btn btn-primary public-nav-mobile-cta"
+					data-sveltekit-preload-data="hover"
+					data-sveltekit-preload-code="hover"
+				>
 					Start Free
 				</a>
 				<button
@@ -206,6 +234,8 @@
 						<a
 							href={toAppPath('/enterprise')}
 							class="btn btn-primary justify-center mb-1 w-full"
+							data-sveltekit-preload-data="hover"
+							data-sveltekit-preload-code="hover"
 							onclick={closePublicMenu}
 						>
 							Enterprise Path
@@ -213,6 +243,8 @@
 						<a
 							href={toAppPath('/auth/login')}
 							class="btn btn-secondary justify-center mb-2 w-full"
+							data-sveltekit-preload-data="hover"
+							data-sveltekit-preload-code="hover"
 							onclick={closePublicMenu}
 						>
 							Start Free
@@ -221,6 +253,8 @@
 							<a
 								href={toAppPath(link.href)}
 								class="py-3 min-h-11 flex items-center hover:text-ink-100"
+								data-sveltekit-preload-data="hover"
+								data-sveltekit-preload-code="hover"
 								onclick={closePublicMenu}
 							>
 								{link.label}
@@ -259,7 +293,14 @@
 								{link.label}
 							</a>
 						{:else}
-							<a href={toAppPath(link.href)} class="public-footer-link">{link.label}</a>
+							<a
+								href={toAppPath(link.href)}
+								class="public-footer-link"
+								data-sveltekit-preload-data="hover"
+								data-sveltekit-preload-code="hover"
+							>
+								{link.label}
+							</a>
 						{/if}
 					{/each}
 				</nav>

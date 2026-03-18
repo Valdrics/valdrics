@@ -8,7 +8,11 @@
 	import { clientLogger } from '$lib/logging/client';
 	import { filenameFromContentDispositionHeader } from '$lib/utils';
 	import SavingsPageViewContent from './SavingsPageViewContent.svelte';
-	import type { SavingsProofDrilldownResponse, SavingsProofResponse } from './savingsTypes';
+	import type {
+		RealizedSavingsEvent,
+		SavingsProofDrilldownResponse,
+		SavingsProofResponse
+	} from './savingsTypes';
 
 	let { data } = $props();
 
@@ -21,10 +25,21 @@
 
 	let report = $state<SavingsProofResponse | null>(null);
 	let drilldown = $state<SavingsProofDrilldownResponse | null>(null);
-	let drilldownDimension = $state<'strategy_type' | 'remediation_action'>('strategy_type');
+	let realizedEvents = $state<RealizedSavingsEvent[]>([]);
+	let drilldownDimension = $state<'strategy_type' | 'remediation_action' | 'finding_category'>(
+		'strategy_type'
+	);
 	let provider = $state<string>('');
 	let datePreset = $state('30d');
 	let dateRange = $state({ startDate: '', endDate: '' });
+
+	function buildSavingsParams(): SvelteURLSearchParams {
+		const params = new SvelteURLSearchParams();
+		if (dateRange.startDate) params.set('start_date', dateRange.startDate);
+		if (dateRange.endDate) params.set('end_date', dateRange.endDate);
+		if (provider) params.set('provider', provider);
+		return params;
+	}
 
 	function isProPlus(tierValue: string | null | undefined): boolean {
 		return ['pro', 'enterprise'].includes((tierValue ?? '').toLowerCase());
@@ -65,12 +80,10 @@
 		error = '';
 		success = '';
 		drilldown = null;
+		realizedEvents = [];
 		try {
 			const headers = getHeaders();
-			const params = new SvelteURLSearchParams();
-			if (dateRange.startDate) params.set('start_date', dateRange.startDate);
-			if (dateRange.endDate) params.set('end_date', dateRange.endDate);
-			if (provider) params.set('provider', provider);
+			const params = buildSavingsParams();
 			params.set('response_format', 'json');
 
 			const res = await getWithTimeout(edgeApiPath(`/savings/proof?${params.toString()}`), headers);
@@ -81,7 +94,7 @@
 				);
 			}
 			report = (await res.json()) as SavingsProofResponse;
-			void loadDrilldown();
+			await Promise.all([loadDrilldown(), loadRealizedEvents()]);
 		} catch (e) {
 			clientLogger.error('Failed to load savings proof:', e);
 			error =
@@ -100,10 +113,7 @@
 		error = '';
 		try {
 			const headers = getHeaders();
-			const params = new SvelteURLSearchParams();
-			if (dateRange.startDate) params.set('start_date', dateRange.startDate);
-			if (dateRange.endDate) params.set('end_date', dateRange.endDate);
-			if (provider) params.set('provider', provider);
+			const params = buildSavingsParams();
 			params.set('dimension', drilldownDimension);
 			params.set('response_format', 'json');
 
@@ -121,6 +131,36 @@
 			error =
 				e instanceof TimeoutError
 					? 'Savings drilldown request timed out. Try again.'
+					: (e as Error).message;
+		}
+	}
+
+	async function loadRealizedEvents() {
+		if (!data.user || !data.session?.access_token) return;
+		if (!isProPlus(data.subscription?.tier)) return;
+
+		try {
+			const headers = getHeaders();
+			const params = buildSavingsParams();
+			params.set('response_format', 'json');
+			params.set('limit', '25');
+			const res = await getWithTimeout(
+				edgeApiPath(`/savings/realized/events?${params.toString()}`),
+				headers
+			);
+			if (!res.ok) {
+				const payload = await res.json().catch(() => ({}));
+				throw new Error(
+					payload.detail || payload.message || 'Failed to load realized savings evidence.'
+				);
+			}
+			realizedEvents = (await res.json()) as RealizedSavingsEvent[];
+		} catch (e) {
+			clientLogger.error('Failed to load realized savings evidence:', e);
+			realizedEvents = [];
+			error =
+				e instanceof TimeoutError
+					? 'Realized savings evidence request timed out. Try again.'
 					: (e as Error).message;
 		}
 	}
@@ -179,6 +219,7 @@
 	{success}
 	{report}
 	{drilldown}
+	{realizedEvents}
 	bind:drilldownDimension
 	bind:provider
 	bind:datePreset

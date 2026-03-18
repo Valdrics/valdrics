@@ -55,6 +55,15 @@ class RealizedSavingsEvent(Base):
         nullable=False,
         index=True,
     )
+    finding_id: Mapped[Optional[UUID]] = mapped_column(
+        PG_UUID(),
+        ForeignKey("optimization_findings.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    finding_category: Mapped[Optional[str]] = mapped_column(
+        String(length=100), nullable=True, index=True
+    )
 
     provider: Mapped[str] = mapped_column(String(length=20), nullable=False, index=True)
     account_id: Mapped[Optional[UUID]] = mapped_column(

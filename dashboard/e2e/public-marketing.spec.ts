@@ -79,6 +79,60 @@ async function openMobileMenu(page: Parameters<typeof test>[0]['page']) {
 }
 
 test.describe('Public marketing smoke (desktop)', () => {
+	test('emits canonical and robots metadata for public and auth routes', async ({ page }) => {
+		await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${BASE_URL}/`);
+		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow');
+
+		await page.goto(`${BASE_URL}/pricing`, { waitUntil: 'domcontentloaded' });
+		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+			'href',
+			`${BASE_URL}/pricing`
+		);
+		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow');
+
+		await page.goto(`${BASE_URL}/auth/login`, { waitUntil: 'domcontentloaded' });
+		await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+			'content',
+			'noindex,nofollow'
+		);
+		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+			'href',
+			`${BASE_URL}/auth/login`
+		);
+
+		for (const routeCase of [
+			{
+				path: '/status',
+				title: /System Status \| Valdrics/i,
+				description: /current service status for valdrics core platform dependencies/i
+			},
+			{
+				path: '/privacy',
+				title: /Privacy Policy \| Valdrics/i,
+				description: /privacy policy covering processing scope, retention, security controls/i
+			},
+			{
+				path: '/terms',
+				title: /Terms of Service \| Valdrics/i,
+				description: /terms of service covering account responsibilities, billing, acceptable use/i
+			}
+		]) {
+			await page.goto(`${BASE_URL}${routeCase.path}`, { waitUntil: 'domcontentloaded' });
+			await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
+				'href',
+				`${BASE_URL}${routeCase.path}`
+			);
+			await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow');
+			await expect(page).toHaveTitle(routeCase.title);
+			await expect(page.locator('meta[name="description"]')).toHaveAttribute(
+				'content',
+				routeCase.description
+			);
+			await expect(page.locator('script[type="application/ld+json"]').first()).toBeAttached();
+		}
+	});
+
 	test('covers landing, pricing, docs, api docs, and status navigation', async ({
 		page
 	}, testInfo) => {

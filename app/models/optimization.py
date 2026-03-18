@@ -12,6 +12,9 @@ from sqlalchemy import (
     ForeignKey,
     DateTime,
     Uuid as PG_UUID,
+    Enum as SQLEnum,
+    Index,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -44,6 +47,15 @@ class StrategyType(str, Enum):
     RIGHTSIZING = "rightsizing"
 
 
+class FindingSource(str, Enum):
+    ZOMBIE_SCAN = "zombie_scan"
+
+
+class FindingStatus(str, Enum):
+    OPEN = "open"
+    RESOLVED = "resolved"
+
+
 class OptimizationStrategy(Base):
     """
     Configuration for an optimization strategy available to a tenant.
@@ -65,6 +77,95 @@ class OptimizationStrategy(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class OptimizationFinding(Base):
+    """
+    Durable actionable finding generated from tenant optimization scans.
+
+    The record tracks the latest observed state for a stable resource/category
+    fingerprint while preserving the immutable snapshot later copied onto
+    remediation requests.
+    """
+
+    __tablename__ = "optimization_findings"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "fingerprint",
+            name="uix_optimization_findings_tenant_fingerprint",
+        ),
+        Index(
+            "ix_optimization_findings_tenant_status_last_detected",
+            "tenant_id",
+            "status",
+            "last_detected_at",
+        ),
+        Index(
+            "ix_optimization_findings_tenant_connection_region",
+            "tenant_id",
+            "connection_id",
+            "region",
+        ),
+    )
+
+    id: Mapped[UUID] = mapped_column(PG_UUID(), primary_key=True, default=uuid4)
+    tenant_id: Mapped[UUID] = mapped_column(
+        PG_UUID(),
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    source: Mapped[FindingSource] = mapped_column(
+        SQLEnum(FindingSource),
+        nullable=False,
+        default=FindingSource.ZOMBIE_SCAN,
+        index=True,
+    )
+    status: Mapped[FindingStatus] = mapped_column(
+        SQLEnum(FindingStatus),
+        nullable=False,
+        default=FindingStatus.OPEN,
+        index=True,
+    )
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    category: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    connection_id: Mapped[UUID] = mapped_column(PG_UUID(), nullable=False, index=True)
+    connection_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    resource_id: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    resource_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    region: Mapped[str] = mapped_column(String(64), nullable=False, default="global")
+    estimated_monthly_savings: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(12, 2), nullable=True
+    )
+    confidence_score: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(4, 3), nullable=True
+    )
+    explainability_notes: Mapped[Optional[str]] = mapped_column(
+        String(2000), nullable=True
+    )
+    requires_manual_review: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    automated_action_allowed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    decision_gate: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    payload: Mapped[Dict[str, Any]] = mapped_column(
+        JSON().with_variant(JSONB, "postgresql"), default=dict
+    )
+    first_detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    last_detected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
 

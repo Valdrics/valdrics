@@ -2,8 +2,10 @@ from typing import Annotated, Dict, Any, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import NO_VALUE
 import structlog
 
 from app.shared.core.auth import CurrentUser, requires_role, require_tenant_access
@@ -57,13 +59,93 @@ _load_remediation_request_for_authorization = (
 _required_approval_permission = _required_approval_permission_impl
 
 
+def _request_finding_status(request_row: RemediationRequest) -> str | None:
+    finding = _request_loaded_finding(request_row)
+    if finding is not None:
+        return getattr(getattr(finding, "status", None), "value", None)
+    snapshot = getattr(request_row, "finding_snapshot", None)
+    if isinstance(snapshot, dict):
+        value = str(snapshot.get("status") or "").strip()
+        return value or None
+    return None
+
+
+def _request_finding_category(request_row: RemediationRequest) -> str | None:
+    finding = _request_loaded_finding(request_row)
+    if finding is not None:
+        value = str(getattr(finding, "category", "") or "").strip()
+        return value or None
+    snapshot = getattr(request_row, "finding_snapshot", None)
+    if isinstance(snapshot, dict):
+        value = str(snapshot.get("category") or "").strip()
+        return value or None
+    return None
+
+
+def _request_loaded_finding(request_row: RemediationRequest) -> Any | None:
+    state = sa_inspect(request_row)
+    attr_state = state.attrs.finding
+    loaded_value = attr_state.loaded_value
+    if loaded_value is NO_VALUE:
+        return None
+    return loaded_value
+
+
+def _serialize_request_row(
+    request_row: RemediationRequest,
+    *,
+    default_region: str,
+    include_execution_fields: bool = False,
+) -> dict[str, Any]:
+    created_at = request_row.created_at
+    payload: dict[str, Any] = {
+        "id": str(request_row.id),
+        "status": request_row.status.value,
+        "resource_id": request_row.resource_id,
+        "resource_type": request_row.resource_type,
+        "action": request_row.action.value,
+        "provider": normalize_provider(getattr(request_row, "provider", None))
+        or "unknown",
+        "region": getattr(request_row, "region", default_region),
+        "connection_id": str(request_row.connection_id)
+        if getattr(request_row, "connection_id", None)
+        else None,
+        "finding_id": str(request_row.finding_id)
+        if getattr(request_row, "finding_id", None)
+        else None,
+        "finding_status": _request_finding_status(request_row),
+        "finding_category": _request_finding_category(request_row),
+        "estimated_savings": float(request_row.estimated_monthly_savings or 0),
+        "created_at": created_at.isoformat() if created_at else None,
+    }
+    if include_execution_fields:
+        executed_at = getattr(request_row, "executed_at", None)
+        payload["executed_at"] = (
+            executed_at.isoformat() if executed_at is not None else None
+        )
+        payload["execution_error"] = getattr(request_row, "execution_error", None)
+    else:
+        scheduled_execution_at = request_row.scheduled_execution_at
+        payload["scheduled_execution_at"] = (
+            scheduled_execution_at.isoformat()
+            if scheduled_execution_at is not None
+            else None
+        )
+        payload["escalation_required"] = bool(
+            getattr(request_row, "escalation_required", False)
+        )
+        payload["escalation_reason"] = getattr(request_row, "escalation_reason", None)
+        payload["escalated_at"] = (
+            escalated_at.isoformat()
+            if (escalated_at := getattr(request_row, "escalated_at", None))
+            else None
+        )
+    return payload
+
+
 class RemediationRequestCreate(BaseModel):
-    resource_id: str
-    resource_type: str
+    finding_id: UUID
     action: str
-    provider: str
-    connection_id: Optional[UUID] = None
-    estimated_savings: float
     create_backup: bool = False
     backup_retention_days: int = 30
     backup_cost_estimate: float = 0
@@ -83,13 +165,8 @@ class PolicyPreviewResponse(BaseModel):
 
 
 class PolicyPreviewCreate(BaseModel):
-    resource_id: str
-    resource_type: str
+    finding_id: UUID
     action: str
-    provider: str
-    connection_id: Optional[UUID] = None
-    confidence_score: float | None = None
-    explainability_notes: str | None = None
     review_notes: str | None = None
     parameters: Optional[Dict[str, Any]] = None
 
@@ -175,20 +252,27 @@ async def create_remediation_request(
     action_enum = _parse_remediation_action(request.action)
 
     service = RemediationService(db=db, region=region_hint)
-    result = await service.create_request(
-        tenant_id=tenant_id,
-        user_id=user.id,
-        resource_id=request.resource_id,
-        resource_type=request.resource_type,
-        action=action_enum,
-        estimated_savings=request.estimated_savings,
-        create_backup=request.create_backup,
-        backup_retention_days=request.backup_retention_days,
-        backup_cost_estimate=request.backup_cost_estimate,
-        provider=request.provider,
-        connection_id=request.connection_id,
-        parameters=request.parameters,
-    )
+    try:
+        result = await service.create_request_from_finding(
+            tenant_id=tenant_id,
+            user_id=user.id,
+            finding_id=request.finding_id,
+            action=action_enum,
+            create_backup=request.create_backup,
+            backup_retention_days=request.backup_retention_days,
+            backup_cost_estimate=request.backup_cost_estimate,
+            parameters=request.parameters,
+        )
+    except ResourceNotFoundError:
+        raise
+    except ValdricsException:
+        raise
+    except ValueError as exc:
+        raise ValdricsException(
+            message=str(exc),
+            code="remediation_request_invalid",
+            status_code=400,
+        ) from exc
     return {"status": "pending", "request_id": str(result.id)}
 
 
@@ -214,32 +298,53 @@ async def list_pending_requests(
     return {
         "pending_count": len(pending),
         "requests": [
-            {
-                "id": str(r.id),
-                "status": r.status.value,
-                "resource_id": r.resource_id,
-                "resource_type": r.resource_type,
-                "action": r.action.value,
-                "provider": normalize_provider(getattr(r, "provider", None))
-                or "unknown",
-                "region": getattr(r, "region", region_hint),
-                "connection_id": str(r.connection_id)
-                if getattr(r, "connection_id", None)
-                else None,
-                "estimated_savings": float(r.estimated_monthly_savings or 0),
-                "scheduled_execution_at": (
-                    r.scheduled_execution_at.isoformat()
-                    if r.scheduled_execution_at is not None
-                    else None
-                ),
-                "escalation_required": bool(getattr(r, "escalation_required", False)),
-                "escalation_reason": getattr(r, "escalation_reason", None),
-                "escalated_at": escalated_at.isoformat()
-                if (escalated_at := getattr(r, "escalated_at", None))
-                else None,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-            for r in pending
+            _serialize_request_row(r, default_region=region_hint) for r in pending
+        ],
+    }
+
+
+@router.get("/history")
+async def list_remediation_history(
+    tenant_id: Annotated[UUID, Depends(require_tenant_access)],
+    user: Annotated[CurrentUser, Depends(requires_role("member"))],
+    db: AsyncSession = Depends(get_db),
+    region: str = Query(default=DEFAULT_REGION_HINT),
+    status: str = Query(
+        default="completed", pattern="^(completed|failed|rejected|cancelled|all)$"
+    ),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> Dict[str, Any]:
+    """List recent non-open remediation requests for an operator-facing history view."""
+    region_hint = _coerce_region_hint(region)
+    normalized_status = str(status or "completed").strip().lower()
+    page_limit = _coerce_query_int(limit, default=20, minimum=1)
+    page_offset = _coerce_query_int(offset, default=0, minimum=0)
+    service = RemediationService(db=db, region=region_hint)
+    try:
+        history = await service.list_history(
+            tenant_id,
+            status=normalized_status,
+            limit=page_limit,
+            offset=page_offset,
+        )
+    except ValueError as exc:
+        raise ValdricsException(
+            message=str(exc),
+            code="remediation_history_invalid_status",
+            status_code=400,
+        ) from exc
+
+    return {
+        "history_count": len(history),
+        "status": normalized_status,
+        "requests": [
+            _serialize_request_row(
+                request_row,
+                default_region=region_hint,
+                include_execution_fields=True,
+            )
+            for request_row in history
         ],
     }
 
@@ -326,19 +431,25 @@ async def preview_remediation_policy_payload(
     action_enum = _parse_remediation_action(payload.action)
 
     service = RemediationService(db=db, region=region_hint)
-    preview = await service.preview_policy_input(
-        tenant_id=tenant_id,
-        user_id=user.id,
-        resource_id=payload.resource_id,
-        resource_type=payload.resource_type,
-        action=action_enum,
-        provider=payload.provider,
-        connection_id=payload.connection_id,
-        confidence_score=payload.confidence_score,
-        explainability_notes=payload.explainability_notes,
-        review_notes=payload.review_notes,
-        parameters=payload.parameters,
-    )
+    try:
+        preview = await service.preview_policy_for_finding(
+            tenant_id=tenant_id,
+            user_id=user.id,
+            finding_id=payload.finding_id,
+            action=action_enum,
+            review_notes=payload.review_notes,
+            parameters=payload.parameters,
+        )
+    except ResourceNotFoundError:
+        raise
+    except ValdricsException:
+        raise
+    except ValueError as exc:
+        raise ValdricsException(
+            message=str(exc),
+            code="remediation_policy_preview_invalid",
+            status_code=400,
+        ) from exc
     return PolicyPreviewResponse(**preview)
 
 

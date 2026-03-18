@@ -27,14 +27,9 @@ class _FakeStatement:
     def __init__(self, model: object) -> None:
         self.model = model
         self.wheres: list[object] = []
-        self.orders: list[object] = []
 
     def where(self, condition: object) -> "_FakeStatement":
         self.wheres.append(condition)
-        return self
-
-    def order_by(self, *clauses: object) -> "_FakeStatement":
-        self.orders.extend(clauses)
         return self
 
 
@@ -145,71 +140,67 @@ async def test_resolve_connection_credentials_returns_fallback_when_model_missin
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("connection_id", "expected", "uses_ordering"),
-    [
-        (None, {"fallback": "cred"}, True),
-        ("conn-1", {}, False),
-    ],
-)
-async def test_resolve_connection_credentials_missing_connection_result_shape(
-    connection_id: str | None,
-    expected: dict[str, object],
-    uses_ordering: bool,
-) -> None:
+async def test_resolve_connection_credentials_requires_explicit_connection_binding() -> None:
     result, service, statements = await _invoke(
         provider="aws",
         connection=None,
-        connection_id=connection_id,
-        model=_make_model(status=True, last_verified_at=True),
+        connection_id=None,
+        model=_make_model(status=True),
     )
 
-    assert result == expected
+    assert result == {}
+    service.db.execute.assert_not_called()
+    service._scalar_one_or_none.assert_not_awaited()
+    assert statements == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_connection_credentials_scopes_exact_connection_lookup() -> None:
+    result, service, statements = await _invoke(
+        provider="aws",
+        connection=None,
+        connection_id="conn-1",
+        model=_make_model(status=True, last_verified_at=False),
+    )
+
+    assert result == {}
     service.db.execute.assert_awaited_once()
     service._scalar_one_or_none.assert_awaited_once_with("db-result")
     stmt = statements[0]
-    if uses_ordering:
-        assert ("eq", "status", "active") in stmt.wheres
-        assert ("desc", "last_verified_at") in stmt.orders
-        assert ("desc", "id") in stmt.orders
-    else:
-        assert ("eq", "id", "conn-1") in stmt.wheres
-        assert stmt.orders == []
+    assert ("eq", "tenant_id", "tenant-1") in stmt.wheres
+    assert ("eq", "id", "conn-1") in stmt.wheres
 
 
 @pytest.mark.asyncio
-async def test_resolve_connection_credentials_uses_is_active_branch_without_last_verified() -> None:
-    result, _service, statements = await _invoke(
+async def test_resolve_connection_credentials_returns_empty_for_inactive_exact_connection() -> None:
+    inactive_connection = SimpleNamespace(
+        id="aws-inactive",
+        role_arn="arn:aws:iam::1:role/test",
+        external_id="ext",
+        status="error",
+    )
+    result, _service, _statements = await _invoke(
         provider="aws",
-        connection=None,
-        model=_make_model(status=False, is_active=True, last_verified_at=False),
+        connection=inactive_connection,
+        connection_id="aws-inactive",
     )
 
-    assert result == {"fallback": "cred"}
-    stmt = statements[0]
-    assert ("is", "is_active", True) in stmt.wheres
-    assert stmt.orders == [("desc", "id")]
-
-
-@pytest.mark.asyncio
-async def test_resolve_connection_credentials_skips_status_filters_when_model_has_no_status_flags() -> None:
-    result, _service, statements = await _invoke(
-        provider="aws",
-        connection=None,
-        model=_make_model(status=False, is_active=False, last_verified_at=False),
-    )
-
-    assert result == {"fallback": "cred"}
-    stmt = statements[0]
-    assert ("eq", "status", "active") not in stmt.wheres
-    assert all(cond[:2] != ("is", "is_active") for cond in stmt.wheres if isinstance(cond, tuple))
-    assert stmt.orders == [("desc", "id")]
+    assert result == {}
 
 
 @pytest.mark.asyncio
 async def test_resolve_connection_credentials_aws_success_and_missing_fields() -> None:
-    ok_connection = SimpleNamespace(id="aws-1", role_arn="arn:aws:iam::1:role/test", external_id="ext")
-    result, _service, _statements = await _invoke(provider="aws", connection=ok_connection)
+    ok_connection = SimpleNamespace(
+        id="aws-1",
+        role_arn="arn:aws:iam::1:role/test",
+        external_id="ext",
+        status="active",
+    )
+    result, _service, _statements = await _invoke(
+        provider="aws",
+        connection=ok_connection,
+        connection_id="aws-1",
+    )
     assert result == {
         "role_arn": "arn:aws:iam::1:role/test",
         "external_id": "ext",
@@ -234,8 +225,13 @@ async def test_resolve_connection_credentials_azure_success_and_missing_fields()
         client_id="client",
         client_secret="secret",
         subscription_id="sub",
+        is_active=True,
     )
-    result, _service, _statements = await _invoke(provider="azure", connection=ok_connection)
+    result, _service, _statements = await _invoke(
+        provider="azure",
+        connection=ok_connection,
+        connection_id="az-1",
+    )
     assert result == {
         "tenant_id": "tenant",
         "client_id": "client",
@@ -265,8 +261,13 @@ async def test_resolve_connection_credentials_gcp_dict_payload_and_blank_string_
     dict_connection = SimpleNamespace(
         id="gcp-1",
         service_account_json={"type": "service_account", "project_id": "proj"},
+        is_active=True,
     )
-    result, _service, _statements = await _invoke(provider="gcp", connection=dict_connection)
+    result, _service, _statements = await _invoke(
+        provider="gcp",
+        connection=dict_connection,
+        connection_id="gcp-1",
+    )
     assert result == {
         "type": "service_account",
         "project_id": "proj",
@@ -274,9 +275,17 @@ async def test_resolve_connection_credentials_gcp_dict_payload_and_blank_string_
         "region": "us-test-1",
     }
 
-    blank_connection = SimpleNamespace(id="gcp-2", service_account_json="   ")
-    result_blank, _service, _statements = await _invoke(provider="gcp", connection=blank_connection)
-    assert result_blank == {"fallback": "cred"}
+    blank_connection = SimpleNamespace(
+        id="gcp-2",
+        service_account_json="   ",
+        is_active=True,
+    )
+    result_blank, _service, _statements = await _invoke(
+        provider="gcp",
+        connection=blank_connection,
+        connection_id="gcp-2",
+    )
+    assert result_blank == {}
 
 
 @pytest.mark.asyncio
@@ -284,27 +293,48 @@ async def test_resolve_connection_credentials_gcp_json_string_dict_and_nondict()
     json_dict_connection = SimpleNamespace(
         id="gcp-3",
         service_account_json=json.dumps({"client_email": "bot@example.com"}),
+        is_active=True,
     )
-    result, _service, _statements = await _invoke(provider="gcp", connection=json_dict_connection)
+    result, _service, _statements = await _invoke(
+        provider="gcp",
+        connection=json_dict_connection,
+        connection_id="gcp-3",
+    )
     assert result == {
         "client_email": "bot@example.com",
         "connection_id": "gcp-3",
         "region": "us-test-1",
     }
 
-    json_list_connection = SimpleNamespace(id="gcp-4", service_account_json='["not-a-dict"]')
-    result_list, _service, _statements = await _invoke(provider="gcp", connection=json_list_connection)
-    assert result_list == {"fallback": "cred"}
+    json_list_connection = SimpleNamespace(
+        id="gcp-4",
+        service_account_json='["not-a-dict"]',
+        is_active=True,
+    )
+    result_list, _service, _statements = await _invoke(
+        provider="gcp",
+        connection=json_list_connection,
+        connection_id="gcp-4",
+    )
+    assert result_list == {}
 
 
 @pytest.mark.asyncio
 async def test_resolve_connection_credentials_gcp_invalid_json_logs_warning() -> None:
-    bad_connection = SimpleNamespace(id="gcp-5", service_account_json="{bad-json")
+    bad_connection = SimpleNamespace(
+        id="gcp-5",
+        service_account_json="{bad-json",
+        is_active=True,
+    )
 
     with patch.object(module.logger, "warning") as warning:
-        result, _service, _statements = await _invoke(provider="gcp", connection=bad_connection)
+        result, _service, _statements = await _invoke(
+            provider="gcp",
+            connection=bad_connection,
+            connection_id="gcp-5",
+        )
 
-    assert result == {"fallback": "cred"}
+    assert result == {}
     warning.assert_called_once()
     assert warning.call_args.args[0] == "remediation_invalid_gcp_service_account_json"
 
@@ -331,12 +361,17 @@ async def test_resolve_connection_credentials_connector_providers(
         auth_method="api_key",
         api_key="key",
         api_secret="secret",
+        is_active=True,
         connector_config={"enabled": True} if provider != "license" else "not-a-dict",
         spend_feed=["a", "b"],
         license_feed=["lic-a"] if provider != "license" else {"unexpected": True},
     )
 
-    result, _service, _statements = await _invoke(provider=provider, connection=connection)
+    result, _service, _statements = await _invoke(
+        provider=provider,
+        connection=connection,
+        connection_id=f"{provider}-1",
+    )
 
     assert result["vendor"] == f"{provider}-vendor"
     assert result["auth_method"] == "api_key"
@@ -357,7 +392,7 @@ async def test_resolve_connection_credentials_connector_providers(
 
 
 @pytest.mark.asyncio
-async def test_resolve_connection_credentials_unknown_provider_returns_fallback_after_lookup() -> None:
+async def test_resolve_connection_credentials_unknown_provider_requires_binding() -> None:
     connection = SimpleNamespace(id="mystery-1")
     fallback = {"x": "y"}
     result, _service, _statements = await _invoke(
@@ -366,4 +401,4 @@ async def test_resolve_connection_credentials_unknown_provider_returns_fallback_
         connection=connection,
         fallback=fallback,
     )
-    assert result == fallback
+    assert result == {}

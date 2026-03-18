@@ -240,6 +240,7 @@ async def test_generate_iac_plan_provider_paths_and_bulk(
         bulk = await service.bulk_generate_iac_plan([req], uuid4())
         assert "Bulk IaC Remediation Plan" in bulk
         assert "Generated:" in bulk
+        assert "\n----------------------------------------\n# Valdrics GitOps Remediation Plan" in bulk
 
 
 @pytest.mark.asyncio
@@ -271,6 +272,7 @@ async def test_bulk_generate_iac_plan_resolves_tier_once(
         bulk = await service.bulk_generate_iac_plan([req1, req2], uuid4())
 
     assert "Bulk IaC Remediation Plan" in bulk
+    assert bulk.count("# Valdrics GitOps Remediation Plan") == 2
     mock_tier_lookup.assert_awaited_once()
 
 

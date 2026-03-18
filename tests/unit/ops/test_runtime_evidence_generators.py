@@ -17,6 +17,7 @@ from scripts.generate_key_rotation_drill_evidence import (
     main as generate_key_rotation_drill_evidence_main,
 )
 from scripts.generate_pkg_fin_policy_decisions import (
+    _build_payload as build_pkg_fin_policy_payload,
     main as generate_pkg_fin_policy_decisions_main,
 )
 from scripts.generate_pricing_benchmark_register import (
@@ -26,6 +27,7 @@ from scripts.generate_valdrics_disposition_register import (
     main as generate_valdrics_disposition_register_main,
 )
 from scripts.pkg_fin_policy_decisions_constants import REQUIRED_DECISION_BACKLOG_IDS
+from scripts.pkg_fin_policy_decisions_constants import REQUIRED_TIERS
 from scripts.verify_finance_telemetry_snapshot import verify_snapshot
 from scripts.verify_key_rotation_drill_evidence import verify_key_rotation_drill_evidence
 from scripts.verify_pkg_fin_policy_decisions import verify_evidence
@@ -93,6 +95,44 @@ def test_generate_pkg_fin_policy_decisions_emits_verifiable_artifact(
         for item in payload["decision_backlog"]["decision_items"]
     }
     assert decision_ids == set(REQUIRED_DECISION_BACKLOG_IDS)
+
+
+def test_generate_pkg_fin_policy_decisions_rejects_duplicate_tier_rows() -> None:
+    tiers = sorted(REQUIRED_TIERS)
+    telemetry_payload = {
+        "window": {
+            "start": "2026-01-01",
+            "end": "2026-01-31",
+            "label": "2026-01",
+        },
+        "pricing_reference": {
+            tier: {"annual_monthly_factor": 1.0}
+            for tier in tiers
+        },
+        "tier_revenue_inputs": [
+            {"tier": tier, "gross_mrr_usd": 1000.0}
+            for tier in tiers
+        ]
+        + [{"tier": tiers[0], "gross_mrr_usd": 1500.0}],
+        "tier_llm_usage": [
+            {"tier": tier, "total_cost_usd": 100.0}
+            for tier in tiers
+        ],
+        "tier_subscription_snapshot": [
+            {"tier": tier, "active_subscriptions": 10}
+            for tier in tiers
+        ],
+    }
+
+    try:
+        build_pkg_fin_policy_payload(
+            telemetry_payload=telemetry_payload,
+            months_observed=2,
+        )
+    except ValueError as exc:
+        assert "duplicate tier" in str(exc)
+    else:
+        raise AssertionError("expected duplicate tier rows to be rejected")
 
 
 def test_generate_finance_committee_assumptions_integrates_with_packet_generation(

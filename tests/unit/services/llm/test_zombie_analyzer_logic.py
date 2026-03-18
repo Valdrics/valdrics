@@ -162,6 +162,56 @@ async def test_analyze_usage_tracking(mock_llm, mock_db):
 
 
 @pytest.mark.asyncio
+async def test_analyze_rebinds_persisted_finding_metadata(mock_llm):
+    analyzer = ZombieAnalyzer(mock_llm)
+    detection_results = {
+        "idle_instances": [
+            {
+                "resource_id": "i-123",
+                "resource_type": "ec2_instance",
+                "provider": "aws",
+                "finding_id": "finding-123",
+                "finding_status": "open",
+                "connection_id": "conn-123",
+            }
+        ]
+    }
+    mock_response = MagicMock()
+    mock_response.content = json.dumps(
+        {
+            "summary": "Bound finding preserved",
+            "total_monthly_savings": "$15.00",
+            "resources": [
+                {
+                    "resource_id": "i-123",
+                    "resource_type": "ec2_instance",
+                    "provider": "aws",
+                    "explanation": "Idle",
+                    "confidence": "high",
+                    "confidence_score": 0.95,
+                    "confidence_reason": "No CPU activity",
+                    "recommended_action": "stop_instance",
+                    "monthly_cost": "$15.00",
+                    "risk_if_deleted": "low",
+                    "risk_explanation": "Can restart later",
+                }
+            ],
+            "general_recommendations": [],
+        }
+    )
+    with patch("langchain_core.prompts.ChatPromptTemplate.__or__") as mock_or:
+        mock_chain = AsyncMock()
+        mock_chain.ainvoke.return_value = mock_response
+        mock_or.return_value = mock_chain
+
+        result = await analyzer.analyze(detection_results)
+
+    assert result["resources"][0]["finding_id"] == "finding-123"
+    assert result["resources"][0]["finding_status"] == "open"
+    assert result["resources"][0]["connection_id"] == "conn-123"
+
+
+@pytest.mark.asyncio
 async def test_analyze_json_parse_error_fallback(mock_llm):
     """Test fallback behavior when LLM returns invalid JSON."""
     analyzer = ZombieAnalyzer(mock_llm)

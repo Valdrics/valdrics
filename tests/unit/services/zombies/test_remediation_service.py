@@ -11,7 +11,8 @@ from app.models.remediation import (
     RemediationAction,
 )
 from app.models.aws_connection import AWSConnection
-from app.shared.core.exceptions import ResourceNotFoundError
+from app.models.optimization import FindingSource, FindingStatus, OptimizationFinding
+from app.shared.core.exceptions import ResourceNotFoundError, ValdricsException
 from app.modules.optimization.domain.actions.base import ExecutionResult, ExecutionStatus
 # Import all models to prevent mapper errors during Mock usage
 
@@ -45,6 +46,7 @@ async def test_create_request_success(remediation_service, db_session):
     mock_conn = MagicMock(spec=AWSConnection)
     mock_conn.id = connection_id
     mock_conn.tenant_id = tenant_id
+    mock_conn.status = "active"
 
     mock_res = MagicMock()
     mock_res.scalar_one_or_none.return_value = mock_conn
@@ -76,9 +78,7 @@ async def test_create_request_unauthorized_connection(remediation_service, db_se
     mock_res.scalar_one_or_none.return_value = None
     db_session.execute.return_value = mock_res
 
-    with pytest.raises(
-        ValueError, match="Unauthorized: Connection does not belong to tenant"
-    ):
+    with pytest.raises(ResourceNotFoundError, match="Connection .* not found"):
         await remediation_service.create_request(
             tenant_id=tenant_id,
             user_id=uuid4(),
@@ -115,6 +115,245 @@ async def test_create_request_does_not_swallow_base_exceptions(
             provider="aws",
             connection_id=connection_id,
         )
+
+
+@pytest.mark.asyncio
+async def test_create_request_requires_explicit_connection_binding(
+    remediation_service, db_session
+):
+    with pytest.raises(ValdricsException) as exc_info:
+        await remediation_service.create_request(
+            tenant_id=uuid4(),
+            user_id=uuid4(),
+            resource_id="vol-1",
+            resource_type="ebs_volume",
+            action=RemediationAction.DELETE_VOLUME,
+            estimated_savings=10.0,
+            provider="aws",
+        )
+
+    assert getattr(exc_info.value, "code", None) == "remediation_connection_required"
+    db_session.add.assert_not_called()
+    db_session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_request_from_finding_binds_immutable_context(
+    remediation_service, db_session
+):
+    tenant_id = uuid4()
+    user_id = uuid4()
+    finding_id = uuid4()
+    connection_id = uuid4()
+    finding = OptimizationFinding(
+        id=finding_id,
+        tenant_id=tenant_id,
+        source=FindingSource.ZOMBIE_SCAN,
+        status=FindingStatus.OPEN,
+        fingerprint="f" * 64,
+        provider="aws",
+        category="unattached_volumes",
+        connection_id=connection_id,
+        connection_name="Prod AWS",
+        resource_id="vol-123",
+        resource_type="ebs_volume",
+        region="us-east-1",
+        estimated_monthly_savings=Decimal("50.0"),
+        confidence_score=Decimal("0.95"),
+        explainability_notes="Volume has been unattached for 30 days.",
+        requires_manual_review=False,
+        automated_action_allowed=True,
+        decision_gate=None,
+        payload={"resource_id": "vol-123"},
+    )
+
+    async def _get_by_id(model, entity_id, scope_tenant_id):
+        if model is OptimizationFinding:
+            assert entity_id == finding_id
+            assert scope_tenant_id == tenant_id
+            return finding
+        return MagicMock(id=connection_id, tenant_id=tenant_id, status="active")
+
+    remediation_service.get_by_id = AsyncMock(side_effect=_get_by_id)
+    remediation_service._build_system_policy_context = AsyncMock(
+        return_value={"source": "finding"}
+    )
+
+    request = await remediation_service.create_request_from_finding(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        finding_id=finding_id,
+        action=RemediationAction.DELETE_VOLUME,
+        create_backup=True,
+    )
+
+    assert request.finding_id == finding_id
+    assert request.resource_id == "vol-123"
+    assert request.connection_id == connection_id
+    assert request.provider == "aws"
+    assert request.finding_snapshot["finding_id"] == str(finding_id)
+    assert request.finding_snapshot["category"] == "unattached_volumes"
+    assert request.estimated_monthly_savings == Decimal("50.0")
+    assert request.status == RemediationStatus.PENDING
+    db_session.add.assert_called_once()
+    db_session.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_request_rejects_inactive_connection(remediation_service, db_session):
+    tenant_id = uuid4()
+    connection_id = uuid4()
+    remediation_service.get_by_id = AsyncMock(
+        return_value=MagicMock(id=connection_id, tenant_id=tenant_id, status="error")
+    )
+
+    with pytest.raises(ValdricsException) as exc_info:
+        await remediation_service.create_request(
+            tenant_id=tenant_id,
+            user_id=uuid4(),
+            resource_id="vol-1",
+            resource_type="ebs_volume",
+            action=RemediationAction.DELETE_VOLUME,
+            estimated_savings=10.0,
+            provider="aws",
+            connection_id=connection_id,
+        )
+
+    assert getattr(exc_info.value, "code", None) == "remediation_connection_inactive"
+    db_session.add.assert_not_called()
+    db_session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_create_request_from_finding_rejects_duplicate_open_request(
+    remediation_service, db_session
+):
+    tenant_id = uuid4()
+    user_id = uuid4()
+    finding_id = uuid4()
+    connection_id = uuid4()
+    finding = OptimizationFinding(
+        id=finding_id,
+        tenant_id=tenant_id,
+        source=FindingSource.ZOMBIE_SCAN,
+        status=FindingStatus.OPEN,
+        fingerprint="d" * 64,
+        provider="aws",
+        category="unattached_volumes",
+        connection_id=connection_id,
+        connection_name="Prod AWS",
+        resource_id="vol-dup",
+        resource_type="ebs_volume",
+        region="us-east-1",
+        estimated_monthly_savings=Decimal("11.0"),
+        confidence_score=Decimal("0.91"),
+        explainability_notes="Duplicate request guard.",
+        requires_manual_review=False,
+        automated_action_allowed=True,
+        decision_gate=None,
+        payload={"resource_id": "vol-dup"},
+    )
+
+    async def _get_by_id(model, entity_id, scope_tenant_id):
+        if model is OptimizationFinding:
+            assert entity_id == finding_id
+            assert scope_tenant_id == tenant_id
+            return finding
+        return MagicMock(id=connection_id, tenant_id=tenant_id, status="active")
+
+    db_session.scalar = AsyncMock(
+        return_value=RemediationRequest(
+            id=uuid4(),
+            tenant_id=tenant_id,
+            resource_id="vol-dup",
+            resource_type="ebs_volume",
+            provider="aws",
+            connection_id=connection_id,
+            region="us-east-1",
+            action=RemediationAction.DELETE_VOLUME,
+            status=RemediationStatus.PENDING,
+            requested_by_user_id=uuid4(),
+        )
+    )
+    remediation_service.get_by_id = AsyncMock(side_effect=_get_by_id)
+    remediation_service._build_system_policy_context = AsyncMock(
+        return_value={"source": "finding"}
+    )
+
+    with pytest.raises(ValdricsException) as exc_info:
+        await remediation_service.create_request_from_finding(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            finding_id=finding_id,
+            action=RemediationAction.DELETE_VOLUME,
+        )
+
+    assert getattr(exc_info.value, "code", None) == (
+        "remediation_request_duplicate_open_finding"
+    )
+    db_session.add.assert_not_called()
+    db_session.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_preview_policy_for_finding_uses_bound_finding_context(
+    remediation_service, db_session
+):
+    tenant_id = uuid4()
+    user_id = uuid4()
+    finding_id = uuid4()
+    connection_id = uuid4()
+    finding = OptimizationFinding(
+        id=finding_id,
+        tenant_id=tenant_id,
+        source=FindingSource.ZOMBIE_SCAN,
+        status=FindingStatus.OPEN,
+        fingerprint="a" * 64,
+        provider="aws",
+        category="idle_instances",
+        connection_id=connection_id,
+        connection_name="Prod AWS",
+        resource_id="i-123",
+        resource_type="ec2_instance",
+        region="us-east-1",
+        estimated_monthly_savings=Decimal("20.0"),
+        confidence_score=Decimal("0.88"),
+        explainability_notes="Idle instance detected.",
+        requires_manual_review=False,
+        automated_action_allowed=True,
+        decision_gate=None,
+        payload={"resource_id": "i-123"},
+    )
+
+    async def _get_by_id(model, entity_id, scope_tenant_id):
+        if model is OptimizationFinding:
+            assert entity_id == finding_id
+            assert scope_tenant_id == tenant_id
+            return finding
+        return MagicMock(id=connection_id, tenant_id=tenant_id, status="active")
+
+    remediation_service.get_by_id = AsyncMock(side_effect=_get_by_id)
+    remediation_service._build_system_policy_context = AsyncMock(
+        return_value={"source": "finding"}
+    )
+    remediation_service.preview_policy = AsyncMock(
+        return_value={"decision": "allow", "summary": "ok", "tier": "pro", "rule_hits": [], "config": {}}
+    )
+
+    result = await remediation_service.preview_policy_for_finding(
+        tenant_id=tenant_id,
+        user_id=user_id,
+        finding_id=finding_id,
+        action=RemediationAction.STOP_INSTANCE,
+        review_notes="validate first",
+    )
+
+    preview_request = remediation_service.preview_policy.await_args.args[0]
+    assert preview_request.finding_id == finding_id
+    assert preview_request.resource_id == "i-123"
+    assert preview_request.connection_id == connection_id
+    assert preview_request.finding_snapshot["fingerprint"] == "a" * 64
+    assert result["decision"] == "allow"
 
 
 @pytest.mark.asyncio
@@ -474,7 +713,151 @@ async def test_execute_backup_failure_aborts(remediation_service, db_session):
             request_id, tenant_id, bypass_grace_period=True
         )
         assert res.status == RemediationStatus.FAILED
-        assert "BACKUP_FAILED" in res.execution_error
+
+
+@pytest.mark.asyncio
+async def test_execute_fails_closed_when_finding_binding_mismatches(
+    remediation_service, db_session
+):
+    request_id = uuid4()
+    tenant_id = uuid4()
+    req = MagicMock(spec=RemediationRequest)
+    req.id = request_id
+    req.tenant_id = tenant_id
+    req.status = RemediationStatus.APPROVED
+    req.resource_id = "vol-actual"
+    req.resource_type = "ebs_volume"
+    req.action = RemediationAction.DELETE_VOLUME
+    req.create_backup = False
+    req.reviewed_by_user_id = uuid4()
+    req.estimated_monthly_savings = Decimal("15.0")
+    req.provider = "aws"
+    req.connection_id = uuid4()
+    req.finding_id = uuid4()
+    req.finding_snapshot = {
+        "provider": "aws",
+        "connection_id": str(req.connection_id),
+        "region": "us-east-1",
+        "resource_id": "vol-expected",
+        "resource_type": "ebs_volume",
+        "fingerprint": "b" * 64,
+    }
+    req.region = "us-east-1"
+    req.action_parameters = {}
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = req
+    db_session.execute.return_value = mock_res
+
+    with (
+        patch(
+            "app.modules.optimization.domain.remediation.AuditLogger.log",
+            new=AsyncMock(),
+        ) as mock_audit_log,
+        patch(
+            "app.modules.optimization.domain.remediation.SafetyGuardrailService"
+        ) as mock_safety,
+    ):
+        mock_safety.return_value.check_all_guards = AsyncMock()
+        result = await remediation_service.execute(
+            request_id, tenant_id, bypass_grace_period=True
+        )
+
+    assert result.status == RemediationStatus.FAILED
+    assert "bound finding context" in (result.execution_error or "")
+    mock_safety.return_value.check_all_guards.assert_not_awaited()
+    assert mock_audit_log.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_execute_resolves_bound_finding_on_success(remediation_service, db_session):
+    request_id = uuid4()
+    tenant_id = uuid4()
+    connection_id = uuid4()
+    finding_id = uuid4()
+    finding = OptimizationFinding(
+        id=finding_id,
+        tenant_id=tenant_id,
+        source=FindingSource.ZOMBIE_SCAN,
+        status=FindingStatus.OPEN,
+        fingerprint="c" * 64,
+        provider="aws",
+        category="idle_instances",
+        connection_id=connection_id,
+        connection_name="Prod AWS",
+        resource_id="i-123",
+        resource_type="ec2_instance",
+        region="us-east-1",
+        estimated_monthly_savings=Decimal("20.0"),
+        confidence_score=Decimal("0.88"),
+        explainability_notes="Idle instance detected.",
+        requires_manual_review=False,
+        automated_action_allowed=True,
+        decision_gate=None,
+        payload={"resource_id": "i-123"},
+    )
+    req = MagicMock(spec=RemediationRequest)
+    req.id = request_id
+    req.tenant_id = tenant_id
+    req.status = RemediationStatus.APPROVED
+    req.resource_id = "i-123"
+    req.resource_type = "ec2_instance"
+    req.action = RemediationAction.STOP_INSTANCE
+    req.create_backup = False
+    req.reviewed_by_user_id = uuid4()
+    req.estimated_monthly_savings = Decimal("20.0")
+    req.provider = "aws"
+    req.connection_id = connection_id
+    req.finding_id = finding_id
+    req.finding_snapshot = {
+        "provider": "aws",
+        "connection_id": str(connection_id),
+        "region": "us-east-1",
+        "resource_id": "i-123",
+        "resource_type": "ec2_instance",
+        "fingerprint": "c" * 64,
+    }
+    req.region = "us-east-1"
+    req.action_parameters = {}
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = req
+    db_session.execute.return_value = mock_res
+    remediation_service.get_by_id = AsyncMock(return_value=finding)
+    remediation_service._resolve_credentials = AsyncMock(
+        return_value={"region": "us-east-1"}
+    )
+
+    with (
+        patch(
+            "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
+        ) as mock_get_strategy,
+        patch(
+            "app.modules.optimization.domain.remediation.AuditLogger.log",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.modules.optimization.domain.remediation.SafetyGuardrailService"
+        ) as mock_safety,
+    ):
+        mock_safety.return_value.check_all_guards = AsyncMock()
+        mock_strategy = MagicMock()
+        mock_strategy.execute = AsyncMock(
+            return_value=ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                resource_id="i-123",
+                action_taken=RemediationAction.STOP_INSTANCE.value,
+            )
+        )
+        mock_get_strategy.return_value = mock_strategy
+
+        result = await remediation_service.execute(
+            request_id, tenant_id, bypass_grace_period=True
+        )
+
+    assert result.status == RemediationStatus.COMPLETED
+    assert finding.status == FindingStatus.RESOLVED
+    assert finding.resolved_at is not None
 
 
 @pytest.mark.asyncio

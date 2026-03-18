@@ -273,6 +273,23 @@
 
 <div class="min-h-screen bg-ink-950 text-ink-100">
 	<a href="#main" class="skip-link">Skip to content</a>
+	<noscript>
+		<div class="noscript-banner" data-noscript-banner>
+			<div class="noscript-banner__copy">
+				<strong>JavaScript is disabled.</strong>
+				<span>
+					Public pages remain readable, but sign-in, live telemetry, and dashboard actions require
+					JavaScript.
+				</span>
+			</div>
+			<nav class="noscript-banner__links" aria-label="No JavaScript fallback links">
+				<a href={toAppPath('/pricing')}>Pricing</a>
+				<a href={toAppPath('/resources')}>Resources</a>
+				<a href={toAppPath('/docs')}>Docs</a>
+				<a href={toAppPath('/status')}>Status</a>
+			</nav>
+		</div>
+	</noscript>
 	{#if data.user}
 		<AppAuthenticatedShell
 			user={data.user}

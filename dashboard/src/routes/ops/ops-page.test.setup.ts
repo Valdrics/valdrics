@@ -40,6 +40,7 @@ export function jsonResponse(payload: unknown, status = 200): Response {
 
 export function setupOpsGetMocks({
 	requests = [],
+	history = [],
 	closePackage,
 	policyPreview = {
 		decision: 'allow',
@@ -49,11 +50,13 @@ export function setupOpsGetMocks({
 	}
 }: {
 	requests?: Array<Record<string, unknown>>;
+	history?: Array<Record<string, unknown>>;
 	closePackage?: Record<string, unknown>;
 	policyPreview?: Record<string, unknown>;
 } = {}) {
 	getMock.mockImplementation(async (url: string) => {
 		if (url.includes('/zombies/pending')) return jsonResponse({ requests });
+		if (url.includes('/zombies/history')) return jsonResponse({ requests: history });
 		if (url.includes('/zombies/policy-preview/')) return jsonResponse(policyPreview);
 		if (url.includes('/jobs/status')) {
 			return jsonResponse({ pending: 0, running: 0, completed: 0, failed: 0, dead_letter: 0 });

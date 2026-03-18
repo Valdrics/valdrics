@@ -418,7 +418,10 @@ async def test_list_realized_savings_events_csv_sanitizes_formula_cells() -> Non
     )
 
     rows = list(csv.reader(csv_response.body.decode().splitlines()))
-    assert rows[1][1] == "'=AWS"
-    assert rows[1][3] == "Compute,Edge"
-    assert rows[1][5] == "'+post_action_delta"
-    assert rows[1][13] == "72.0"
+    header = rows[0]
+    values = rows[1]
+    row = dict(zip(header, values, strict=False))
+    assert row["provider"] == "'=AWS"
+    assert row["resource_id"] == "Compute,Edge"
+    assert row["method"] == "'+post_action_delta"
+    assert row["realized_monthly_savings_usd"] == "72.0"

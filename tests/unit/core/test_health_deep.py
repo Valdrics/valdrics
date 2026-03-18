@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 import pytest
 from types import SimpleNamespace
@@ -335,3 +336,69 @@ async def test_run_health_check_rejects_non_mapping_payload():
     assert result["status"] == "unhealthy"
     assert result["component"] == "cache"
     assert result["error"] == "Health check returned non-dict payload"
+
+
+@pytest.mark.asyncio
+async def test_run_health_check_times_out_with_component_fallback():
+    service = HealthService()
+
+    async def slow_check():
+        await asyncio.sleep(0.05)
+        return {"status": "healthy"}
+
+    with patch.object(service, "_health_timeout_seconds", return_value=0.01):
+        result = await service._run_health_check(
+            slow_check(),
+            component="external_services",
+        )
+
+    assert result["status"] == "degraded"
+    assert "timed out" in result["error"]
+    assert result["component"] == "external_services"
+
+
+@pytest.mark.asyncio
+async def test_comprehensive_health_check_disables_networked_checks_in_testing():
+    service = HealthService()
+
+    with (
+        patch.object(service, "_testing_mode", return_value=True),
+        patch.object(
+            service,
+            "_check_database",
+            return_value={"status": "up", "latency_ms": 1},
+        ),
+        patch.object(
+            service,
+            "_check_cache",
+            new=AsyncMock(side_effect=AssertionError("cache check should be skipped")),
+        ),
+        patch.object(
+            service,
+            "_check_external_services",
+            new=AsyncMock(
+                side_effect=AssertionError("external check should be skipped")
+            ),
+        ),
+        patch.object(
+            service,
+            "_check_circuit_breakers",
+            return_value={"status": "healthy"},
+        ),
+        patch.object(
+            service,
+            "_check_system_resources",
+            return_value={"status": "healthy"},
+        ),
+        patch.object(
+            service,
+            "_check_background_jobs",
+            return_value={"status": "healthy"},
+        ),
+    ):
+        result = await service.comprehensive_health_check()
+
+    assert result["status"] == "healthy"
+    assert result["checks"]["cache"]["status"] == "disabled"
+    assert result["checks"]["external_services"]["status"] == "disabled"
+    assert result["checks"]["external_services"]["services"]["aws_sts"]["status"] == "disabled"

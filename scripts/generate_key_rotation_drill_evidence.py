@@ -234,6 +234,7 @@ def _build_markdown(
     field_results: dict[str, bool],
     selector_results: dict[str, bool],
     _selector_logs: dict[str, str],
+    overall_passed: bool,
 ) -> str:
     now = datetime.now(timezone.utc).replace(microsecond=0)
     drill_date = now.date().isoformat()
@@ -271,7 +272,7 @@ def _build_markdown(
         f"- replay_protection_intact: {str(field_results['replay_protection_intact']).lower()}\n"
         f"- alert_pipeline_verified: {str(field_results['alert_pipeline_verified']).lower()}\n"
         f"- endpoint_replay_tamper_guard: {str(endpoint_guard_result).lower()}\n"
-        "- post_drill_status: PASS\n\n"
+        f"- post_drill_status: {'PASS' if overall_passed else 'FAIL'}\n\n"
         "## Executed Selector Summary\n\n"
         f"- total_selectors_run: {len(_all_drill_checks())}\n"
     )
@@ -284,16 +285,7 @@ def main(argv: list[str] | None = None) -> int:
         retries=int(args.selector_retries),
     )
     failed = [key for key, passed in field_results.items() if not passed]
-    if failed and not bool(args.allow_check_failures):
-        details = "\n".join(
-            f"{selector}: {selector_logs.get(selector, '')}"
-            for selector in sorted(selector_logs)
-        )
-        raise RuntimeError(
-            "key-rotation live checks failed for: "
-            + ", ".join(sorted(failed))
-            + f"\n{details}"
-        )
+    overall_passed = not failed
 
     output_path = Path(str(args.output))
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -302,9 +294,29 @@ def main(argv: list[str] | None = None) -> int:
             field_results=field_results,
             selector_results=selector_results,
             _selector_logs=selector_logs,
+            overall_passed=overall_passed,
         ),
         encoding="utf-8",
     )
+
+    if failed:
+        details = "\n".join(
+            f"{selector}: {selector_logs.get(selector, '')}"
+            for selector in sorted(selector_logs)
+        )
+        print(f"Generated key-rotation drill evidence: {output_path}")
+        if bool(args.allow_check_failures):
+            print(
+                "Key-rotation drill evidence captured failing selectors: "
+                + ", ".join(sorted(failed))
+            )
+            return 2
+        raise RuntimeError(
+            "key-rotation live checks failed for: "
+            + ", ".join(sorted(failed))
+            + f"\n{details}"
+        )
+
     verify_key_rotation_drill_evidence(
         drill_path=output_path,
         max_drill_age_days=float(args.max_drill_age_days),

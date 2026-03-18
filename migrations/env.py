@@ -33,7 +33,7 @@ from app.models.background_job import BackgroundJob  # noqa: F401 # pylint: disa
 from app.modules.governance.domain.security.audit_log import AuditLog, SystemAuditLog  # noqa: F401 # pylint: disable=unused-import
 from app.models.attribution import AttributionRule, CostAllocation  # noqa: F401 # pylint: disable=unused-import
 from app.models.anomaly_marker import AnomalyMarker  # noqa: F401 # pylint: disable=unused-import
-from app.models.optimization import OptimizationStrategy, StrategyRecommendation  # noqa: F401 # pylint: disable=unused-import
+from app.models.optimization import OptimizationFinding, OptimizationStrategy, StrategyRecommendation  # noqa: F401 # pylint: disable=unused-import
 from app.models.enforcement import (  # noqa: F401 # pylint: disable=unused-import
     EnforcementApprovalRequest,
     EnforcementBudgetAllocation,

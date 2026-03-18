@@ -10,6 +10,7 @@ from app.modules.optimization.domain.remediation import (
     RemediationAction,
     RemediationService,
 )
+from app.shared.core.exceptions import ValdricsException
 
 
 def _db_stub() -> MagicMock:
@@ -110,13 +111,23 @@ async def test_preview_policy_input_aws_uses_scoped_connection_region_when_hint_
 async def test_create_request_non_aws_forces_global_region() -> None:
     tenant_id = uuid4()
     user_id = uuid4()
+    connection_id = uuid4()
     db = _db_stub()
     service = RemediationService(db=db, region="us-east-1")
+    service.get_by_id = AsyncMock(  # type: ignore[method-assign]
+        return_value=SimpleNamespace(id=connection_id, is_active=True)
+    )
 
-    with patch.object(
-        service,
-        "_build_system_policy_context",
-        new=AsyncMock(return_value={}),
+    with (
+        patch(
+            "app.modules.optimization.domain.remediation.get_connection_model",
+            return_value=object(),
+        ),
+        patch.object(
+            service,
+            "_build_system_policy_context",
+            new=AsyncMock(return_value={}),
+        ),
     ):
         request = await service.create_request(
             tenant_id=tenant_id,
@@ -126,9 +137,30 @@ async def test_create_request_non_aws_forces_global_region() -> None:
             action=RemediationAction.STOP_INSTANCE,
             estimated_savings=7.5,
             provider="azure",
+            connection_id=connection_id,
         )
 
     assert request.region == "global"
+
+
+@pytest.mark.asyncio
+async def test_preview_policy_input_requires_explicit_connection_binding() -> None:
+    tenant_id = uuid4()
+    user_id = uuid4()
+    db = _db_stub()
+    service = RemediationService(db=db, region="global")
+
+    with pytest.raises(ValdricsException) as exc_info:
+        await service.preview_policy_input(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            resource_id="i-456",
+            resource_type="GPU Compute",
+            action=RemediationAction.TERMINATE_INSTANCE,
+            provider="aws",
+        )
+
+    assert getattr(exc_info.value, "code", None) == "remediation_connection_required"
 
 
 @pytest.mark.asyncio

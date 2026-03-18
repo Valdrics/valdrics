@@ -218,6 +218,109 @@ async def build_remediation_action_buckets(
     ]
 
 
+def _finding_category_from_snapshot(snapshot: object) -> str:
+    if isinstance(snapshot, dict):
+        value = str(snapshot.get("category") or "").strip().lower()
+        if value:
+            return value
+    return "unknown"
+
+
+async def build_finding_category_buckets(
+    *,
+    db: AsyncSession,
+    tenant_id: UUID,
+    normalized_provider: str | None,
+    window_start: datetime,
+    window_end: datetime,
+    ensure_bucket: Callable[[str], dict[str, Any]],
+    as_float: Callable[[Any], float],
+) -> list[str]:
+    pending_statuses = {
+        RemediationStatus.PENDING.value,
+        RemediationStatus.PENDING_APPROVAL.value,
+        RemediationStatus.APPROVED.value,
+        RemediationStatus.SCHEDULED.value,
+        RemediationStatus.EXECUTING.value,
+    }
+
+    pending_stmt = select(RemediationRequest).where(
+        RemediationRequest.tenant_id == tenant_id,
+        RemediationRequest.status.in_(pending_statuses),
+    )
+    if normalized_provider:
+        pending_stmt = pending_stmt.where(
+            RemediationRequest.provider == normalized_provider
+        )
+    pending_requests = list((await db.execute(pending_stmt)).scalars().all())
+    for request in pending_requests:
+        key = _finding_category_from_snapshot(getattr(request, "finding_snapshot", None))
+        bucket = ensure_bucket(key)
+        bucket["pending_remediations"] += 1
+        bucket["opportunity_monthly_usd"] += as_float(
+            getattr(request, "estimated_monthly_savings", None)
+        )
+
+    completed_at = func.coalesce(
+        RemediationRequest.executed_at,
+        RemediationRequest.updated_at,
+        RemediationRequest.created_at,
+    )
+    completed_stmt = select(RemediationRequest).where(
+        RemediationRequest.tenant_id == tenant_id,
+        RemediationRequest.status == RemediationStatus.COMPLETED.value,
+        completed_at >= window_start,
+        completed_at <= window_end,
+    )
+    if normalized_provider:
+        completed_stmt = completed_stmt.where(
+            RemediationRequest.provider == normalized_provider
+        )
+    completed_requests = list((await db.execute(completed_stmt)).scalars().all())
+
+    realized_events_by_request_id: dict[UUID, RealizedSavingsEvent] = {}
+    if completed_requests:
+        event_stmt = select(RealizedSavingsEvent).where(
+            RealizedSavingsEvent.tenant_id == tenant_id,
+            RealizedSavingsEvent.remediation_request_id.in_(
+                [request.id for request in completed_requests]
+            ),
+        )
+        if normalized_provider:
+            event_stmt = event_stmt.where(
+                RealizedSavingsEvent.provider == normalized_provider
+            )
+        realized_events = list((await db.execute(event_stmt)).scalars().all())
+        realized_events_by_request_id = {
+            event.remediation_request_id: event for event in realized_events
+        }
+
+    for request in completed_requests:
+        realized_event = realized_events_by_request_id.get(request.id)
+        key = (
+            str(realized_event.finding_category or "").strip().lower()
+            if realized_event is not None
+            else ""
+        )
+        if not key:
+            key = _finding_category_from_snapshot(
+                getattr(request, "finding_snapshot", None)
+            )
+        bucket = ensure_bucket(key or "unknown")
+        bucket["completed_remediations"] += 1
+        bucket["realized_monthly_usd"] += as_float(
+            realized_event.realized_monthly_savings_usd
+            if realized_event is not None
+            else getattr(request, "estimated_monthly_savings", None)
+        )
+
+    return [
+        "Finding category drilldown is remediation provenance scoped: it reflects pending/completed remediations and realized savings evidence, not open strategy recommendations.",
+        "Unknown is used when a remediation request or realized savings event does not carry finding category metadata.",
+        "Realized uses finance-grade ledger deltas where evidence exists; otherwise it falls back to estimated monthly savings.",
+    ]
+
+
 def sort_and_limit_buckets(
     buckets_by_key: dict[str, dict[str, Any]], *, top_limit: int
 ) -> tuple[list[tuple[str, dict[str, Any]]], bool]:

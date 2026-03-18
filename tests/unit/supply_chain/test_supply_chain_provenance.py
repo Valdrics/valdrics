@@ -94,3 +94,50 @@ def test_generate_provenance_manifest_is_json_serializable(tmp_path: Path) -> No
 
     encoded = json.dumps(manifest, sort_keys=True)
     assert "dependency_inputs" in encoded
+
+
+def test_generate_provenance_manifest_rejects_duplicate_dependency_inputs(
+    tmp_path: Path,
+) -> None:
+    _write(tmp_path / "pyproject.toml", "[project]\nname='x'\n")
+
+    with pytest.raises(ValueError, match="duplicate path"):
+        generate_provenance_manifest(
+            repo_root=tmp_path,
+            dependency_inputs=(Path("pyproject.toml"), Path("./pyproject.toml")),
+            sbom_dir=None,
+            env={},
+        )
+
+
+def test_generate_provenance_manifest_rejects_dependency_inputs_outside_repo_root(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    _write(tmp_path / "outside.txt", "top-secret\n")
+
+    with pytest.raises(ValueError, match="must stay within repo root"):
+        generate_provenance_manifest(
+            repo_root=repo_root,
+            dependency_inputs=(Path("../outside.txt"),),
+            sbom_dir=None,
+            env={},
+        )
+
+
+def test_generate_provenance_manifest_rejects_sbom_dir_outside_repo_root(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    _write(repo_root / "pyproject.toml", "[project]\nname='x'\n")
+    _write(tmp_path / "external-sbom/python.json", '{"bomFormat":"CycloneDX"}\n')
+
+    with pytest.raises(ValueError, match="sbom_dir must stay within repo root"):
+        generate_provenance_manifest(
+            repo_root=repo_root,
+            dependency_inputs=(Path("pyproject.toml"),),
+            sbom_dir=Path("../external-sbom"),
+            env={},
+        )

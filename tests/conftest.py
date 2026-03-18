@@ -11,6 +11,7 @@ Provides:
 
 pytest_plugins = ("tests.unit.shared.adapters.aws_cur_test_helpers",)
 
+import asyncio
 import os
 import sys
 from pathlib import Path
@@ -172,8 +173,8 @@ tenacity.retry = mock_retry
 # ============================================================================
 
 
-@pytest_asyncio.fixture
-async def async_engine(tmp_path_factory):
+@pytest.fixture
+def async_engine(tmp_path_factory):
     """Create async SQLite engine for testing using a temporary file."""
     from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -182,7 +183,7 @@ async def async_engine(tmp_path_factory):
 
     engine = create_async_engine(db_url, echo=False)
     yield engine
-    await engine.dispose()
+    asyncio.run(engine.dispose())
 
     for suffix in ("", "-journal", "-shm", "-wal"):
         Path(f"{db_path}{suffix}").unlink(missing_ok=True)
@@ -241,12 +242,58 @@ def client(app) -> Generator["TestClient", None, None]:
 @pytest_asyncio.fixture
 async def async_client(
     app,
-    db,
-    async_engine,
+    request,
 ) -> AsyncGenerator["AsyncClient", None]:
     """Async test client for FastAPI. Overrides get_db to share test session."""
     from httpx import AsyncClient, ASGITransport
     from app.shared.db.session import get_db, get_system_db
+
+    from contextlib import ExitStack
+
+    old_override = app.dependency_overrides.get(get_db)
+    old_system_override = app.dependency_overrides.get(get_system_db)
+
+    # Fast API/auth smoke tests do not need the full DB bootstrap path.
+    if "db" not in request.fixturenames:
+        from fastapi.testclient import TestClient
+
+        class _AsyncClientAdapter:
+            def __init__(self, client: TestClient, bound_app) -> None:
+                self._client = client
+                self.app = bound_app
+
+            async def get(self, *args, **kwargs):
+                return await asyncio.to_thread(self._client.get, *args, **kwargs)
+
+            async def post(self, *args, **kwargs):
+                return await asyncio.to_thread(self._client.post, *args, **kwargs)
+
+            async def delete(self, *args, **kwargs):
+                return await asyncio.to_thread(self._client.delete, *args, **kwargs)
+
+            async def options(self, *args, **kwargs):
+                return await asyncio.to_thread(self._client.options, *args, **kwargs)
+
+        mock_db = MagicMock()
+        app.dependency_overrides[get_db] = lambda: mock_db
+        app.dependency_overrides[get_system_db] = lambda: mock_db
+
+        with TestClient(app) as client:
+            yield _AsyncClientAdapter(client, app)
+
+        if old_override:
+            app.dependency_overrides[get_db] = old_override
+        else:
+            app.dependency_overrides.pop(get_db, None)
+
+        if old_system_override:
+            app.dependency_overrides[get_system_db] = old_system_override
+        else:
+            app.dependency_overrides.pop(get_system_db, None)
+        return
+
+    db = request.getfixturevalue("db")
+    async_engine = request.getfixturevalue("async_engine")
 
     # Create test global session maker
     from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
@@ -256,6 +303,7 @@ async def async_client(
         class_=AsyncSession,
         expire_on_commit=False,
     )
+    transport = ASGITransport(app=app)
 
     # Patch all modules that use the global async_session_maker directly
     # to ensure they use our test session maker connected to the test DB.
@@ -270,8 +318,6 @@ async def async_client(
         "app.main.async_session_maker",
     ]
 
-    from contextlib import ExitStack
-
     with ExitStack() as stack:
         for target in modules_to_patch:
             try:
@@ -280,13 +326,9 @@ async def async_client(
                 # Some modules might not be loaded yet or don't have it
                 continue
 
-        # Store old override if any
-        old_override = app.dependency_overrides.get(get_db)
-        old_system_override = app.dependency_overrides.get(get_system_db)
         app.dependency_overrides[get_db] = lambda: db
         app.dependency_overrides[get_system_db] = lambda: db
 
-        transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
             setattr(ac, "app", app)  # SEC: Attach app for dependency overrides in tests
             yield ac
@@ -303,14 +345,14 @@ async def async_client(
             app.dependency_overrides.pop(get_system_db, None)
 
 
-@pytest_asyncio.fixture
-async def ac(async_client):
+@pytest.fixture
+def ac(async_client):
     """Alias for async_client to match integration tests."""
     return async_client
 
 
-@pytest_asyncio.fixture
-async def db(db_session):
+@pytest.fixture
+def db(db_session):
     """Alias for db_session to match integration tests."""
     return db_session
 

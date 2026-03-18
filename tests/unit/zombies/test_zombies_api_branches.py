@@ -78,10 +78,8 @@ async def test_preview_remediation_policy_payload_invalid_action() -> None:
     )
 
     payload = zombies.PolicyPreviewCreate(
-        resource_id="i-gpu-123",
-        resource_type="GPU Compute",
+        finding_id=uuid4(),
         action="invalid_action",
-        provider="aws",
     )
 
     with pytest.raises(ValdricsException, match="Invalid action"):
@@ -96,7 +94,7 @@ async def test_preview_remediation_policy_payload_invalid_action() -> None:
 @pytest.mark.asyncio
 async def test_preview_remediation_policy_payload_success() -> None:
     tenant_id = uuid4()
-    connection_id = uuid4()
+    finding_id = uuid4()
     db = AsyncMock()
     user = CurrentUser(
         id=uuid4(),
@@ -107,13 +105,8 @@ async def test_preview_remediation_policy_payload_success() -> None:
     )
 
     payload = zombies.PolicyPreviewCreate(
-        resource_id="i-gpu-123",
-        resource_type="GPU Compute",
+        finding_id=finding_id,
         action="terminate_instance",
-        provider="aws",
-        connection_id=connection_id,
-        confidence_score=0.88,
-        explainability_notes="gpu node from dev experiment",
         review_notes="manual validation",
     )
 
@@ -121,7 +114,7 @@ async def test_preview_remediation_policy_payload_success() -> None:
         "app.modules.optimization.api.v1.zombies.RemediationService"
     ) as service_cls:
         service = service_cls.return_value
-        service.preview_policy_input = AsyncMock(
+        service.preview_policy_for_finding = AsyncMock(
             return_value={
                 "decision": "escalate",
                 "summary": "GPU-related remediation requires explicit GPU approval override.",
@@ -145,11 +138,38 @@ async def test_preview_remediation_policy_payload_success() -> None:
 
         assert response.decision == "escalate"
         assert response.tier == "pro"
-        service.preview_policy_input.assert_awaited_once()
-        assert (
-            service.preview_policy_input.await_args.kwargs["connection_id"]
-            == connection_id
-        )
+        service.preview_policy_for_finding.assert_awaited_once()
+        assert service.preview_policy_for_finding.await_args.kwargs["finding_id"] == finding_id
+
+
+@pytest.mark.asyncio
+async def test_list_remediation_history_translates_invalid_status() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    user = CurrentUser(
+        id=uuid4(),
+        email="member@example.com",
+        tenant_id=tenant_id,
+        role=UserRole.MEMBER,
+        tier=PricingTier.PRO,
+    )
+
+    with patch(
+        "app.modules.optimization.api.v1.zombies.RemediationService"
+    ) as service_cls:
+        service = service_cls.return_value
+        service.list_history = AsyncMock(side_effect=ValueError("bad status"))
+
+        with pytest.raises(ValdricsException) as exc_info:
+            await zombies.list_remediation_history(
+                tenant_id=tenant_id,
+                user=user,
+                db=db,
+                status="completed",
+            )
+
+    assert exc_info.value.code == "remediation_history_invalid_status"
+    assert exc_info.value.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -690,18 +710,15 @@ async def test_create_remediation_request_default_region_hint_is_global() -> Non
     created = MagicMock()
     created.id = uuid4()
     payload = zombies.RemediationRequestCreate(
-        resource_id="vm-123",
-        resource_type="VM Instance",
+        finding_id=uuid4(),
         action="stop_instance",
-        provider="azure",
-        estimated_savings=25.5,
     )
 
     with patch(
         "app.modules.optimization.api.v1.zombies.RemediationService"
     ) as service_cls:
         service = service_cls.return_value
-        service.create_request = AsyncMock(return_value=created)
+        service.create_request_from_finding = AsyncMock(return_value=created)
 
         result = await zombies.create_remediation_request(
             request=payload,
@@ -712,3 +729,73 @@ async def test_create_remediation_request_default_region_hint_is_global() -> Non
 
     service_cls.assert_called_once_with(db=db, region="global")
     assert result["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_create_remediation_request_normalizes_value_error_from_service() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    user = CurrentUser(
+        id=uuid4(),
+        email="admin@example.com",
+        tenant_id=tenant_id,
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+    payload = zombies.RemediationRequestCreate(
+        finding_id=uuid4(),
+        action="stop_instance",
+    )
+
+    with patch(
+        "app.modules.optimization.api.v1.zombies.RemediationService"
+    ) as service_cls:
+        service = service_cls.return_value
+        service.create_request_from_finding = AsyncMock(
+            side_effect=ValueError("invalid binding")
+        )
+
+        with pytest.raises(ValdricsException) as exc_info:
+            await zombies.create_remediation_request(
+                request=payload,
+                tenant_id=tenant_id,
+                user=user,
+                db=db,
+            )
+
+    assert exc_info.value.code == "remediation_request_invalid"
+
+
+@pytest.mark.asyncio
+async def test_preview_remediation_policy_payload_normalizes_value_error_from_service() -> None:
+    tenant_id = uuid4()
+    db = AsyncMock()
+    user = CurrentUser(
+        id=uuid4(),
+        email="admin@example.com",
+        tenant_id=tenant_id,
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+    payload = zombies.PolicyPreviewCreate(
+        finding_id=uuid4(),
+        action="terminate_instance",
+    )
+
+    with patch(
+        "app.modules.optimization.api.v1.zombies.RemediationService"
+    ) as service_cls:
+        service = service_cls.return_value
+        service.preview_policy_for_finding = AsyncMock(
+            side_effect=ValueError("invalid preview")
+        )
+
+        with pytest.raises(ValdricsException) as exc_info:
+            await zombies.preview_remediation_policy_payload(
+                payload=payload,
+                tenant_id=tenant_id,
+                user=user,
+                db=db,
+            )
+
+    assert exc_info.value.code == "remediation_policy_preview_invalid"

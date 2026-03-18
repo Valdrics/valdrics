@@ -1,8 +1,14 @@
 <script lang="ts">
-	import type { JobRecord, PendingRequest, StrategyRecommendation } from './opsTypes';
+	import type {
+		JobRecord,
+		PendingRequest,
+		RemediationHistoryItem,
+		StrategyRecommendation
+	} from './opsTypes';
 
 	let {
 		pendingRequests,
+		recentCompletions,
 		processingJobs = false,
 		jobs,
 		recommendations,
@@ -17,6 +23,7 @@
 		onApplyRecommendation
 	}: {
 		pendingRequests: PendingRequest[];
+		recentCompletions: RemediationHistoryItem[];
 		processingJobs?: boolean;
 		jobs: JobRecord[];
 		recommendations: StrategyRecommendation[];
@@ -77,6 +84,63 @@
 								>
 									Review
 								</button>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+		</div>
+	{/if}
+</div>
+
+<div class="card">
+	<div class="flex items-center justify-between mb-4">
+		<h2 class="text-lg font-semibold">Recent completions</h2>
+	</div>
+	{#if recentCompletions.length === 0}
+		<p class="text-ink-400 text-sm">No completed remediation history yet.</p>
+	{:else}
+		<div class="overflow-x-auto">
+			<table class="table">
+				<thead>
+					<tr>
+						<th>Resource</th>
+						<th>Action</th>
+						<th>Completed</th>
+						<th>Finding category</th>
+						<th>Finding status</th>
+						<th>Outcome</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each recentCompletions as req (req.id)}
+						<tr>
+							<td>
+								<div class="text-sm">{req.resource_type}</div>
+								<div class="text-xs text-ink-500 font-mono">{req.resource_id}</div>
+							</td>
+							<td class="capitalize">{req.action.replaceAll('_', ' ')}</td>
+							<td class="text-xs text-ink-500">{formatDate(req.executed_at || req.created_at)}</td>
+							<td class="text-xs font-mono">{req.finding_category || 'unknown'}</td>
+							<td>
+								{#if req.finding_status === 'resolved'}
+									<span class="badge badge-success text-xs">Resolved</span>
+								{:else}
+									<span class="text-xs text-ink-500 capitalize">
+										{(req.finding_status || 'unknown').replaceAll('_', ' ')}
+									</span>
+								{/if}
+							</td>
+							<td>
+								{#if req.status === 'completed'}
+									<span class="text-success-400 text-sm font-semibold">Completed</span>
+								{:else if req.execution_error}
+									<div class="text-xs text-danger-400">{req.execution_error}</div>
+								{:else}
+									<span class="text-xs text-ink-500 capitalize">
+										{req.status.replaceAll('_', ' ')}
+									</span>
+								{/if}
 							</td>
 						</tr>
 					{/each}

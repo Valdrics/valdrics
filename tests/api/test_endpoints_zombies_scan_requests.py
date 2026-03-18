@@ -1,9 +1,12 @@
 """Zombie API endpoint tests: scan, request creation, and pending listing flows."""
 
+from datetime import datetime, timezone
 import pytest
 from uuid import uuid4
 from unittest.mock import AsyncMock, MagicMock, patch
 from httpx import AsyncClient
+
+from app.models.remediation import RemediationStatus
 
 class TestZombieAPIScanAndRequests:
     """Tests for zombie scan and remediation request/list flows."""
@@ -142,11 +145,8 @@ class TestZombieAPIScanAndRequests:
     ):
         """Test successful remediation request creation."""
         request_data = {
-            "resource_id": "i-test123",
-            "resource_type": "ec2_instance",
+            "finding_id": str(uuid4()),
             "action": "stop_instance",
-            "provider": "aws",
-            "estimated_savings": 50.0,
         }
 
         # Mock authentication by overriding the app's dependency
@@ -175,7 +175,7 @@ class TestZombieAPIScanAndRequests:
             mock_service = mock_service_cls.return_value
             mock_result = MagicMock()
             mock_result.id = uuid4()
-            mock_service.create_request = AsyncMock(return_value=mock_result)
+            mock_service.create_request_from_finding = AsyncMock(return_value=mock_result)
 
             response = await ac.post("/api/v1/zombies/request", json=request_data)
 
@@ -195,11 +195,8 @@ class TestZombieAPIScanAndRequests:
     ):
         """Test remediation request creation with invalid action."""
         request_data = {
-            "resource_id": "i-test123",
-            "resource_type": "ec2_instance",
+            "finding_id": str(uuid4()),
             "action": "invalid_action",
-            "provider": "aws",
-            "estimated_savings": 50.0,
         }
 
         # Mock authentication by overriding the app's dependency
@@ -254,6 +251,11 @@ class TestZombieAPIScanAndRequests:
             "app.modules.optimization.api.v1.zombies.RemediationService"
         ) as mock_service_cls:
             mock_service = mock_service_cls.return_value
+            test_remediation_request.finding_id = uuid4()
+            test_remediation_request.finding_snapshot = {
+                "status": "open",
+                "category": "idle_instances",
+            }
             mock_service.list_pending = AsyncMock(return_value=[test_remediation_request])
 
             response = await ac.get("/api/v1/zombies/pending")
@@ -264,6 +266,8 @@ class TestZombieAPIScanAndRequests:
             assert len(data["requests"]) == 1
             assert data["requests"][0]["resource_id"] == "i-test123"
             assert data["requests"][0]["status"] == "pending"
+            assert data["requests"][0]["finding_status"] == "open"
+            assert data["requests"][0]["finding_category"] == "idle_instances"
 
         # Clean up overrides
         ac.app.dependency_overrides.pop(get_current_user, None)
@@ -326,3 +330,46 @@ class TestZombieAPIScanAndRequests:
         ac.app.dependency_overrides.pop(get_current_user, None)
         ac.app.dependency_overrides.pop(require_tenant_access, None)
 
+    @pytest.mark.asyncio
+    async def test_list_remediation_history_success(
+        self, ac: AsyncClient, test_tenant, mock_user, test_remediation_request
+    ):
+        """Test successful listing of completed remediation history."""
+        from app.shared.core.auth import get_current_user, require_tenant_access
+
+        async def mock_get_current_user():
+            return mock_user
+
+        async def mock_require_tenant_access():
+            return test_tenant.id
+
+        ac.app.dependency_overrides[get_current_user] = mock_get_current_user
+        ac.app.dependency_overrides[require_tenant_access] = mock_require_tenant_access
+
+        with patch(
+            "app.modules.optimization.api.v1.zombies.RemediationService"
+        ) as mock_service_cls:
+            mock_service = mock_service_cls.return_value
+            test_remediation_request.status = RemediationStatus.COMPLETED
+            test_remediation_request.executed_at = datetime.now(timezone.utc)
+            test_remediation_request.finding_id = uuid4()
+            test_remediation_request.finding_snapshot = {
+                "status": "resolved",
+                "category": "idle_instances",
+            }
+            mock_service.list_history = AsyncMock(return_value=[test_remediation_request])
+
+            response = await ac.get("/api/v1/zombies/history")
+
+            assert response.status_code == 200
+            data = response.json()
+            assert data["history_count"] == 1
+            assert data["status"] == "completed"
+            assert len(data["requests"]) == 1
+            assert data["requests"][0]["status"] == "completed"
+            assert data["requests"][0]["finding_status"] == "resolved"
+            assert data["requests"][0]["finding_category"] == "idle_instances"
+            assert data["requests"][0]["executed_at"] is not None
+
+        ac.app.dependency_overrides.pop(get_current_user, None)
+        ac.app.dependency_overrides.pop(require_tenant_access, None)

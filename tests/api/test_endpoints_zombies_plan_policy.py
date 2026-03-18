@@ -156,7 +156,7 @@ class TestZombieAPIPlanAndPolicyPreview:
             "app.modules.optimization.api.v1.zombies.RemediationService"
         ) as mock_service_cls:
             mock_service = mock_service_cls.return_value
-            mock_service.preview_policy_input = AsyncMock(return_value={
+            mock_service.preview_policy_for_finding = AsyncMock(return_value={
                 "decision": "escalate",
                 "summary": "GPU-related remediation requires explicit GPU approval override.",
                 "tier": "pro",
@@ -172,12 +172,8 @@ class TestZombieAPIPlanAndPolicyPreview:
             response = await ac.post(
                 "/api/v1/zombies/policy-preview",
                 json={
-                    "resource_id": "i-gpu-smoke",
-                    "resource_type": "GPU Compute",
+                    "finding_id": str(uuid4()),
                     "action": "terminate_instance",
-                    "provider": "aws",
-                    "confidence_score": 0.88,
-                    "explainability_notes": "gpu workload",
                 },
             )
             assert response.status_code == 200
@@ -210,10 +206,8 @@ class TestZombieAPIPlanAndPolicyPreview:
         response = await ac.post(
             "/api/v1/zombies/policy-preview",
             json={
-                "resource_id": "i-gpu-smoke",
-                "resource_type": "GPU Compute",
+                "finding_id": str(uuid4()),
                 "action": "invalid_action",
-                "provider": "aws",
             },
         )
         assert response.status_code == 400
@@ -223,5 +217,3 @@ class TestZombieAPIPlanAndPolicyPreview:
         ac.app.dependency_overrides.pop(get_current_user, None)
         ac.app.dependency_overrides.pop(require_tenant_access, None)
         ac.app.dependency_overrides.pop(FeatureFlag.POLICY_PREVIEW, None)
-
-

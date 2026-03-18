@@ -34,6 +34,43 @@ def _utc_now_iso() -> str:
     return now.isoformat().replace("+00:00", "Z")
 
 
+def _normalize_repo_relative_path(
+    repo_root: Path,
+    path: Path,
+    *,
+    field: str,
+) -> Path:
+    raw = Path(path)
+    if raw.is_absolute():
+        raise ValueError(f"{field} must be relative to repo root")
+
+    resolved = (repo_root / raw).resolve()
+    try:
+        return resolved.relative_to(repo_root)
+    except ValueError as exc:
+        raise ValueError(f"{field} must stay within repo root: {raw.as_posix()}") from exc
+
+
+def _normalize_dependency_inputs(
+    repo_root: Path,
+    dependency_inputs: Sequence[Path],
+) -> tuple[Path, ...]:
+    normalized_paths: list[Path] = []
+    seen_paths: set[str] = set()
+    for idx, dependency_input in enumerate(dependency_inputs):
+        normalized = _normalize_repo_relative_path(
+            repo_root,
+            Path(dependency_input),
+            field=f"dependency_inputs[{idx}]",
+        )
+        key = normalized.as_posix()
+        if key in seen_paths:
+            raise ValueError(f"dependency_inputs contains duplicate path: {key}")
+        seen_paths.add(key)
+        normalized_paths.append(normalized)
+    return tuple(normalized_paths)
+
+
 def _resolve_file(repo_root: Path, relative_path: Path) -> Path:
     candidate = repo_root / relative_path
     if not candidate.exists() or not candidate.is_file():
@@ -56,10 +93,15 @@ def _build_sbom_entries(repo_root: Path, sbom_dir: Path | None) -> list[dict[str
     if sbom_dir is None:
         return []
 
-    absolute_sbom_dir = (repo_root / sbom_dir).resolve()
+    normalized_sbom_dir = _normalize_repo_relative_path(
+        repo_root,
+        sbom_dir,
+        field="sbom_dir",
+    )
+    absolute_sbom_dir = (repo_root / normalized_sbom_dir).resolve()
     if not absolute_sbom_dir.exists() or not absolute_sbom_dir.is_dir():
         raise FileNotFoundError(
-            f"SBOM directory does not exist: {sbom_dir.as_posix()}"
+            f"SBOM directory does not exist: {normalized_sbom_dir.as_posix()}"
         )
 
     entries: list[dict[str, Any]] = []
@@ -82,11 +124,16 @@ def generate_provenance_manifest(
     sbom_dir: Path | None,
     env: Mapping[str, str],
 ) -> dict[str, Any]:
+    resolved_repo_root = repo_root.resolve()
+    normalized_dependency_inputs = _normalize_dependency_inputs(
+        resolved_repo_root,
+        dependency_inputs,
+    )
     dependency_entries = [
-        _build_file_digest_entry(repo_root, relative_path)
-        for relative_path in dependency_inputs
+        _build_file_digest_entry(resolved_repo_root, relative_path)
+        for relative_path in normalized_dependency_inputs
     ]
-    sbom_entries = _build_sbom_entries(repo_root, sbom_dir)
+    sbom_entries = _build_sbom_entries(resolved_repo_root, sbom_dir)
 
     repository = env.get("GITHUB_REPOSITORY", "")
     run_id = env.get("GITHUB_RUN_ID", "")

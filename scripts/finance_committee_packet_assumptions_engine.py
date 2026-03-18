@@ -40,6 +40,8 @@ def _index_rows(rows: Any, *, field: str) -> dict[str, dict[str, Any]]:
         tier = str(row.get("tier", "")).strip().lower()
         if not tier:
             continue
+        if tier in indexed:
+            raise ValueError(f"{field} contains duplicate tier: {tier}")
         indexed[tier] = row
     return indexed
 

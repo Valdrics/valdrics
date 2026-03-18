@@ -3,6 +3,7 @@
 	import { type ZombieCollectionKey, type ZombieCollections } from '$lib/zombieCollections';
 
 	type RemediationFinding = {
+		finding_id?: string;
 		resource_id: string;
 		resource_type?: string;
 		provider?: string;
@@ -205,8 +206,12 @@
 								type="button"
 								class="btn btn-ghost text-xs"
 								onclick={() => onRemediate(row.finding)}
+								disabled={!row.finding.finding_id}
+								title={!row.finding.finding_id
+									? 'Persisted finding binding missing. Rerun the scan to remediate safely.'
+									: 'Review remediation'}
 							>
-								Review
+								{row.finding.finding_id ? 'Review' : 'Unavailable'}
 							</button>
 						</td>
 					</tr>

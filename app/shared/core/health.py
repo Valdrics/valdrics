@@ -60,6 +60,41 @@ class HealthService:
     def __init__(self, db: AsyncSession | None = None):
         self.db = db
 
+    def _get_settings(self) -> Any:
+        return get_settings()
+
+    def _health_timeout_seconds(self, *, component: str) -> float:
+        settings_obj = self._get_settings()
+        default_timeout = getattr(settings_obj, "HEALTH_CHECK_TIMEOUT_SECONDS", 2.0)
+        external_timeout = getattr(
+            settings_obj,
+            "HEALTH_CHECK_EXTERNAL_TIMEOUT_SECONDS",
+            min(float(default_timeout or 2.0), 2.0),
+        )
+        raw_timeout = external_timeout if component == "external_services" else default_timeout
+        try:
+            timeout = float(raw_timeout)
+        except (TypeError, ValueError):
+            timeout = 2.0
+        return max(0.1, min(timeout, 10.0))
+
+    def _testing_mode(self) -> bool:
+        return bool(getattr(self._get_settings(), "TESTING", False))
+
+    async def _disabled_component_result(
+        self,
+        *,
+        message: str,
+        services: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "status": "disabled",
+            "message": message,
+        }
+        if services is not None:
+            payload["services"] = services
+        return payload
+
     async def check_all(self) -> Dict[str, Any]:
         """Run system health checks and return a lifecycle-friendly payload."""
         health = await self.comprehensive_health_check()
@@ -109,7 +144,10 @@ class HealthService:
             from app.shared.core.http import get_http_client
 
             client = get_http_client()
-            response = await client.get("https://sts.amazonaws.com")
+            response = await client.get(
+                "https://sts.amazonaws.com",
+                timeout=self._health_timeout_seconds(component="external_services"),
+            )
 
             if response.status_code < 400:
                 return True, {"reachable": True}
@@ -129,6 +167,7 @@ class HealthService:
 
         Returns detailed health status for monitoring and alerting.
         """
+        testing_mode = self._testing_mode()
         component_checks = (
             (
                 "database",
@@ -140,14 +179,34 @@ class HealthService:
             (
                 "cache",
                 self._run_health_check(
-                    self._check_cache(),
+                    (
+                        self._disabled_component_result(
+                            message="Cache health checks disabled in testing",
+                        )
+                        if testing_mode
+                        else self._check_cache()
+                    ),
                     component="cache",
                 ),
             ),
             (
                 "external_services",
                 self._run_health_check(
-                    self._check_external_services(),
+                    (
+                        self._disabled_component_result(
+                            message="External service health checks disabled in testing",
+                            services={
+                                "aws_sts": {
+                                    "status": "disabled",
+                                    "message": (
+                                        "External service health checks disabled in testing"
+                                    ),
+                                }
+                            },
+                        )
+                        if testing_mode
+                        else self._check_external_services()
+                    ),
                     component="external_services",
                 ),
             ),
@@ -237,7 +296,26 @@ class HealthService:
     ) -> Dict[str, Any]:
         """Contain unexpected subcheck failures so /health remains deterministic."""
         try:
-            result = await coro
+            result = await asyncio.wait_for(
+                coro,
+                timeout=self._health_timeout_seconds(component=component),
+            )
+        except asyncio.TimeoutError:
+            fallback_status = HEALTH_FALLBACK_STATUSES.get(component, "unknown")
+            logger.error(
+                "health_check_timeout",
+                component=component,
+                fallback_status=fallback_status,
+                timeout_seconds=self._health_timeout_seconds(component=component),
+            )
+            return {
+                "status": fallback_status,
+                "error": (
+                    f"Health check timed out after "
+                    f"{self._health_timeout_seconds(component=component):.2f}s"
+                ),
+                "component": component,
+            }
         except HEALTH_RECOVERABLE_ERRORS as exc:
             fallback_status = HEALTH_FALLBACK_STATUSES.get(component, "unknown")
             logger.error(
@@ -341,7 +419,10 @@ class HealthService:
             from app.shared.core.http import get_http_client
 
             client = get_http_client()
-            response = await client.get("https://sts.amazonaws.com")
+            response = await client.get(
+                "https://sts.amazonaws.com",
+                timeout=self._health_timeout_seconds(component="external_services"),
+            )
             services_status["aws_sts"] = {
                 "status": "healthy" if response.status_code < 500 else "unhealthy",
                 "response_code": response.status_code,

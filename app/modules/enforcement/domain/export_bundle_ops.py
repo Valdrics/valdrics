@@ -128,11 +128,11 @@ async def build_export_bundle_payload(
     normalize_policy_document_schema_version_fn: Callable[[str | None], str],
     normalize_policy_document_sha256_fn: Callable[[str | None], str],
     computed_context_snapshot_fn: Callable[[dict[str, Any] | None], dict[str, Any]],
+    parse_iso_datetime_fn: Callable[[Any], datetime | None],
     json_default_fn: Callable[[Any], Any],
     render_decisions_csv_fn: Callable[[list[EnforcementDecision]], str],
     render_approvals_csv_fn: Callable[[list[EnforcementApprovalRequest]], str],
     export_events_counter: Any,
-    utcnow_fn: Callable[[], datetime],
 ) -> dict[str, Any]:
     bounded_max_rows = int(max_rows)
     if bounded_max_rows < 1:
@@ -181,6 +181,7 @@ async def build_export_bundle_payload(
     )
     decisions = list(decision_rows.scalars().all())
     decision_count_exported = len(decisions)
+    bundle_generated_at_candidates: list[datetime] = []
 
     approval_count_db = int(
         (
@@ -247,7 +248,14 @@ async def build_export_bundle_payload(
         dict[str, Any],
     ] = {}
     for decision in decisions:
+        decision_created_at = getattr(decision, "created_at", None)
+        if isinstance(decision_created_at, datetime):
+            bundle_generated_at_candidates.append(as_utc_fn(decision_created_at))
+
         snapshot = computed_context_snapshot_fn(decision.response_payload)
+        snapshot_generated_at_dt = parse_iso_datetime_fn(snapshot.get("generated_at"))
+        if snapshot_generated_at_dt is not None:
+            bundle_generated_at_candidates.append(snapshot_generated_at_dt)
         context_key = (
             str(snapshot["context_version"]),
             str(snapshot["month_start"]),
@@ -312,6 +320,11 @@ async def build_export_bundle_payload(
     ).hexdigest()
 
     approval_count_exported = len(approvals)
+    for approval in approvals:
+        approval_created_at = getattr(approval, "created_at", None)
+        if isinstance(approval_created_at, datetime):
+            bundle_generated_at_candidates.append(as_utc_fn(approval_created_at))
+
     decisions_csv = render_decisions_csv_fn(decisions)
     approvals_csv = render_approvals_csv_fn(approvals)
     decisions_sha256 = hashlib.sha256(decisions_csv.encode("utf-8")).hexdigest()
@@ -324,9 +337,14 @@ async def build_export_bundle_payload(
         artifact="bundle",
         outcome=("success" if parity_ok else "mismatch"),
     ).inc()
+    bundle_generated_at = (
+        max(bundle_generated_at_candidates)
+        if bundle_generated_at_candidates
+        else normalized_end
+    )
 
     return {
-        "generated_at": utcnow_fn(),
+        "generated_at": bundle_generated_at,
         "window_start": normalized_start,
         "window_end": normalized_end,
         "decision_count_db": decision_count_db,

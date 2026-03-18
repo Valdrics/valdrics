@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -14,6 +16,17 @@ def test_generate_evidence_requires_separation_of_duties(tmp_path: Path) -> None
             output=tmp_path / "artifact.json",
             executed_by="same@valdrics.local",
             approved_by="same@valdrics.local",
+            profile="enforcement_failure_injection",
+            cwd=tmp_path,
+        )
+
+
+def test_generate_evidence_requires_non_empty_identities(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="must be non-empty"):
+        generator.generate_evidence(
+            output=tmp_path / "artifact.json",
+            executed_by="   ",
+            approved_by="approver@valdrics.local",
             profile="enforcement_failure_injection",
             cwd=tmp_path,
         )
@@ -100,3 +113,37 @@ def test_main_exit_code_follows_overall_result(
         ]
     )
     assert exit_code == 0
+
+
+def test_run_scenario_uses_isolated_pytest_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_run(*args: object, **kwargs: object) -> MagicMock:
+        captured["env"] = kwargs.get("env")
+        completed = MagicMock()
+        completed.returncode = 0
+        completed.stdout = "ok"
+        completed.stderr = ""
+        return completed
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://prod.example/app")
+    monkeypatch.setenv("DB_SSL_MODE", "require")
+    monkeypatch.setenv("PGSSLMODE", "require")
+    monkeypatch.setattr(generator.subprocess, "run", _fake_run)
+
+    scenario = generator.FailureScenario(
+        scenario_id="FI-TEST",
+        checks=("isolated env",),
+        selectors=("tests/unit/enforcement/test_enforcement_api.py::test_gate_failsafe_timeout_and_error_modes",),
+    )
+    payload, passed = generator._run_scenario(scenario, cwd=Path("."))
+
+    assert passed is True
+    assert payload["status"] == "pass"
+    env = captured["env"]
+    assert isinstance(env, dict)
+    assert "DATABASE_URL" not in env
+    assert "DB_SSL_MODE" not in env
+    assert "PGSSLMODE" not in env
+    assert env["TESTING"] == "true"
+    assert env["DEBUG"] == "false"

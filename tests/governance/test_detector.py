@@ -91,6 +91,10 @@ async def test_create_remediation_request(
 ) -> None:
     tenant_id = uuid4()
     user_id = uuid4()
+    connection_id = uuid4()
+    service.get_by_id = AsyncMock(  # type: ignore[method-assign]
+        return_value=MagicMock(id=connection_id, tenant_id=tenant_id, status="active")
+    )
 
     req = await service.create_request(
         tenant_id=tenant_id,
@@ -100,6 +104,7 @@ async def test_create_remediation_request(
         action=RemediationAction.DELETE_VOLUME,
         estimated_savings=20.0,
         provider="aws",
+        connection_id=connection_id,
     )
 
     assert req.status == RemediationStatus.PENDING

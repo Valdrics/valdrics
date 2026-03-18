@@ -7,12 +7,33 @@ export type PendingRequest = {
 	provider?: string;
 	region?: string;
 	connection_id?: string | null;
+	finding_id?: string | null;
+	finding_status?: string | null;
+	finding_category?: string | null;
 	estimated_savings: number;
 	scheduled_execution_at?: string | null;
 	escalation_required?: boolean;
 	escalation_reason?: string | null;
 	escalated_at?: string | null;
 	created_at: string | null;
+};
+
+export type RemediationHistoryItem = {
+	id: string;
+	status: string;
+	resource_id: string;
+	resource_type: string;
+	action: string;
+	provider?: string;
+	region?: string;
+	connection_id?: string | null;
+	finding_id?: string | null;
+	finding_status?: string | null;
+	finding_category?: string | null;
+	estimated_savings: number;
+	created_at: string | null;
+	executed_at?: string | null;
+	execution_error?: string | null;
 };
 
 export type PolicyPreview = {

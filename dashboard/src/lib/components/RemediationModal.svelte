@@ -4,6 +4,7 @@
 	import { edgeApiPath } from '$lib/edgeProxy';
 
 	type RemediationFinding = {
+		finding_id?: string;
 		resource_id: string;
 		resource_type?: string;
 		provider?: string;
@@ -47,6 +48,7 @@
 	let parameters = $state<RemediationParameters>({ target_size: '' });
 
 	const action = $derived(finding ? deriveRemediationAction(finding) : '');
+	const hasFindingBinding = $derived(Boolean(finding?.finding_id));
 
 	$effect(() => {
 		if (isOpen && finding && !parameters.target_size) {
@@ -55,6 +57,12 @@
 	});
 
 	$effect(() => {
+		if (isOpen && finding && !hasFindingBinding) {
+			preview = null;
+			previewError =
+				'Persisted finding binding missing. Rerun the scan before requesting remediation.';
+			return;
+		}
 		if (isOpen && finding && !preview && !previewLoading) {
 			runPreview();
 		}
@@ -98,11 +106,6 @@
 		return 'stop_instance';
 	}
 
-	function parseMonthlyCost(value: string | number | undefined): number {
-		if (typeof value === 'number') return value;
-		return Number.parseFloat(String(value ?? '0').replace(/[^0-9.-]/g, '')) || 0;
-	}
-
 	function policyDecisionClass(decision: string | undefined): string {
 		switch ((decision || '').toLowerCase()) {
 			case 'allow':
@@ -123,6 +126,12 @@
 			previewError = 'Not authenticated.';
 			return;
 		}
+		if (!finding.finding_id) {
+			preview = null;
+			previewError =
+				'Persisted finding binding missing. Rerun the scan before requesting remediation.';
+			return;
+		}
 
 		previewLoading = true;
 		previewError = '';
@@ -138,9 +147,7 @@
 			const previewResponse = await api.post(
 				edgeApiPath('/zombies/policy-preview'),
 				{
-					resource_id: finding.resource_id,
-					resource_type: finding.resource_type || 'unknown',
-					provider: finding.provider || 'aws',
+					finding_id: finding.finding_id,
 					action,
 					parameters
 				},
@@ -173,6 +180,11 @@
 			actionError = 'Not authenticated.';
 			return;
 		}
+		if (!finding.finding_id) {
+			actionError =
+				'Persisted finding binding missing. Rerun the scan before requesting remediation.';
+			return;
+		}
 
 		submitting = true;
 		actionError = '';
@@ -187,12 +199,8 @@
 			const response = await api.post(
 				edgeApiPath('/zombies/request'),
 				{
-					resource_id: finding.resource_id,
-					resource_type: finding.resource_type || 'unknown',
-					provider: finding.provider || 'aws',
-					connection_id: finding.connection_id,
+					finding_id: finding.finding_id,
 					action,
-					estimated_savings: parseMonthlyCost(finding.monthly_cost),
 					create_backup: true,
 					parameters
 				},
@@ -293,6 +301,18 @@
 					</div>
 				{/if}
 
+				{#if !hasFindingBinding}
+					<div class="p-4 bg-warning-500/10 border border-warning-500/30 rounded-lg">
+						<p class="text-sm text-warning-400 font-semibold">
+							This row is not bound to a persisted finding yet.
+						</p>
+						<p class="text-xs text-warning-300/80 mt-1">
+							Rerun the zombie scan and use the persisted finding result before requesting
+							remediation.
+						</p>
+					</div>
+				{/if}
+
 				<!-- Policy Preview -->
 				<div class="space-y-3">
 					<h4 class="text-sm font-semibold flex items-center gap-2 text-ink-200">
@@ -370,6 +390,7 @@
 						class="btn btn-primary min-w-[140px]"
 						disabled={submitting ||
 							previewLoading ||
+							!hasFindingBinding ||
 							!!previewError ||
 							preview?.decision?.toLowerCase() === 'block'}
 						onclick={submitRequest}

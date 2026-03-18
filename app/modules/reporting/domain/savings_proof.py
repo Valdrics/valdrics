@@ -27,6 +27,7 @@ from app.models.optimization import OptimizationStrategy, StrategyRecommendation
 from app.models.realized_savings import RealizedSavingsEvent
 from app.models.remediation import RemediationRequest, RemediationStatus
 from app.modules.reporting.domain.savings_proof_drilldown_ops import (
+    build_finding_category_buckets,
     build_remediation_action_buckets,
     build_strategy_type_buckets,
     sort_and_limit_buckets,
@@ -346,7 +347,12 @@ class SavingsProofService:
         dim = str(dimension or "").strip().lower()
         normalized_provider = provider.strip().lower() if provider else None
 
-        supported_dims = {"provider", "strategy_type", "remediation_action"}
+        supported_dims = {
+            "provider",
+            "strategy_type",
+            "remediation_action",
+            "finding_category",
+        }
         if dim not in supported_dims:
             supported = ", ".join(sorted(supported_dims))
             raise ValueError(
@@ -419,8 +425,18 @@ class SavingsProofService:
                 ensure_bucket=_ensure_bucket,
                 as_float=_as_float,
             )
-        else:
+        elif dim == "remediation_action":
             notes = await build_remediation_action_buckets(
+                db=self.db,
+                tenant_id=tenant_id,
+                normalized_provider=normalized_provider,
+                window_start=window_start,
+                window_end=window_end,
+                ensure_bucket=_ensure_bucket,
+                as_float=_as_float,
+            )
+        else:
+            notes = await build_finding_category_buckets(
                 db=self.db,
                 tenant_id=tenant_id,
                 normalized_provider=normalized_provider,

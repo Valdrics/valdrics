@@ -1,6 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
+import { readable } from 'svelte/store';
 import Page from './+page.svelte';
+
+vi.mock('$app/paths', () => ({
+	assets: ''
+}));
+
+vi.mock('$app/stores', () => ({
+	page: readable({ url: new URL('https://example.com/terms') })
+}));
 
 describe('terms page', () => {
 	it('renders production service terms sections', () => {

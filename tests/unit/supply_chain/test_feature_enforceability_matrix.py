@@ -5,7 +5,10 @@ from pathlib import Path
 
 import pytest
 
-from scripts.generate_feature_enforceability_matrix import generate_matrix
+from scripts.generate_feature_enforceability_matrix import (
+    _feature_runtime_gate_for_file,
+    generate_matrix,
+)
 from scripts.verify_feature_enforceability_matrix import verify_matrix
 
 
@@ -34,3 +37,22 @@ def test_verify_feature_enforceability_matrix_rejects_missing_paid_feature(
 
     with pytest.raises(ValueError, match="missing paid-tier features"):
         verify_matrix(artifact_path=out, repo_root=REPO_ROOT)
+
+
+def test_feature_runtime_gate_detection_handles_multiline_calls() -> None:
+    raw = """
+from app.shared.core.dependencies import requires_feature
+from app.shared.core.pricing import FeatureFlag
+
+Depends(
+    requires_feature(
+        FeatureFlag.COMPLIANCE_EXPORTS,
+        required_role="admin",
+    )
+)
+"""
+
+    assert _feature_runtime_gate_for_file(
+        token="FeatureFlag.COMPLIANCE_EXPORTS",
+        raw=raw,
+    )

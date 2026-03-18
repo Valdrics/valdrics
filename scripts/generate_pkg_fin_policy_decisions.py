@@ -85,6 +85,8 @@ def _index_rows(rows: Any, *, key_field: str, field: str) -> dict[str, dict[str,
         key = str(row.get(key_field) or "").strip().lower()
         if not key:
             raise ValueError(f"{field}[{idx}].{key_field} must be a non-empty string")
+        if key in indexed:
+            raise ValueError(f"{field} contains duplicate {key_field}: {key}")
         indexed[key] = row
     return indexed
 

@@ -3,7 +3,11 @@
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import DateRangePicker from '$lib/components/DateRangePicker.svelte';
 	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
-	import type { SavingsProofDrilldownResponse, SavingsProofResponse } from './savingsTypes';
+	import type {
+		RealizedSavingsEvent,
+		SavingsProofDrilldownResponse,
+		SavingsProofResponse
+	} from './savingsTypes';
 
 	interface Props {
 		data: {
@@ -18,7 +22,8 @@
 		success: string;
 		report: SavingsProofResponse | null;
 		drilldown: SavingsProofDrilldownResponse | null;
-		drilldownDimension: 'strategy_type' | 'remediation_action';
+		realizedEvents: RealizedSavingsEvent[];
+		drilldownDimension: 'strategy_type' | 'remediation_action' | 'finding_category';
 		provider: string;
 		datePreset: string;
 		dateRange: {
@@ -41,6 +46,7 @@
 		success,
 		report,
 		drilldown,
+		realizedEvents,
 		drilldownDimension = $bindable(),
 		provider = $bindable(),
 		datePreset = $bindable(),
@@ -224,6 +230,7 @@
 							>
 								<option value="strategy_type">Strategy type</option>
 								<option value="remediation_action">Remediation action</option>
+								<option value="finding_category">Finding category</option>
 							</select>
 							<button
 								type="button"
@@ -285,6 +292,61 @@
 									{/each}
 								</tbody>
 							</table>
+						</div>
+
+						<div class="mt-5 rounded-xl border border-ink-800/60 bg-ink-950/20 p-4">
+							<div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
+								<div>
+									<h3 class="text-sm font-semibold">
+										Completed remediations with finance-grade realized savings evidence
+									</h3>
+									<p class="text-xs text-ink-500">
+										Finding provenance is carried from discovery through execution and realized
+										savings measurement.
+									</p>
+								</div>
+							</div>
+							{#if realizedEvents.length === 0}
+								<p class="text-sm text-ink-400">
+									No realized savings evidence events were found for this window.
+								</p>
+							{:else}
+								<div class="overflow-x-auto">
+									<table class="table">
+										<thead>
+											<tr>
+												<th>Finding category</th>
+												<th>Resource</th>
+												<th>Provider</th>
+												<th>Executed</th>
+												<th>Realized (Monthly)</th>
+												<th>Provenance</th>
+											</tr>
+										</thead>
+										<tbody>
+											{#each realizedEvents as event (event.remediation_request_id)}
+												<tr>
+													<td class="font-mono text-xs">
+														{event.finding_category || 'unknown'}
+													</td>
+													<td class="text-xs font-mono">{event.resource_id || '-'}</td>
+													<td class="text-xs">{event.provider}</td>
+													<td class="text-xs text-ink-500">
+														{formatDate(event.executed_at || event.computed_at)}
+													</td>
+													<td>{formatUsd(event.realized_monthly_savings_usd)}</td>
+													<td class="text-xs text-ink-500">
+														<div>Request {event.remediation_request_id.slice(0, 8)}...</div>
+														<div>
+															Finding {event.finding_id ? `${event.finding_id.slice(0, 8)}...` : 'n/a'}
+														</div>
+													</td>
+												</tr>
+											{/each}
+										</tbody>
+									</table>
+								</div>
+							{/if}
 						</div>
 					{/if}
 				</div>

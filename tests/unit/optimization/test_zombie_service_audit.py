@@ -11,7 +11,9 @@ from app.shared.core.pricing import PricingTier
 
 @pytest.fixture
 def mock_db():
-    return AsyncMock()
+    db = AsyncMock()
+    db.add = MagicMock()
+    return db
 
 
 @pytest.fixture
@@ -103,6 +105,81 @@ async def test_scan_for_tenant_success(mock_db, tenant_id):
     assert result["waste_rightsizing"]["summary"]["total_recommendations"] == 1
     assert result["architectural_inefficiency"]["deterministic"] is True
     mock_notify.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_scan_for_tenant_attaches_persisted_finding_ids(mock_db, tenant_id):
+    service = ZombieService(mock_db)
+
+    conn = MagicMock(spec=AWSConnection)
+    conn.id = uuid4()
+    conn.tenant_id = tenant_id
+    conn.name = "Prod-AWS"
+    conn.provider = "aws"
+    conn.region = "us-east-1"
+    conn.aws_account_id = "123456789012"
+    conn.role_arn = "arn:aws:iam::123456789012:role/Valdrics"
+    conn.external_id = "external-id"
+    conn.cur_bucket_name = "cur-bucket"
+    conn.cur_report_name = "cur-report"
+    conn.cur_prefix = "cur-prefix"
+
+    mock_detector = AsyncMock()
+    mock_detector.provider_name = "aws"
+    mock_detector.get_credentials = AsyncMock(
+        return_value={"AccessKeyId": "AKIA_TEST", "SecretAccessKey": "SECRET_TEST"}
+    )
+    mock_detector.scan_all.return_value = {
+        "unattached_volumes": [{"resource_id": "vol-1", "monthly_cost": 10.0}]
+    }
+
+    mock_rd = MagicMock()
+    mock_rd.get_enabled_regions = AsyncMock(return_value=["us-east-1"])
+
+    async def execute_side_effect(stmt: object) -> MagicMock:
+        query = str(stmt).lower()
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = []
+        if "aws_connections" in query:
+            result.scalars.return_value.all.return_value = [conn]
+        return result
+
+    mock_db.execute.side_effect = execute_side_effect
+
+    def fake_get_detector(*_args, **_kwargs):
+        return mock_detector
+
+    async def fake_persist(*_args, **kwargs):
+        kwargs["scan_payload"]["unattached_volumes"][0]["finding_id"] = "finding-123"
+        kwargs["scan_payload"]["unattached_volumes"][0]["finding_status"] = "open"
+
+    with (
+        patch(
+            "app.modules.optimization.domain.service.ZombieDetectorFactory",
+            new=SimpleNamespace(get_detector=fake_get_detector),
+        ),
+        patch(
+            "app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery",
+            return_value=mock_rd,
+        ),
+        patch(
+            "app.shared.core.pricing.get_tenant_tier",
+            return_value=PricingTier.STARTER,
+        ),
+        patch("app.shared.core.ops_metrics.SCAN_LATENCY"),
+        patch(
+            "app.shared.core.notifications.NotificationDispatcher.notify_zombies"
+        ),
+        patch(
+            "app.modules.optimization.domain.findings.persist_scan_findings_with_guard",
+            new=AsyncMock(side_effect=fake_persist),
+        ) as mock_persist,
+    ):
+        result = await service.scan_for_tenant(tenant_id)
+
+    assert result["unattached_volumes"][0]["finding_id"] == "finding-123"
+    assert result["unattached_volumes"][0]["finding_status"] == "open"
+    mock_persist.assert_awaited_once()
 
 
 @pytest.mark.asyncio

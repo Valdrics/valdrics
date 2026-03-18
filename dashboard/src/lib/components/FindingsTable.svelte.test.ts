@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, cleanup } from '@testing-library/svelte';
 import FindingsTable from './FindingsTable.svelte';
 
 vi.mock('dompurify', () => ({
@@ -13,6 +13,10 @@ vi.mock('$lib/logging/client', () => ({
 		error: vi.fn()
 	}
 }));
+
+afterEach(() => {
+	cleanup();
+});
 
 describe('FindingsTable', () => {
 	it('shows growth-plan lock state when owner attribution is tier-gated', () => {
@@ -34,5 +38,26 @@ describe('FindingsTable', () => {
 
 		expect(screen.getByText('LOCKED')).toBeTruthy();
 		expect(screen.getByTitle('Owner Attribution requires Growth tier')).toBeTruthy();
+	});
+
+	it('disables remediation when persisted finding binding is missing', () => {
+		render(FindingsTable, {
+			resources: [
+				{
+					provider: 'aws',
+					resource_id: 'i-1234567890',
+					resource_type: 'instance',
+					monthly_cost: '$25',
+					confidence: 'medium',
+					risk_if_deleted: 'low',
+					explanation: 'Idle for 14 days'
+				}
+			],
+			onRemediate: vi.fn()
+		});
+
+		const button = screen.getByRole('button', { name: 'Unavailable' });
+		expect(button.hasAttribute('disabled')).toBe(true);
+		expect(button.getAttribute('title')).toContain('Persisted finding binding missing');
 	});
 });

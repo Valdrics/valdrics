@@ -28,6 +28,7 @@ Secrets rotated during the drill:
 - source_rollback_validation_passed: tests/unit/enforcement/enforcement_service_cases_part04.py::test_consume_approval_token_accepts_rollback_fallback_secret
 - source_replay_protection_intact: tests/unit/enforcement/enforcement_service_cases_part03.py::test_consume_approval_token_rejects_replay
 - source_alert_pipeline_verified: tests/unit/enforcement/test_reconciliation_worker.py::test_reconciliation_worker_sends_sla_release_alert
+- source_endpoint_replay_tamper_guard: tests/unit/enforcement/enforcement_api_cases_part03.py::test_consume_approval_token_endpoint_rejects_replay_and_tamper
 - pre_rotation_tokens_accepted: true
 - post_rotation_new_tokens_accepted: true
 - post_rotation_old_tokens_rejected: true
@@ -35,6 +36,7 @@ Secrets rotated during the drill:
 - rollback_validation_passed: true
 - replay_protection_intact: true
 - alert_pipeline_verified: true
+- endpoint_replay_tamper_guard: true
 - post_drill_status: PASS
 
 ## Evidence Anchors

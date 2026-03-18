@@ -57,7 +57,12 @@ from app.shared.db.local_sqlite_bootstrap import (
     bootstrap_local_sqlite_schema,
     should_bootstrap_local_sqlite,
 )
-from app.shared.db.session import async_session_maker, get_engine, reset_db_runtime
+from app.shared.db.session import (
+    async_session_maker,
+    dispose_db_runtime,
+    get_engine,
+    reset_db_runtime,
+)
 from app.shared.core.exceptions import ValdricsException
 from app.shared.core.rate_limit import (
     setup_rate_limiting,
@@ -119,7 +124,7 @@ API_DOCUMENTATION_PATHS = frozenset({"/openapi.json", "/docs", "/redoc"})
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     global settings
     settings = reload_settings_from_environment()
-    reset_db_runtime()
+    await dispose_db_runtime()
     validate_runtime_dependencies(settings)
     init_sentry()
 

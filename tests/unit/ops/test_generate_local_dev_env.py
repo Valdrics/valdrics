@@ -134,3 +134,14 @@ def test_generate_local_dev_env_is_shell_source_safe_for_json_values(tmp_path: P
     )
 
     assert sourced.stdout == '["http://localhost:5173","http://localhost:5174"]'
+
+
+def test_generate_local_dev_env_creates_parent_directories(tmp_path: Path) -> None:
+    template = tmp_path / ".env.example"
+    output = tmp_path / "nested" / "local" / ".env.dev"
+    _write(template, "CSRF_SECRET_KEY=\nENCRYPTION_KEY=\n")
+
+    result = generate_local_dev_env(template_path=template, output_path=output, seed="seed-4")
+
+    assert result == output
+    assert output.exists()

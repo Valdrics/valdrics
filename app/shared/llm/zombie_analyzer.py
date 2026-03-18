@@ -144,6 +144,34 @@ class ZombieAnalyzer:
         return flattened
 
     @staticmethod
+    def _finding_binding_key(resource: Dict[str, Any]) -> tuple[str, str]:
+        provider = str(resource.get("provider") or "").strip().lower()
+        resource_id = str(resource.get("resource_id") or "").strip().lower()
+        return provider, resource_id
+
+    @classmethod
+    def _enrich_analysis_resources_with_findings(
+        cls,
+        *,
+        analysis_resources: List[Dict[str, Any]],
+        flattened_detection_results: List[Dict[str, Any]],
+    ) -> None:
+        binding_index = {
+            cls._finding_binding_key(resource): resource
+            for resource in flattened_detection_results
+            if resource.get("finding_id")
+        }
+
+        for resource in analysis_resources:
+            binding = binding_index.get(cls._finding_binding_key(resource))
+            if not isinstance(binding, dict):
+                continue
+            for key in ("finding_id", "finding_status", "connection_id"):
+                value = binding.get(key)
+                if value not in (None, ""):
+                    resource[key] = value
+
+    @staticmethod
     def _resolve_output_token_ceiling(raw_limit: Any) -> int | None:
         if raw_limit is None:
             return None
@@ -374,6 +402,10 @@ class ZombieAnalyzer:
                 response_text, ZombieAnalysisResult
             )
             analysis = validated_result.model_dump()
+            self._enrich_analysis_resources_with_findings(
+                analysis_resources=analysis.get("resources", []),
+                flattened_detection_results=zombies,
+            )
             logger.info(
                 "zombie_analysis_complete",
                 resource_count=len(analysis.get("resources", [])),

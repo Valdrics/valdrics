@@ -74,6 +74,8 @@ def index_by_tier(rows: list[dict[str, Any]], *, field: str) -> dict[str, dict[s
         if not isinstance(row, dict):
             raise ValueError(f"{field}[{idx}] must be an object")
         tier = parse_non_empty_str(row.get("tier"), field=f"{field}[{idx}].tier").lower()
+        if tier in indexed:
+            raise ValueError(f"{field} contains duplicate tier: {tier}")
         indexed[tier] = row
     return indexed
 

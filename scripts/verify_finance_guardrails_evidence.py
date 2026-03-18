@@ -222,6 +222,8 @@ def verify_evidence(
         tier = str(item.get("tier") or "").strip().lower()
         if not tier:
             raise ValueError(f"tier_unit_economics[{idx}].tier must be a non-empty string")
+        if tier in seen_tiers:
+            raise ValueError(f"tier_unit_economics contains duplicate tier: {tier}")
         seen_tiers.add(tier)
 
         mrr_usd = _parse_float(

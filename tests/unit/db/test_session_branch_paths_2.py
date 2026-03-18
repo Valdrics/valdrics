@@ -275,14 +275,15 @@ def test_get_db_runtime_cached_and_set_inside_lock_paths() -> None:
 
 
 def test_reset_db_runtime_dispose_exception_logged() -> None:
-    dispose = MagicMock(side_effect=RuntimeError("dispose failed"))
-    runtime = SimpleNamespace(engine=SimpleNamespace(sync_engine=SimpleNamespace(dispose=dispose)))
+    dispose = AsyncMock(side_effect=RuntimeError("dispose failed"))
+    runtime = SimpleNamespace(engine=SimpleNamespace(dispose=dispose))
     session_mod._db_runtime = runtime
 
     with patch("app.shared.db.session.logger") as mock_logger:
         session_mod.reset_db_runtime()
 
     assert session_mod._db_runtime is None
+    dispose.assert_awaited_once()
     mock_logger.debug.assert_called_once()
 
 

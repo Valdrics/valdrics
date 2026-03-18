@@ -280,6 +280,30 @@ class RemediationService(BaseService):
             connection_id=connection_id,
         )
 
+    async def preview_policy_for_finding(
+        self,
+        *,
+        tenant_id: UUID,
+        user_id: UUID,
+        finding_id: UUID,
+        action: RemediationAction,
+        review_notes: Optional[str] = None,
+        parameters: Optional[Dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        from app.modules.optimization.domain.remediation_workflow import (
+            preview_policy_for_finding_payload,
+        )
+
+        return await preview_policy_for_finding_payload(
+            self,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            finding_id=finding_id,
+            action=action,
+            review_notes=review_notes,
+            parameters=parameters,
+        )
+
     async def create_request(
         self,
         tenant_id: UUID,
@@ -319,6 +343,34 @@ class RemediationService(BaseService):
             parameters=parameters,
         )
 
+    async def create_request_from_finding(
+        self,
+        *,
+        tenant_id: UUID,
+        user_id: UUID,
+        finding_id: UUID,
+        action: RemediationAction,
+        create_backup: bool = False,
+        backup_retention_days: int = 30,
+        backup_cost_estimate: float = 0,
+        parameters: Optional[Dict[str, Any]] = None,
+    ) -> RemediationRequest:
+        from app.modules.optimization.domain.remediation_workflow import (
+            create_remediation_request_from_finding,
+        )
+
+        return await create_remediation_request_from_finding(
+            self,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            finding_id=finding_id,
+            action=action,
+            create_backup=create_backup,
+            backup_retention_days=backup_retention_days,
+            backup_cost_estimate=backup_cost_estimate,
+            parameters=parameters,
+        )
+
     async def list_pending(
         self, tenant_id: UUID, limit: int = 50, offset: int = 0
     ) -> List[RemediationRequest]:
@@ -329,6 +381,26 @@ class RemediationService(BaseService):
         return await list_pending_requests(
             self,
             tenant_id,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def list_history(
+        self,
+        tenant_id: UUID,
+        *,
+        status: str = "completed",
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[RemediationRequest]:
+        from app.modules.optimization.domain.remediation_workflow import (
+            list_request_history,
+        )
+
+        return await list_request_history(
+            self,
+            tenant_id,
+            status=status,
             limit=limit,
             offset=offset,
         )

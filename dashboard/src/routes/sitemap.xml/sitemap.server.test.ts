@@ -41,6 +41,7 @@ describe('sitemap.xml route', () => {
 		expect(xml).toContain('https://example.com/enterprise');
 		expect(xml).toContain('https://example.com/talk-to-sales');
 		expect(xml).toContain('https://example.com/status');
+		expect(xml).not.toContain('https://example.com/auth/login');
 		expect(xml).toContain('<lastmod>2026-03-09T00:00:00.000Z</lastmod>');
 	});
 

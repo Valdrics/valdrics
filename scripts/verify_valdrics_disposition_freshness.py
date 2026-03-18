@@ -237,6 +237,23 @@ def verify_disposition_register(
                     f"dispositions[{idx}].control_probe_ids[{probe_idx}] "
                     f"references missing runtime probe: {probe_id}"
                 )
+        referenced_probe_results = [
+            probe_results[str(probe_id_value).strip()]
+            for probe_id_value in control_probe_ids
+        ]
+        all_referenced_probes_passed = all(
+            bool(item.get("passed")) for item in referenced_probe_results
+        )
+        if status == "documented_exception" and not all_referenced_probes_passed:
+            raise ValueError(
+                f"dispositions[{idx}] with status documented_exception must reference "
+                "only passing runtime probes"
+            )
+        if status == "planned_refactor" and all_referenced_probes_passed:
+            raise ValueError(
+                f"dispositions[{idx}] with status planned_refactor must reference at "
+                "least one failing runtime probe"
+            )
 
         review_by = _parse_iso_date(
             item.get("review_by"),

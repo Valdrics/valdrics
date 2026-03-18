@@ -92,6 +92,7 @@ def generate_local_dev_env(
         template_path.read_text(encoding="utf-8").splitlines(),
         _build_overrides(seed),
     )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(rendered, encoding="utf-8")
     return output_path
 

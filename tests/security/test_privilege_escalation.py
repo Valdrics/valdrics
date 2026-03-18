@@ -71,7 +71,7 @@ async def test_member_cannot_process_jobs(ac: AsyncClient):
 
 @pytest.mark.asyncio
 async def test_admin_can_process_jobs(ac: AsyncClient):
-    """Verify that an admin CAN trigger job processing."""
+    """Verify that tenant admins cannot trigger platform-global job processing."""
 
     def override_admin_a(request: Request):
         request.state.tenant_id = ADMIN_A.tenant_id
@@ -83,8 +83,7 @@ async def test_admin_can_process_jobs(ac: AsyncClient):
 
     response = await ac.post("/api/v1/jobs/process")
 
-    # Might be 200 or 500 depending on DB, but should NOT be 403
-    assert response.status_code != 403
+    assert response.status_code == 403
     app.dependency_overrides.pop(get_current_user, None)
 
 
@@ -166,9 +165,6 @@ async def test_member_cannot_enqueue_restricted_jobs(ac: AsyncClient):
 
     resp = await ac.post("/api/v1/jobs/enqueue", json=payload)
 
-    # Changed to 403 because role check (RequireRole) or endpoint validation happens before Pydantic.
-    # The endpoint explicitly raises 403 for unauthorized job types.
     assert resp.status_code == 403
-    # In Pydantic 2, the error message for Forbidden job type (literal) might be more structured
-    assert "Input should be" in resp.text or "Unauthorized job type" in resp.text
+    assert "Insufficient permissions" in resp.text
     app.dependency_overrides.pop(get_current_user, None)

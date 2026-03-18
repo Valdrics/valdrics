@@ -195,6 +195,7 @@ async def test_savings_proof_drilldown_strategy_type_and_remediation_action(
         action=RemediationAction.DELETE_VOLUME,
         status=RemediationStatus.PENDING,
         estimated_monthly_savings=Decimal("2.00"),
+        finding_snapshot={"category": "unattached_volumes"},
         requested_by_user_id=admin.id,
     )
     db.add(pending_delete)
@@ -208,6 +209,7 @@ async def test_savings_proof_drilldown_strategy_type_and_remediation_action(
         action=RemediationAction.STOP_INSTANCE,
         status=RemediationStatus.APPROVED,
         estimated_monthly_savings=Decimal("4.00"),
+        finding_snapshot={"category": "idle_instances"},
         requested_by_user_id=admin.id,
     )
     db.add(pending_stop)
@@ -221,6 +223,7 @@ async def test_savings_proof_drilldown_strategy_type_and_remediation_action(
         action=RemediationAction.TERMINATE_INSTANCE,
         status=RemediationStatus.COMPLETED,
         estimated_monthly_savings=Decimal("3.00"),
+        finding_snapshot={"category": "idle_instances"},
         requested_by_user_id=admin.id,
         executed_at=datetime.now(timezone.utc) - timedelta(days=2),
     )
@@ -231,6 +234,8 @@ async def test_savings_proof_drilldown_strategy_type_and_remediation_action(
     evidence = RealizedSavingsEvent(
         tenant_id=tenant_id,
         remediation_request_id=completed_rem.id,
+        finding_id=uuid.uuid4(),
+        finding_category="idle_instances",
         provider="aws",
         account_id=None,
         resource_id=completed_rem.resource_id,
@@ -288,3 +293,19 @@ async def test_savings_proof_drilldown_strategy_type_and_remediation_action(
 
     assert payload["opportunity_monthly_usd"] == 6.0
     assert payload["realized_monthly_usd"] == 20.0
+
+    res = await ac.get(
+        "/api/v1/savings/proof/drilldown?dimension=finding_category", headers=headers
+    )
+    assert res.status_code == 200
+    payload = res.json()
+    assert payload["dimension"] == "finding_category"
+    idle = next(item for item in payload["buckets"] if item["key"] == "idle_instances")
+    unattached = next(
+        item for item in payload["buckets"] if item["key"] == "unattached_volumes"
+    )
+    assert idle["pending_remediations"] == 1
+    assert idle["completed_remediations"] == 1
+    assert idle["realized_monthly_usd"] == 20.0
+    assert unattached["pending_remediations"] == 1
+    assert unattached["opportunity_monthly_usd"] == 2.0

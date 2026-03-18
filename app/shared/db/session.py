@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import re
 import ssl  # noqa: F401  # Retained for compatibility with focused DB test patches.
@@ -237,7 +238,21 @@ def _get_db_runtime() -> _DBRuntime:
 
 
 def reset_db_runtime() -> None:
-    """Test helper for forcing runtime re-initialization on next access."""
+    """Sync wrapper for forcing runtime re-initialization on next access."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        asyncio.run(dispose_db_runtime())
+        return
+
+    # Async callers should use dispose_db_runtime() directly so disposal completes
+    # before a new runtime is created.
+    logger.warning("reset_db_runtime_called_inside_running_loop_scheduling_dispose")
+    asyncio.create_task(dispose_db_runtime())
+
+
+async def dispose_db_runtime() -> None:
+    """Dispose the active async engine and clear the cached runtime."""
     global _db_runtime
     runtime = _db_runtime
     _db_runtime = None
@@ -246,7 +261,7 @@ def reset_db_runtime() -> None:
         return
 
     try:
-        runtime.engine.sync_engine.dispose()
+        await runtime.engine.dispose()
     except DB_RUNTIME_DISPOSE_ERRORS as exc:
         logger.debug("db_runtime_dispose_skipped", error=str(exc), exc_info=True)
 

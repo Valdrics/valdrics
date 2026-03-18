@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess  # nosec B404 - controlled local pytest invocation only
 import sys
 import time
@@ -107,6 +108,12 @@ def _run_scenario(scenario: FailureScenario, *, cwd: Path) -> tuple[dict[str, ob
         "-q",
         *(_validate_selector(selector) for selector in scenario.selectors),
     ]
+    subprocess_env = os.environ.copy()
+    subprocess_env.pop("DATABASE_URL", None)
+    subprocess_env.pop("DB_SSL_MODE", None)
+    subprocess_env.pop("PGSSLMODE", None)
+    subprocess_env["TESTING"] = "true"
+    subprocess_env["DEBUG"] = "false"
     started = time.perf_counter()
     result = subprocess.run(
         command,
@@ -114,6 +121,7 @@ def _run_scenario(scenario: FailureScenario, *, cwd: Path) -> tuple[dict[str, ob
         capture_output=True,
         text=True,
         check=False,
+        env=subprocess_env,
     )  # nosec B603 - pytest invocation uses static repo-local selectors
     duration_seconds = round(time.perf_counter() - started, 3)
     passed = result.returncode == 0
@@ -140,7 +148,11 @@ def generate_evidence(
     profile: str,
     cwd: Path,
 ) -> tuple[dict[str, object], bool]:
-    if executed_by.strip() == approved_by.strip():
+    normalized_executed_by = executed_by.strip()
+    normalized_approved_by = approved_by.strip()
+    if not normalized_executed_by or not normalized_approved_by:
+        raise ValueError("executed_by and approved_by must be non-empty")
+    if normalized_executed_by == normalized_approved_by:
         raise ValueError("executed_by and approved_by must be distinct")
 
     scenario_rows: list[dict[str, object]] = []
@@ -160,8 +172,8 @@ def generate_evidence(
         "runner": "staged_failure_injection",
         "execution_class": "staged",
         "captured_at": datetime.now(timezone.utc).isoformat(),
-        "executed_by": executed_by.strip(),
-        "approved_by": approved_by.strip(),
+        "executed_by": normalized_executed_by,
+        "approved_by": normalized_approved_by,
         "scenarios": scenario_rows,
         "summary": {
             "total_scenarios": total,

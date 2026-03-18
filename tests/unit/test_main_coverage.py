@@ -54,7 +54,7 @@ async def test_lifespan_flow(mock_lifespan_deps):
 
     with (
         patch("app.main.should_bootstrap_local_sqlite", return_value=False),
-        patch("app.main.reset_db_runtime"),
+        patch("app.main.dispose_db_runtime", new_callable=AsyncMock),
     ):
         async with lifespan(app):
             mock_lifespan_deps["makedirs"].assert_called_with(
@@ -79,7 +79,7 @@ async def test_lifespan_skips_scheduler_when_disabled(mock_lifespan_deps):
 
         with (
             patch("app.main.should_bootstrap_local_sqlite", return_value=False),
-            patch("app.main.reset_db_runtime"),
+            patch("app.main.dispose_db_runtime", new_callable=AsyncMock),
         ):
             async with lifespan(app):
                 pass
@@ -94,7 +94,7 @@ async def test_lifespan_bootstraps_local_sqlite_when_enabled(mock_lifespan_deps)
     with (
         patch("app.main.should_bootstrap_local_sqlite", return_value=True),
         patch("app.main.bootstrap_local_sqlite_schema", new_callable=AsyncMock) as bootstrap,
-        patch("app.main.reset_db_runtime"),
+        patch("app.main.dispose_db_runtime", new_callable=AsyncMock),
     ):
         async with lifespan(app):
             pass

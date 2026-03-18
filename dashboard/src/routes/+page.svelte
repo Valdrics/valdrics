@@ -26,6 +26,7 @@
 	import { getDashboardPersonaContent, PUBLIC_HOME_META } from './homeDashboardContent';
 
 	type RemediationFinding = {
+		finding_id?: string;
 		resource_id: string;
 		resource_type?: string;
 		provider?: string;

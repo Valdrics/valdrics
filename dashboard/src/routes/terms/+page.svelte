@@ -1,10 +1,14 @@
-<svelte:head>
-	<title>Terms of Service | Valdrics</title>
-	<meta
-		name="description"
-		content="Valdrics terms of service covering account responsibilities, billing, acceptable use, confidentiality, liability, and dispute provisions."
-	/>
-</svelte:head>
+<script lang="ts">
+	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
+</script>
+
+<PublicPageMeta
+	title="Terms of Service"
+	description="Valdrics terms of service covering account responsibilities, billing, acceptable use, confidentiality, liability, and dispute provisions."
+	pageType="WebPage"
+	pageSection="Legal"
+	keywords={['terms of service', 'billing terms', 'acceptable use', 'liability']}
+/>
 
 <article class="mx-auto max-w-4xl px-6 py-12 space-y-8">
 	<header class="space-y-3">

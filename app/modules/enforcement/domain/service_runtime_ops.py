@@ -346,11 +346,11 @@ async def build_export_bundle(
         normalize_policy_document_schema_version_fn=_normalize_policy_document_schema_version,
         normalize_policy_document_sha256_fn=_normalize_policy_document_sha256,
         computed_context_snapshot_fn=_computed_context_snapshot,
+        parse_iso_datetime_fn=_parse_iso_datetime,
         json_default_fn=_json_default,
         render_decisions_csv_fn=service._render_decisions_csv,
         render_approvals_csv_fn=service._render_approvals_csv,
         export_events_counter=ENFORCEMENT_EXPORT_EVENTS_TOTAL,
-        utcnow_fn=_utcnow,
     )
     return EnforcementExportBundle(**payload)
 
