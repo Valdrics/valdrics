@@ -41,7 +41,7 @@ describe('settings page integration wiring (core)', () => {
 			);
 			expect(getMock).toHaveBeenCalledWith(
 				endpoint('/settings/llm/models'),
-				expect.objectContaining({ timeoutMs: 8000 })
+				expect.objectContaining({ headers: expect.any(Object), timeoutMs: 8000 })
 			);
 			expect(getMock).toHaveBeenCalledWith(
 				endpoint('/settings/llm'),

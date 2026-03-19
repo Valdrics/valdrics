@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 from pathlib import Path
+import re
 import sys
 from typing import Any
 from urllib.parse import urlparse
@@ -126,6 +128,21 @@ def _string_value(values: dict[str, str], key: str, default: str = "") -> str:
     return str(values.get(key, default) or default)
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _resolve_default_path(path: Path) -> Path:
+    return (_repo_root() / path).resolve()
+
+
+def _resolve_cli_path(path: Path) -> Path:
+    raw = Path(path).expanduser()
+    if raw.is_absolute():
+        return raw.resolve()
+    return (_repo_root() / raw).resolve()
+
+
 def _selected_llm_provider(values: dict[str, str]) -> str:
     normalized = _string_value(values, "LLM_PROVIDER", "groq").strip().lower()
     if normalized not in LLM_PROVIDER_ENV_KEY:
@@ -162,12 +179,146 @@ def _include_outbound_tls_break_glass(values: dict[str, str]) -> bool:
     )
 
 
+def _is_valid_strict_public_url(value: str) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate or _contains_placeholder(candidate):
+        return False
+
+    parsed = urlparse(candidate)
+    if parsed.scheme != "https" or not parsed.netloc:
+        return False
+    if parsed.username or parsed.password or parsed.query or parsed.fragment:
+        return False
+
+    hostname = str(parsed.hostname or "").strip().lower()
+    if not hostname or hostname == "localhost":
+        return False
+
+    try:
+        host_ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return True
+
+    return not (
+        host_ip.is_private
+        or host_ip.is_loopback
+        or host_ip.is_link_local
+        or host_ip.is_multicast
+        or host_ip.is_unspecified
+        or host_ip.is_reserved
+    )
+
+
+def _is_valid_http_url(value: str) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate or _contains_placeholder(candidate):
+        return False
+    return candidate.startswith(("http://", "https://"))
+
+
+def _has_valid_trusted_proxy_cidrs(value: str) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate or _contains_placeholder(candidate):
+        return False
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(parsed, list) or not parsed:
+        return False
+    for raw in parsed:
+        cidr = str(raw or "").strip()
+        if not cidr:
+            return False
+        try:
+            ipaddress.ip_network(cidr, strict=False)
+        except ValueError:
+            return False
+    return True
+
+
+def _is_valid_aws_principal_arn(value: str) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate or _contains_placeholder(candidate):
+        return False
+    arn_pattern = re.compile(
+        r"^arn:(aws|aws-us-gov|aws-cn):iam::\d{12}:(root|role\/[\w+=,.@\\-_/]+|user\/[\w+=,.@\\-_/]+)$"
+    )
+    return bool(arn_pattern.fullmatch(candidate))
+
+
+def _has_minimum_length(value: str, *, minimum: int) -> bool:
+    candidate = str(value or "").strip()
+    if not candidate or _contains_placeholder(candidate):
+        return False
+    return len(candidate) >= minimum
+
+
 def _runtime_blockers(values: dict[str, str]) -> list[str]:
     blockers: list[str] = []
     for key in RUNTIME_BLOCKER_KEYS:
         value = _string_value(values, key).strip()
         if not value or _contains_placeholder(value):
             blockers.append(key)
+
+    for key in ("API_URL", "FRONTEND_URL"):
+        value = _string_value(values, key).strip()
+        if value and not _contains_placeholder(value) and not _is_valid_strict_public_url(value):
+            blockers.append(key)
+
+    for key in ("OTEL_EXPORTER_OTLP_ENDPOINT", "SENTRY_DSN"):
+        value = _string_value(values, key).strip()
+        if value and not _contains_placeholder(value) and not _is_valid_http_url(value):
+            blockers.append(key)
+
+    trusted_proxy_cidrs = _string_value(values, "TRUSTED_PROXY_CIDRS").strip()
+    if (
+        trusted_proxy_cidrs
+        and not _contains_placeholder(trusted_proxy_cidrs)
+        and not _has_valid_trusted_proxy_cidrs(trusted_proxy_cidrs)
+    ):
+        blockers.append("TRUSTED_PROXY_CIDRS")
+
+    aws_trust_principal_arn = _string_value(values, "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN").strip()
+    if (
+        aws_trust_principal_arn
+        and not _contains_placeholder(aws_trust_principal_arn)
+        and not _is_valid_aws_principal_arn(aws_trust_principal_arn)
+    ):
+        blockers.append("AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN")
+
+    admin_api_key = _string_value(values, "ADMIN_API_KEY").strip()
+    if admin_api_key and not _contains_placeholder(admin_api_key) and not _has_minimum_length(
+        admin_api_key,
+        minimum=32,
+    ):
+        blockers.append("ADMIN_API_KEY")
+
+    environment = _string_value(values, "ENVIRONMENT").strip().lower()
+    if environment == "production":
+        paystack_secret_key = _string_value(values, "PAYSTACK_SECRET_KEY").strip()
+        if (
+            paystack_secret_key
+            and not _contains_placeholder(paystack_secret_key)
+            and not paystack_secret_key.startswith("sk_live_")
+        ):
+            blockers.append("PAYSTACK_SECRET_KEY")
+
+        paystack_public_key = _string_value(values, "PAYSTACK_PUBLIC_KEY").strip()
+        if (
+            paystack_public_key
+            and not _contains_placeholder(paystack_public_key)
+            and not paystack_public_key.startswith("pk_live_")
+        ):
+            blockers.append("PAYSTACK_PUBLIC_KEY")
+
+    internal_metrics_auth_token = _string_value(values, "INTERNAL_METRICS_AUTH_TOKEN").strip()
+    if (
+        internal_metrics_auth_token
+        and not _contains_placeholder(internal_metrics_auth_token)
+        and not _has_minimum_length(internal_metrics_auth_token, minimum=32)
+    ):
+        blockers.append("INTERNAL_METRICS_AUTH_TOKEN")
 
     provider_key = _selected_llm_provider_env_key(values)
     provider_value = _string_value(values, provider_key).strip()
@@ -189,6 +340,20 @@ def _artifact_output_paths(output_dir: Path) -> tuple[Path, ...]:
         output_dir / "terraform.runtime.auto.tfvars.json",
         output_dir / "deployment.report.json",
     )
+
+
+def _ensure_output_dir_parent(output_dir: Path) -> None:
+    current = output_dir
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output_dir parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
 
 
 def _koyeb_name(environment: str, component: str) -> str:
@@ -380,6 +545,15 @@ def _normalize_image_digest(value: str, *, field_name: str, default: str) -> str
     return f"sha256:{digest_body}"
 
 
+def _normalize_image_registry(value: str) -> str:
+    normalized = str(value or "").strip().rstrip("/")
+    if not normalized:
+        raise ValueError("registry must be a non-empty container registry prefix.")
+    if any(ch.isspace() for ch in normalized):
+        raise ValueError("registry must not contain whitespace.")
+    return normalized
+
+
 def _koyeb_release_metadata(
     *,
     environment: str,
@@ -388,7 +562,7 @@ def _koyeb_release_metadata(
     api_image_digest: str,
     dashboard_image_digest: str,
 ) -> dict[str, Any]:
-    normalized_registry = registry.rstrip("/")
+    normalized_registry = _normalize_image_registry(registry)
     normalized_release_tag = str(release_tag or "").strip() or DEFAULT_RELEASE_TAG
     normalized_api_digest = _normalize_image_digest(
         api_image_digest,
@@ -591,6 +765,11 @@ def generate_managed_deployment_artifacts(
         raise FileNotFoundError(
             f"Runtime env file does not exist: {runtime_env_file.as_posix()}"
         )
+    if not runtime_env_file.is_file():
+        raise ValueError(f"runtime_env_file must be a file: {runtime_env_file.as_posix()}")
+    if output_dir.exists() and not output_dir.is_dir():
+        raise ValueError(f"output_dir must be a directory path: {output_dir.as_posix()}")
+    _ensure_output_dir_parent(output_dir)
     runtime_env_resolved = runtime_env_file.resolve()
     for artifact_path in _artifact_output_paths(output_dir):
         if artifact_path.resolve() == runtime_env_resolved:
@@ -779,12 +958,20 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    runtime_env_file = args.runtime_env_file or Path(".runtime") / f"{args.environment}.env"
-    output_dir = args.output_dir or DEFAULT_OUTPUT_ROOT / str(args.environment)
+    runtime_env_file = (
+        _resolve_default_path(Path(".runtime") / f"{args.environment}.env")
+        if args.runtime_env_file is None
+        else _resolve_cli_path(args.runtime_env_file)
+    )
+    output_dir = (
+        _resolve_default_path(DEFAULT_OUTPUT_ROOT / str(args.environment))
+        if args.output_dir is None
+        else _resolve_cli_path(args.output_dir)
+    )
     report = generate_managed_deployment_artifacts(
         environment=str(args.environment),
-        runtime_env_file=runtime_env_file.resolve(),
-        output_dir=output_dir.resolve(),
+        runtime_env_file=runtime_env_file,
+        output_dir=output_dir,
         registry=str(args.registry),
         release_tag=str(args.release_tag),
         api_image_digest=str(args.api_image_digest),

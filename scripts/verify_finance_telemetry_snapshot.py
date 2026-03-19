@@ -74,6 +74,8 @@ def _parse_non_empty_str(value: Any, *, field: str) -> str:
 def _load_payload(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Finance telemetry snapshot file not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"Finance telemetry snapshot file must be a file: {path}")
     raw = path.read_text(encoding="utf-8")
     try:
         payload = json.loads(raw)

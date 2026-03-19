@@ -38,6 +38,71 @@ TIER_MATRIX: dict[str, tuple[int, int, Decimal]] = {
 }
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _protected_output_paths() -> set[Path]:
+    repo_root = _repo_root()
+    return {
+        Path(__file__).resolve(),
+        repo_root / "scripts" / "collect_finance_telemetry_snapshot.py",
+        repo_root / "scripts" / "verify_finance_telemetry_snapshot.py",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json",
+    }
+
+
+def _resolve_output_path(value: str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        resolved = raw.resolve()
+    else:
+        resolved = (_repo_root() / raw).resolve()
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"output must be a file path: {resolved.as_posix()}")
+    if resolved in _protected_output_paths():
+        raise ValueError(
+            "output must not overwrite finance telemetry source, collector, verifier, or template files"
+        )
+    return resolved
+
+
+def _resolve_database_path(value: str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        return raw.resolve()
+    return (_repo_root() / raw).resolve()
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
+def _ensure_parent_dir(path: Path, *, field_name: str) -> None:
+    current = path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"{field_name} parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate runtime finance telemetry snapshot artifact.",
@@ -212,11 +277,14 @@ async def _generate_snapshot(
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    database_path = Path(str(args.database_path))
-    output_path = Path(str(args.output))
+    database_path = _resolve_database_path(str(args.database_path))
+    output_path = _resolve_output_path(str(args.output))
+    _ensure_output_parent_dir(output_path)
+    if database_path.exists() and not database_path.is_file():
+        raise ValueError(f"database_path must be a file path: {database_path}")
+    _ensure_parent_dir(database_path, field_name="database_path")
     if output_path.resolve() == database_path.resolve():
         raise ValueError("output and database_path must be different files")
-    database_path.parent.mkdir(parents=True, exist_ok=True)
 
     if args.start_date and args.end_date:
         start_date = _parse_date(str(args.start_date), field="start_date")
@@ -225,8 +293,14 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("start_date and end_date must be provided together")
     else:
         start_date, end_date = _default_window()
-    label = str(args.label).strip() if args.label else f"{start_date}_{end_date}"
+    if args.label is not None:
+        label = str(args.label).strip()
+        if not label:
+            raise ValueError("label must be a non-empty string")
+    else:
+        label = f"{start_date}_{end_date}"
 
+    database_path.parent.mkdir(parents=True, exist_ok=True)
     payload = asyncio.run(
         _generate_snapshot(
             database_path=database_path,

@@ -41,7 +41,7 @@ class _STSResponse:
 
 
 class _STSClient:
-    async def get(self, _url: str) -> _STSResponse:
+    async def get(self, _url: str, **_kwargs: Any) -> _STSResponse:
         return _STSResponse()
 
 

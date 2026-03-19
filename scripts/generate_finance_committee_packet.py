@@ -18,6 +18,39 @@ from scripts.verify_finance_guardrails_evidence import verify_evidence
 from scripts.verify_finance_telemetry_snapshot import verify_snapshot
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _protected_output_paths() -> set[Path]:
+    repo_root = _repo_root()
+    return {
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
+    }
+
+
+def _resolve_repo_relative_path(value: str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        return raw.resolve()
+    return (_repo_root() / raw).resolve()
+
+
+def _ensure_output_dir_parent(output_dir: Path) -> None:
+    current = output_dir
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output_dir parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
 def _send_alert_if_needed(
     *,
     webhook_url: str | None,
@@ -100,14 +133,14 @@ def _parse_positive_float_arg(value: float, *, field: str) -> float:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    telemetry_path = Path(str(args.telemetry_path))
-    assumptions_path = Path(str(args.assumptions_path))
-    output_dir = Path(str(args.output_dir))
+    telemetry_path = _resolve_repo_relative_path(str(args.telemetry_path))
+    assumptions_path = _resolve_repo_relative_path(str(args.assumptions_path))
+    output_dir = _resolve_repo_relative_path(str(args.output_dir))
     telemetry_resolved = telemetry_path.resolve()
     assumptions_resolved = assumptions_path.resolve()
     if telemetry_resolved == assumptions_resolved:
         raise ValueError("telemetry_path and assumptions_path must be different files")
-    output_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_output_dir_parent(output_dir)
 
     verify_snapshot(
         snapshot_path=telemetry_path,
@@ -149,7 +182,13 @@ def main(argv: list[str] | None = None) -> int:
                 "output_dir would overwrite "
                 f"{input_paths[output_resolved]}: {output_path.as_posix()}"
             )
+        if output_resolved in _protected_output_paths():
+            raise ValueError(
+                "output_dir would overwrite checked-in finance evidence: "
+                f"{output_path.as_posix()}"
+            )
 
+    output_dir.mkdir(parents=True, exist_ok=True)
     guardrails_path.write_text(
         json.dumps(finance_guardrails, indent=2, sort_keys=True),
         encoding="utf-8",

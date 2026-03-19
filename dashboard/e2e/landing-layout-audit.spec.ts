@@ -1,7 +1,9 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Landing layout audit regressions', () => {
-	test('aligns signal hotspot circles with rendered lane nodes', async ({ page }) => {
+	test.use({ reducedMotion: 'reduce' });
+
+	test('keeps approval-chain nodes, rail stops, and stage cards synchronized', async ({ page }) => {
 		await page.setViewportSize({ width: 1365, height: 820 });
 		await page.goto('/');
 		await page.waitForLoadState('networkidle');
@@ -10,49 +12,73 @@ test.describe('Landing layout audit regressions', () => {
 		await signalSection.scrollIntoViewIfNeeded();
 		await expect(page.locator('section#signal-map .signal-map')).toBeVisible();
 
-		const alignment = await page.evaluate(() => {
-			const hotspotElements = Array.from(
-				document.querySelectorAll<HTMLElement>('#signal-map .signal-hotspot')
+		const initialState = await signalSection.evaluate((section) => {
+			const orbitNodes = Array.from(
+				section.querySelectorAll<HTMLElement>('.approval-chain-orbit-node')
 			);
-			const nodeElements = Array.from(
-				document.querySelectorAll<SVGCircleElement>(
-					'#signal-map .signal-svg .sig-node:not(.sig-node--center)'
-				)
+			const railStops = Array.from(
+				section.querySelectorAll<HTMLElement>('.approval-chain-rail-stop')
 			);
-
-			const hotspots = hotspotElements.map((element) => {
-				const rect = element.getBoundingClientRect();
-				return {
-					x: rect.left + rect.width / 2,
-					y: rect.top + rect.height / 2
-				};
-			});
-			const nodes = nodeElements.map((element) => {
-				const rect = element.getBoundingClientRect();
-				return {
-					x: rect.left + rect.width / 2,
-					y: rect.top + rect.height / 2
-				};
-			});
-
-			const distances = hotspots.map((hotspot, index) => {
-				const node = nodes[index];
-				if (!node) {
-					return Number.POSITIVE_INFINITY;
-				}
-				return Math.hypot(hotspot.x - node.x, hotspot.y - node.y);
-			});
-
+			const stages = Array.from(section.querySelectorAll<HTMLElement>('.approval-chain-stage'));
+			const titles = stages.map(
+				(stage) => stage.querySelector('.approval-chain-stage-title')?.textContent?.trim() ?? ''
+			);
+			const activeOrbitIndex = orbitNodes.findIndex((node) => node.classList.contains('is-active'));
+			const activeRailIndex = railStops.findIndex((stop) => stop.classList.contains('is-active'));
+			const activeStageIndex = stages.findIndex((stage) => stage.classList.contains('is-active'));
 			return {
-				hotspotCount: hotspots.length,
-				nodeCount: nodes.length,
-				maxDistance: distances.length > 0 ? Math.max(...distances) : Number.POSITIVE_INFINITY
+				orbitCount: orbitNodes.length,
+				railCount: railStops.length,
+				stageCount: stages.length,
+				titles,
+				activeOrbitIndex,
+				activeRailIndex,
+				activeStageIndex
 			};
 		});
 
-		expect(alignment.hotspotCount).toBe(4);
-		expect(alignment.nodeCount).toBe(4);
-		expect(alignment.maxDistance).toBeLessThanOrEqual(8);
+		expect(initialState.orbitCount).toBe(4);
+		expect(initialState.railCount).toBe(4);
+		expect(initialState.stageCount).toBe(4);
+		expect(initialState.titles).toEqual([
+			'Signal Scoped',
+			'Checks Applied',
+			'Approval Routed',
+			'Outcome Recorded'
+		]);
+		expect(initialState.activeOrbitIndex).toBeGreaterThanOrEqual(0);
+		expect(initialState.activeOrbitIndex).toBe(initialState.activeRailIndex);
+		expect(initialState.activeOrbitIndex).toBe(initialState.activeStageIndex);
+
+		const thirdStage = signalSection.locator('.approval-chain-stage').nth(2);
+		await thirdStage.evaluate((element) => {
+			(element as HTMLButtonElement).click();
+		});
+		await expect(signalSection.locator('#signal-control-details')).toBeVisible();
+
+		await expect
+			.poll(async () => {
+				return signalSection.evaluate((section) => {
+					const orbitNodes = Array.from(
+						section.querySelectorAll<HTMLElement>('.approval-chain-orbit-node')
+					);
+					const railStops = Array.from(
+						section.querySelectorAll<HTMLElement>('.approval-chain-rail-stop')
+					);
+					const stages = Array.from(section.querySelectorAll<HTMLElement>('.approval-chain-stage'));
+					return {
+						activeOrbitIndex: orbitNodes.findIndex((node) => node.classList.contains('is-active')),
+						activeRailIndex: railStops.findIndex((stop) => stop.classList.contains('is-active')),
+						activeStageIndex: stages.findIndex((stage) => stage.classList.contains('is-active'))
+					};
+				});
+			})
+			.toEqual({
+				activeOrbitIndex: 2,
+				activeRailIndex: 2,
+				activeStageIndex: 2
+			});
+		await expect(signalSection.getByRole('tabpanel')).toContainText(/approval routed/i);
 	});
 
 	test('does not trigger unresolved Supabase host errors on anonymous landing loads', async ({

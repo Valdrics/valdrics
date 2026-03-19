@@ -140,7 +140,42 @@ def _resolve_output_path(*, repo_root: Path, output: str) -> Path:
         out_path.relative_to(repo_root)
     except ValueError as exc:
         raise ValueError("out must resolve inside the repository root") from exc
+    if out_path.exists() and not out_path.is_file():
+        raise ValueError("out must be a file path inside the repository root")
+    protected_paths = {
+        Path(__file__).resolve(),
+        (repo_root / "scripts" / "verify_feature_enforceability_matrix.py").resolve(),
+        (repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json").resolve(),
+    }
+    if out_path in protected_paths:
+        raise ValueError(
+            "out must not overwrite feature-enforceability source, verifier, or checked-in artifact files"
+        )
+    protected_roots = (
+        repo_root / "app" / "modules",
+        repo_root / "app" / "shared",
+    )
+    for protected_root in protected_roots:
+        try:
+            out_path.relative_to(protected_root)
+        except ValueError:
+            continue
+        raise ValueError("out must not overwrite scanned source roots")
     return out_path
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"out parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -150,6 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     repo_root = _repo_root()
     payload = generate_matrix(repo_root=repo_root)
     out_path = _resolve_output_path(repo_root=repo_root, output=str(args.out))
+    _ensure_output_parent_dir(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     verify_matrix(artifact_path=out_path, repo_root=repo_root)

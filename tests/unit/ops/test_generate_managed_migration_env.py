@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import scripts.generate_managed_migration_env as managed_migration_env_generator
 from scripts.generate_managed_migration_env import generate_managed_migration_env
 
 
@@ -93,3 +94,154 @@ def test_generate_managed_migration_env_rejects_shared_output_and_report_path(
             report_path=combined,
             environment="staging",
         )
+
+
+@pytest.mark.parametrize("field_name", ["output_path", "report_path"])
+def test_generate_managed_migration_env_rejects_directory_targets(
+    tmp_path: Path,
+    field_name: str,
+) -> None:
+    output = tmp_path / "staging.migrate.env"
+    report_path = tmp_path / "staging.migrate.report.json"
+    bad_target = tmp_path / field_name
+    bad_target.mkdir()
+
+    kwargs = {
+        "output_path": output,
+        "report_path": report_path,
+        "environment": "staging",
+    }
+    kwargs[field_name] = bad_target
+
+    with pytest.raises(ValueError, match=rf"{field_name} must be a file path"):
+        generate_managed_migration_env(**kwargs)
+
+
+@pytest.mark.parametrize("field_name", ["output_path", "report_path"])
+def test_generate_managed_migration_env_rejects_blocked_parent_dirs(
+    tmp_path: Path,
+    field_name: str,
+) -> None:
+    blocked_parent = tmp_path / f"blocked-{field_name}"
+    blocked_parent.write_text("not-a-directory", encoding="utf-8")
+    safe_parent = tmp_path / "safe-parent"
+    kwargs = {
+        "output_path": safe_parent / "staging.migrate.env",
+        "report_path": safe_parent / "staging.migrate.report.json",
+        "environment": "staging",
+    }
+    kwargs[field_name] = blocked_parent / Path(kwargs[field_name]).name
+
+    with pytest.raises(ValueError, match=rf"{field_name} parent must be a directory path"):
+        generate_managed_migration_env(**kwargs)
+
+
+def test_main_resolves_default_paths_from_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_generate_managed_migration_env(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        output_path = kwargs["output_path"]
+        return {
+            "environment": kwargs["environment"],
+            "output_path": output_path.as_posix(),
+            "migration_ready": False,
+            "migration_validation_blockers": [],
+        }
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        managed_migration_env_generator,
+        "generate_managed_migration_env",
+        _fake_generate_managed_migration_env,
+    )
+
+    assert managed_migration_env_generator.main(["--environment", "staging"]) == 0
+    assert captured["output_path"] == (
+        managed_migration_env_generator._repo_root()
+        / managed_migration_env_generator.DEFAULT_OUTPUT_DIR
+        / "staging.migrate.env"
+    ).resolve()
+    assert captured["report_path"] == (
+        managed_migration_env_generator._repo_root()
+        / managed_migration_env_generator.DEFAULT_OUTPUT_DIR
+        / "staging.migrate.report.json"
+    ).resolve()
+
+
+def test_main_resolves_explicit_relative_paths_from_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    captured: dict[str, object] = {}
+
+    def _fake_generate_managed_migration_env(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        output_path = kwargs["output_path"]
+        return {
+            "environment": kwargs["environment"],
+            "output_path": output_path.as_posix(),  # type: ignore[index]
+            "migration_ready": False,
+            "migration_validation_blockers": [],
+        }
+
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(managed_migration_env_generator, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        managed_migration_env_generator,
+        "generate_managed_migration_env",
+        _fake_generate_managed_migration_env,
+    )
+
+    assert (
+        managed_migration_env_generator.main(
+            [
+                "--environment",
+                "staging",
+                "--output-path",
+                ".runtime/staging.migrate.env",
+                "--report-path",
+                ".runtime/staging.migrate.report.json",
+            ]
+        )
+        == 0
+    )
+    assert captured["output_path"] == (
+        repo_root / ".runtime" / "staging.migrate.env"
+    ).resolve()
+    assert captured["report_path"] == (
+        repo_root / ".runtime" / "staging.migrate.report.json"
+    ).resolve()
+
+
+@pytest.mark.parametrize(
+    ("field_name", "relative_target"),
+    [
+        ("output_path", ".env.example"),
+        ("report_path", "scripts/validate_migration_env.py"),
+    ],
+)
+def test_generate_managed_migration_env_rejects_protected_output_targets(
+    field_name: str,
+    relative_target: str,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    kwargs = {
+        "output_path": repo_root / "tmp-staging.migrate.env",
+        "report_path": repo_root / "tmp-staging.migrate.report.json",
+        "environment": "staging",
+    }
+    kwargs[field_name] = repo_root / relative_target
+
+    with pytest.raises(
+        ValueError,
+        match=rf"{field_name} must not overwrite migration source, template, or validator files",
+    ):
+        generate_managed_migration_env(**kwargs)

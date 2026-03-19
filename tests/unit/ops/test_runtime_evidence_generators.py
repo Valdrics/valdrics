@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import scripts.generate_valdrics_disposition_register as valdrics_generator
 import scripts.generate_pricing_benchmark_register as pricing_generator
 from scripts.generate_finance_telemetry_snapshot import (
     main as generate_finance_telemetry_snapshot_main,
@@ -63,6 +64,251 @@ def test_generate_finance_telemetry_snapshot_rejects_database_output_collision(
         )
 
 
+def test_generate_finance_telemetry_snapshot_rejects_blank_label_before_generation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._generate_snapshot",
+        lambda **_: (_ for _ in ()).throw(AssertionError("snapshot generation should not run")),
+    )
+
+    with pytest.raises(ValueError, match="label must be a non-empty string"):
+        generate_finance_telemetry_snapshot_main(
+            [
+                "--output",
+                str(tmp_path / "finance_telemetry_snapshot.json"),
+                "--database-path",
+                str(tmp_path / "finance.sqlite"),
+                "--label",
+                "   ",
+            ]
+        )
+
+
+def test_generate_finance_telemetry_snapshot_does_not_create_database_parent_on_label_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_path = tmp_path / "nested" / "telemetry.sqlite"
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._generate_snapshot",
+        lambda **_: (_ for _ in ()).throw(AssertionError("snapshot generation should not run")),
+    )
+
+    with pytest.raises(ValueError, match="label must be a non-empty string"):
+        generate_finance_telemetry_snapshot_main(
+            [
+                "--output",
+                str(tmp_path / "finance_telemetry_snapshot.json"),
+                "--database-path",
+                str(database_path),
+                "--label",
+                "   ",
+            ]
+        )
+
+    assert not database_path.parent.exists()
+
+
+@pytest.mark.parametrize(
+    "relative_output",
+    [
+        "scripts/verify_finance_telemetry_snapshot.py",
+        "scripts/collect_finance_telemetry_snapshot.py",
+        "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
+        "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json",
+    ],
+)
+def test_generate_finance_telemetry_snapshot_rejects_protected_output_collisions(
+    monkeypatch: pytest.MonkeyPatch,
+    relative_output: str,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    output = repo_root / relative_output
+    called = {"generate": False}
+
+    async def _unexpected_generate_snapshot(**_: object) -> dict[str, object]:
+        called["generate"] = True
+        raise AssertionError("snapshot generation should not run for protected output paths")
+
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._generate_snapshot",
+        _unexpected_generate_snapshot,
+    )
+
+    with pytest.raises(ValueError, match="output must not overwrite finance telemetry"):
+        generate_finance_telemetry_snapshot_main(
+            [
+                "--output",
+                str(output),
+                "--database-path",
+                str(repo_root / ".runtime" / "tmp" / "finance.sqlite"),
+            ]
+        )
+
+    assert called["generate"] is False
+
+
+def test_generate_finance_telemetry_snapshot_rejects_output_parent_file(
+    tmp_path: Path,
+) -> None:
+    blocked_parent = tmp_path / "blocked-parent"
+    blocked_parent.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="output parent must be a directory path"):
+        generate_finance_telemetry_snapshot_main(
+            [
+                "--output",
+                str(blocked_parent / "finance_telemetry_snapshot.json"),
+                "--database-path",
+                str(tmp_path / "finance.sqlite"),
+            ]
+        )
+
+
+def test_generate_finance_telemetry_snapshot_rejects_directory_output_path(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "telemetry-output"
+    output_dir.mkdir()
+
+    with pytest.raises(ValueError, match="output must be a file path"):
+        generate_finance_telemetry_snapshot_main(
+            [
+                "--output",
+                str(output_dir),
+                "--database-path",
+                str(tmp_path / "finance.sqlite"),
+            ]
+        )
+
+
+def test_generate_finance_telemetry_snapshot_rejects_relative_protected_output_from_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._repo_root",
+        lambda: repo_root,
+    )
+
+    with pytest.raises(ValueError, match="output must not overwrite finance telemetry"):
+        generate_finance_telemetry_snapshot_main(
+            [
+                "--output",
+                "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
+                "--database-path",
+                "runtime/finance.sqlite",
+            ]
+        )
+
+
+def test_generate_finance_telemetry_snapshot_resolves_relative_paths_from_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    output = repo_root / "artifacts" / "finance_telemetry_snapshot.json"
+    database_path = repo_root / "runtime" / "finance.sqlite"
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._repo_root",
+        lambda: repo_root,
+    )
+
+    async def _fake_generate_snapshot(**kwargs: object) -> dict[str, object]:
+        assert kwargs["database_path"] == database_path
+        return {
+            "captured_at": "2026-03-01T00:00:00+00:00",
+            "window": {"start": "2026-02-01T00:00:00+00:00", "end": "2026-02-28T23:59:59+00:00"},
+            "gate_results": {
+                "telemetry_gate_required_tiers_present": True,
+                "telemetry_gate_window_valid": True,
+                "telemetry_gate_percentiles_valid": True,
+                "telemetry_gate_artifact_fresh": True,
+                "telemetry_gate_free_tier_guardrails_bounded": True,
+                "telemetry_gate_free_tier_margin_guarded": True,
+            },
+        }
+
+    verify_calls: list[dict[str, object]] = []
+
+    def _fake_verify_snapshot(**kwargs: object) -> int:
+        verify_calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._generate_snapshot",
+        _fake_generate_snapshot,
+    )
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot.verify_snapshot",
+        _fake_verify_snapshot,
+    )
+
+    assert (
+        generate_finance_telemetry_snapshot_main(
+            [
+                "--output",
+                "artifacts/finance_telemetry_snapshot.json",
+                "--database-path",
+                "runtime/finance.sqlite",
+            ]
+        )
+        == 0
+    )
+    assert output.exists()
+    assert verify_calls == [
+        {
+            "snapshot_path": output,
+            "max_artifact_age_hours": 4.0,
+        }
+    ]
+
+
+def test_generate_finance_telemetry_snapshot_rejects_directory_database_path(
+    tmp_path: Path,
+) -> None:
+    database_dir = tmp_path / "database-dir"
+    database_dir.mkdir()
+
+    with pytest.raises(ValueError, match="database_path must be a file path"):
+        generate_finance_telemetry_snapshot_main(
+            [
+                "--output",
+                str(tmp_path / "finance_telemetry_snapshot.json"),
+                "--database-path",
+                str(database_dir),
+            ]
+        )
+
+
+def test_generate_finance_telemetry_snapshot_rejects_blocked_database_parent(
+    tmp_path: Path,
+) -> None:
+    blocked_parent = tmp_path / "blocked-database-parent"
+    blocked_parent.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="database_path parent must be a directory path"):
+        generate_finance_telemetry_snapshot_main(
+            [
+                "--output",
+                str(tmp_path / "finance_telemetry_snapshot.json"),
+                "--database-path",
+                str(blocked_parent / "finance.sqlite"),
+            ]
+        )
+
+
 def test_generate_pricing_benchmark_register_emits_verifiable_artifact(
     tmp_path: Path,
 ) -> None:
@@ -95,6 +341,121 @@ def test_generate_pricing_benchmark_register_rejects_invalid_source_age_threshol
                 "0",
             ]
         )
+
+
+@pytest.mark.parametrize(
+    "relative_output",
+    [
+        "scripts/verify_pricing_benchmark_register.py",
+        "docs/ops/evidence/pricing_benchmark_register_TEMPLATE.json",
+    ],
+)
+def test_generate_pricing_benchmark_register_rejects_protected_output_collisions(
+    monkeypatch: pytest.MonkeyPatch,
+    relative_output: str,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    output = repo_root / relative_output
+    called = {"build": False}
+
+    def _unexpected_build_payload(**_: object) -> dict[str, object]:
+        called["build"] = True
+        raise AssertionError("payload generation should not run for protected output paths")
+
+    monkeypatch.setattr(pricing_generator, "_build_payload", _unexpected_build_payload)
+
+    with pytest.raises(ValueError, match="output must not overwrite pricing benchmark"):
+        generate_pricing_benchmark_register_main(
+            [
+                "--output",
+                str(output),
+                "--max-source-age-days",
+                "120",
+            ]
+        )
+
+    assert called["build"] is False
+
+
+def test_generate_pricing_benchmark_register_rejects_output_parent_file(
+    tmp_path: Path,
+) -> None:
+    blocked_parent = tmp_path / "blocked-parent"
+    blocked_parent.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="output parent must be a directory path"):
+        generate_pricing_benchmark_register_main(
+            [
+                "--output",
+                str(blocked_parent / "pricing_benchmark_register.json"),
+                "--max-source-age-days",
+                "120",
+            ]
+        )
+
+
+def test_generate_pricing_benchmark_register_rejects_directory_output_path(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "pricing-output"
+    output_dir.mkdir()
+
+    with pytest.raises(ValueError, match="output must be a file path"):
+        generate_pricing_benchmark_register_main(
+            [
+                "--output",
+                str(output_dir),
+                "--max-source-age-days",
+                "120",
+            ]
+        )
+
+
+def test_generate_pricing_benchmark_register_rejects_relative_protected_output_from_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(pricing_generator, "_repo_root", lambda: repo_root)
+
+    with pytest.raises(ValueError, match="output must not overwrite pricing benchmark"):
+        generate_pricing_benchmark_register_main(
+            [
+                "--output",
+                "docs/ops/evidence/pricing_benchmark_register_TEMPLATE.json",
+                "--max-source-age-days",
+                "120",
+            ]
+        )
+
+
+def test_generate_pricing_benchmark_register_resolves_relative_output_from_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(pricing_generator, "_repo_root", lambda: repo_root)
+
+    assert (
+        generate_pricing_benchmark_register_main(
+            [
+                "--output",
+                "artifacts/pricing_benchmark_register.json",
+                "--max-source-age-days",
+                "120",
+            ]
+        )
+        == 0
+    )
+    assert (repo_root / "artifacts" / "pricing_benchmark_register.json").exists()
 
 
 @pytest.mark.parametrize(
@@ -329,6 +690,192 @@ def test_generate_valdrics_disposition_register_rejects_blank_source_audit_path(
         )
 
 
+def test_generate_valdrics_disposition_register_rejects_missing_local_source_audit_path(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "valdrics_disposition_register.json"
+    missing_audit = tmp_path / "missing_audit.md"
+
+    with pytest.raises(
+        FileNotFoundError,
+        match="source_audit_path local file does not exist",
+    ):
+        generate_valdrics_disposition_register_main(
+            [
+                "--output",
+                str(output),
+                "--source-audit-path",
+                str(missing_audit),
+            ]
+        )
+
+
+def test_generate_valdrics_disposition_register_rejects_source_audit_output_collision(
+    tmp_path: Path,
+) -> None:
+    output = tmp_path / "valdrics_disposition_register.json"
+    output.write_text("audit source", encoding="utf-8")
+
+    with pytest.raises(
+        ValueError,
+        match="source_audit_path and output must be different files",
+    ):
+        generate_valdrics_disposition_register_main(
+            [
+                "--output",
+                str(output),
+                "--source-audit-path",
+                str(output),
+            ]
+        )
+
+
+@pytest.mark.parametrize(
+    "relative_output",
+    [
+        "scripts/verify_valdrics_disposition_freshness.py",
+        "docs/ops/evidence/valdrics_disposition_register_TEMPLATE.json",
+        "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
+    ],
+)
+def test_generate_valdrics_disposition_register_rejects_protected_output_collisions(
+    monkeypatch: pytest.MonkeyPatch,
+    relative_output: str,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    output = repo_root / relative_output
+
+    monkeypatch.setattr(
+        "scripts.generate_valdrics_disposition_register._collect_probe_results",
+        lambda **_: (_ for _ in ()).throw(
+            AssertionError("probe collection should not run for protected output paths")
+        ),
+    )
+
+    with pytest.raises(ValueError, match="output must not overwrite Valdrics"):
+        generate_valdrics_disposition_register_main(
+            [
+                "--output",
+                str(output),
+            ]
+        )
+
+
+def test_generate_valdrics_disposition_register_rejects_relative_protected_output_from_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(valdrics_generator, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        "scripts.generate_valdrics_disposition_register._collect_probe_results",
+        lambda **_: (_ for _ in ()).throw(
+            AssertionError("probe collection should not run for protected output paths")
+        ),
+    )
+
+    with pytest.raises(ValueError, match="output must not overwrite Valdrics"):
+        generate_valdrics_disposition_register_main(
+            [
+                "--output",
+                "docs/ops/evidence/valdrics_disposition_register_TEMPLATE.json",
+            ]
+        )
+
+
+def test_generate_valdrics_disposition_register_resolves_relative_paths_from_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    source_audit = repo_root / "docs" / "ops" / "source_audit.md"
+    source_audit.parent.mkdir(parents=True, exist_ok=True)
+    source_audit.write_text("audit source", encoding="utf-8")
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(valdrics_generator, "_repo_root", lambda: repo_root)
+
+    probe_results = {
+        probe.probe_id: {
+            "probe_id": probe.probe_id,
+            "command": " ".join(probe.command),
+            "passed": True,
+            "output_excerpt": "ok",
+        }
+        for probe in valdrics_generator.RUNTIME_PROBES
+    }
+    monkeypatch.setattr(
+        "scripts.generate_valdrics_disposition_register._collect_probe_results",
+        lambda **_: probe_results,
+    )
+    verify_calls: list[dict[str, object]] = []
+
+    def _fake_verify(**kwargs: object) -> int:
+        verify_calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(valdrics_generator, "verify_disposition_register", _fake_verify)
+
+    assert (
+        generate_valdrics_disposition_register_main(
+            [
+                "--output",
+                "artifacts/valdrics_disposition_register.json",
+                "--source-audit-path",
+                "docs/ops/source_audit.md",
+            ]
+        )
+        == 0
+    )
+
+    expected_output = repo_root / "artifacts" / "valdrics_disposition_register.json"
+    assert expected_output.exists()
+    payload = json.loads(expected_output.read_text(encoding="utf-8"))
+    assert payload["source_audit_path"] == source_audit.as_posix()
+    assert verify_calls == [
+        {
+            "register_path": expected_output,
+            "max_artifact_age_days": 45.0,
+            "max_review_window_days": 120.0,
+        }
+    ]
+
+
+def test_generate_valdrics_disposition_register_rejects_output_parent_file(
+    tmp_path: Path,
+) -> None:
+    blocked_parent = tmp_path / "blocked-parent"
+    blocked_parent.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="output parent must be a directory path"):
+        generate_valdrics_disposition_register_main(
+            [
+                "--output",
+                str(blocked_parent / "valdrics_disposition_register.json"),
+            ]
+        )
+
+
+def test_generate_valdrics_disposition_register_rejects_directory_output_path(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "valdrics-output"
+    output_dir.mkdir()
+
+    with pytest.raises(ValueError, match="output must be a file path"):
+        generate_valdrics_disposition_register_main(
+            [
+                "--output",
+                str(output_dir),
+            ]
+        )
+
+
 def test_generate_valdrics_disposition_register_rejects_non_positive_probe_timeout(
     tmp_path: Path,
 ) -> None:
@@ -343,3 +890,27 @@ def test_generate_valdrics_disposition_register_rejects_non_positive_probe_timeo
                 "0",
             ]
         )
+
+
+def test_generate_valdrics_disposition_register_runs_probes_from_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cwd_calls: list[Path] = []
+
+    class _Completed:
+        returncode = 0
+        stdout = "ok\n"
+        stderr = ""
+
+    def _fake_run(*args, **kwargs):  # type: ignore[no-untyped-def]
+        del args
+        cwd_calls.append(kwargs["cwd"])
+        return _Completed()
+
+    monkeypatch.setattr(valdrics_generator.subprocess, "run", _fake_run)
+
+    probe_results = valdrics_generator._collect_probe_results(timeout_seconds=1.0)
+
+    assert probe_results
+    assert cwd_calls
+    assert all(cwd == valdrics_generator._repo_root() for cwd in cwd_calls)

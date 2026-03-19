@@ -185,6 +185,14 @@ def test_verify_finance_telemetry_snapshot_rejects_too_old_artifact(
         verify_snapshot(snapshot_path=path, max_artifact_age_hours=0.01)
 
 
+def test_verify_finance_telemetry_snapshot_rejects_directory_input(tmp_path: Path) -> None:
+    snapshot_dir = tmp_path / "telemetry-dir"
+    snapshot_dir.mkdir()
+
+    with pytest.raises(ValueError, match="Finance telemetry snapshot file must be a file"):
+        verify_snapshot(snapshot_path=snapshot_dir)
+
+
 def test_main_accepts_valid_payload(tmp_path: Path) -> None:
     path = tmp_path / "telemetry.json"
     _write(path, _valid_payload())

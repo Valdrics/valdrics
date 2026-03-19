@@ -223,6 +223,7 @@ async def upsert_provider_invoice_impl(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     audit = AuditLogger(db, tenant_id=tenant_id)
+    commit_succeeded = False
     try:
         await audit.log(
             event_type=AuditEventType.INVOICE_UPSERTED,
@@ -242,9 +243,10 @@ async def upsert_provider_invoice_impl(
             request_path=str(request.url.path),
         )
         await db.commit()
-    except Exception:
-        await db.rollback()
-        raise
+        commit_succeeded = True
+    finally:
+        if not commit_succeeded:
+            await db.rollback()
 
     return {
         "status": "success",
@@ -288,6 +290,7 @@ async def update_provider_invoice_status_impl(
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     audit = AuditLogger(db, tenant_id=tenant_id)
+    commit_succeeded = False
     try:
         await audit.log(
             event_type=AuditEventType.INVOICE_STATUS_UPDATED,
@@ -300,9 +303,10 @@ async def update_provider_invoice_status_impl(
             request_path=str(request.url.path),
         )
         await db.commit()
-    except Exception:
-        await db.rollback()
-        raise
+        commit_succeeded = True
+    finally:
+        if not commit_succeeded:
+            await db.rollback()
 
     return {
         "status": "success",
@@ -330,6 +334,7 @@ async def delete_provider_invoice_impl(
         raise HTTPException(status_code=404, detail="Invoice not found")
 
     audit = AuditLogger(db, tenant_id=tenant_id)
+    commit_succeeded = False
     try:
         await audit.log(
             event_type=AuditEventType.INVOICE_DELETED,
@@ -342,9 +347,10 @@ async def delete_provider_invoice_impl(
             request_path=str(request.url.path),
         )
         await db.commit()
-    except Exception:
-        await db.rollback()
-        raise
+        commit_succeeded = True
+    finally:
+        if not commit_succeeded:
+            await db.rollback()
     return {"status": "deleted", "invoice_id": str(invoice_id)}
 
 

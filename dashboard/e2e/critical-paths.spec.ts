@@ -22,11 +22,17 @@ test.describe('Onboarding Flow', () => {
 		await page.goto(BASE_URL);
 		await waitForPageLoad(page);
 
-		await expect(page.getByRole('heading', { level: 1 })).toContainText(
-			/turn cloud, saas, and software spend into governed action without slowing delivery/i
-		);
+		await expect(
+			page.getByRole('heading', {
+				level: 1,
+				name: /govern cloud, saas, and software spend without slowing delivery/i
+			})
+		).toBeVisible();
 		await expect(
 			page.getByRole('link', { name: /Start Free Workspace|Book Executive Briefing/i }).first()
+		).toBeVisible();
+		await expect(
+			page.getByRole('link', { name: /See Pricing|Start Free Workspace/i }).nth(1)
 		).toBeVisible();
 	});
 
@@ -44,8 +50,7 @@ test.describe('Onboarding Flow', () => {
 		await page.goto(`${BASE_URL}/pricing`);
 		await waitForPageLoad(page);
 
-		// Check all tiers are visible
-		await expect(page.getByRole('heading', { name: 'Free', exact: true })).toBeVisible();
+		await expect(page.getByRole('link', { name: /Start on Free Tier/i })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Starter', exact: true })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Growth', exact: true })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Pro', exact: true })).toBeVisible();
@@ -56,17 +61,20 @@ test.describe('Onboarding Flow', () => {
 		await page.goto(`${BASE_URL}/auth/login`);
 		await waitForPageLoad(page);
 
-		// Check for login form elements
-		await expect(page.locator('input[type="email"]')).toBeVisible();
-		await expect(page.locator('button:has-text("Sign In")')).toBeVisible();
+		await expect(page.getByLabel(/email address/i)).toBeVisible();
+		await expect(page.getByRole('button', { name: /^sign in$/i })).toBeVisible();
+		await expect(page.getByRole('button', { name: /continue with sso/i })).toBeVisible();
 	});
 
 	test('signup page loads', async ({ page }) => {
 		await page.goto(`${BASE_URL}/auth/login`);
 		await waitForPageLoad(page);
 
-		await page.click('button:has-text("Sign up")');
-		await expect(page.locator('h1:has-text("Create your account")')).toBeVisible();
+		await page.getByRole('button', { name: /^sign up$/i }).click();
+		await expect(
+			page.getByRole('heading', { level: 1, name: /create your account/i })
+		).toBeVisible();
+		await expect(page.getByRole('button', { name: /^create account$/i })).toBeVisible();
 	});
 });
 
@@ -106,10 +114,20 @@ test.describe('Dashboard Flow (Authenticated)', () => {
 	});
 
 	test('settings page loads', async ({ page }) => {
+		const llmModelStatuses: number[] = [];
+		page.on('response', (response) => {
+			if (response.url().includes('/settings/llm/models')) {
+				llmModelStatuses.push(response.status());
+			}
+		});
+
 		await page.goto(`${BASE_URL}/settings`);
 		await waitForPageLoad(page);
 
 		await expect(page.locator('h1:has-text("Preferences")')).toBeVisible();
+		expect(llmModelStatuses).not.toEqual([]);
+		expect(llmModelStatuses).toEqual(expect.arrayContaining([200]));
+		expect(llmModelStatuses).not.toContain(401);
 	});
 });
 
@@ -163,11 +181,40 @@ test.describe('GreenOps Flow', () => {
 	});
 
 	test('greenops page loads', async ({ page }) => {
+		const greenopsStatuses = {
+			carbon: [] as number[],
+			budget: [] as number[],
+			graviton: [] as number[],
+			intensity: [] as number[]
+		};
+		page.on('response', (response) => {
+			const url = response.url();
+			if (url.includes('/carbon?')) {
+				greenopsStatuses.carbon.push(response.status());
+				return;
+			}
+			if (url.includes('/carbon/budget?')) {
+				greenopsStatuses.budget.push(response.status());
+				return;
+			}
+			if (url.includes('/carbon/graviton?')) {
+				greenopsStatuses.graviton.push(response.status());
+				return;
+			}
+			if (url.includes('/carbon/intensity?')) {
+				greenopsStatuses.intensity.push(response.status());
+			}
+		});
+
 		await page.goto(`${BASE_URL}/greenops`);
 		await waitForPageLoad(page);
 
 		await expect(page.getByRole('heading', { name: /greenops dashboard/i })).toBeVisible();
 		await expect(page.getByText(/carbon/i).first()).toBeVisible();
+		expect(greenopsStatuses.carbon).toEqual(expect.arrayContaining([200]));
+		expect(greenopsStatuses.budget).toEqual(expect.arrayContaining([200]));
+		expect(greenopsStatuses.graviton).toEqual(expect.arrayContaining([200]));
+		expect(greenopsStatuses.intensity).toEqual(expect.arrayContaining([200]));
 	});
 });
 

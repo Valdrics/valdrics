@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import pytest
 
+import scripts.generate_managed_runtime_env as managed_runtime_env_generator
 from scripts.generate_managed_runtime_env import generate_managed_runtime_env
 from scripts import validate_runtime_env
 
@@ -307,6 +308,144 @@ def test_generate_managed_runtime_env_rejects_shared_output_and_report_path(
         )
 
 
+def test_generate_managed_runtime_env_rejects_invalid_trusted_proxy_cidrs(
+    tmp_path: Path,
+) -> None:
+    template = tmp_path / ".env.example"
+    output = tmp_path / "staging.env"
+    report_path = tmp_path / "staging.report.json"
+    _write(template, "API_URL=\nFRONTEND_URL=\nDATABASE_URL=\nTRUSTED_PROXY_CIDRS=[]\n")
+
+    with pytest.raises(
+        ValueError,
+        match="trusted_proxy_cidrs contains invalid CIDR: not-a-cidr",
+    ):
+        generate_managed_runtime_env(
+            template_path=template,
+            output_path=output,
+            report_path=report_path,
+            environment="staging",
+            trusted_proxy_cidrs=["not-a-cidr"],
+        )
+
+
+def test_generate_managed_runtime_env_rejects_non_https_public_urls(
+    tmp_path: Path,
+) -> None:
+    template = tmp_path / ".env.example"
+    output = tmp_path / "staging.env"
+    report_path = tmp_path / "staging.report.json"
+    _write(template, "API_URL=\nFRONTEND_URL=\nDATABASE_URL=\nTRUSTED_PROXY_CIDRS=[]\n")
+
+    with pytest.raises(
+        ValueError,
+        match="API_URL must use an explicit https:// URL in staging/production.",
+    ):
+        generate_managed_runtime_env(
+            template_path=template,
+            output_path=output,
+            report_path=report_path,
+            environment="staging",
+            api_url="http://api.staging.example.com",
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "kwargs", "message"),
+    [
+        (
+            "SENTRY_DSN",
+            {"sentry_dsn": "not-a-url"},
+            "SENTRY_DSN must use an explicit http:// or https:// URL.",
+        ),
+        (
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            {"otel_endpoint": "otel-collector:4317"},
+            "OTEL_EXPORTER_OTLP_ENDPOINT must use an explicit http:// or https:// URL.",
+        ),
+    ],
+)
+def test_generate_managed_runtime_env_rejects_invalid_observability_urls(
+    tmp_path: Path,
+    field_name: str,
+    kwargs: dict[str, str],
+    message: str,
+) -> None:
+    template = tmp_path / ".env.example"
+    output = tmp_path / "staging.env"
+    report_path = tmp_path / "staging.report.json"
+    _write(template, "API_URL=\nFRONTEND_URL=\nDATABASE_URL=\nTRUSTED_PROXY_CIDRS=[]\n")
+
+    with pytest.raises(ValueError, match=message):
+        generate_managed_runtime_env(
+            template_path=template,
+            output_path=output,
+            report_path=report_path,
+            environment="staging",
+            **kwargs,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "kwargs", "message"),
+    [
+        (
+            "PAYSTACK_SECRET_KEY",
+            {"paystack_secret_key": "sk_test_not_live"},
+            "PAYSTACK_SECRET_KEY must be a live key \\(sk_live_\\.\\.\\.\\) in production.",
+        ),
+        (
+            "PAYSTACK_PUBLIC_KEY",
+            {"paystack_public_key": "pk_test_not_live"},
+            "PAYSTACK_PUBLIC_KEY must be a live key \\(pk_live_\\.\\.\\.\\) in production.",
+        ),
+    ],
+)
+def test_generate_managed_runtime_env_rejects_invalid_production_paystack_keys(
+    tmp_path: Path,
+    field_name: str,
+    kwargs: dict[str, str],
+    message: str,
+) -> None:
+    template = tmp_path / ".env.example"
+    output = tmp_path / "production.env"
+    report_path = tmp_path / "production.report.json"
+    _write(template, "API_URL=\nFRONTEND_URL=\nDATABASE_URL=\nTRUSTED_PROXY_CIDRS=[]\n")
+
+    with pytest.raises(ValueError, match=message):
+        generate_managed_runtime_env(
+            template_path=template,
+            output_path=output,
+            report_path=report_path,
+            environment="production",
+            **kwargs,
+        )
+
+
+def test_generate_managed_runtime_env_rejects_invalid_aws_trust_principal_arn(
+    tmp_path: Path,
+) -> None:
+    template = tmp_path / ".env.example"
+    output = tmp_path / "production.env"
+    report_path = tmp_path / "production.report.json"
+    _write(template, "API_URL=\nFRONTEND_URL=\nDATABASE_URL=\nTRUSTED_PROXY_CIDRS=[]\n")
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN must be an IAM principal ARN "
+            r"\(role, user, or account root\)\."
+        ),
+    ):
+        generate_managed_runtime_env(
+            template_path=template,
+            output_path=output,
+            report_path=report_path,
+            environment="production",
+            aws_assume_role_trust_principal_arn="not-an-arn",
+        )
+
+
 def test_generate_managed_runtime_env_rejects_template_path_collisions(
     tmp_path: Path,
 ) -> None:
@@ -324,3 +463,192 @@ def test_generate_managed_runtime_env_rejects_template_path_collisions(
             report_path=report_path,
             environment="staging",
         )
+
+
+def test_generate_managed_runtime_env_rejects_non_file_template_path(
+    tmp_path: Path,
+) -> None:
+    template_dir = tmp_path / "template-dir"
+    template_dir.mkdir()
+    output = tmp_path / "staging.env"
+    report_path = tmp_path / "staging.report.json"
+
+    with pytest.raises(ValueError, match="template_path must be a file"):
+        generate_managed_runtime_env(
+            template_path=template_dir,
+            output_path=output,
+            report_path=report_path,
+            environment="staging",
+        )
+
+
+@pytest.mark.parametrize(
+    ("field_name", "relative_target"),
+    [
+        ("output_path", ".env.example"),
+        ("report_path", "scripts/validate_runtime_env.py"),
+    ],
+)
+def test_generate_managed_runtime_env_rejects_protected_output_targets(
+    tmp_path: Path,
+    field_name: str,
+    relative_target: str,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    template = tmp_path / ".env.example"
+    _write(template, "API_URL=\nFRONTEND_URL=\nDATABASE_URL=\n")
+    output = tmp_path / "staging.env"
+    report_path = tmp_path / "staging.report.json"
+    kwargs = {
+        "template_path": template,
+        "output_path": output,
+        "report_path": report_path,
+        "environment": "staging",
+    }
+    kwargs[field_name] = repo_root / relative_target
+
+    with pytest.raises(
+        ValueError,
+        match=rf"{field_name} must not overwrite runtime source, template, or validator files",
+    ):
+        generate_managed_runtime_env(**kwargs)
+
+
+@pytest.mark.parametrize("field_name", ["output_path", "report_path"])
+def test_generate_managed_runtime_env_rejects_directory_output_targets(
+    tmp_path: Path,
+    field_name: str,
+) -> None:
+    template = tmp_path / ".env.example"
+    _write(template, "API_URL=\nFRONTEND_URL=\nDATABASE_URL=\n")
+    output = tmp_path / "staging.env"
+    report_path = tmp_path / "staging.report.json"
+    bad_target = tmp_path / field_name
+    bad_target.mkdir()
+
+    kwargs = {
+        "template_path": template,
+        "output_path": output,
+        "report_path": report_path,
+        "environment": "staging",
+    }
+    kwargs[field_name] = bad_target
+
+    with pytest.raises(ValueError, match=rf"{field_name} must be a file path"):
+        generate_managed_runtime_env(**kwargs)
+
+
+@pytest.mark.parametrize("field_name", ["output_path", "report_path"])
+def test_generate_managed_runtime_env_rejects_blocked_parent_dirs(
+    tmp_path: Path,
+    field_name: str,
+) -> None:
+    template = tmp_path / ".env.example"
+    _write(template, "API_URL=\nFRONTEND_URL=\nDATABASE_URL=\n")
+    blocked_parent = tmp_path / f"blocked-{field_name}"
+    blocked_parent.write_text("not-a-directory", encoding="utf-8")
+    safe_parent = tmp_path / "safe-parent"
+    output = safe_parent / "staging.env"
+    report_path = safe_parent / "staging.report.json"
+
+    kwargs = {
+        "template_path": template,
+        "output_path": output,
+        "report_path": report_path,
+        "environment": "staging",
+    }
+    kwargs[field_name] = blocked_parent / Path(kwargs[field_name]).name
+
+    with pytest.raises(ValueError, match=rf"{field_name} parent must be a directory path"):
+        generate_managed_runtime_env(**kwargs)
+
+
+def test_main_resolves_default_paths_from_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_generate_managed_runtime_env(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        output_path = kwargs["output_path"]
+        return {
+            "environment": kwargs["environment"],
+            "output_path": output_path.as_posix(),
+            "validation_ready": False,
+            "runtime_validation_blockers": [],
+            "declared_external_placeholders": [],
+        }
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        managed_runtime_env_generator,
+        "generate_managed_runtime_env",
+        _fake_generate_managed_runtime_env,
+    )
+
+    assert managed_runtime_env_generator.main(["--environment", "staging"]) == 0
+    assert captured["template_path"] == (
+        managed_runtime_env_generator._repo_root()
+        / managed_runtime_env_generator.DEFAULT_TEMPLATE_PATH
+    ).resolve()
+    assert captured["output_path"] == (
+        managed_runtime_env_generator._repo_root()
+        / managed_runtime_env_generator.DEFAULT_OUTPUT_DIR
+        / "staging.env"
+    ).resolve()
+    assert captured["report_path"] == (
+        managed_runtime_env_generator._repo_root()
+        / managed_runtime_env_generator.DEFAULT_OUTPUT_DIR
+        / "staging.report.json"
+    ).resolve()
+
+
+def test_main_resolves_explicit_relative_paths_from_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    captured: dict[str, object] = {}
+
+    def _fake_generate_managed_runtime_env(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {
+            "environment": kwargs["environment"],
+            "output_path": kwargs["output_path"].as_posix(),  # type: ignore[index]
+            "validation_ready": False,
+            "runtime_validation_blockers": [],
+            "declared_external_placeholders": [],
+        }
+
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(managed_runtime_env_generator, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        managed_runtime_env_generator,
+        "generate_managed_runtime_env",
+        _fake_generate_managed_runtime_env,
+    )
+
+    assert (
+        managed_runtime_env_generator.main(
+            [
+                "--environment",
+                "staging",
+                "--template-path",
+                ".env.example",
+                "--output-path",
+                ".runtime/staging.env",
+                "--report-path",
+                ".runtime/staging.report.json",
+            ]
+        )
+        == 0
+    )
+    assert captured["template_path"] == (repo_root / ".env.example").resolve()
+    assert captured["output_path"] == (repo_root / ".runtime" / "staging.env").resolve()
+    assert captured["report_path"] == (
+        repo_root / ".runtime" / "staging.report.json"
+    ).resolve()

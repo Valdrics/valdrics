@@ -33,6 +33,28 @@ async def test_get_profile_returns_persona(async_client: AsyncClient, app):
         assert payload["persona"] == "platform"
         assert payload["role"] == "admin"
         assert payload["tier"] == "pro"
+        assert payload["platform_operator"] is False
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_get_profile_flags_platform_operator(async_client: AsyncClient, app):
+    mock_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        email="platform-ops@valdrics.io",
+        role=UserRole.OWNER,
+        tier=PricingTier.ENTERPRISE,
+        persona=UserPersona.PLATFORM,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.get("/api/v1/settings/profile")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["platform_operator"] is True
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

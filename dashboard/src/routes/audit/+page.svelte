@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
 	import { buildCompliancePackPath } from '$lib/compliancePack';
+	import { canAccessAuditLogs } from '$lib/entitlements';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { buildFocusExportPath } from '$lib/focusExport';
 	import { filenameFromContentDispositionHeader } from '$lib/utils';
@@ -38,6 +39,7 @@
 	let packIncludeClosePackage = $state(false);
 	let packCloseEnforceFinalized = $state(true);
 	let packCloseMaxRestatements = $state(5000);
+	let canAccessAudit = $derived(canAccessAuditLogs(data.subscription?.tier, data.profile?.role));
 
 	const savingsProviderAllowed = ['aws', 'azure', 'gcp', 'saas', 'license'];
 
@@ -56,6 +58,7 @@
 	}
 
 	async function loadEventTypes() {
+		if (!canAccessAudit) return;
 		const headers = getHeaders();
 		const res = await getWithTimeout(edgeApiPath('/audit/event-types'), headers);
 		if (res.ok) {
@@ -65,6 +68,10 @@
 	}
 
 	async function loadLogs() {
+		if (!canAccessAudit) {
+			loading = false;
+			return;
+		}
 		if (!data.user || !data.session?.access_token) {
 			loading = false;
 			return;
@@ -95,6 +102,7 @@
 	}
 
 	async function viewDetail(id: string) {
+		if (!canAccessAudit) return;
 		selectedLogId = id;
 		selectedDetail = null;
 		loadingDetail = true;
@@ -122,6 +130,7 @@
 	}
 
 	async function exportCsv() {
+		if (!canAccessAudit) return;
 		exporting = true;
 		error = '';
 		success = '';
@@ -153,6 +162,7 @@
 	}
 
 	async function exportCompliancePack() {
+		if (!canAccessAudit) return;
 		exportingPack = true;
 		error = '';
 		success = '';
@@ -212,6 +222,7 @@
 	}
 
 	async function exportFocusCsv() {
+		if (!canAccessAudit) return;
 		exportingFocus = true;
 		error = '';
 		success = '';
@@ -271,6 +282,10 @@
 	}
 
 	onMount(() => {
+		if (!canAccessAudit) {
+			loading = false;
+			return;
+		}
 		void loadEventTypes();
 		void loadLogs();
 	});
@@ -282,6 +297,7 @@
 
 <AuditPageViewContent
 	{data}
+	{canAccessAudit}
 	{loading}
 	{loadingDetail}
 	{exporting}

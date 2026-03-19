@@ -18,7 +18,8 @@
 	import ToastComponent from '$lib/components/Toast.svelte';
 	import { base } from '$app/paths';
 	import { browser } from '$app/environment';
-	import { allowedNavHrefs, isAdminRole, normalizePersona } from '$lib/persona';
+	import { canAccessAdminHealth } from '$lib/entitlements';
+	import { allowedNavHrefs, normalizePersona } from '$lib/persona';
 	import {
 		getFocusableElements,
 		lockBodyScroll,
@@ -100,6 +101,7 @@
 
 	let persona = $derived(normalizePersona(data.profile?.persona));
 	let role = $derived(String(data.profile?.role ?? 'member'));
+	let platformOperator = $derived(Boolean(data.profile?.platform_operator));
 
 	$effect(() => {
 		if (!browser) return;
@@ -120,12 +122,12 @@
 	});
 
 	let visibleNavItems = $derived(
-		(() => {
-			if (isAdminRole(role)) return allNavItems;
-			return allNavItems.filter((item) => item.href !== '/admin/health');
-		})()
+		allNavItems.filter((item) => {
+			if (item.href !== '/admin/health') return true;
+			return canAccessAdminHealth(role, platformOperator);
+		})
 	);
-	let allowlist = $derived(allowedNavHrefs(persona, role));
+	let allowlist = $derived(allowedNavHrefs(persona, role, { platformOperator }));
 	let primaryNavItems = $derived(visibleNavItems.filter((item) => allowlist.has(item.href)));
 	let secondaryNavItems = $derived(visibleNavItems.filter((item) => !allowlist.has(item.href)));
 	let activeSecondaryNavItems = $derived(secondaryNavItems.filter((item) => isActive(item.href)));
@@ -328,6 +330,8 @@
 			{activeSecondaryNavItems}
 			bind:showAllNav
 			{persona}
+			{role}
+			{platformOperator}
 			{prefersReducedMotion}
 			jobStore={liveJobStore}
 			{toAppPath}

@@ -47,6 +47,66 @@ def test_generate_evidence_requires_non_empty_profile(tmp_path: Path) -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "relative_output",
+    [
+        "scripts/verify_enforcement_failure_injection_evidence.py",
+        "tests/unit/enforcement/test_enforcement_api.py",
+        "docs/ops/evidence/enforcement_failure_injection_2026-02-27.json",
+    ],
+)
+def test_generate_evidence_rejects_protected_output_collisions(
+    monkeypatch: pytest.MonkeyPatch,
+    relative_output: str,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    output = repo_root / relative_output
+
+    def _unexpected_run_scenario(*args: object, **kwargs: object) -> tuple[dict[str, object], bool]:
+        raise AssertionError("scenario execution should not run for protected output paths")
+
+    monkeypatch.setattr(generator, "_run_scenario", _unexpected_run_scenario)
+
+    with pytest.raises(ValueError, match="output must not overwrite failure-injection"):
+        generator.generate_evidence(
+            output=output,
+            executed_by="exec@valdrics.local",
+            approved_by="approver@valdrics.local",
+            profile="enforcement_failure_injection",
+            cwd=repo_root,
+            timeout_seconds=60.0,
+        )
+
+
+def test_generate_evidence_rejects_relative_protected_output_from_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(generator, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        generator,
+        "_run_scenario",
+        lambda *_, **__: (_ for _ in ()).throw(
+            AssertionError("scenario execution should not run for protected output paths")
+        ),
+    )
+
+    with pytest.raises(ValueError, match="output must not overwrite failure-injection"):
+        generator.generate_evidence(
+            output=Path("docs/ops/evidence/enforcement_failure_injection_2026-02-27.json"),
+            executed_by="exec@valdrics.local",
+            approved_by="approver@valdrics.local",
+            profile="enforcement_failure_injection",
+            cwd=repo_root,
+            timeout_seconds=60.0,
+        )
+
+
 def test_generate_evidence_rejects_profile_contract_drift(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="profile must equal"):
         generator.generate_evidence(
@@ -54,6 +114,40 @@ def test_generate_evidence_rejects_profile_contract_drift(tmp_path: Path) -> Non
             executed_by="exec@valdrics.local",
             approved_by="approver@valdrics.local",
             profile="custom_profile",
+            cwd=tmp_path,
+            timeout_seconds=60.0,
+        )
+
+
+def test_generate_evidence_rejects_output_parent_file(
+    tmp_path: Path,
+) -> None:
+    blocked_parent = tmp_path / "blocked-parent"
+    blocked_parent.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="output parent must be a directory path"):
+        generator.generate_evidence(
+            output=blocked_parent / "artifact.json",
+            executed_by="exec@valdrics.local",
+            approved_by="approver@valdrics.local",
+            profile="enforcement_failure_injection",
+            cwd=tmp_path,
+            timeout_seconds=60.0,
+        )
+
+
+def test_generate_evidence_rejects_directory_output_path(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "artifact-dir"
+    output_dir.mkdir()
+
+    with pytest.raises(ValueError, match="output must be a file path"):
+        generator.generate_evidence(
+            output=output_dir,
+            executed_by="exec@valdrics.local",
+            approved_by="approver@valdrics.local",
+            profile="enforcement_failure_injection",
             cwd=tmp_path,
             timeout_seconds=60.0,
         )
@@ -152,6 +246,67 @@ def test_main_exit_code_follows_overall_result(
     assert verify_calls == [
         {
             "evidence_path": tmp_path / "artifact.json",
+            "expected_profile": "enforcement_failure_injection",
+            "max_artifact_age_hours": 4.0,
+        }
+    ]
+
+
+def test_main_resolves_relative_output_from_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(generator, "_repo_root", lambda: repo_root)
+
+    def _fake_run_scenario(
+        scenario: generator.FailureScenario, *, cwd: Path, timeout_seconds: float
+    ) -> tuple[dict[str, object], bool]:
+        del cwd, timeout_seconds
+        return (
+            {
+                "id": scenario.scenario_id,
+                "status": "pass",
+                "duration_seconds": 0.5,
+                "checks": list(scenario.checks),
+                "evidence_refs": list(scenario.selectors),
+                "command": "pytest",
+                "result_tail": "ok",
+            },
+            True,
+        )
+
+    monkeypatch.setattr(generator, "_run_scenario", _fake_run_scenario)
+    verify_calls: list[dict[str, object]] = []
+
+    def _fake_verify(**kwargs: object) -> int:
+        verify_calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(generator, "verify_evidence", _fake_verify)
+
+    assert (
+        generator.main(
+            [
+                "--output",
+                "artifacts/failure_injection.json",
+                "--executed-by",
+                "exec@valdrics.local",
+                "--approved-by",
+                "approve@valdrics.local",
+            ]
+        )
+        == 0
+    )
+    expected_output = repo_root / "artifacts" / "failure_injection.json"
+    assert expected_output.exists()
+    assert verify_calls == [
+        {
+            "evidence_path": expected_output,
             "expected_profile": "enforcement_failure_injection",
             "max_artifact_age_hours": 4.0,
         }

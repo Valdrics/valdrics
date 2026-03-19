@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { encodePlaywrightE2EBrowserSessionCookie } from '$lib/testing/playwrightE2EAuth';
 
 const mocks = vi.hoisted(() => ({
 	createServerClient: vi.fn(),
@@ -20,6 +21,7 @@ const mocks = vi.hoisted(() => ({
 		E2E_AUTH_SECRET: '',
 		SUPABASE_JWT_SECRET: 'test-jwt-secret-at-least-32-bytes-long',
 		SUPABASE_JWT_ISSUER: 'supabase',
+		PLAYWRIGHT_SUPABASE_STORAGE_KEY: '',
 		PLAYWRIGHT_E2E_USER_ID: '33333333-3333-4333-8333-333333333333',
 		PLAYWRIGHT_E2E_USER_EMAIL: 'fixture@valdrics.test',
 		PLAYWRIGHT_E2E_USER_NAME: 'Fixture User',
@@ -236,5 +238,52 @@ describe('hooks.server handle', () => {
 		expect(sessionResult.user?.email).toBe(mocks.privateEnv.PLAYWRIGHT_E2E_USER_EMAIL);
 		expect(sessionResult.session?.access_token.split('.')).toHaveLength(3);
 		expect(sessionResult.session?.refresh_token).toMatch(/^[0-9a-f]{64}$/i);
+	});
+
+	it('accepts a seeded browser session cookie during guarded e2e bypass mode', async () => {
+		mocks.canUseE2EAuthBypass.mockReturnValue(true);
+		mocks.privateEnv.PLAYWRIGHT_SUPABASE_STORAGE_KEY = 'sb-test-auth-token';
+		mocks.createServerClient.mockReturnValue({
+			auth: {
+				getSession: vi.fn(),
+				getUser: vi.fn()
+			}
+		});
+
+		const event = createEvent('https://example.com/dashboard');
+		const cookieValue = encodePlaywrightE2EBrowserSessionCookie({
+			secret: mocks.privateEnv.SUPABASE_JWT_SECRET,
+			issuer: mocks.privateEnv.SUPABASE_JWT_ISSUER,
+			fixture: {
+				tenantId: mocks.privateEnv.PLAYWRIGHT_E2E_TENANT_ID,
+				tenantName: mocks.privateEnv.PLAYWRIGHT_E2E_TENANT_NAME,
+				userId: mocks.privateEnv.PLAYWRIGHT_E2E_USER_ID,
+				userName: mocks.privateEnv.PLAYWRIGHT_E2E_USER_NAME,
+				email: mocks.privateEnv.PLAYWRIGHT_E2E_USER_EMAIL,
+				role: mocks.privateEnv.PLAYWRIGHT_E2E_USER_ROLE,
+				persona: mocks.privateEnv.PLAYWRIGHT_E2E_USER_PERSONA,
+				tier: mocks.privateEnv.PLAYWRIGHT_E2E_TIER
+			}
+		});
+		vi.mocked(event.cookies.get).mockImplementation((key: string) =>
+			key === 'sb-test-auth-token' ? cookieValue : undefined
+		);
+
+		const resolve = vi.fn(
+			async () =>
+				new Response('<html></html>', {
+					status: 200,
+					headers: { 'content-type': 'text/html' }
+				})
+		);
+
+		await handle({
+			event,
+			resolve
+		} as Parameters<typeof handle>[0]);
+
+		const sessionResult = await event.locals.safeGetSession();
+		expect(sessionResult.user?.email).toBe(mocks.privateEnv.PLAYWRIGHT_E2E_USER_EMAIL);
+		expect(sessionResult.session?.access_token.split('.')).toHaveLength(3);
 	});
 });

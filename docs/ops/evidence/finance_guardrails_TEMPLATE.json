@@ -1,17 +1,17 @@
 {
-  "captured_at": "YYYY-MM-DDTHH:MM:SSZ",
+  "captured_at": "2026-02-27T10:00:00Z",
   "window": {
-    "start": "YYYY-MM-01T00:00:00Z",
-    "end": "YYYY-MM-DDT23:59:59Z",
-    "label": "YYYY-MM"
+    "start": "2026-02-01T00:00:00Z",
+    "end": "2026-02-27T23:59:59Z",
+    "label": "2026-02"
   },
   "metrics": {
-    "blended_gross_margin_percent": 0.0,
-    "p95_tenant_llm_cogs_pct_mrr": 0.0,
-    "annual_discount_impact_percent": 0.0,
-    "growth_to_pro_conversion_mom_delta_percent": 0.0,
-    "pro_to_enterprise_conversion_mom_delta_percent": 0.0,
-    "stress_margin_percent": 0.0
+    "blended_gross_margin_percent": 84.6,
+    "p95_tenant_llm_cogs_pct_mrr": 5.2,
+    "annual_discount_impact_percent": 7.38,
+    "growth_to_pro_conversion_mom_delta_percent": 0.8,
+    "pro_to_enterprise_conversion_mom_delta_percent": 0.4,
+    "stress_margin_percent": 76.0
   },
   "thresholds": {
     "min_blended_gross_margin_percent": 80.0,
@@ -24,61 +24,61 @@
   },
   "close_history": [
     {
-      "month": "YYYY-MM",
-      "blended_gross_margin_percent": 0.0
+      "month": "2026-01",
+      "blended_gross_margin_percent": 84.2
     },
     {
-      "month": "YYYY-MM",
-      "blended_gross_margin_percent": 0.0
+      "month": "2026-02",
+      "blended_gross_margin_percent": 84.6
     }
   ],
   "tier_unit_economics": [
     {
       "tier": "starter",
-      "mrr_usd": 0.0,
-      "effective_mrr_usd": 0.0,
-      "llm_cogs_usd": 0.0,
-      "infra_cogs_usd": 0.0,
-      "support_cogs_usd": 0.0,
-      "gross_margin_percent": 0.0
+      "mrr_usd": 60000.0,
+      "effective_mrr_usd": 55000.0,
+      "llm_cogs_usd": 2000.0,
+      "infra_cogs_usd": 5000.0,
+      "support_cogs_usd": 1500.0,
+      "gross_margin_percent": 84.55
     },
     {
       "tier": "growth",
-      "mrr_usd": 0.0,
-      "effective_mrr_usd": 0.0,
-      "llm_cogs_usd": 0.0,
-      "infra_cogs_usd": 0.0,
-      "support_cogs_usd": 0.0,
-      "gross_margin_percent": 0.0
+      "mrr_usd": 120000.0,
+      "effective_mrr_usd": 110000.0,
+      "llm_cogs_usd": 4000.0,
+      "infra_cogs_usd": 9000.0,
+      "support_cogs_usd": 2500.0,
+      "gross_margin_percent": 85.91
     },
     {
       "tier": "pro",
-      "mrr_usd": 0.0,
-      "effective_mrr_usd": 0.0,
-      "llm_cogs_usd": 0.0,
-      "infra_cogs_usd": 0.0,
-      "support_cogs_usd": 0.0,
-      "gross_margin_percent": 0.0
+      "mrr_usd": 180000.0,
+      "effective_mrr_usd": 165000.0,
+      "llm_cogs_usd": 7000.0,
+      "infra_cogs_usd": 15000.0,
+      "support_cogs_usd": 4000.0,
+      "gross_margin_percent": 84.24
     },
     {
       "tier": "enterprise",
-      "mrr_usd": 0.0,
-      "effective_mrr_usd": 0.0,
-      "llm_cogs_usd": 0.0,
-      "infra_cogs_usd": 0.0,
-      "support_cogs_usd": 0.0,
-      "gross_margin_percent": 0.0
+      "mrr_usd": 250000.0,
+      "effective_mrr_usd": 235000.0,
+      "llm_cogs_usd": 10000.0,
+      "infra_cogs_usd": 20000.0,
+      "support_cogs_usd": 7000.0,
+      "gross_margin_percent": 84.26
     }
   ],
   "stress_scenario": {
     "infra_cost_multiplier": 2.0,
-    "projected_margin_percent": 0.0
+    "projected_margin_percent": 76.0
   },
   "gate_results": {
-    "fin_gate_1_gross_margin_floor": false,
-    "fin_gate_2_llm_cogs_containment": false,
-    "fin_gate_3_annual_discount_impact": false,
-    "fin_gate_4_expansion_signal": false,
-    "fin_gate_5_stress_resilience": false
+    "fin_gate_1_gross_margin_floor": true,
+    "fin_gate_2_llm_cogs_containment": true,
+    "fin_gate_3_annual_discount_impact": true,
+    "fin_gate_4_expansion_signal": true,
+    "fin_gate_5_stress_resilience": true
   }
 }

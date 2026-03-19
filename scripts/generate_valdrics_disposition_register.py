@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import re
 import subprocess  # nosec B404 - controlled local verifier execution only
 import sys
 from dataclasses import dataclass
@@ -67,6 +68,7 @@ FINDING_PROBE_MAP: dict[str, tuple[str, ...]] = {
     "VAL-API-002": ("audit_controls",),
     "VAL-API-004": ("env_hygiene", "audit_controls"),
 }
+URI_SCHEME_RE = re.compile(r"^[a-z][a-z0-9+.-]*://", flags=re.IGNORECASE)
 
 
 def _parse_positive_float_arg(value: float, *, field: str) -> float:
@@ -83,6 +85,71 @@ def _parse_non_empty_str_arg(value: str, *, field: str) -> str:
     if not parsed:
         raise ValueError(f"{field} must be a non-empty string")
     return parsed
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _protected_output_paths() -> set[Path]:
+    repo_root = _repo_root()
+    return {
+        Path(__file__).resolve(),
+        repo_root / "scripts" / "verify_valdrics_disposition_freshness.py",
+        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json",
+    }
+
+
+def _resolve_repo_relative_path(value: str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        return raw.resolve()
+    return (_repo_root() / raw).resolve()
+
+
+def _resolve_output_path(value: str) -> Path:
+    resolved = _resolve_repo_relative_path(value)
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"output must be a file path: {resolved.as_posix()}")
+    if resolved in _protected_output_paths():
+        raise ValueError(
+            "output must not overwrite Valdrics source, verifier, or checked-in evidence files"
+        )
+    return resolved
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
+def _resolve_source_audit_path(*, value: str, output_path: Path) -> str:
+    parsed = _parse_non_empty_str_arg(value, field="source_audit_path")
+    if URI_SCHEME_RE.match(parsed):
+        return parsed
+
+    resolved = _resolve_repo_relative_path(parsed)
+    if not resolved.exists():
+        raise FileNotFoundError(
+            f"source_audit_path local file does not exist: {resolved.as_posix()}"
+        )
+    if not resolved.is_file():
+        raise ValueError(
+            f"source_audit_path must reference a file when using a local path: {resolved.as_posix()}"
+        )
+    if resolved == output_path.resolve():
+        raise ValueError("source_audit_path and output must be different files")
+    return resolved.as_posix()
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -152,6 +219,7 @@ def _run_probe(
     command: tuple[str, ...],
     timeout_seconds: float,
 ) -> tuple[bool, str]:
+    repo_root = _repo_root()
     try:
         completed = subprocess.run(
             list(command),
@@ -159,6 +227,7 @@ def _run_probe(
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
+            cwd=repo_root,
         )  # nosec B603 - commands come from a static, repo-local runtime probe registry
     except subprocess.TimeoutExpired as exc:
         return False, f"timeout after {timeout_seconds:.1f}s ({exc})"
@@ -264,15 +333,16 @@ def main(argv: list[str] | None = None) -> int:
         float(args.probe_timeout_seconds),
         field="probe_timeout_seconds",
     )
-    source_audit_path = _parse_non_empty_str_arg(
-        str(args.source_audit_path),
-        field="source_audit_path",
+    output_path = _resolve_output_path(str(args.output))
+    _ensure_output_parent_dir(output_path)
+    source_audit_path = _resolve_source_audit_path(
+        value=str(args.source_audit_path),
+        output_path=output_path,
     )
     payload = _build_payload(
         source_audit_path=source_audit_path,
         probe_timeout_seconds=probe_timeout_seconds,
     )
-    output_path = Path(str(args.output))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
     verify_disposition_register(

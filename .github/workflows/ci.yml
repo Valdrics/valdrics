@@ -840,6 +840,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - label: Authenticated Shell
+            spec: e2e/authenticated-shell.spec.ts
+            artifact: playwright-report-authenticated-shell
           - label: E2E Critical Paths
             spec: e2e/critical-paths.spec.ts
             artifact: playwright-report-critical

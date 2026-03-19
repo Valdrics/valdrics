@@ -16,6 +16,57 @@ from scripts.finance_committee_packet_common import load_json
 from scripts.verify_finance_telemetry_snapshot import verify_snapshot
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _protected_output_paths() -> set[Path]:
+    repo_root = _repo_root()
+    return {
+        Path(__file__).resolve(),
+        repo_root / "scripts" / "generate_finance_telemetry_snapshot.py",
+        repo_root / "scripts" / "verify_finance_telemetry_snapshot.py",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
+    }
+
+
+def _resolve_output_path(value: str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        resolved = raw.resolve()
+    else:
+        resolved = (_repo_root() / raw).resolve()
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"output must be a file path: {resolved.as_posix()}")
+    if resolved in _protected_output_paths():
+        raise ValueError(
+            "output must not overwrite finance assumptions source, telemetry generator, verifier, or checked-in evidence files"
+        )
+    return resolved
+
+
+def _resolve_input_path(value: str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        return raw.resolve()
+    return (_repo_root() / raw).resolve()
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
@@ -64,8 +115,13 @@ def _resolve_telemetry_payload(
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    telemetry_path = Path(str(args.telemetry_path)) if args.telemetry_path else None
-    output_path = Path(str(args.output))
+    telemetry_path = (
+        _resolve_input_path(str(args.telemetry_path))
+        if args.telemetry_path
+        else None
+    )
+    output_path = _resolve_output_path(str(args.output))
+    _ensure_output_parent_dir(output_path)
     if telemetry_path is not None and telemetry_path.resolve() == output_path.resolve():
         raise ValueError("telemetry_path and output must be different files")
     telemetry, source_telemetry = _resolve_telemetry_payload(telemetry_path=telemetry_path)

@@ -347,3 +347,156 @@ def test_main_self_verifies_generated_artifact(
             "max_artifact_age_hours": 4.0,
         }
     ]
+
+
+@pytest.mark.parametrize(
+    "relative_output",
+    [
+        "scripts/verify_enforcement_stress_evidence.py",
+        "scripts/load_test_api.py",
+        "docs/ops/evidence/enforcement_stress_artifact_TEMPLATE.json",
+        "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
+    ],
+)
+def test_main_rejects_protected_output_collisions(
+    monkeypatch: pytest.MonkeyPatch,
+    relative_output: str,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    output = repo_root / relative_output
+
+    async def _unexpected_generate_evidence(args: Namespace) -> dict[str, object]:
+        raise AssertionError("stress generation should not run for protected output paths")
+
+    monkeypatch.setattr(stress_generator, "generate_evidence", _unexpected_generate_evidence)
+
+    with pytest.raises(ValueError, match="output must not overwrite enforcement stress"):
+        stress_generator.main(
+            [
+                "--output",
+                str(output),
+                "--database-url",
+                "postgresql+asyncpg://user:pass@db.example.com:5432/app",
+            ]
+        )
+
+
+def test_main_rejects_relative_protected_output_from_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(stress_generator, "_repo_root", lambda: repo_root)
+
+    async def _unexpected_generate_evidence(args: Namespace) -> dict[str, object]:
+        del args
+        raise AssertionError("stress generation should not run for protected output paths")
+
+    monkeypatch.setattr(stress_generator, "generate_evidence", _unexpected_generate_evidence)
+
+    with pytest.raises(ValueError, match="output must not overwrite enforcement stress"):
+        stress_generator.main(
+            [
+                "--output",
+                "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
+                "--database-url",
+                "postgresql+asyncpg://user:pass@db.example.com:5432/app",
+            ]
+        )
+
+
+def test_main_resolves_relative_output_from_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(stress_generator, "_repo_root", lambda: repo_root)
+
+    payload = {
+        "profile": "enforcement",
+        "meets_targets": True,
+        "results": {"total_requests": 1},
+    }
+
+    async def _fake_generate_evidence(args: Namespace) -> dict[str, object]:
+        del args
+        return payload
+
+    verify_calls: list[dict[str, object]] = []
+
+    def _fake_verify(**kwargs: object) -> int:
+        verify_calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(stress_generator, "generate_evidence", _fake_generate_evidence)
+    monkeypatch.setattr(stress_generator, "verify_evidence", _fake_verify)
+
+    assert (
+        stress_generator.main(
+            [
+                "--output",
+                "artifacts/enforcement_stress.json",
+                "--database-url",
+                "postgresql+asyncpg://user:pass@db.example.com:5432/app",
+            ]
+        )
+        == 0
+    )
+    expected_output = repo_root / "artifacts" / "enforcement_stress.json"
+    assert expected_output.exists()
+    assert verify_calls == [
+        {
+            "evidence_path": expected_output,
+            "expected_profile": "enforcement",
+            "min_rounds": 3,
+            "min_duration_seconds": 30,
+            "min_concurrent_users": 10,
+            "required_database_engine": "postgresql",
+            "max_p95_seconds": 2.0,
+            "max_error_rate_percent": 1.0,
+            "min_throughput_rps": 0.5,
+            "max_artifact_age_hours": 4.0,
+        }
+    ]
+
+
+def test_main_rejects_output_parent_file(
+    tmp_path: Path,
+) -> None:
+    blocked_parent = tmp_path / "blocked-parent"
+    blocked_parent.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="output parent must be a directory path"):
+        stress_generator.main(
+            [
+                "--output",
+                str(blocked_parent / "enforcement_stress.json"),
+                "--database-url",
+                "postgresql+asyncpg://user:pass@db.example.com:5432/app",
+            ]
+        )
+
+
+def test_main_rejects_directory_output_path(
+    tmp_path: Path,
+) -> None:
+    output_dir = tmp_path / "stress-output"
+    output_dir.mkdir()
+
+    with pytest.raises(ValueError, match="output must be a file path"):
+        stress_generator.main(
+            [
+                "--output",
+                str(output_dir),
+                "--database-url",
+                "postgresql+asyncpg://user:pass@db.example.com:5432/app",
+            ]
+        )

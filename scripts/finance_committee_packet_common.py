@@ -56,6 +56,8 @@ def sanitize_label(raw: str) -> str:
 def load_json(path: Path, *, field: str) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"{field} does not exist: {path}")
+    if not path.is_file():
+        raise ValueError(f"{field} must be a file: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError(f"{field} must be a JSON object")

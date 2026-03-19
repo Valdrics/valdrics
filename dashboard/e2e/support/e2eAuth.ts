@@ -2,6 +2,7 @@ import type { BrowserContext } from '@playwright/test';
 
 import {
 	createPlaywrightE2EAccessToken,
+	encodePlaywrightE2EBrowserSessionCookie,
 	resolvePlaywrightE2EFixture
 } from '../../src/lib/testing/playwrightE2EAuth';
 
@@ -21,43 +22,6 @@ const PLAYWRIGHT_SUPABASE_STORAGE_KEY = String(
 type AuthenticatedSessionOptions = {
 	browserSession?: boolean;
 };
-
-function createBrowserFixtureSession() {
-	const now = Math.floor(Date.now() / 1000);
-	const expiresIn = E2E_BROWSER_SESSION_LIFETIME_SECONDS;
-	const accessToken = createPlaywrightE2EAccessToken({
-		secret: E2E_JWT_SECRET,
-		issuer: E2E_JWT_ISSUER,
-		fixture: E2E_FIXTURE,
-		lifetimeSeconds: expiresIn
-	});
-
-	return {
-		access_token: accessToken,
-		refresh_token: 'playwright-refresh-token',
-		expires_in: expiresIn,
-		expires_at: now + expiresIn,
-		token_type: 'bearer',
-		user: {
-			id: E2E_FIXTURE.userId,
-			aud: 'authenticated',
-			role: 'authenticated',
-			email: E2E_FIXTURE.email,
-			email_confirmed_at: new Date(0).toISOString(),
-			phone: '',
-			app_metadata: { provider: 'email', providers: ['email'] },
-			user_metadata: { name: E2E_FIXTURE.userName, source: 'playwright' },
-			identities: [],
-			created_at: new Date(0).toISOString(),
-			updated_at: new Date().toISOString(),
-			is_anonymous: false
-		}
-	};
-}
-
-function encodeSupabaseCookieValue() {
-	return `base64-${Buffer.from(JSON.stringify(createBrowserFixtureSession())).toString('base64url')}`;
-}
 
 export function createFixtureAccessToken() {
 	return createPlaywrightE2EAccessToken({
@@ -83,7 +47,12 @@ export async function enableAuthenticatedSession(
 	await context.addCookies([
 		{
 			name: PLAYWRIGHT_SUPABASE_STORAGE_KEY,
-			value: encodeSupabaseCookieValue(),
+			value: encodePlaywrightE2EBrowserSessionCookie({
+				secret: E2E_JWT_SECRET,
+				issuer: E2E_JWT_ISSUER,
+				fixture: E2E_FIXTURE,
+				lifetimeSeconds: E2E_BROWSER_SESSION_LIFETIME_SECONDS
+			}),
 			url: origin,
 			httpOnly: false,
 			secure: origin.startsWith('https://'),

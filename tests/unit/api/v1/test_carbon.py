@@ -1,3 +1,4 @@
+import os
 import pytest
 import uuid
 from datetime import date, datetime, timedelta, timezone
@@ -69,6 +70,71 @@ async def test_get_carbon_budget_no_connection(mock_get_connections):
 
     response = await get_carbon_budget(user, db, provider="aws")
     assert response["alert_status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_get_carbon_footprint_returns_playwright_fixture_payload():
+    user = MagicMock()
+    user.tenant_id = "tenant-123"
+    db = AsyncMock()
+
+    with (
+        patch.dict(os.environ, {"PLAYWRIGHT_E2E_TENANT_ID": "tenant-123"}),
+        patch(
+            "app.modules.reporting.api.v1.carbon.get_settings",
+            return_value=MagicMock(TESTING=True),
+        ),
+    ):
+        response = await get_carbon_footprint(
+            date.today(),
+            date.today(),
+            user,
+            db,
+            provider="aws",
+            region="us-east-1",
+        )
+
+    assert response["total_co2_kg"] == 128.4
+    assert response["forecast_30d"]["projected_co2_kg"] == 401.7
+    assert len(response["green_region_recommendations"]) == 3
+
+
+@pytest.mark.asyncio
+async def test_get_carbon_budget_returns_playwright_fixture_payload():
+    user = MagicMock()
+    user.tenant_id = "tenant-123"
+    db = AsyncMock()
+
+    with (
+        patch.dict(os.environ, {"PLAYWRIGHT_E2E_TENANT_ID": "tenant-123"}),
+        patch(
+            "app.modules.reporting.api.v1.carbon.get_settings",
+            return_value=MagicMock(TESTING=True),
+        ),
+    ):
+        response = await get_carbon_budget(user, db, provider="aws")
+
+    assert response["alert_status"] == "ok"
+    assert response["usage_percent"] == 58.4
+
+
+@pytest.mark.asyncio
+async def test_analyze_graviton_opportunities_returns_playwright_fixture_payload():
+    user = MagicMock()
+    user.tenant_id = "tenant-123"
+    db = AsyncMock()
+
+    with (
+        patch.dict(os.environ, {"PLAYWRIGHT_E2E_TENANT_ID": "tenant-123"}),
+        patch(
+            "app.modules.reporting.api.v1.carbon.get_settings",
+            return_value=MagicMock(TESTING=True),
+        ),
+    ):
+        response = await analyze_graviton_opportunities(user, db)
+
+    assert len(response["candidates"]) == 2
+    assert response["candidates"][0]["recommended_type"] == "m7g.large"
 
 
 @pytest.mark.asyncio

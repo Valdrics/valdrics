@@ -1,5 +1,6 @@
 <script lang="ts">
 	import AuthGate from '$lib/components/AuthGate.svelte';
+	import { canAccessAdminHealth } from '$lib/entitlements';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
 
@@ -17,6 +18,9 @@
 	let loading = $state(false);
 	let refreshing = $state(false);
 	let healthRequestId = 0;
+	let hasPlatformAccess = $derived(
+		canAccessAdminHealth(data.profile?.role ?? 'member', data.profile?.platform_operator)
+	);
 
 	function extractApiError(payload: unknown): string | null {
 		if (!payload || typeof payload !== 'object') return null;
@@ -30,12 +34,15 @@
 	async function loadHealthDashboard(accessToken: string | undefined, hasUser: boolean) {
 		const requestId = ++healthRequestId;
 
-		if (!hasUser || !accessToken) {
+		if (!hasUser || !accessToken || !hasPlatformAccess) {
 			dashboard = null;
 			fairUse = null;
 			fairUseError = '';
-			error = '';
-			forbidden = false;
+			error =
+				hasUser && !hasPlatformAccess
+					? 'Platform operator access is required to view system health metrics.'
+					: '';
+			forbidden = hasUser && !hasPlatformAccess;
 			loading = false;
 			refreshing = false;
 			return;

@@ -1,4 +1,5 @@
 import sys
+from importlib import import_module
 from importlib.util import find_spec
 from unittest.mock import MagicMock
 import pytest
@@ -39,5 +40,38 @@ for mod in mock_modules:
 
 
 @pytest.fixture
-def mock_azure_creds() -> MagicMock:
-    return MagicMock(name="azure_credentials")
+def mock_azure_creds() -> dict[str, str]:
+    return {
+        "tenant_id": "00000000-0000-0000-0000-000000000001",
+        "client_id": "00000000-0000-0000-0000-000000000002",
+        "client_secret": "secret-123",
+        "subscription_id": "00000000-0000-0000-0000-000000000003",
+    }
+
+
+@pytest.fixture(autouse=True)
+def stub_azure_identity_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
+    dummy_credential = MagicMock(name="azure_identity_credential")
+    module_names = [
+        "app.modules.optimization.adapters.azure.detector",
+        "app.modules.optimization.adapters.azure.plugins.ai",
+        "app.modules.optimization.adapters.azure.plugins.compute",
+        "app.modules.optimization.adapters.azure.plugins.containers",
+        "app.modules.optimization.adapters.azure.plugins.network",
+        "app.modules.optimization.adapters.azure.plugins.storage",
+    ]
+
+    for module_name in module_names:
+        module = import_module(module_name)
+        if hasattr(module, "ClientSecretCredential"):
+            monkeypatch.setattr(
+                module,
+                "ClientSecretCredential",
+                lambda *args, **kwargs: dummy_credential,
+            )
+        if hasattr(module, "DefaultAzureCredential"):
+            monkeypatch.setattr(
+                module,
+                "DefaultAzureCredential",
+                lambda *args, **kwargs: dummy_credential,
+            )

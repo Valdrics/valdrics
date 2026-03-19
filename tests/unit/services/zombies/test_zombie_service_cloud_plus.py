@@ -19,6 +19,7 @@ def _result_with_rows(rows: list[object]) -> MagicMock:
 @pytest.mark.asyncio
 async def test_scan_for_tenant_includes_platform_and_hybrid_connections() -> None:
     db = AsyncMock()
+    db.add = MagicMock()
     service = ZombieService(db)
     tenant_id = uuid4()
 

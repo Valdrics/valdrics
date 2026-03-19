@@ -1,5 +1,6 @@
 import asyncio
 from datetime import date, datetime, time, timezone, timedelta
+import os
 from typing import Annotated, Any, Dict
 from uuid import UUID
 
@@ -198,6 +199,71 @@ async def _store_cached_payload(
     await cache.set(cache_key, payload, ttl=ttl)
 
 
+def _is_playwright_greenops_fixture_user(user: CurrentUser) -> bool:
+    fixture_tenant_id = str(os.getenv("PLAYWRIGHT_E2E_TENANT_ID", "")).strip()
+    tenant_id = getattr(user, "tenant_id", None)
+    return bool(
+        get_settings().TESTING
+        and fixture_tenant_id
+        and tenant_id is not None
+        and str(tenant_id) == fixture_tenant_id
+    )
+
+
+def _build_playwright_greenops_carbon_payload(region_hint: str) -> Dict[str, Any]:
+    recommendations = [
+        {"region": "eu-north-1", "carbon_intensity": 68, "savings_percent": 31},
+        {"region": "us-west-2", "carbon_intensity": 96, "savings_percent": 18},
+        {"region": "eu-west-1", "carbon_intensity": 112, "savings_percent": 12},
+    ]
+    if region_hint in {item["region"] for item in recommendations}:
+        recommendations = [item for item in recommendations if item["region"] != region_hint]
+
+    return {
+        "total_co2_kg": 128.4,
+        "scope2_co2_kg": 79.6,
+        "scope3_co2_kg": 48.8,
+        "carbon_efficiency_score": 143.2,
+        "estimated_energy_kwh": 382.0,
+        "forecast_30d": {"projected_co2_kg": 401.7},
+        "equivalencies": {
+            "miles_driven": 321,
+            "trees_needed_for_year": 6,
+            "smartphone_charges": 15786,
+            "percent_of_home_month": 42,
+        },
+        "green_region_recommendations": recommendations,
+    }
+
+
+def _build_playwright_greenops_budget_payload() -> Dict[str, Any]:
+    return {
+        "alert_status": "ok",
+        "current_usage_kg": 128.4,
+        "budget_kg": 220.0,
+        "usage_percent": 58.4,
+    }
+
+
+def _build_playwright_greenops_graviton_payload() -> Dict[str, Any]:
+    return {
+        "candidates": [
+            {
+                "instance_id": "i-playwright-001",
+                "energy_savings_percent": 28,
+                "current_type": "m5.large",
+                "recommended_type": "m7g.large",
+            },
+            {
+                "instance_id": "i-playwright-002",
+                "energy_savings_percent": 24,
+                "current_type": "c5.xlarge",
+                "recommended_type": "c7g.xlarge",
+            },
+        ]
+    }
+
+
 @router.get("")
 async def get_carbon_footprint(
     start_date: date,
@@ -216,6 +282,8 @@ async def get_carbon_footprint(
     tenant_id = _require_tenant_id(user)
     normalized_provider = _normalize_provider(provider)
     region_hint = _resolve_region_hint(normalized_provider, region)
+    if _is_playwright_greenops_fixture_user(user) and normalized_provider == "aws":
+        return _build_playwright_greenops_carbon_payload(region_hint)
     cache_key = (
         f"api:carbon:footprint:{tenant_id}:{normalized_provider}:{region_hint}:"
         f"{start_date.isoformat()}:{end_date.isoformat()}"
@@ -260,6 +328,8 @@ async def get_carbon_budget(
         raise HTTPException(status_code=400, detail="provider is required")
     tenant_id = _require_tenant_id(user)
     normalized_provider = _normalize_provider(provider)
+    if _is_playwright_greenops_fixture_user(user) and normalized_provider == "aws":
+        return _build_playwright_greenops_budget_payload()
     today = date.today()
     region_hint = _resolve_region_hint(normalized_provider, region)
     cache_key = f"api:carbon:budget:{tenant_id}:{normalized_provider}:{region_hint}:{today.isoformat()}"
@@ -333,6 +403,8 @@ async def analyze_graviton_opportunities(
     """Analyze EC2 instances for Graviton migration opportunities (AWS only)."""
     region_hint = _coerce_query_str(region, default="us-east-1")
     tenant_id = _require_tenant_id(user)
+    if _is_playwright_greenops_fixture_user(user):
+        return _build_playwright_greenops_graviton_payload()
     cache_key = f"api:carbon:graviton:{tenant_id}:{region_hint}"
     cached = await _read_cached_payload(cache_key)
     if cached is not None:

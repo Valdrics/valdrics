@@ -25,8 +25,15 @@ describe('persona helpers', () => {
 		expect(hrefs.has('/ops')).toBe(true);
 	});
 
-	it('keeps admin-only routes for admin roles', () => {
+	it('keeps platform-only routes off the nav unless platform access is present', () => {
 		const hrefs = allowedNavHrefs('platform', 'admin');
+		expect(hrefs.has('/admin/health')).toBe(false);
+		expect(hrefs.has('/admin/landing-campaigns')).toBe(true);
+		expect(hrefs.has('/billing')).toBe(true);
+	});
+
+	it('keeps admin health for platform operators', () => {
+		const hrefs = allowedNavHrefs('platform', 'admin', { platformOperator: true });
 		expect(hrefs.has('/admin/health')).toBe(true);
 		expect(hrefs.has('/admin/landing-campaigns')).toBe(true);
 		expect(hrefs.has('/billing')).toBe(true);

@@ -17,9 +17,14 @@ export function isAdminRole(role: unknown): boolean {
 	return normalized === 'admin' || normalized === 'owner';
 }
 
-export function allowedNavHrefs(persona: unknown, role: unknown): Set<string> {
+export function allowedNavHrefs(
+	persona: unknown,
+	role: unknown,
+	options: { platformOperator?: boolean } = {}
+): Set<string> {
 	const p = normalizePersona(persona);
 	const isAdmin = isAdminRole(role);
+	const platformOperator = Boolean(options.platformOperator);
 
 	let hrefs: string[];
 	switch (p) {
@@ -35,7 +40,10 @@ export function allowedNavHrefs(persona: unknown, role: unknown): Set<string> {
 			];
 			break;
 		case 'platform':
-			hrefs = ['/ops', '/connections', '/audit', '/admin/health'];
+			hrefs = ['/ops', '/connections', '/audit'];
+			if (platformOperator) {
+				hrefs.push('/admin/health');
+			}
 			break;
 		case 'leadership':
 			hrefs = ['/dashboard', '/leaderboards', '/savings', '/greenops', '/audit'];
@@ -51,7 +59,10 @@ export function allowedNavHrefs(persona: unknown, role: unknown): Set<string> {
 
 	// Subscription management is an admin concern, regardless of persona.
 	if (isAdmin) {
-		hrefs.push('/billing', '/admin/health', '/admin/landing-campaigns');
+		hrefs.push('/billing', '/admin/landing-campaigns');
+		if (platformOperator) {
+			hrefs.push('/admin/health');
+		}
 	}
 
 	// Hide admin-only routes unless admin/owner.

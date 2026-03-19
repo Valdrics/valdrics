@@ -5,7 +5,7 @@ test.describe('Authentication Flow', () => {
 	test('shows landing page when not authenticated', async ({ page }) => {
 		await page.goto('/');
 		await expect(page.locator('h1')).toContainText(
-			/turn cloud, saas, and software spend into governed action without slowing delivery/i
+			/govern cloud, saas, and software spend without slowing delivery/i
 		);
 	});
 
