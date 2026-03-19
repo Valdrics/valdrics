@@ -85,6 +85,10 @@ SUPPLEMENTAL_CHECKS: tuple[DrillCheck, ...] = (
 )
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
 def _all_drill_checks() -> tuple[DrillCheck, ...]:
     return (*DEFAULT_DRILL_CHECKS, *SUPPLEMENTAL_CHECKS)
 
@@ -164,6 +168,49 @@ def _parse_non_negative_int_arg(value: int, *, field: str) -> int:
     return parsed
 
 
+def _protected_output_paths() -> set[Path]:
+    repo_root = _repo_root()
+    protected = {
+        Path(__file__).resolve(),
+        (repo_root / "scripts" / "verify_key_rotation_drill_evidence.py").resolve(),
+        (repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md").resolve(),
+    }
+    for check in _all_drill_checks():
+        selector_path = str(check.selector).split("::", 1)[0].strip()
+        if selector_path:
+            protected.add((repo_root / selector_path).resolve())
+    return protected
+
+
+def _resolve_output_path(value: str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        output_path = raw.resolve()
+    else:
+        output_path = (_repo_root() / raw).resolve()
+    if output_path.exists() and not output_path.is_file():
+        raise ValueError(f"output must be a file path: {output_path.as_posix()}")
+    if output_path in _protected_output_paths():
+        raise ValueError(
+            "output must not overwrite key-rotation drill source or verifier files"
+        )
+    return output_path
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
 def _run_selector(
     *,
     selector: str,
@@ -187,6 +234,7 @@ def _run_selector(
 
     attempts = max(1, int(retries) + 1)
     last_output = ""
+    repo_root = _repo_root()
     for attempt in range(1, attempts + 1):
         try:
             completed = subprocess.run(
@@ -196,6 +244,7 @@ def _run_selector(
                 text=True,
                 timeout=timeout_seconds,
                 env=subprocess_env,
+                cwd=repo_root,
             )  # nosec B603 - pytest invocation uses validated repo-local selector
         except subprocess.TimeoutExpired as exc:
             last_output = f"timeout after {timeout_seconds:.1f}s: {selector} ({exc})"
@@ -309,6 +358,8 @@ def main(argv: list[str] | None = None) -> int:
         int(args.selector_retries),
         field="selector_retries",
     )
+    output_path = _resolve_output_path(str(args.output))
+    _ensure_output_parent_dir(output_path)
     field_results, selector_results, selector_logs = _execute_checks(
         timeout_seconds=pytest_timeout_seconds,
         retries=selector_retries,
@@ -316,7 +367,6 @@ def main(argv: list[str] | None = None) -> int:
     failed = [key for key, passed in field_results.items() if not passed]
     overall_passed = not failed
 
-    output_path = Path(str(args.output))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         _build_markdown(

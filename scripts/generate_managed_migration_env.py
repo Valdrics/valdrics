@@ -21,6 +21,44 @@ SUPPORTED_ENVIRONMENTS = ("staging", "production")
 SUPPORTED_DB_SSL_MODES = ("disable", "require", "verify-ca", "verify-full")
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _resolve_default_path(path: Path) -> Path:
+    return (_repo_root() / path).resolve()
+
+
+def _resolve_cli_path(path: Path) -> Path:
+    raw = Path(path).expanduser()
+    if raw.is_absolute():
+        return raw.resolve()
+    return (_repo_root() / raw).resolve()
+
+
+def _protected_output_paths() -> set[Path]:
+    repo_root = _repo_root()
+    return {
+        Path(__file__).resolve(),
+        repo_root / ".env.example",
+        repo_root / "scripts" / "validate_migration_env.py",
+    }
+
+
+def _ensure_parent_dir(path: Path, *, field_name: str) -> None:
+    current = path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"{field_name} parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
 def _placeholder(name: str) -> str:
     return f"{PLACEHOLDER_PREFIX}{name}"
 
@@ -106,6 +144,18 @@ def generate_managed_migration_env(
         )
     if output_path.resolve() == report_path.resolve():
         raise ValueError("output_path and report_path must be different files")
+    protected_paths = _protected_output_paths()
+    for field_name, resolved in (("output_path", output_path.resolve()), ("report_path", report_path.resolve())):
+        if resolved in protected_paths:
+            raise ValueError(
+                f"{field_name} must not overwrite migration source, template, or validator files"
+            )
+    if output_path.exists() and not output_path.is_file():
+        raise ValueError(f"output_path must be a file path: {output_path.as_posix()}")
+    if report_path.exists() and not report_path.is_file():
+        raise ValueError(f"report_path must be a file path: {report_path.as_posix()}")
+    _ensure_parent_dir(output_path, field_name="output_path")
+    _ensure_parent_dir(report_path, field_name="report_path")
 
     overrides = _build_overrides(
         environment=normalized_environment,
@@ -176,15 +226,19 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    output_path = args.output_path or (
-        DEFAULT_OUTPUT_DIR / f"{args.environment}.migrate.env"
+    output_path = (
+        _resolve_default_path(DEFAULT_OUTPUT_DIR / f"{args.environment}.migrate.env")
+        if args.output_path is None
+        else _resolve_cli_path(args.output_path)
     )
-    report_path = args.report_path or (
-        DEFAULT_OUTPUT_DIR / f"{args.environment}.migrate.report.json"
+    report_path = (
+        _resolve_default_path(DEFAULT_OUTPUT_DIR / f"{args.environment}.migrate.report.json")
+        if args.report_path is None
+        else _resolve_cli_path(args.report_path)
     )
     report = generate_managed_migration_env(
-        output_path=output_path.resolve(),
-        report_path=report_path.resolve(),
+        output_path=output_path,
+        report_path=report_path,
         environment=str(args.environment),
         database_url=args.database_url,
         db_ssl_mode=str(args.db_ssl_mode),

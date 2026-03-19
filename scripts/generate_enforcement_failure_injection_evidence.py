@@ -118,6 +118,55 @@ def _parse_positive_float_arg(value: float, *, field: str) -> float:
     return parsed
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _protected_output_paths() -> set[Path]:
+    repo_root = _repo_root()
+    protected = {
+        Path(__file__).resolve(),
+        repo_root / "scripts" / "verify_enforcement_failure_injection_evidence.py",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json",
+    }
+    for scenario in SCENARIOS:
+        for selector in scenario.selectors:
+            selector_path = selector.split("::", 1)[0].strip()
+            if selector_path:
+                protected.add((repo_root / selector_path).resolve())
+    return protected
+
+
+def _resolve_output_path(value: Path | str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        resolved = raw.resolve()
+    else:
+        resolved = (_repo_root() / raw).resolve()
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"output must be a file path: {resolved.as_posix()}")
+    if resolved in _protected_output_paths():
+        raise ValueError(
+            "output must not overwrite failure-injection source, verifier, selector, or template files"
+        )
+    return resolved
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
 def _run_scenario(
     scenario: FailureScenario,
     *,
@@ -190,6 +239,8 @@ def generate_evidence(
     normalized_executed_by = executed_by.strip()
     normalized_approved_by = approved_by.strip()
     normalized_profile = str(profile or "").strip()
+    output_path = _resolve_output_path(output)
+    _ensure_output_parent_dir(output_path)
     if not normalized_executed_by or not normalized_approved_by:
         raise ValueError("executed_by and approved_by must be non-empty")
     if normalized_executed_by == normalized_approved_by:
@@ -231,8 +282,8 @@ def generate_evidence(
         },
     }
 
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8")
     return artifact, overall_passed
 
 
@@ -242,8 +293,9 @@ def main(argv: list[str] | None = None) -> int:
         float(args.pytest_timeout_seconds),
         field="pytest_timeout_seconds",
     )
+    output_path = _resolve_output_path(Path(args.output))
     artifact, passed = generate_evidence(
-        output=Path(args.output),
+        output=output_path,
         executed_by=str(args.executed_by),
         approved_by=str(args.approved_by),
         profile=str(args.profile),
@@ -251,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
         timeout_seconds=pytest_timeout_seconds,
     )
     verify_evidence(
-        evidence_path=Path(args.output),
+        evidence_path=output_path,
         expected_profile=EXPECTED_PROFILE,
         max_artifact_age_hours=4.0,
     )

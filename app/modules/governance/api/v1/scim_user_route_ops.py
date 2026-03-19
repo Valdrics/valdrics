@@ -29,10 +29,13 @@ async def _audit_and_commit_user_change(
     conflict_message: str | None = None,
 ) -> None:
     audit = audit_logger_cls(db, tenant_id)
+    rollback_needed = True
     try:
         await audit.log(**audit_kwargs)
         await db.commit()
+        rollback_needed = False
     except IntegrityError as exc:
+        rollback_needed = False
         await db.rollback()
         if conflict_message is None:
             raise
@@ -41,9 +44,9 @@ async def _audit_and_commit_user_change(
             conflict_message,
             scim_type="uniqueness",
         ) from exc
-    except Exception:
-        await db.rollback()
-        raise
+    finally:
+        if rollback_needed:
+            await db.rollback()
 
 
 async def list_users_route(

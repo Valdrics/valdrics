@@ -75,6 +75,78 @@ def test_main_rejects_repo_escape_output(tmp_path: Path) -> None:
         main(["--out", str(tmp_path / "outside.json")])
 
 
+@pytest.mark.parametrize(
+    "output",
+    [
+        "app/shared/core/pricing.py",
+        "app/modules/reporting/api/v1/costs.py",
+    ],
+)
+def test_resolve_output_path_rejects_scanned_source_roots(output: str) -> None:
+    with pytest.raises(ValueError, match="out must not overwrite scanned source roots"):
+        _resolve_output_path(
+            repo_root=REPO_ROOT,
+            output=output,
+        )
+
+
+def test_main_rejects_scanned_source_root_output() -> None:
+    with pytest.raises(ValueError, match="out must not overwrite scanned source roots"):
+        main(["--out", "app/shared/core/pricing.py"])
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        "scripts/verify_feature_enforceability_matrix.py",
+        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+    ],
+)
+def test_resolve_output_path_rejects_protected_artifacts(output: str) -> None:
+    with pytest.raises(
+        ValueError,
+        match="out must not overwrite feature-enforceability source, verifier, or checked-in artifact files",
+    ):
+        _resolve_output_path(
+            repo_root=REPO_ROOT,
+            output=output,
+        )
+
+
+def test_main_rejects_protected_artifact_output() -> None:
+    with pytest.raises(
+        ValueError,
+        match="out must not overwrite feature-enforceability source, verifier, or checked-in artifact files",
+    ):
+        main(["--out", "docs/ops/feature_enforceability_matrix_2026-02-27.json"])
+
+
+def test_main_rejects_output_parent_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    blocked_parent = tmp_path / "blocked-parent"
+    blocked_parent.write_text("not-a-directory", encoding="utf-8")
+
+    monkeypatch.setattr(matrix_generator, "_repo_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="out parent must be a directory path"):
+        main(["--out", "blocked-parent/matrix.json"])
+
+
+def test_main_rejects_directory_output_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_dir = tmp_path / "matrix-output"
+    output_dir.mkdir()
+
+    monkeypatch.setattr(matrix_generator, "_repo_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="out must be a file path inside the repository root"):
+        main(["--out", "matrix-output"])
+
+
 def test_main_self_verifies_generated_matrix(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

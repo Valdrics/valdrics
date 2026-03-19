@@ -233,6 +233,7 @@ async def maybe_schedule_grace_period_execution(
     from app.models.background_job import JobType
     from app.modules.governance.domain.jobs.processor import enqueue_job
 
+    commit_succeeded = False
     try:
         await enqueue_job(
             db=db,
@@ -256,11 +257,12 @@ async def maybe_schedule_grace_period_execution(
             },
         )
         await db.commit()
-    except Exception:
-        await db.rollback()
-        request.status = original_status
-        request.scheduled_execution_at = original_scheduled_execution_at
-        raise
+        commit_succeeded = True
+    finally:
+        if not commit_succeeded:
+            await db.rollback()
+            request.status = original_status
+            request.scheduled_execution_at = original_scheduled_execution_at
 
     logger.info(
         "remediation_scheduled_grace_period",

@@ -39,7 +39,12 @@ export const load: LayoutServerLoad = async ({ locals, fetch, url, cookies }) =>
 	}
 
 	let subscription = { tier: 'free', status: 'active' };
-	let profile: { persona: string; role?: string; tier?: string } | null = null;
+	let profile: {
+		persona: string;
+		role?: string;
+		tier?: string;
+		platform_operator?: boolean;
+	} | null = null;
 
 	// Fetch subscription tier if user is authenticated
 	if (session?.access_token) {

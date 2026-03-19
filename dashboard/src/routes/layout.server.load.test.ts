@@ -67,7 +67,9 @@ describe('layout server load', () => {
 		});
 		mocks.fetchWithTimeout
 			.mockResolvedValueOnce(jsonResponse({ tier: 'pro', status: 'active' }))
-			.mockResolvedValueOnce(jsonResponse({ persona: 'finance', role: 'owner' }));
+			.mockResolvedValueOnce(
+				jsonResponse({ persona: 'finance', role: 'owner', platform_operator: false })
+			);
 
 		const result = await load({
 			locals: { safeGetSession },
@@ -79,7 +81,11 @@ describe('layout server load', () => {
 		expect(safeGetSession).toHaveBeenCalledTimes(1);
 		expect(mocks.fetchWithTimeout).toHaveBeenCalledTimes(2);
 		expect(result.subscription).toEqual({ tier: 'pro', status: 'active' });
-		expect(result.profile).toEqual({ persona: 'finance', role: 'owner' });
+		expect(result.profile).toEqual({
+			persona: 'finance',
+			role: 'owner',
+			platform_operator: false
+		});
 	});
 
 	it('degrades gracefully when public session resolution fails', async () => {

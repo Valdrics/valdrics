@@ -85,6 +85,8 @@ def parse_date(value: Any, *, field: str) -> datetime:
 def load_payload(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"PKG/FIN policy decision evidence file not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"PKG/FIN policy decision evidence file must be a file: {path}")
     raw = path.read_text(encoding="utf-8")
     try:
         payload = json.loads(raw)

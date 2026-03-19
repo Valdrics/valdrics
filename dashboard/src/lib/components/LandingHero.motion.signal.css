@@ -128,14 +128,19 @@
 	.landing-hero-signal-field {
 		inset: var(--landing-hero-signal-field-inset-sm);
 		height: var(--landing-hero-signal-field-height-sm);
-		opacity: var(--landing-hero-signal-field-opacity-sm);
+		opacity: calc(var(--landing-hero-signal-field-opacity-sm) * 0.82);
 	}
 
+	.landing-hero-signal-ring-b,
 	.landing-hero-signal-ring-c {
 		display: none;
 	}
 
 	.landing-hero-signal-node {
 		display: none;
+	}
+
+	.landing-hero-signal-core img {
+		opacity: 0.24;
 	}
 }

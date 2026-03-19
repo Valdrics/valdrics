@@ -303,5 +303,6 @@ export function setupOpsGetMocks({
 export const testOpsPageData = {
 	user: { id: 'user-id' },
 	session: { access_token: 'token' },
-	subscription: { tier: 'pro', status: 'active' }
+	subscription: { tier: 'pro', status: 'active' },
+	profile: { role: 'admin', persona: 'engineering', platform_operator: false }
 } as unknown as PageData;

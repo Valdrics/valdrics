@@ -259,7 +259,8 @@
 
 	async function loadModels() {
 		try {
-			const res = await getWithTimeout(edgeApiPath('/settings/llm/models'));
+			const headers = await getHeaders();
+			const res = await getWithTimeout(edgeApiPath('/settings/llm/models'), headers);
 			if (res.ok) {
 				providerModels = await res.json();
 			}

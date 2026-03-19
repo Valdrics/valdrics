@@ -3,26 +3,25 @@
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import { canAccessAdminHealth } from '$lib/entitlements';
 
-	let { isOpen = $bindable(false) } = $props();
+	type CommandAction = { id?: string; label: string; icon: string; path?: string; href?: string };
+
+	let {
+		isOpen = $bindable(false),
+		actions = [],
+		role = 'member',
+		platformOperator = false
+	}: {
+		isOpen?: boolean;
+		actions?: CommandAction[];
+		role?: string;
+		platformOperator?: boolean;
+	} = $props();
 	let query = $state('');
 	let selectedIndex = $state(0);
 	let searchInput = $state<HTMLInputElement | undefined>(undefined);
 	let prefersReducedMotion = $state(false);
-
-	const actions = [
-		{ id: 'dash', label: 'Go to Dashboard', icon: '📊', path: '/dashboard' },
-		{ id: 'ops', label: 'Open Ops Center', icon: '🛠️', path: '/ops' },
-		{ id: 'onb', label: 'Open Onboarding', icon: '🧭', path: '/onboarding' },
-		{ id: 'audit', label: 'Open Audit Logs', icon: '🧾', path: '/audit' },
-		{ id: 'conn', label: 'Manage Cloud Connections', icon: '☁️', path: '/connections' },
-		{ id: 'green', label: 'View GreenOps Metrics', icon: '🌱', path: '/greenops' },
-		{ id: 'llm', label: 'LLM Usage Tracking', icon: '🤖', path: '/llm' },
-		{ id: 'bill', label: 'Billing & Subscriptions', icon: '💳', path: '/billing' },
-		{ id: 'trop', label: 'Leaderboards', icon: '🏆', path: '/leaderboards' },
-		{ id: 'sett', label: 'Account Settings', icon: '⚙️', path: '/settings' },
-		{ id: 'admh', label: 'Admin Health Dashboard', icon: '🩺', path: '/admin/health' }
-	];
 
 	function toAppPath(path: string): string {
 		const normalizedPath = path.startsWith('/') ? path : `/${path}`;
@@ -30,8 +29,33 @@
 		return `${normalizedBase}${normalizedPath}`;
 	}
 
+	let resolvedActions = $derived(
+		Array.from(
+			new Map(
+				actions
+					.filter((action) => {
+						const path = action.path ?? action.href ?? '';
+						if (path !== '/admin/health') return true;
+						return canAccessAdminHealth(role, platformOperator);
+					})
+					.map((action, index) => {
+						const path = action.path ?? action.href ?? '';
+						return [
+							path,
+							{
+								id: action.id ?? `action-${index}`,
+								label: action.label,
+								icon: action.icon,
+								path
+							}
+						];
+					})
+			).values()
+		)
+	);
+
 	let filteredActions = $derived(
-		actions.filter((a) => a.label.toLowerCase().includes(query.toLowerCase()))
+		resolvedActions.filter((a) => a.label.toLowerCase().includes(query.toLowerCase()))
 	);
 
 	$effect(() => {

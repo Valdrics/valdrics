@@ -40,6 +40,34 @@ describe('Landing component decomposition', () => {
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
 		expect(screen.getByText(/cloud \+ saas \+ software in one control layer/i)).toBeTruthy();
 		expect(screen.getByText(/read-only onboarding where supported/i)).toBeTruthy();
+		expect(screen.getByText(/see the governed loop before rollout/i)).toBeTruthy();
+		expect(screen.getByText(/what changes after onboarding/i)).toBeTruthy();
+		expect(screen.getByText(/permanent free tier/i)).toBeTruthy();
+		expect(screen.getByText(/signal-to-owner handoff/i)).toBeTruthy();
+		const jumpNav = screen.getByRole('navigation', { name: /browse landing sections/i });
+		expect(
+			within(jumpNav)
+				.getByRole('link', { name: /explore product/i })
+				.getAttribute('href')
+		).toBe('#product');
+		expect(
+			within(jumpNav)
+				.getByRole('link', { name: /see decision loop/i })
+				.getAttribute('href')
+		).toBe('#signal-map');
+		expect(
+			within(jumpNav)
+				.getByRole('link', { name: /compare plans/i })
+				.getAttribute('href')
+		).toBe('#plans');
+		expect(
+			within(jumpNav)
+				.getByRole('link', { name: /review trust/i })
+				.getAttribute('href')
+		).toBe('#trust');
+		expect(screen.getAllByText(/one governed operating layer/i).length).toBeGreaterThanOrEqual(1);
+		expect(screen.getAllByText(/owner-routed action/i).length).toBeGreaterThanOrEqual(1);
+		expect(screen.getAllByText(/reviewable outcomes/i).length).toBeGreaterThanOrEqual(1);
 		expect(screen.queryByText(/verify before you commit/i)).toBeNull();
 		expect(screen.queryByRole('link', { name: /technical validation/i })).toBeNull();
 		expect(screen.queryByRole('link', { name: /access checklist/i })).toBeNull();

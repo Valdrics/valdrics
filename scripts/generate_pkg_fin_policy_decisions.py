@@ -42,6 +42,56 @@ LAUNCH_BLOCKING_IDS: set[str] = {
 POSTLAUNCH_IDS: set[str] = {"PKG-029", "PKG-030", "PKG-031"}
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _protected_output_paths() -> set[Path]:
+    repo_root = _repo_root()
+    return {
+        Path(__file__).resolve(),
+        repo_root / "scripts" / "verify_pkg_fin_policy_decisions.py",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
+    }
+
+
+def _resolve_output_path(value: str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        resolved = raw.resolve()
+    else:
+        resolved = (_repo_root() / raw).resolve()
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"output must be a file path: {resolved.as_posix()}")
+    if resolved in _protected_output_paths():
+        raise ValueError(
+            "output must not overwrite PKG/FIN source, verifier, or checked-in evidence template files"
+        )
+    return resolved
+
+
+def _resolve_input_path(value: str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        return raw.resolve()
+    return (_repo_root() / raw).resolve()
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate runtime PKG/FIN policy decision evidence artifact.",
@@ -68,6 +118,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def _load_json(path: Path, *, field: str) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"{field} does not exist: {path}")
+    if not path.is_file():
+        raise ValueError(f"{field} must be a file: {path}")
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -299,8 +351,9 @@ def _build_payload(
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    telemetry_path = Path(str(args.telemetry_snapshot_path))
-    output_path = Path(str(args.output))
+    telemetry_path = _resolve_input_path(str(args.telemetry_snapshot_path))
+    output_path = _resolve_output_path(str(args.output))
+    _ensure_output_parent_dir(output_path)
     if telemetry_path.resolve() == output_path.resolve():
         raise ValueError("telemetry_snapshot_path and output must be different files")
     verify_snapshot(snapshot_path=telemetry_path, max_artifact_age_hours=24.0)

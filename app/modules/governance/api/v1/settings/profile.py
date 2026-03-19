@@ -32,6 +32,7 @@ class ProfileResponse(BaseModel):
     role: UserRole
     tier: PricingTier
     persona: UserPersona
+    platform_operator: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -55,6 +56,7 @@ async def get_profile(
         role=current_user.role,
         tier=current_user.tier,
         persona=current_user.persona,
+        platform_operator=current_user.tenant_id is None,
     )
 
 
@@ -115,4 +117,5 @@ async def update_profile(
         role=current_user.role,
         tier=current_user.tier,
         persona=payload.persona,
+        platform_operator=False,
     )

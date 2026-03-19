@@ -56,7 +56,7 @@ describe('LandingHero', () => {
 			heroView.getByText(/detect waste\. route the owner\. approve the action\. keep the proof\./i)
 		).toBeTruthy();
 		expect(
-			heroView.getByText(/turns cost, usage, and policy signals into owner-routed approvals/i)
+			heroView.getByText(/routes cost, usage, and policy signals to owners, approvals/i)
 		).toBeTruthy();
 		const secondaryCta = heroView.getByRole('link', { name: /see pricing/i });
 		expect(secondaryCta).toBeTruthy();
@@ -69,6 +69,30 @@ describe('LandingHero', () => {
 		expect(heroView.getByText(/cloud \+ saas \+ software in one control layer/i)).toBeTruthy();
 		expect(heroView.getByText(/read-only onboarding where supported/i)).toBeTruthy();
 		expect(heroView.getByText(/approval trail and exportable proof/i)).toBeTruthy();
+		const jumpNav = heroView.getByRole('navigation', { name: /browse landing sections/i });
+		expect(
+			within(jumpNav)
+				.getByRole('link', { name: /explore product/i })
+				.getAttribute('href')
+		).toBe('#product');
+		expect(
+			within(jumpNav)
+				.getByRole('link', { name: /see decision loop/i })
+				.getAttribute('href')
+		).toBe('#signal-map');
+		expect(
+			within(jumpNav)
+				.getByRole('link', { name: /compare plans/i })
+				.getAttribute('href')
+		).toBe('#plans');
+		expect(
+			within(jumpNav)
+				.getByRole('link', { name: /review trust/i })
+				.getAttribute('href')
+		).toBe('#trust');
+		expect(heroView.getAllByText(/one governed operating layer/i).length).toBeGreaterThanOrEqual(1);
+		expect(heroView.getAllByText(/owner-routed action/i).length).toBeGreaterThanOrEqual(1);
+		expect(heroView.getAllByText(/reviewable outcomes/i).length).toBeGreaterThanOrEqual(1);
 		expect(heroView.queryByText(/verify before you commit/i)).toBeNull();
 		expect(heroView.queryByText(/modeled first-quarter range:/i)).toBeNull();
 		expect(heroView.queryByRole('link', { name: /technical validation/i })).toBeNull();
@@ -251,6 +275,23 @@ describe('LandingHero', () => {
 		const declineButton = screen.getByRole('button', { name: /decline analytics/i });
 		await fireEvent.click(declineButton);
 		expect(window.localStorage.getItem('valdrics.cookie_consent.v1')).toBe('rejected');
+	});
+
+	it('pauses approval-chain autoplay after a manual lane selection', async () => {
+		vi.useFakeTimers();
+		const { unmount } = render(LandingHero);
+
+		await fireEvent.click(screen.getAllByRole('button', { name: /^open approval chain$/i })[0]!);
+		await fireEvent.click(
+			screen.getAllByRole('button', { name: /inspect approval routed step/i })[0]!
+		);
+		expect(screen.getAllByRole('tabpanel')[0]?.textContent || '').toMatch(/approval routed/i);
+
+		await vi.advanceTimersByTimeAsync(9000);
+		expect(screen.getAllByRole('tabpanel')[0]?.textContent || '').toMatch(/approval routed/i);
+
+		unmount();
+		vi.useRealTimers();
 	});
 
 	it('disables auto-rotation when reduced motion is preferred', () => {

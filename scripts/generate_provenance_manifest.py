@@ -21,6 +21,10 @@ DEFAULT_DEPENDENCY_INPUTS: tuple[Path, ...] = (
 )
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -71,13 +75,42 @@ def _normalize_dependency_inputs(
     return tuple(normalized_paths)
 
 
+def _resolve_repo_root(repo_root: Path) -> Path:
+    resolved = repo_root.resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"repo_root does not exist: {resolved.as_posix()}")
+    if not resolved.is_dir():
+        raise ValueError(f"repo_root must be a directory: {resolved.as_posix()}")
+    return resolved
+
+
 def _resolve_output_path(repo_root: Path, output: Path) -> Path:
-    resolved = Path(output).resolve()
+    raw_output = Path(output)
+    if raw_output.is_absolute():
+        resolved = raw_output.resolve()
+    else:
+        resolved = (repo_root / raw_output).resolve()
     try:
         resolved.relative_to(repo_root)
     except ValueError as exc:
         raise ValueError("output must stay within repo root") from exc
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError("output must be a file path within repo root")
     return resolved
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output parent must be a directory path within repo root: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
 
 
 def _resolve_file(repo_root: Path, relative_path: Path) -> Path:
@@ -108,7 +141,11 @@ def _build_sbom_entries(repo_root: Path, sbom_dir: Path | None) -> list[dict[str
         field="sbom_dir",
     )
     absolute_sbom_dir = (repo_root / normalized_sbom_dir).resolve()
-    if not absolute_sbom_dir.exists() or not absolute_sbom_dir.is_dir():
+    if absolute_sbom_dir.exists() and not absolute_sbom_dir.is_dir():
+        raise ValueError(
+            f"SBOM directory must be a directory: {normalized_sbom_dir.as_posix()}"
+        )
+    if not absolute_sbom_dir.exists():
         raise FileNotFoundError(
             f"SBOM directory does not exist: {normalized_sbom_dir.as_posix()}"
         )
@@ -133,7 +170,7 @@ def generate_provenance_manifest(
     sbom_dir: Path | None,
     env: Mapping[str, str],
 ) -> dict[str, Any]:
-    resolved_repo_root = repo_root.resolve()
+    resolved_repo_root = _resolve_repo_root(repo_root)
     normalized_dependency_inputs = _normalize_dependency_inputs(
         resolved_repo_root,
         dependency_inputs,
@@ -176,8 +213,8 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--repo-root",
         type=Path,
-        default=Path("."),
-        help="Repository root path (default: current directory).",
+        default=_repo_root(),
+        help="Repository root path (default: this repository root).",
     )
     parser.add_argument(
         "--output",
@@ -218,7 +255,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         else DEFAULT_DEPENDENCY_INPUTS
     )
 
-    repo_root = args.repo_root.resolve()
+    repo_root = _resolve_repo_root(args.repo_root)
     output_path = _resolve_output_path(repo_root, args.output)
     normalized_dependency_inputs = _normalize_dependency_inputs(
         repo_root,
@@ -257,6 +294,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         env=os.environ,
     )
 
+    _ensure_output_parent_dir(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(manifest, indent=2, sort_keys=True) + "\n",

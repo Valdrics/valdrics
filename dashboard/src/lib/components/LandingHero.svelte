@@ -84,6 +84,8 @@
 		scenarioWindowMonths = $state(12),
 		scenarioAdjustCaptured = $state(false),
 		landingScrollProgressPct = $state(0);
+	let snapshotAutoplayPaused = $state(false),
+		demoAutoplayPaused = $state(false);
 	let prefersReducedMotion = $state(
 		getReducedMotionPreference(browser && typeof window !== 'undefined' ? window : undefined)
 	);
@@ -146,13 +148,14 @@
 	);
 	let includeExperimentQueryParams = $derived(shouldIncludeExperimentQueryParams($page.url, false));
 	let shouldRotateSnapshots = $derived(
-		!prefersReducedMotion &&
+		!snapshotAutoplayPaused &&
+			!prefersReducedMotion &&
 			documentVisible &&
 			signalMapInView &&
 			REALTIME_SIGNAL_SNAPSHOTS.length > 1
 	);
 	let shouldRotateDemoSteps = $derived(
-		!prefersReducedMotion && documentVisible && MICRO_DEMO_STEPS.length > 1
+		!demoAutoplayPaused && !prefersReducedMotion && documentVisible && MICRO_DEMO_STEPS.length > 1
 	);
 	let roiInputs = $derived(
 		normalizeLandingRoiInputs({
@@ -304,11 +307,20 @@
 			utm: attribution.utm
 		});
 	}
+	const pauseSnapshotAutoplay = () => {
+		snapshotAutoplayPaused = true;
+	};
+	const pauseDemoAutoplay = () => {
+		demoAutoplayPaused = true;
+	};
 	const selectSnapshot = (index: number) =>
 		trackIndexedLandingSelection({
 			index,
 			size: REALTIME_SIGNAL_SNAPSHOTS.length,
-			assign: (value) => (snapshotIndex = value),
+			assign: (value) => {
+				pauseSnapshotAutoplay();
+				snapshotIndex = value;
+			},
 			eventName: 'snapshot_select',
 			section: 'signal_map',
 			value: REALTIME_SIGNAL_SNAPSHOTS[index]?.id,
@@ -332,7 +344,10 @@
 		trackIndexedLandingSelection({
 			index,
 			size: MICRO_DEMO_STEPS.length,
-			assign: (value) => (demoStepIndex = value),
+			assign: (value) => {
+				pauseDemoAutoplay();
+				demoStepIndex = value;
+			},
 			eventName: 'micro_demo_step',
 			section: 'hero_demo',
 			value: MICRO_DEMO_STEPS[index]?.id,
@@ -341,6 +356,7 @@
 			buildTelemetryContext
 		});
 	const selectSignalLane = (laneId: SignalLaneId): void => {
+		pauseSnapshotAutoplay();
 		activeLaneId = laneId;
 		markEngaged();
 		emitLandingTelemetrySafe('lane_focus', 'signal_map', laneId, buildTelemetryContext('engaged'));

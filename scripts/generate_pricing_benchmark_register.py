@@ -13,6 +13,49 @@ from typing import Any
 from scripts.verify_pricing_benchmark_register import verify_register
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _protected_output_paths() -> set[Path]:
+    repo_root = _repo_root()
+    return {
+        Path(__file__).resolve(),
+        repo_root / "scripts" / "verify_pricing_benchmark_register.py",
+        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json",
+    }
+
+
+def _resolve_output_path(value: str) -> Path:
+    raw = Path(str(value)).expanduser()
+    if raw.is_absolute():
+        resolved = raw.resolve()
+    else:
+        resolved = (_repo_root() / raw).resolve()
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"output must be a file path: {resolved.as_posix()}")
+    if resolved in _protected_output_paths():
+        raise ValueError(
+            "output must not overwrite pricing benchmark source, verifier, or checked-in evidence files"
+        )
+    return resolved
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Generate runtime pricing benchmark register artifact.",
@@ -175,6 +218,8 @@ def _build_payload(*, captured_at: datetime, max_source_age_days: float) -> dict
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
+    output_path = _resolve_output_path(str(args.output))
+    _ensure_output_parent_dir(output_path)
     captured_at = datetime.now(timezone.utc).replace(microsecond=0)
     max_source_age_days = _normalize_max_source_age_days(float(args.max_source_age_days))
     payload = _build_payload(
@@ -182,7 +227,6 @@ def main(argv: list[str] | None = None) -> int:
         max_source_age_days=max_source_age_days,
     )
 
-    output_path = Path(str(args.output))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 

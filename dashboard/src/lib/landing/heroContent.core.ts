@@ -10,11 +10,10 @@ export const HERO_ROLE_CONTEXT: Record<
 	}
 > = Object.freeze({
 	cto: {
-		controlTitle:
-			'Turn cloud, SaaS, and software spend into governed action without slowing delivery.',
+		controlTitle: 'Govern cloud, SaaS, and software spend without slowing delivery.',
 		metricsTitle: 'From dashboards and tickets to one governed spend action system.',
 		subtitle:
-			'Valdrics turns cost, usage, and policy signals into owner-routed approvals, workflow execution, and exportable proof across cloud and software environments.',
+			'Valdrics routes cost, usage, and policy signals to owners, approvals, workflow execution, and exportable proof across cloud and software.',
 		primaryIntent: 'engineering_control'
 	},
 	finops: {

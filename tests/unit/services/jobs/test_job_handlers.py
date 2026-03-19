@@ -93,6 +93,10 @@ async def test_zombie_scan_handler_success(mock_db, sample_job):
             "app.modules.optimization.domain.factory.ZombieDetectorFactory.get_detector"
         ) as mock_factory,
         patch(
+            "app.modules.optimization.domain.findings.persist_scan_findings_with_guard",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
             "app.shared.core.pricing.get_tenant_tier",
             new=AsyncMock(return_value="growth"),
         ),

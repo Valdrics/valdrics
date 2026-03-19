@@ -28,17 +28,20 @@ async def _audit_and_commit_group_change(
     conflict_message: str | None = None,
 ) -> None:
     audit = AuditLogger(db, tenant_id)
+    rollback_needed = True
     try:
         await audit.log(**audit_kwargs)
         await db.commit()
+        rollback_needed = False
     except IntegrityError as exc:
+        rollback_needed = False
         await db.rollback()
         if conflict_message is None:
             raise
         raise scim_error_factory(409, conflict_message, "uniqueness") from exc
-    except Exception:
-        await db.rollback()
-        raise
+    finally:
+        if rollback_needed:
+            await db.rollback()
 
 
 async def list_groups_route(

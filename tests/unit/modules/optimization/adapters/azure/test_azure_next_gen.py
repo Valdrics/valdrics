@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 import sys
 
 # -----------------------------------------------------------------------------
@@ -52,7 +52,8 @@ async def test_idle_azure_openai_plugin_scan(mock_azure_creds):
     mock_monitor_client.metrics.list.return_value = mock_metrics_data
 
     with patch("app.modules.optimization.adapters.azure.plugins.ai.CognitiveServicesManagementClient", return_value=mock_mgmt_client), \
-         patch("app.modules.optimization.adapters.azure.plugins.ai.MonitorManagementClient", return_value=mock_monitor_client):
+         patch("app.modules.optimization.adapters.azure.plugins.ai.MonitorManagementClient", return_value=mock_monitor_client), \
+         patch("app.modules.optimization.adapters.azure.plugins.ai.allow_expensive_cloud_api_call", new=AsyncMock(return_value=True)):
 
         zombies = await plugin.scan(
             session="sub-1",
@@ -122,6 +123,10 @@ async def test_idle_azure_openai_plugin_uses_sku_for_ptu_cost(mock_azure_creds):
             "app.modules.optimization.adapters.azure.plugins.ai.PricingService.estimate_monthly_waste",
             return_value=6000.0,
         ) as estimate,
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.ai.allow_expensive_cloud_api_call",
+            new=AsyncMock(return_value=True),
+        ),
     ):
         zombies = await plugin.scan(
             session="sub-1",
@@ -170,7 +175,8 @@ async def test_idle_ai_search_plugin_scan(mock_azure_creds):
     mock_monitor_client.metrics.list.return_value = mock_metrics_data
 
     with patch("app.modules.optimization.adapters.azure.plugins.ai.SearchManagementClient", return_value=mock_mgmt_client), \
-         patch("app.modules.optimization.adapters.azure.plugins.ai.MonitorManagementClient", return_value=mock_monitor_client):
+         patch("app.modules.optimization.adapters.azure.plugins.ai.MonitorManagementClient", return_value=mock_monitor_client), \
+         patch("app.modules.optimization.adapters.azure.plugins.ai.allow_expensive_cloud_api_call", new=AsyncMock(return_value=True)):
 
         zombies = await plugin.scan(
             session="sub-1",
@@ -229,6 +235,10 @@ async def test_idle_azure_openai_plugin_metric_failure_is_non_fatal(mock_azure_c
             "app.modules.optimization.adapters.azure.plugins.ai.MonitorManagementClient",
             return_value=mock_monitor_client,
         ),
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.ai.allow_expensive_cloud_api_call",
+            new=AsyncMock(return_value=True),
+        ),
     ):
         zombies = await plugin.scan(
             session="sub-1",
@@ -272,6 +282,10 @@ async def test_idle_ai_search_plugin_metric_failure_is_non_fatal(mock_azure_cred
         patch(
             "app.modules.optimization.adapters.azure.plugins.ai.MonitorManagementClient",
             return_value=mock_monitor_client,
+        ),
+        patch(
+            "app.modules.optimization.adapters.azure.plugins.ai.allow_expensive_cloud_api_call",
+            new=AsyncMock(return_value=True),
         ),
     ):
         zombies = await plugin.scan(

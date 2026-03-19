@@ -31,6 +31,11 @@ interface CoreActionsInput {
 	getData: () => OpsRuntimeData | null | undefined;
 	state: OpsOperationalState;
 	requestTimeoutMs: number;
+	access: {
+		jobSlo: () => boolean;
+		acceptanceKpis: () => boolean;
+		closeWorkflow: () => boolean;
+	};
 }
 
 function hasSessionToken(data: OpsRuntimeData | null | undefined): data is OpsRuntimeData {
@@ -59,7 +64,7 @@ async function parseErrorMessage(response: Response, fallback: string): Promise<
 }
 
 export function createOpsOperationalCoreActions(input: CoreActionsInput) {
-	const { getData, state, requestTimeoutMs } = input;
+	const { getData, state, requestTimeoutMs, access } = input;
 
 	async function loadOperationalData() {
 		const data = getData();
@@ -92,36 +97,44 @@ export function createOpsOperationalCoreActions(input: CoreActionsInput) {
 					headers,
 					requestTimeoutMs
 				),
-				getWithTimeout(
-					edgeApiPath(buildJobSloUrl(state.jobSloWindowHours)),
-					headers,
-					requestTimeoutMs
-				),
-				getWithTimeout(
-					edgeApiPath(
-						buildAcceptanceKpiUrl(
-							state.unitStartDate,
-							state.unitEndDate,
-							state.ingestionSlaWindowHours
+				access.jobSlo()
+					? getWithTimeout(
+							edgeApiPath(buildJobSloUrl(state.jobSloWindowHours)),
+							headers,
+							requestTimeoutMs
 						)
-					),
-					headers,
-					requestTimeoutMs
-				),
-				getWithTimeout(edgeApiPath(buildAcceptanceKpiHistoryUrl(25)), headers, requestTimeoutMs),
-				getWithTimeout(
-					edgeApiPath(
-						buildClosePackageUrl(
-							state.closeStartDate,
-							state.closeEndDate,
-							state.closeProvider,
-							'json',
-							false
+					: Promise.resolve(null),
+				access.acceptanceKpis()
+					? getWithTimeout(
+							edgeApiPath(
+								buildAcceptanceKpiUrl(
+									state.unitStartDate,
+									state.unitEndDate,
+									state.ingestionSlaWindowHours
+								)
+							),
+							headers,
+							requestTimeoutMs
 						)
-					),
-					headers,
-					requestTimeoutMs
-				),
+					: Promise.resolve(null),
+				access.acceptanceKpis()
+					? getWithTimeout(edgeApiPath(buildAcceptanceKpiHistoryUrl(25)), headers, requestTimeoutMs)
+					: Promise.resolve(null),
+				access.closeWorkflow()
+					? getWithTimeout(
+							edgeApiPath(
+								buildClosePackageUrl(
+									state.closeStartDate,
+									state.closeEndDate,
+									state.closeProvider,
+									'json',
+									false
+								)
+							),
+							headers,
+							requestTimeoutMs
+						)
+					: Promise.resolve(null),
 				getWithTimeout(edgeApiPath(buildAcceptanceEvidenceUrl()), headers, requestTimeoutMs)
 			]);
 

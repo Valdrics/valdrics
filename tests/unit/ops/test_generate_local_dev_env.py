@@ -4,6 +4,9 @@ import base64
 from pathlib import Path
 import subprocess
 
+import pytest
+
+import scripts.generate_local_dev_env as local_dev_env_generator
 from scripts.generate_local_dev_env import generate_local_dev_env
 
 
@@ -157,3 +160,137 @@ def test_generate_local_dev_env_rejects_template_output_path_collision(
 
     with pytest.raises(ValueError, match="template_path and output_path must be different files"):
         generate_local_dev_env(template_path=template, output_path=template, seed="seed-5")
+
+
+def test_generate_local_dev_env_rejects_non_file_template_path(
+    tmp_path: Path,
+) -> None:
+    template_dir = tmp_path / "template-dir"
+    template_dir.mkdir()
+    output = tmp_path / ".env.dev"
+
+    import pytest
+
+    with pytest.raises(ValueError, match="template_path must be a file"):
+        generate_local_dev_env(template_path=template_dir, output_path=output, seed="seed-6")
+
+
+def test_generate_local_dev_env_rejects_directory_output_path(
+    tmp_path: Path,
+) -> None:
+    template = tmp_path / ".env.example"
+    output_dir = tmp_path / "output-dir"
+    output_dir.mkdir()
+    _write(template, "CSRF_SECRET_KEY=\nENCRYPTION_KEY=\n")
+
+    import pytest
+
+    with pytest.raises(ValueError, match="output_path must be a file path"):
+        generate_local_dev_env(template_path=template, output_path=output_dir, seed="seed-7")
+
+
+@pytest.mark.parametrize(
+    "relative_output",
+    [
+        ".env.example",
+        "scripts/generate_local_dev_env.py",
+    ],
+)
+def test_generate_local_dev_env_rejects_protected_output_targets(
+    tmp_path: Path,
+    relative_output: str,
+) -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    template = tmp_path / ".env.template"
+    _write(template, "CSRF_SECRET_KEY=\nENCRYPTION_KEY=\n")
+
+    import pytest
+
+    with pytest.raises(
+        ValueError,
+        match="output_path must not overwrite local-dev source or tracked template files",
+    ):
+        generate_local_dev_env(
+            template_path=template,
+            output_path=repo_root / relative_output,
+            seed="seed-8",
+        )
+
+
+def test_generate_local_dev_env_rejects_blocked_output_parent(
+    tmp_path: Path,
+) -> None:
+    template = tmp_path / ".env.template"
+    blocked_parent = tmp_path / "blocked-parent"
+    blocked_parent.write_text("not-a-directory", encoding="utf-8")
+    _write(template, "CSRF_SECRET_KEY=\nENCRYPTION_KEY=\n")
+
+    with pytest.raises(ValueError, match="output_path parent must be a directory path"):
+        generate_local_dev_env(
+            template_path=template,
+            output_path=blocked_parent / ".env.dev",
+            seed="seed-9",
+        )
+
+
+def test_main_resolves_default_paths_from_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_generate_local_dev_env(**kwargs: object) -> Path:
+        captured.update(kwargs)
+        return kwargs["output_path"]  # type: ignore[return-value]
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        local_dev_env_generator,
+        "generate_local_dev_env",
+        _fake_generate_local_dev_env,
+    )
+
+    assert local_dev_env_generator.main([]) == 0
+    assert captured["template_path"] == (
+        local_dev_env_generator._repo_root() / local_dev_env_generator.DEFAULT_TEMPLATE_PATH
+    ).resolve()
+    assert captured["output_path"] == (
+        local_dev_env_generator._repo_root() / local_dev_env_generator.DEFAULT_OUTPUT_PATH
+    ).resolve()
+
+
+def test_main_resolves_explicit_relative_paths_from_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    captured: dict[str, object] = {}
+
+    def _fake_generate_local_dev_env(**kwargs: object) -> Path:
+        captured.update(kwargs)
+        return kwargs["output_path"]  # type: ignore[return-value]
+
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(local_dev_env_generator, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        local_dev_env_generator,
+        "generate_local_dev_env",
+        _fake_generate_local_dev_env,
+    )
+
+    assert (
+        local_dev_env_generator.main(
+            [
+                "--template-path",
+                ".env.example",
+                "--output-path",
+                ".env.dev",
+            ]
+        )
+        == 0
+    )
+    assert captured["template_path"] == (repo_root / ".env.example").resolve()
+    assert captured["output_path"] == (repo_root / ".env.dev").resolve()

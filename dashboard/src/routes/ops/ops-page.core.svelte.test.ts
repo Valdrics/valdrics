@@ -149,6 +149,34 @@ describe('ops page unit economics interactions', () => {
 		});
 	});
 
+	it('skips pro-only operational requests on growth tier and shows upgrade notices', async () => {
+		render(Page, {
+			data: {
+				...testOpsPageData,
+				subscription: { tier: 'growth', status: 'active' }
+			}
+		});
+
+		await screen.findByText('Unit Economics Monitor');
+		await screen.findByText('Cost Ingestion SLA');
+		expect(await screen.findAllByText(/pro tier required/i)).toHaveLength(3);
+
+		await waitFor(() => {
+			expect(
+				getMock.mock.calls.some((call) => String(call[0]).includes('/costs/ingestion/sla?'))
+			).toBe(true);
+		});
+		expect(getMock.mock.calls.some((call) => String(call[0]).includes('/jobs/slo?'))).toBe(false);
+		expect(
+			getMock.mock.calls.some((call) => String(call[0]).includes('/costs/acceptance/kpis?'))
+		).toBe(false);
+		expect(
+			getMock.mock.calls.some((call) =>
+				String(call[0]).includes('/costs/reconciliation/close-package?')
+			)
+		).toBe(false);
+	});
+
 	it('loads and refreshes integration acceptance run evidence', async () => {
 		render(Page, {
 			data: testOpsPageData

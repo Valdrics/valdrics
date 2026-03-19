@@ -1,10 +1,30 @@
 from __future__ import annotations
 
+import json
+from datetime import datetime, timezone
 from pathlib import Path
+
+from scripts.verify_enforcement_failure_injection_evidence import (
+    verify_evidence as verify_enforcement_failure_injection_evidence,
+)
+from scripts.verify_enforcement_stress_evidence import (
+    verify_evidence as verify_enforcement_stress_evidence,
+)
+from scripts.verify_finance_guardrails_evidence import (
+    verify_evidence as verify_finance_guardrails_evidence,
+)
+from scripts.verify_pkg_fin_policy_decisions import (
+    verify_evidence as verify_pkg_fin_policy_decisions_evidence,
+)
+from scripts.verify_pricing_benchmark_register import verify_register
+from scripts.verify_valdrics_disposition_freshness import (
+    verify_disposition_register,
+)
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 OPS_EVIDENCE_DIR = REPO_ROOT / "docs" / "ops" / "evidence"
+VALDRICS_TEMPLATE_AS_OF = datetime(2026, 3, 19, 0, 0, tzinfo=timezone.utc)
 
 
 def test_release_artifact_template_pack_exists_with_required_files() -> None:
@@ -97,3 +117,56 @@ def test_release_artifact_template_pack_contains_required_contract_tokens() -> N
 
     assert "Enterprise Gate Command" in ci_raw
     assert "coverage-enterprise-gate.xml" in ci_raw
+
+
+def test_release_artifact_templates_are_verifier_coherent() -> None:
+    failure_template_path = OPS_EVIDENCE_DIR / "enforcement_failure_injection_TEMPLATE.json"
+    stress_template_path = OPS_EVIDENCE_DIR / "enforcement_stress_artifact_TEMPLATE.json"
+    finance_template_path = OPS_EVIDENCE_DIR / "finance_guardrails_TEMPLATE.json"
+    pkg_fin_template_path = OPS_EVIDENCE_DIR / "pkg_fin_policy_decisions_TEMPLATE.json"
+    pricing_template_path = OPS_EVIDENCE_DIR / "pricing_benchmark_register_TEMPLATE.json"
+    valdrics_template_path = OPS_EVIDENCE_DIR / "valdrics_disposition_register_TEMPLATE.json"
+
+    assert json.loads(failure_template_path.read_text(encoding="utf-8"))
+    assert json.loads(stress_template_path.read_text(encoding="utf-8"))
+    assert json.loads(finance_template_path.read_text(encoding="utf-8"))
+    assert json.loads(pkg_fin_template_path.read_text(encoding="utf-8"))
+    assert json.loads(pricing_template_path.read_text(encoding="utf-8"))
+    assert json.loads(valdrics_template_path.read_text(encoding="utf-8"))
+
+    assert (
+        verify_enforcement_failure_injection_evidence(
+            evidence_path=failure_template_path,
+            expected_profile="enforcement_failure_injection",
+        )
+        == 0
+    )
+    assert (
+        verify_enforcement_stress_evidence(
+            evidence_path=stress_template_path,
+            expected_profile="enforcement",
+            min_rounds=3,
+            min_duration_seconds=30,
+            min_concurrent_users=10,
+            required_database_engine="postgresql",
+            max_p95_seconds=2.0,
+            max_error_rate_percent=1.0,
+            min_throughput_rps=0.5,
+        )
+        == 0
+    )
+    assert verify_finance_guardrails_evidence(evidence_path=finance_template_path) == 0
+    assert (
+        verify_pkg_fin_policy_decisions_evidence(evidence_path=pkg_fin_template_path)
+        == 0
+    )
+    assert verify_register(register_path=pricing_template_path, max_source_age_days=120.0) == 0
+    assert (
+        verify_disposition_register(
+            register_path=valdrics_template_path,
+            max_artifact_age_days=45.0,
+            max_review_window_days=120.0,
+            as_of=VALDRICS_TEMPLATE_AS_OF,
+        )
+        == 0
+    )

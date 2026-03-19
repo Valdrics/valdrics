@@ -161,8 +161,8 @@
 	}
 }
 .landing-section-lazy {
-	content-visibility: auto;
-	contain-intrinsic-size: auto 960px;
+	content-visibility: visible;
+	contain-intrinsic-size: auto;
 }
 @media (max-width: 767px) {
 	.landing .landing-section-lazy {
@@ -189,6 +189,32 @@
 	.landing-hero .container {
 		padding-top: 1rem;
 		padding-bottom: 1.35rem;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.landing .fade-in-up,
+	.landing .pulse-glow,
+	.landing .landing-scroll-progress > span,
+	.landing-hero::before,
+	.landing-hero::after,
+	.landing-hero-signal-core::before,
+	.landing-hero-signal-ring,
+	.landing-hero-signal-node {
+		animation: none !important;
+		transition: none !important;
+	}
+
+	.landing .fade-in-up {
+		opacity: 1;
+		transform: none;
+	}
+
+	.landing-hero-signal-field {
+		opacity: 0.26;
+	}
+
+	.landing-back-to-top {
+		transition: none !important;
 	}
 }
 .landing-hero {
@@ -234,11 +260,11 @@
 }
 @media (min-width: 1024px) {
 	.landing-hero .container {
-		min-height: clamp(29rem, 56vh, 35rem);
+		min-height: clamp(25rem, 48vh, 30rem);
 	}
 }
 @media (min-width: 1280px) {
 	.landing-hero .container {
-		min-height: clamp(31rem, 58vh, 37rem);
+		min-height: clamp(27rem, 50vh, 32rem);
 	}
 }

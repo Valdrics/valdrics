@@ -18,7 +18,10 @@ import { isPublicPath } from '$lib/routeProtection';
 import { canUseE2EAuthBypass, shouldUseSecureCookies } from '$lib/serverSecurity';
 import {
 	createPlaywrightE2EAccessToken,
-	resolvePlaywrightE2EFixture
+	decodePlaywrightE2EBrowserSessionCookie,
+	resolvePlaywrightSupabaseStorageKey,
+	resolvePlaywrightE2EFixture,
+	verifyPlaywrightE2EAccessToken
 } from '$lib/testing/playwrightE2EAuth';
 
 const E2E_AUTH_HEADER = 'x-valdrics-e2e-auth';
@@ -77,6 +80,64 @@ function hasMatchingE2ESecret(provided: string | null, expected: string): boolea
 	return timingSafeEqual(providedBytes, expectedBytes);
 }
 
+function resolveE2EFixtureFromEnv() {
+	return resolvePlaywrightE2EFixture({
+		tenantId: env.PLAYWRIGHT_E2E_TENANT_ID,
+		tenantName: env.PLAYWRIGHT_E2E_TENANT_NAME,
+		userId: env.PLAYWRIGHT_E2E_USER_ID,
+		userName: env.PLAYWRIGHT_E2E_USER_NAME,
+		email: env.PLAYWRIGHT_E2E_USER_EMAIL,
+		role: env.PLAYWRIGHT_E2E_USER_ROLE,
+		persona: env.PLAYWRIGHT_E2E_USER_PERSONA,
+		tier: env.PLAYWRIGHT_E2E_TIER
+	});
+}
+
+function tryResolveE2ECookieSession(params: {
+	event: Parameters<Handle>[0]['event'];
+	publicSupabaseUrl: string;
+	jwtSecret: string;
+	jwtIssuer: string;
+	fixture: ReturnType<typeof resolvePlaywrightE2EFixture>;
+}): { session: Session; user: User } | null {
+	const storageKey =
+		String(env.PLAYWRIGHT_SUPABASE_STORAGE_KEY || '').trim() ||
+		resolvePlaywrightSupabaseStorageKey(params.publicSupabaseUrl);
+	if (!storageKey) {
+		return null;
+	}
+
+	const browserSession = decodePlaywrightE2EBrowserSessionCookie(
+		params.event.cookies.get(storageKey)
+	);
+	if (!browserSession) {
+		return null;
+	}
+
+	if (
+		browserSession.user.id !== params.fixture.userId ||
+		browserSession.user.email !== params.fixture.email ||
+		!verifyPlaywrightE2EAccessToken({
+			token: browserSession.access_token,
+			secret: params.jwtSecret,
+			issuer: params.jwtIssuer,
+			fixture: params.fixture
+		})
+	) {
+		serverLogger.warn('e2e_auth_cookie_validation_failed', {
+			url: params.event.url.toString(),
+			storageKey
+		});
+		return null;
+	}
+
+	return buildE2EBypassAuth({
+		jwtSecret: params.jwtSecret,
+		jwtIssuer: params.jwtIssuer,
+		fixture: params.fixture
+	});
+}
+
 export const handle: Handle = async ({ event, resolve }) => {
 	const isPublic = isPublicPath(event.url.pathname);
 	const isHttps = shouldUseSecureCookies(event.url, env.NODE_ENV || '');
@@ -125,23 +186,17 @@ export const handle: Handle = async ({ event, resolve }) => {
 			hostname: event.url.hostname
 		});
 		if (canUseBypass) {
+			const fixture = resolveE2EFixtureFromEnv();
+			const jwtSecret = String(env.SUPABASE_JWT_SECRET || '').trim();
+			const jwtIssuer = String(env.SUPABASE_JWT_ISSUER || 'supabase').trim() || 'supabase';
 			const provided = event.request.headers.get(E2E_AUTH_HEADER);
 			const expected = String(env.E2E_AUTH_SECRET || '').trim();
 			if (hasMatchingE2ESecret(provided, expected)) {
 				try {
 					return buildE2EBypassAuth({
-						jwtSecret: String(env.SUPABASE_JWT_SECRET || '').trim(),
-						jwtIssuer: String(env.SUPABASE_JWT_ISSUER || 'supabase').trim() || 'supabase',
-						fixture: resolvePlaywrightE2EFixture({
-							tenantId: env.PLAYWRIGHT_E2E_TENANT_ID,
-							tenantName: env.PLAYWRIGHT_E2E_TENANT_NAME,
-							userId: env.PLAYWRIGHT_E2E_USER_ID,
-							userName: env.PLAYWRIGHT_E2E_USER_NAME,
-							email: env.PLAYWRIGHT_E2E_USER_EMAIL,
-							role: env.PLAYWRIGHT_E2E_USER_ROLE,
-							persona: env.PLAYWRIGHT_E2E_USER_PERSONA,
-							tier: env.PLAYWRIGHT_E2E_TIER
-						})
+						jwtSecret,
+						jwtIssuer,
+						fixture
 					});
 				} catch (error) {
 					serverLogger.error('e2e_auth_bypass_session_build_failed', {
@@ -150,6 +205,17 @@ export const handle: Handle = async ({ event, resolve }) => {
 					});
 					return { session: null, user: null };
 				}
+			}
+
+			const cookieSession = tryResolveE2ECookieSession({
+				event,
+				publicSupabaseUrl,
+				jwtSecret,
+				jwtIssuer,
+				fixture
+			});
+			if (cookieSession) {
+				return cookieSession;
 			}
 		}
 

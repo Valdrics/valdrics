@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.shared.core.health import HealthService
 
@@ -80,3 +80,17 @@ async def test_check_aws_status_codes():
         ok, details = await service.check_aws()
         assert ok is False
         assert "STS returned 503" in details["error"]
+
+
+@pytest.mark.asyncio
+async def test_check_database_includes_engine_for_injected_session():
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=MagicMock())
+    db.bind = MagicMock()
+    db.bind.dialect.name = "sqlite"
+
+    service = HealthService(db=db)
+    ok, details = await service.check_database()
+
+    assert ok is True
+    assert details["engine"] == "sqlite"

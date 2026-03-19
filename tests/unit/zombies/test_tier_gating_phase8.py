@@ -94,6 +94,9 @@ async def test_zombie_service_field_masking_starter():
             with patch(
                 "app.shared.core.notifications.NotificationDispatcher.notify_zombies",
                 new_callable=AsyncMock,
+            ), patch(
+                "app.modules.optimization.domain.findings.persist_scan_findings_with_guard",
+                new_callable=AsyncMock,
             ):
                 results = await service.scan_for_tenant(tenant_id)
 
@@ -111,8 +114,6 @@ async def test_zombie_service_no_masking_pro():
     db = AsyncMock()
     tenant_id = uuid4()
 
-    # Mock tenant tier as PRO
-    # Mock tenant tier as PRO
     with patch(
         "app.shared.core.pricing.get_tenant_tier", new_callable=AsyncMock
     ) as mock_tier:
@@ -175,6 +176,9 @@ async def test_zombie_service_no_masking_pro():
             with patch(
                 "app.shared.core.notifications.NotificationDispatcher.notify_zombies",
                 new_callable=AsyncMock,
+            ), patch(
+                "app.modules.optimization.domain.findings.persist_scan_findings_with_guard",
+                new_callable=AsyncMock,
             ):
                 results = await service.scan_for_tenant(tenant_id)
 
@@ -191,8 +195,6 @@ async def test_remediation_service_iac_gating_starter():
     db = AsyncMock()
     tenant_id = uuid4()
 
-    # Mock tenant tier as STARTER
-    # Mock tenant tier as STARTER
     with patch(
         "app.shared.core.pricing.get_tenant_tier", new_callable=AsyncMock
     ) as mock_tier:

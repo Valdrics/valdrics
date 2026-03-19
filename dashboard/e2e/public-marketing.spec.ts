@@ -167,10 +167,12 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await expect(page.getByRole('heading', { level: 1, name: /system status/i })).toBeVisible();
 
 		await page.goto(`${BASE_URL}/pricing`);
+		await page.waitForLoadState('networkidle');
 		await expect(
 			page.getByRole('heading', { level: 1, name: /simple, transparent pricing/i })
 		).toBeVisible();
 		const switchButton = page.getByRole('switch', { name: /toggle billing cycle/i });
+		await switchButton.scrollIntoViewIfNeeded();
 		await expect(switchButton).toHaveAttribute('aria-checked', 'false');
 		await switchButton.click();
 		await expect(switchButton).toHaveAttribute('aria-checked', 'true');
@@ -239,12 +241,8 @@ test.describe('Public marketing smoke (desktop)', () => {
 
 		await goToLanding(page);
 		const hero = page.locator('#hero');
-		await hero.getByRole('link', { name: /see enterprise path/i }).click();
-		await assertPublicRoute(
-			page,
-			'/enterprise',
-			/control cloud and software economics with procurement-grade confidence/i
-		);
+		await hero.getByRole('link', { name: /see pricing/i }).click();
+		await assertPublicRoute(page, '/pricing', /simple, transparent pricing/i);
 
 		await goToLanding(page);
 		await hero.getByRole('link', { name: /start free|book executive briefing/i }).click();

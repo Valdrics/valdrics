@@ -199,6 +199,17 @@ def test_verify_pkg_fin_policy_decisions_rejects_missing_required_tier(
         verify_evidence(evidence_path=path)
 
 
+def test_verify_pkg_fin_policy_decisions_rejects_directory_input(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "pkg-fin-dir"
+    evidence_dir.mkdir()
+
+    with pytest.raises(
+        ValueError,
+        match="PKG/FIN policy decision evidence file must be a file",
+    ):
+        verify_evidence(evidence_path=evidence_dir)
+
+
 def test_verify_pkg_fin_policy_decisions_rejects_invalid_policy_choice(
     tmp_path: Path,
 ) -> None:

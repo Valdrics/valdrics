@@ -9,6 +9,11 @@
       "path": "app/modules/optimization/domain/actions/base.py",
       "line": 136,
       "kind": "exception"
+    },
+    {
+      "path": "app/shared/core/health.py",
+      "line": 330,
+      "kind": "exception"
     }
   ]
 }

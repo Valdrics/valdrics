@@ -355,6 +355,188 @@ def test_generate_finance_committee_packet_rejects_input_output_path_collisions(
         )
 
 
+def test_generate_finance_committee_packet_rejects_checked_in_guardrail_collisions(
+    tmp_path: Path,
+) -> None:
+    telemetry = tmp_path / "telemetry.json"
+    assumptions = tmp_path / "assumptions.json"
+    telemetry_payload = _telemetry_payload()
+    telemetry_payload["window"]["label"] = "TEMPLATE"
+    _write(telemetry, telemetry_payload)
+    _write(assumptions, _assumptions_payload())
+
+    repo_root = Path(__file__).resolve().parents[3]
+    output_dir = repo_root / "docs" / "ops" / "evidence"
+
+    with pytest.raises(ValueError, match="output_dir would overwrite checked-in finance evidence"):
+        main(
+            [
+                "--telemetry-path",
+                str(telemetry),
+                "--assumptions-path",
+                str(assumptions),
+                "--output-dir",
+                str(output_dir),
+            ]
+        )
+
+
+def test_generate_finance_committee_packet_rejects_relative_checked_in_guardrail_collisions_from_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(
+        "scripts.generate_finance_committee_packet._repo_root",
+        lambda: repo_root,
+    )
+
+    telemetry = tmp_path / "telemetry.json"
+    assumptions = tmp_path / "assumptions.json"
+    telemetry_payload = _telemetry_payload()
+    telemetry_payload["window"]["label"] = "TEMPLATE"
+    _write(telemetry, telemetry_payload)
+    _write(assumptions, _assumptions_payload())
+
+    with pytest.raises(ValueError, match="output_dir would overwrite checked-in finance evidence"):
+        main(
+            [
+                "--telemetry-path",
+                str(telemetry),
+                "--assumptions-path",
+                str(assumptions),
+                "--output-dir",
+                "docs/ops/evidence",
+            ]
+        )
+
+
+def test_generate_finance_committee_packet_resolves_relative_paths_from_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    inputs_dir = repo_root / "inputs"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+    telemetry = inputs_dir / "telemetry.json"
+    assumptions = inputs_dir / "assumptions.json"
+    _write(telemetry, _telemetry_payload())
+    _write(assumptions, _assumptions_payload())
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(
+        "scripts.generate_finance_committee_packet._repo_root",
+        lambda: repo_root,
+    )
+
+    verify_snapshot_calls: list[dict[str, object]] = []
+    verify_evidence_calls: list[dict[str, object]] = []
+
+    def _fake_verify_snapshot(**kwargs: object) -> int:
+        verify_snapshot_calls.append(kwargs)
+        return 0
+
+    def _fake_verify_evidence(**kwargs: object) -> int:
+        verify_evidence_calls.append(kwargs)
+        return 0
+
+    monkeypatch.setattr(
+        "scripts.generate_finance_committee_packet.verify_snapshot",
+        _fake_verify_snapshot,
+    )
+    monkeypatch.setattr(
+        "scripts.generate_finance_committee_packet.verify_evidence",
+        _fake_verify_evidence,
+    )
+
+    assert (
+        main(
+            [
+                "--telemetry-path",
+                "inputs/telemetry.json",
+                "--assumptions-path",
+                "inputs/assumptions.json",
+                "--output-dir",
+                "artifacts",
+            ]
+        )
+        == 0
+    )
+
+    output_dir = repo_root / "artifacts"
+    guardrails_path = output_dir / "finance_guardrails_2026-02.json"
+    committee_path = output_dir / "finance_committee_packet_2026-02.json"
+    tiers_csv_path = output_dir / "finance_committee_tier_unit_economics_2026-02.csv"
+    scenarios_csv_path = output_dir / "finance_committee_scenarios_2026-02.csv"
+    assert guardrails_path.exists()
+    assert committee_path.exists()
+    assert tiers_csv_path.exists()
+    assert scenarios_csv_path.exists()
+    assert verify_snapshot_calls == [
+        {
+            "snapshot_path": telemetry,
+            "max_artifact_age_hours": None,
+        }
+    ]
+    assert verify_evidence_calls == [
+        {
+            "evidence_path": guardrails_path,
+            "allow_failed_gates": True,
+        }
+    ]
+
+
+def test_generate_finance_committee_packet_rejects_output_dir_parent_file(
+    tmp_path: Path,
+) -> None:
+    telemetry = tmp_path / "telemetry.json"
+    assumptions = tmp_path / "assumptions.json"
+    blocked_parent = tmp_path / "blocked-parent"
+    blocked_parent.write_text("not-a-directory", encoding="utf-8")
+    _write(telemetry, _telemetry_payload())
+    _write(assumptions, _assumptions_payload())
+
+    with pytest.raises(ValueError, match="output_dir parent must be a directory path"):
+        main(
+            [
+                "--telemetry-path",
+                str(telemetry),
+                "--assumptions-path",
+                str(assumptions),
+                "--output-dir",
+                str(blocked_parent / "committee-output"),
+            ]
+        )
+
+
+def test_generate_finance_committee_packet_rejects_directory_assumptions_path(
+    tmp_path: Path,
+) -> None:
+    telemetry = tmp_path / "telemetry.json"
+    assumptions_dir = tmp_path / "assumptions-dir"
+    output_dir = tmp_path / "output"
+    assumptions_dir.mkdir()
+    _write(telemetry, _telemetry_payload())
+
+    with pytest.raises(ValueError, match="assumptions_path must be a file"):
+        main(
+            [
+                "--telemetry-path",
+                str(telemetry),
+                "--assumptions-path",
+                str(assumptions_dir),
+                "--output-dir",
+                str(output_dir),
+            ]
+        )
+    assert not output_dir.exists()
+
+
 @pytest.mark.parametrize(
     ("arg_name", "arg_value", "expected_message"),
     [

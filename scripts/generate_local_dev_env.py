@@ -18,6 +18,43 @@ DEFAULT_OUTPUT_PATH = Path(".env.dev")
 DEFAULT_SEED = "valdrics-local-dev-seed-v1"
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _resolve_default_path(path: Path) -> Path:
+    return (_repo_root() / path).resolve()
+
+
+def _resolve_cli_path(path: Path) -> Path:
+    raw = Path(path).expanduser()
+    if raw.is_absolute():
+        return raw.resolve()
+    return (_repo_root() / raw).resolve()
+
+
+def _protected_output_paths() -> set[Path]:
+    repo_root = _repo_root()
+    return {
+        Path(__file__).resolve(),
+        repo_root / ".env.example",
+    }
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output_path parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
 def _derive_digest(seed: str, key: str) -> bytes:
     return hashlib.sha256(f"{seed}:{key}".encode("utf-8")).digest()
 
@@ -88,8 +125,17 @@ def generate_local_dev_env(
 ) -> Path:
     if template_path.resolve() == output_path.resolve():
         raise ValueError("template_path and output_path must be different files")
+    if output_path.resolve() in _protected_output_paths():
+        raise ValueError(
+            "output_path must not overwrite local-dev source or tracked template files"
+        )
     if not template_path.exists():
         raise FileNotFoundError(f"Template file does not exist: {template_path.as_posix()}")
+    if not template_path.is_file():
+        raise ValueError(f"template_path must be a file: {template_path.as_posix()}")
+    if output_path.exists() and not output_path.is_file():
+        raise ValueError(f"output_path must be a file path: {output_path.as_posix()}")
+    _ensure_output_parent_dir(output_path)
     rendered = _render_env(
         template_path.read_text(encoding="utf-8").splitlines(),
         _build_overrides(seed),
@@ -128,9 +174,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    template_path = _resolve_cli_path(args.template_path)
+    output_path = _resolve_cli_path(args.output_path)
     output_path = generate_local_dev_env(
-        template_path=args.template_path.resolve(),
-        output_path=args.output_path.resolve(),
+        template_path=template_path,
+        output_path=output_path,
         seed=str(args.seed),
     )
     print(

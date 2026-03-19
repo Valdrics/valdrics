@@ -11,10 +11,10 @@
 }
 .landing-copy {
 	display: grid;
-	max-width: 76rem;
+	max-width: 74rem;
 	width: 100%;
 	margin: 0 auto;
-	row-gap: 0.28rem;
+	row-gap: 0.42rem;
 	justify-items: stretch;
 	text-align: center;
 }
@@ -34,14 +34,20 @@
 	gap: 0.55rem;
 	flex-wrap: wrap;
 	justify-self: center;
-	max-width: 60rem;
+	max-width: 54rem;
+}
+.landing-kicker .badge {
+	max-width: 100%;
+	line-height: 1.25;
+	text-align: center;
 }
 .landing-kicker-text {
 	color: #e8f3fa;
-	font-size: 1rem;
+	font-size: 0.96rem;
 	font-weight: 600;
 	letter-spacing: 0.01em;
 	text-shadow: 0 1px 16px rgb(3 8 15 / 0.18);
+	text-wrap: balance;
 }
 .landing-sep {
 	color: rgb(255 255 255 / 0.42);
@@ -89,40 +95,42 @@
 }
 .landing-title {
 	font-family: ui-serif, 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
-	font-weight: 800;
-	letter-spacing: -0.04em;
-	line-height: 1.02;
-	font-size: clamp(2.8rem, 6vw, 5.2rem);
-	margin-top: 1rem;
-	margin-bottom: 1.1rem;
-	max-width: 14ch;
+	font-weight: 780;
+	letter-spacing: -0.045em;
+	line-height: 0.98;
+	font-size: clamp(2rem, 6vw, 4.45rem);
+	margin-top: 0.72rem;
+	margin-bottom: 0.86rem;
+	max-width: 15.5ch;
 	justify-self: center;
 	text-shadow: 0 10px 28px rgb(3 10 18 / 0.26);
+	text-wrap: balance;
 }
 @media (min-width: 768px) {
 	.landing-title {
-		max-width: 18ch;
+		max-width: 16.25ch;
 	}
 }
 @media (min-width: 1024px) {
 	.landing-title {
-		max-width: 24ch;
+		max-width: 17ch;
 	}
 }
 .landing-subtitle {
 	color: #edf5fb;
-	font-size: 1.32rem;
-	font-weight: 560;
-	line-height: 1.52;
-	max-width: 48rem;
+	font-size: clamp(1.02rem, 2.3vw, 1.32rem);
+	font-weight: 540;
+	line-height: 1.46;
+	max-width: 44rem;
 	margin: 0 auto;
 	justify-self: center;
 	text-shadow: 0 8px 24px rgb(3 10 18 / 0.18);
+	text-wrap: balance;
 }
 @media (min-width: 1024px) {
 	.landing-subtitle {
-		font-size: 1.48rem;
-		max-width: 52rem;
+		font-size: 1.34rem;
+		max-width: 46rem;
 	}
 }
 .landing-cta {
@@ -130,7 +138,7 @@
 	flex-wrap: wrap;
 	gap: 0.75rem;
 	justify-content: center;
-	margin-top: 1.05rem;
+	margin-top: 0.8rem;
 	justify-self: center;
 	width: 100%;
 }
@@ -157,6 +165,18 @@
 	color: var(--color-ink-100);
 }
 @media (max-width: 640px) {
+	.landing-kicker {
+		flex-direction: column;
+		gap: 0.42rem;
+		max-width: 100%;
+	}
+	.landing-kicker-text {
+		font-size: 0.84rem;
+		max-width: 19rem;
+	}
+	.landing-sep {
+		display: none;
+	}
 	.landing-cta {
 		flex-direction: column;
 		align-items: stretch;
@@ -171,6 +191,26 @@
 		font-size: 1rem;
 		line-height: 1.2;
 		padding: 0.72rem 1rem;
+	}
+	.landing-title {
+		max-width: 11.5ch;
+		font-size: clamp(1.94rem, 9.6vw, 2.72rem);
+		margin-top: 0.46rem;
+		margin-bottom: 0.62rem;
+	}
+	.landing-subtitle {
+		font-size: 0.98rem;
+		line-height: 1.44;
+		max-width: 21rem;
+	}
+	.landing-hero-proof-rail {
+		max-width: 100%;
+		gap: 0.38rem;
+	}
+	.landing-hero-proof-rail-item {
+		font-size: 0.74rem;
+		letter-spacing: 0.04em;
+		padding: 0.42rem 0.66rem;
 	}
 }
 .landing-cta-note {
@@ -190,7 +230,7 @@
 	margin-left: 0.32rem;
 }
 .landing-hero-credibility {
-	margin-top: 0.7rem;
+	margin-top: 0.45rem;
 	display: grid;
 	gap: 0;
 	justify-items: center;
@@ -210,9 +250,9 @@
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: center;
-	gap: 0.5rem;
+	gap: 0.44rem;
 	width: 100%;
-	max-width: 42rem;
+	max-width: 40rem;
 }
 .landing-hero-proof-rail-item {
 	margin: 0;
@@ -224,9 +264,9 @@
 	padding: 0.48rem 0.82rem;
 	background: rgb(8 15 23 / 0.78);
 	text-align: center;
-	font-size: 0.82rem;
+	font-size: 0.78rem;
 	font-weight: 800;
-	letter-spacing: 0.06em;
+	letter-spacing: 0.05em;
 	text-transform: uppercase;
 	color: #f3f8fc;
 }

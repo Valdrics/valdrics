@@ -82,6 +82,13 @@ class HealthService:
     def _testing_mode(self) -> bool:
         return bool(getattr(self._get_settings(), "TESTING", False))
 
+    @staticmethod
+    def _database_engine_name(db: AsyncSession | None) -> str:
+        bind = getattr(db, "bind", None)
+        dialect = getattr(bind, "dialect", None)
+        name = str(getattr(dialect, "name", "") or "").strip().lower()
+        return name or "unknown"
+
     async def _disabled_component_result(
         self,
         *,
@@ -381,7 +388,11 @@ class HealthService:
             try:
                 await self.db.execute(text("SELECT 1"))
                 latency = (asyncio.get_running_loop().time() - start_time) * 1000
-                return {"status": "up", "latency_ms": round(latency, 2)}
+                return {
+                    "status": "up",
+                    "latency_ms": round(latency, 2),
+                    "engine": self._database_engine_name(self.db),
+                }
             except HEALTH_RECOVERABLE_ERRORS as exc:
                 logger.error("database_health_check_failed", error=str(exc))
                 return {

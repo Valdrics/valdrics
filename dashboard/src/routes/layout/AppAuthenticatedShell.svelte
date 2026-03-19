@@ -11,6 +11,8 @@
 		user: {
 			email?: string | null;
 		};
+		role: string;
+		platformOperator: boolean;
 		subscription?: {
 			tier?: string | null;
 		} | null;
@@ -30,6 +32,8 @@
 
 	let {
 		user,
+		role,
+		platformOperator,
 		subscription,
 		primaryNavItems,
 		secondaryNavItems,
@@ -211,6 +215,9 @@
 </main>
 
 <CommandPalette
+	actions={[...primaryNavItems, ...secondaryNavItems]}
+	{role}
+	{platformOperator}
 	bind:isOpen={
 		() => uiState.isCommandPaletteOpen, (value) => (uiState.isCommandPaletteOpen = value)
 	}

@@ -1,5 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import UpgradeNotice from '$lib/components/UpgradeNotice.svelte';
+	import {
+		canAccessOpsAcceptanceEvidence,
+		canAccessOpsCloseWorkflow,
+		canAccessOpsJobSlo
+	} from '$lib/entitlements';
 	import OpsStatusBanners from './OpsStatusBanners.svelte';
 	import OpsAcceptanceKpiSection from './OpsAcceptanceKpiSection.svelte';
 	import OpsCloseWorkflowSection from './OpsCloseWorkflowSection.svelte';
@@ -28,11 +34,21 @@
 
 	let { data } = $props();
 	const state = $state(buildOpsOperationalInitialState());
+	const canAccessJobSlo = () => canAccessOpsJobSlo(data.subscription?.tier, data.profile?.role);
+	const canAccessAcceptanceKpis = () =>
+		canAccessOpsAcceptanceEvidence(data.subscription?.tier, data.profile?.role);
+	const canAccessCloseWorkflow = () =>
+		canAccessOpsCloseWorkflow(data.subscription?.tier, data.profile?.role);
 
 	const coreActions = createOpsOperationalCoreActions({
 		getData: () => data,
 		state,
-		requestTimeoutMs: OPS_REQUEST_TIMEOUT_MS
+		requestTimeoutMs: OPS_REQUEST_TIMEOUT_MS,
+		access: {
+			jobSlo: canAccessJobSlo,
+			acceptanceKpis: canAccessAcceptanceKpis,
+			closeWorkflow: canAccessCloseWorkflow
+		}
 	});
 
 	const acceptanceActions = createOpsOperationalAcceptanceActions({
@@ -94,37 +110,53 @@
 		bind:ingestionSlaWindowHours={state.ingestionSlaWindowHours}
 	/>
 
-	<OpsJobSloSection
-		{...{
-			refreshingJobSlo: state.refreshingJobSlo,
-			refreshJobSlo: coreActions.refreshJobSlo,
-			jobSlo: state.jobSlo,
-			jobSloBadgeClass,
-			jobSloMetricBadgeClass,
-			formatDuration: formatDurationSafe
-		}}
-		bind:jobSloWindowHours={state.jobSloWindowHours}
-	/>
+	{#if canAccessJobSlo()}
+		<OpsJobSloSection
+			{...{
+				refreshingJobSlo: state.refreshingJobSlo,
+				refreshJobSlo: coreActions.refreshJobSlo,
+				jobSlo: state.jobSlo,
+				jobSloBadgeClass,
+				jobSloMetricBadgeClass,
+				formatDuration: formatDurationSafe
+			}}
+			bind:jobSloWindowHours={state.jobSloWindowHours}
+		/>
+	{:else}
+		<UpgradeNotice
+			currentTier={data.subscription?.tier}
+			requiredTier="pro"
+			feature="job reliability SLO evidence"
+		/>
+	{/if}
 
-	<OpsAcceptanceKpiSection
-		{...{
-			capturingAcceptanceKpis: state.capturingAcceptanceKpis,
-			downloadingAcceptanceJson: state.downloadingAcceptanceJson,
-			downloadingAcceptanceCsv: state.downloadingAcceptanceCsv,
-			refreshingAcceptanceKpis: state.refreshingAcceptanceKpis,
-			refreshingAcceptanceKpiHistory: state.refreshingAcceptanceKpiHistory,
-			captureAcceptanceKpis: acceptanceActions.captureAcceptanceKpis,
-			downloadAcceptanceKpiJson: acceptanceActions.downloadAcceptanceKpiJson,
-			downloadAcceptanceKpiCsv: acceptanceActions.downloadAcceptanceKpiCsv,
-			refreshAcceptanceKpis: acceptanceActions.refreshAcceptanceKpis,
-			refreshAcceptanceKpiHistory: acceptanceActions.refreshAcceptanceKpiHistory,
-			acceptanceKpis: state.acceptanceKpis,
-			acceptanceKpiHistory: state.acceptanceKpiHistory,
-			lastAcceptanceKpiCapture: state.lastAcceptanceKpiCapture,
-			acceptanceBadgeClass,
-			formatDate: formatDateSafe
-		}}
-	/>
+	{#if canAccessAcceptanceKpis()}
+		<OpsAcceptanceKpiSection
+			{...{
+				capturingAcceptanceKpis: state.capturingAcceptanceKpis,
+				downloadingAcceptanceJson: state.downloadingAcceptanceJson,
+				downloadingAcceptanceCsv: state.downloadingAcceptanceCsv,
+				refreshingAcceptanceKpis: state.refreshingAcceptanceKpis,
+				refreshingAcceptanceKpiHistory: state.refreshingAcceptanceKpiHistory,
+				captureAcceptanceKpis: acceptanceActions.captureAcceptanceKpis,
+				downloadAcceptanceKpiJson: acceptanceActions.downloadAcceptanceKpiJson,
+				downloadAcceptanceKpiCsv: acceptanceActions.downloadAcceptanceKpiCsv,
+				refreshAcceptanceKpis: acceptanceActions.refreshAcceptanceKpis,
+				refreshAcceptanceKpiHistory: acceptanceActions.refreshAcceptanceKpiHistory,
+				acceptanceKpis: state.acceptanceKpis,
+				acceptanceKpiHistory: state.acceptanceKpiHistory,
+				lastAcceptanceKpiCapture: state.lastAcceptanceKpiCapture,
+				acceptanceBadgeClass,
+				formatDate: formatDateSafe
+			}}
+		/>
+	{:else}
+		<UpgradeNotice
+			currentTier={data.subscription?.tier}
+			requiredTier="pro"
+			feature="acceptance KPI evidence"
+		/>
+	{/if}
 
 	<OpsIntegrationAcceptanceSection
 		{...{
@@ -148,27 +180,35 @@
 		bind:captureFailFast={state.captureFailFast}
 	/>
 
-	<OpsCloseWorkflowSection
-		{...{
-			refreshingClosePackage: state.refreshingClosePackage,
-			previewClosePackage: closeActions.previewClosePackage,
-			downloadingCloseJson: state.downloadingCloseJson,
-			downloadClosePackageJson: closeActions.downloadClosePackageJson,
-			downloadingCloseCsv: state.downloadingCloseCsv,
-			downloadClosePackageCsv: closeActions.downloadClosePackageCsv,
-			downloadingRestatementCsv: state.downloadingRestatementCsv,
-			downloadRestatementCsv: closeActions.downloadRestatementCsv,
-			closePackage: state.closePackage,
-			saveProviderInvoice: closeActions.saveProviderInvoice,
-			savingInvoice: state.savingInvoice,
-			deletingInvoice: state.deletingInvoice,
-			deleteProviderInvoice: closeActions.deleteProviderInvoice,
-			closeStatusBadgeClass: closeStatusBadgeClassSafe,
-			formatUsd: formatUsdSafe
-		}}
-		bind:closeStartDate={state.closeStartDate}
-		bind:closeEndDate={state.closeEndDate}
-		bind:closeProvider={state.closeProvider}
-		bind:invoiceForm={state.invoiceForm}
-	/>
+	{#if canAccessCloseWorkflow()}
+		<OpsCloseWorkflowSection
+			{...{
+				refreshingClosePackage: state.refreshingClosePackage,
+				previewClosePackage: closeActions.previewClosePackage,
+				downloadingCloseJson: state.downloadingCloseJson,
+				downloadClosePackageJson: closeActions.downloadClosePackageJson,
+				downloadingCloseCsv: state.downloadingCloseCsv,
+				downloadClosePackageCsv: closeActions.downloadClosePackageCsv,
+				downloadingRestatementCsv: state.downloadingRestatementCsv,
+				downloadRestatementCsv: closeActions.downloadRestatementCsv,
+				closePackage: state.closePackage,
+				saveProviderInvoice: closeActions.saveProviderInvoice,
+				savingInvoice: state.savingInvoice,
+				deletingInvoice: state.deletingInvoice,
+				deleteProviderInvoice: closeActions.deleteProviderInvoice,
+				closeStatusBadgeClass: closeStatusBadgeClassSafe,
+				formatUsd: formatUsdSafe
+			}}
+			bind:closeStartDate={state.closeStartDate}
+			bind:closeEndDate={state.closeEndDate}
+			bind:closeProvider={state.closeProvider}
+			bind:invoiceForm={state.invoiceForm}
+		/>
+	{:else}
+		<UpgradeNotice
+			currentTier={data.subscription?.tier}
+			requiredTier="pro"
+			feature="reconciliation close workflow"
+		/>
+	{/if}
 </div>

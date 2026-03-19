@@ -5,11 +5,14 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ipaddress
 import json
 from pathlib import Path
+import re
 import secrets
 import sys
 from typing import Any
+from urllib.parse import urlparse
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -66,6 +69,44 @@ INTERNAL_SECRET_KEYS = (
     "ENFORCEMENT_APPROVAL_TOKEN_SECRET",
     "ENFORCEMENT_EXPORT_SIGNING_SECRET",
 )
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def _resolve_default_path(path: Path) -> Path:
+    return (_repo_root() / path).resolve()
+
+
+def _resolve_cli_path(path: Path) -> Path:
+    raw = Path(path).expanduser()
+    if raw.is_absolute():
+        return raw.resolve()
+    return (_repo_root() / raw).resolve()
+
+
+def _protected_output_paths() -> set[Path]:
+    repo_root = _repo_root()
+    return {
+        Path(__file__).resolve(),
+        repo_root / ".env.example",
+        repo_root / "scripts" / "validate_runtime_env.py",
+    }
+
+
+def _ensure_parent_dir(path: Path, *, field_name: str) -> None:
+    current = path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"{field_name} parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
 
 
 def _generate_hex(length: int = 64) -> str:
@@ -148,6 +189,107 @@ def _render_trusted_proxy_cidrs(cidrs: list[str] | None) -> str:
     return json.dumps([_placeholder("TRUSTED_PROXY_CIDR")], separators=(",", ":"))
 
 
+def _normalize_trusted_proxy_cidrs(cidrs: list[str] | None) -> list[str] | None:
+    if cidrs is None:
+        return None
+    normalized: list[str] = []
+    for raw in cidrs:
+        cidr = str(raw or "").strip()
+        if not cidr:
+            raise ValueError("trusted_proxy_cidrs entries must be non-empty")
+        try:
+            ipaddress.ip_network(cidr, strict=False)
+        except ValueError as exc:
+            raise ValueError(f"trusted_proxy_cidrs contains invalid CIDR: {cidr}") from exc
+        normalized.append(cidr)
+    return normalized
+
+
+def _normalize_strict_public_url(value: str | None, *, field_name: str) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        raise ValueError(f"{field_name} must be a non-empty https:// URL")
+
+    parsed = urlparse(normalized)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise ValueError(f"{field_name} must use an explicit https:// URL in staging/production.")
+    if parsed.username or parsed.password:
+        raise ValueError(f"{field_name} must not include embedded credentials.")
+    if parsed.query or parsed.fragment:
+        raise ValueError(f"{field_name} must not include query strings or fragments.")
+
+    hostname = str(parsed.hostname or "").strip().lower()
+    if not hostname or hostname == "localhost":
+        raise ValueError(f"{field_name} must not point at localhost in staging/production.")
+
+    try:
+        host_ip = ipaddress.ip_address(hostname)
+    except ValueError:
+        return normalized
+
+    if (
+        host_ip.is_private
+        or host_ip.is_loopback
+        or host_ip.is_link_local
+        or host_ip.is_multicast
+        or host_ip.is_unspecified
+        or host_ip.is_reserved
+    ):
+        raise ValueError(
+            f"{field_name} must not resolve to a private or non-routable IP in staging/production."
+        )
+    return normalized
+
+
+def _normalize_optional_http_url(value: str | None, *, field_name: str) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        raise ValueError(f"{field_name} must be a non-empty URL")
+    if not normalized.startswith(("http://", "https://")):
+        raise ValueError(f"{field_name} must use an explicit http:// or https:// URL.")
+    return normalized
+
+
+def _normalize_paystack_key(
+    value: str | None,
+    *,
+    field_name: str,
+    environment: str,
+    required_prefix: str,
+) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        raise ValueError(f"{field_name} must be a non-empty string")
+    if environment == "production" and not normalized.startswith(required_prefix):
+        raise ValueError(
+            f"{field_name} must be a live key ({required_prefix}...) in production."
+        )
+    return normalized
+
+
+def _normalize_aws_principal_arn(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        raise ValueError("AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN must be a non-empty string")
+    arn_pattern = re.compile(
+        r"^arn:(aws|aws-us-gov|aws-cn):iam::\d{12}:(root|role\/[\w+=,.@\-_/]+|user\/[\w+=,.@\-_/]+)$"
+    )
+    if not arn_pattern.fullmatch(normalized):
+        raise ValueError(
+            "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN must be an IAM principal ARN "
+            "(role, user, or account root)."
+        )
+    return normalized
+
+
 def _build_llm_overrides(provider: str, provider_api_key: str | None) -> dict[str, str]:
     normalized = str(provider or DEFAULT_LLM_PROVIDER).strip().lower()
     if normalized not in SUPPORTED_LLM_PROVIDERS:
@@ -192,8 +334,35 @@ def _build_overrides(
     otel_endpoint: str | None,
     trusted_proxy_cidrs: list[str] | None,
 ) -> dict[str, str]:
-    resolved_api_url = api_url or _default_api_url()
-    resolved_frontend_url = frontend_url or _default_frontend_url()
+    normalized_trusted_proxy_cidrs = _normalize_trusted_proxy_cidrs(trusted_proxy_cidrs)
+    resolved_api_url = _normalize_strict_public_url(api_url, field_name="API_URL") or _default_api_url()
+    resolved_frontend_url = (
+        _normalize_strict_public_url(frontend_url, field_name="FRONTEND_URL")
+        or _default_frontend_url()
+    )
+    normalized_sentry_dsn = _normalize_optional_http_url(
+        sentry_dsn,
+        field_name="SENTRY_DSN",
+    )
+    normalized_otel_endpoint = _normalize_optional_http_url(
+        otel_endpoint,
+        field_name="OTEL_EXPORTER_OTLP_ENDPOINT",
+    )
+    normalized_paystack_secret_key = _normalize_paystack_key(
+        paystack_secret_key,
+        field_name="PAYSTACK_SECRET_KEY",
+        environment=environment,
+        required_prefix="sk_live_",
+    )
+    normalized_paystack_public_key = _normalize_paystack_key(
+        paystack_public_key,
+        field_name="PAYSTACK_PUBLIC_KEY",
+        environment=environment,
+        required_prefix="pk_live_",
+    )
+    normalized_aws_assume_role_trust_principal_arn = _normalize_aws_principal_arn(
+        aws_assume_role_trust_principal_arn
+    )
 
     overrides: dict[str, str] = {
         "APP_NAME": "Valdrics",
@@ -215,7 +384,7 @@ def _build_overrides(
         "SUPABASE_ANON_KEY": supabase_anon_key or _default_supabase_anon_key(),
         "SUPABASE_JWT_SECRET": supabase_jwt_secret or _default_supabase_jwt_secret(),
         "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN": (
-            aws_assume_role_trust_principal_arn
+            normalized_aws_assume_role_trust_principal_arn
             or _default_aws_assume_role_trust_principal_arn()
         ),
         "CSRF_SECRET_KEY": _generate_hex(64),
@@ -226,19 +395,19 @@ def _build_overrides(
         "INTERNAL_METRICS_AUTH_TOKEN": _generate_hex(64),
         "ENFORCEMENT_APPROVAL_TOKEN_SECRET": _generate_hex(64),
         "ENFORCEMENT_EXPORT_SIGNING_SECRET": _generate_hex(64),
-        "PAYSTACK_SECRET_KEY": paystack_secret_key or _default_paystack_secret_key(),
-        "PAYSTACK_PUBLIC_KEY": paystack_public_key or _default_paystack_public_key(),
+        "PAYSTACK_SECRET_KEY": normalized_paystack_secret_key or _default_paystack_secret_key(),
+        "PAYSTACK_PUBLIC_KEY": normalized_paystack_public_key or _default_paystack_public_key(),
         "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY": "NGN",
         "PAYSTACK_ENABLE_USD_CHECKOUT": "false",
         "ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION": "false",
         "SAAS_STRICT_INTEGRATIONS": "true",
         "EXPOSE_API_DOCUMENTATION_PUBLICLY": "false",
         "OTEL_LOGS_EXPORT_ENABLED": "true",
-        "OTEL_EXPORTER_OTLP_ENDPOINT": otel_endpoint or _default_otel_endpoint(),
-        "SENTRY_DSN": sentry_dsn or _default_sentry_dsn(),
+        "OTEL_EXPORTER_OTLP_ENDPOINT": normalized_otel_endpoint or _default_otel_endpoint(),
+        "SENTRY_DSN": normalized_sentry_dsn or _default_sentry_dsn(),
         "TRUST_PROXY_HEADERS": "true",
         "TRUSTED_PROXY_HOPS": "1",
-        "TRUSTED_PROXY_CIDRS": _render_trusted_proxy_cidrs(trusted_proxy_cidrs),
+        "TRUSTED_PROXY_CIDRS": _render_trusted_proxy_cidrs(normalized_trusted_proxy_cidrs),
         "CIRCUIT_BREAKER_DISTRIBUTED_STATE": "true",
         "FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK": "false",
         "FORECASTER_BREAK_GLASS_REASON": "",
@@ -347,8 +516,22 @@ def generate_managed_runtime_env(
         raise ValueError(
             "template_path, output_path, and report_path must be different files"
         )
+    protected_paths = _protected_output_paths()
+    for field_name, resolved in (("output_path", output_resolved), ("report_path", report_resolved)):
+        if resolved in protected_paths:
+            raise ValueError(
+                f"{field_name} must not overwrite runtime source, template, or validator files"
+            )
     if not template_path.exists():
         raise FileNotFoundError(f"Template file does not exist: {template_path.as_posix()}")
+    if not template_path.is_file():
+        raise ValueError(f"template_path must be a file: {template_path.as_posix()}")
+    if output_path.exists() and not output_path.is_file():
+        raise ValueError(f"output_path must be a file path: {output_path.as_posix()}")
+    if report_path.exists() and not report_path.is_file():
+        raise ValueError(f"report_path must be a file path: {report_path.as_posix()}")
+    _ensure_parent_dir(output_path, field_name="output_path")
+    _ensure_parent_dir(report_path, field_name="report_path")
 
     overrides = _build_overrides(
         environment=normalized_environment,
@@ -466,16 +649,25 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    output_path = args.output_path or (
-        DEFAULT_OUTPUT_DIR / f"{args.environment}.env"
+    template_path = (
+        _resolve_default_path(DEFAULT_TEMPLATE_PATH)
+        if args.template_path == DEFAULT_TEMPLATE_PATH
+        else _resolve_cli_path(args.template_path)
     )
-    report_path = args.report_path or (
-        DEFAULT_OUTPUT_DIR / f"{args.environment}.report.json"
+    output_path = (
+        _resolve_default_path(DEFAULT_OUTPUT_DIR / f"{args.environment}.env")
+        if args.output_path is None
+        else _resolve_cli_path(args.output_path)
+    )
+    report_path = (
+        _resolve_default_path(DEFAULT_OUTPUT_DIR / f"{args.environment}.report.json")
+        if args.report_path is None
+        else _resolve_cli_path(args.report_path)
     )
     report = generate_managed_runtime_env(
-        template_path=args.template_path.resolve(),
-        output_path=output_path.resolve(),
-        report_path=report_path.resolve(),
+        template_path=template_path,
+        output_path=output_path,
+        report_path=report_path,
         environment=str(args.environment),
         api_url=args.api_url,
         frontend_url=args.frontend_url,
