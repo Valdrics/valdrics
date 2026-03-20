@@ -7,6 +7,7 @@ import argparse
 import base64
 import ipaddress
 import json
+import tempfile
 from pathlib import Path
 import re
 import secrets
@@ -79,11 +80,16 @@ def _resolve_default_path(path: Path) -> Path:
     return (_repo_root() / path).resolve()
 
 
-def _resolve_cli_path(path: Path) -> Path:
+def _resolve_cli_path(path: Path, *, field_name: str) -> Path:
     raw = Path(path).expanduser()
     if raw.is_absolute():
         return raw.resolve()
-    return (_repo_root() / raw).resolve()
+    resolved = (_repo_root() / raw).resolve()
+    try:
+        resolved.relative_to(_repo_root())
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must stay within repo root when relative") from exc
+    return resolved
 
 
 def _protected_output_paths() -> set[Path]:
@@ -92,6 +98,24 @@ def _protected_output_paths() -> set[Path]:
         Path(__file__).resolve(),
         repo_root / ".env.example",
         repo_root / "scripts" / "validate_runtime_env.py",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json",
+        repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json",
+        repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json",
     }
 
 
@@ -107,6 +131,21 @@ def _ensure_parent_dir(path: Path, *, field_name: str) -> None:
         if current == current.parent:
             return
         current = current.parent
+
+
+def _stage_text_file(path: Path, content: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.stem}.",
+        suffix=f"{path.suffix}.tmp",
+        delete=False,
+    ) as handle:
+        temp_path = Path(handle.name)
+        handle.write(content)
+    return temp_path
 
 
 def _generate_hex(length: int = 64) -> str:
@@ -555,8 +594,6 @@ def generate_managed_runtime_env(
         template_path.read_text(encoding="utf-8").splitlines(),
         overrides,
     )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(rendered, encoding="utf-8")
 
     declared_external_placeholders = _identify_unresolved_keys(
         overrides,
@@ -583,8 +620,24 @@ def generate_managed_runtime_env(
         ),
         "migration_command": "uv run alembic upgrade head",
     }
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+    staged_output = _stage_text_file(output_path, rendered)
+    try:
+        staged_report = _stage_text_file(
+            report_path,
+            json.dumps(report, indent=2, sort_keys=True),
+        )
+    except Exception:
+        staged_output.unlink(missing_ok=True)
+        raise
+    try:
+        staged_output.replace(output_path)
+        staged_report.replace(report_path)
+    except Exception:
+        staged_output.unlink(missing_ok=True)
+        staged_report.unlink(missing_ok=True)
+        output_path.unlink(missing_ok=True)
+        report_path.unlink(missing_ok=True)
+        raise
     return report
 
 
@@ -652,17 +705,17 @@ def main(argv: list[str] | None = None) -> int:
     template_path = (
         _resolve_default_path(DEFAULT_TEMPLATE_PATH)
         if args.template_path == DEFAULT_TEMPLATE_PATH
-        else _resolve_cli_path(args.template_path)
+        else _resolve_cli_path(args.template_path, field_name="template_path")
     )
     output_path = (
         _resolve_default_path(DEFAULT_OUTPUT_DIR / f"{args.environment}.env")
         if args.output_path is None
-        else _resolve_cli_path(args.output_path)
+        else _resolve_cli_path(args.output_path, field_name="output_path")
     )
     report_path = (
         _resolve_default_path(DEFAULT_OUTPUT_DIR / f"{args.environment}.report.json")
         if args.report_path is None
-        else _resolve_cli_path(args.report_path)
+        else _resolve_cli_path(args.report_path, field_name="report_path")
     )
     report = generate_managed_runtime_env(
         template_path=template_path,

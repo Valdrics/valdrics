@@ -63,7 +63,7 @@ def test_main_allow_check_failures_emits_fail_artifact_and_skips_verifier(
     assert "- post_drill_status: FAIL" in text
 
 
-def test_main_writes_fail_artifact_before_raising_when_failures_not_allowed(
+def test_main_does_not_leave_fail_artifact_when_failures_not_allowed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -83,9 +83,7 @@ def test_main_writes_fail_artifact_before_raising_when_failures_not_allowed(
             ]
         )
 
-    text = output.read_text(encoding="utf-8")
-    assert "- pre_rotation_tokens_accepted: false" in text
-    assert "- post_drill_status: FAIL" in text
+    assert not output.exists()
 
 
 def test_main_rejects_non_positive_pytest_timeout_before_running_checks(
@@ -160,6 +158,8 @@ def test_main_rejects_non_positive_max_drill_age_before_running_checks(
         "tests/unit/enforcement/test_key_rotation_drill_selectors.py",
         "scripts/verify_key_rotation_drill_evidence.py",
         "docs/ops/key-rotation-drill-2026-02-27.md",
+        "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
+        "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
     ],
 )
 def test_main_rejects_output_collisions_with_protected_drill_files(
@@ -204,6 +204,29 @@ def test_main_rejects_relative_protected_output_from_outside_repo(
         )
 
 
+def test_main_rejects_relative_output_that_escapes_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(drill_generator, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        drill_generator,
+        "_execute_checks",
+        lambda **_: (_ for _ in ()).throw(AssertionError("checks should not run")),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="output must stay within repo root when relative",
+    ):
+        drill_generator.main(["--output", "../escape/key_rotation_drill.md"])
+
+
 def test_main_resolves_relative_output_from_repo_root(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -245,12 +268,49 @@ def test_main_resolves_relative_output_from_repo_root(
     )
     expected_output = repo_root / "artifacts" / "key_rotation_drill.md"
     assert expected_output.exists()
-    assert verify_calls == [
-        {
-            "drill_path": expected_output,
-            "max_drill_age_days": 120.0,
-        }
-    ]
+    assert len(verify_calls) == 1
+    assert verify_calls[0]["max_drill_age_days"] == 120.0
+    assert verify_calls[0]["drill_path"].parent == expected_output.parent
+    assert verify_calls[0]["drill_path"] != expected_output
+
+
+def test_main_does_not_leave_output_when_verifier_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "key_rotation_drill.md"
+    field_results = {check.key: True for check in drill_generator._all_drill_checks()}
+    selector_results = {
+        check.selector: True for check in drill_generator._all_drill_checks()
+    }
+    selector_logs = {
+        check.selector: f"{check.key} ok"
+        for check in drill_generator._all_drill_checks()
+    }
+    verify_calls: list[Path] = []
+
+    monkeypatch.setattr(
+        drill_generator,
+        "_execute_checks",
+        lambda **_: (field_results, selector_results, selector_logs),
+    )
+
+    def _fake_verify(**kwargs: object) -> int:
+        verify_calls.append(kwargs["drill_path"])
+        raise ValueError("drill verification failed")
+
+    monkeypatch.setattr(
+        drill_generator,
+        "verify_key_rotation_drill_evidence",
+        _fake_verify,
+    )
+
+    with pytest.raises(ValueError, match="drill verification failed"):
+        drill_generator.main(["--output", str(output)])
+
+    assert not output.exists()
+    assert verify_calls
+    assert all(path != output for path in verify_calls)
 
 
 def test_main_rejects_output_parent_file(

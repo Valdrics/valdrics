@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -22,8 +23,22 @@ def _protected_output_paths() -> set[Path]:
     return {
         Path(__file__).resolve(),
         repo_root / "scripts" / "verify_pricing_benchmark_register.py",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
         repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json",
         repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json",
     }
 
 
@@ -33,6 +48,10 @@ def _resolve_output_path(value: str) -> Path:
         resolved = raw.resolve()
     else:
         resolved = (_repo_root() / raw).resolve()
+        try:
+            resolved.relative_to(_repo_root())
+        except ValueError as exc:
+            raise ValueError("output must stay within repo root when relative") from exc
     if resolved.exists() and not resolved.is_file():
         raise ValueError(f"output must be a file path: {resolved.as_posix()}")
     if resolved in _protected_output_paths():
@@ -143,6 +162,34 @@ def _normalize_max_source_age_days(value: float) -> float:
     return normalized
 
 
+def _write_verified_register(
+    *,
+    output_path: Path,
+    payload: dict[str, object],
+    max_source_age_days: float,
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=output_path.parent,
+        prefix=f".{output_path.stem}.",
+        suffix=f"{output_path.suffix}.tmp",
+        delete=False,
+    ) as handle:
+        temp_path = Path(handle.name)
+        handle.write(json.dumps(payload, indent=2, sort_keys=True))
+    try:
+        verify_register(
+            register_path=temp_path,
+            max_source_age_days=max_source_age_days,
+        )
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    temp_path.replace(output_path)
+
+
 def _normalize_confidence_score(value: Any, *, field: str) -> float:
     try:
         normalized = float(value)
@@ -227,11 +274,9 @@ def main(argv: list[str] | None = None) -> int:
         max_source_age_days=max_source_age_days,
     )
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-
-    verify_register(
-        register_path=output_path,
+    _write_verified_register(
+        output_path=output_path,
+        payload=payload,
         max_source_age_days=max_source_age_days,
     )
     print(f"Generated pricing benchmark register: {output_path}")

@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import json
 import math
+import tempfile
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -41,8 +42,22 @@ def _protected_output_paths() -> set[Path]:
         Path(__file__).resolve(),
         repo_root / "scripts" / "load_test_api.py",
         repo_root / "scripts" / "verify_enforcement_stress_evidence.py",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json",
         repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json",
         repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json",
     }
 
 
@@ -52,6 +67,10 @@ def _resolve_output_path(value: str) -> Path:
         resolved = raw.resolve()
     else:
         resolved = (_repo_root() / raw).resolve()
+        try:
+            resolved.relative_to(_repo_root())
+        except ValueError as exc:
+            raise ValueError("output must stay within repo root when relative") from exc
     if resolved.exists() and not resolved.is_file():
         raise ValueError(f"output must be a file path: {resolved.as_posix()}")
     if resolved in _protected_output_paths():
@@ -678,19 +697,33 @@ def main(argv: list[str] | None = None) -> int:
     load_profile = _normalize_load_profile_args(args)
     payload = asyncio.run(generate_evidence(args))
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    verify_evidence(
-        evidence_path=output_path,
-        expected_profile="enforcement",
-        min_rounds=int(load_profile["rounds"]),
-        min_duration_seconds=int(load_profile["duration_seconds"]),
-        min_concurrent_users=int(load_profile["concurrent_users"]),
-        required_database_engine=str(getattr(args, "required_database_engine", "postgresql")),
-        max_p95_seconds=float(load_profile["max_p95_seconds"]),
-        max_error_rate_percent=float(load_profile["max_error_rate_percent"]),
-        min_throughput_rps=float(load_profile["min_throughput_rps"]),
-        max_artifact_age_hours=4.0,
-    )
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=output_path.parent,
+        prefix=f".{output_path.stem}.",
+        suffix=f"{output_path.suffix}.tmp",
+        delete=False,
+    ) as handle:
+        temp_path = Path(handle.name)
+        handle.write(json.dumps(payload, indent=2, sort_keys=True))
+    try:
+        verify_evidence(
+            evidence_path=temp_path,
+            expected_profile="enforcement",
+            min_rounds=int(load_profile["rounds"]),
+            min_duration_seconds=int(load_profile["duration_seconds"]),
+            min_concurrent_users=int(load_profile["concurrent_users"]),
+            required_database_engine=str(getattr(args, "required_database_engine", "postgresql")),
+            max_p95_seconds=float(load_profile["max_p95_seconds"]),
+            max_error_rate_percent=float(load_profile["max_error_rate_percent"]),
+            min_throughput_rps=float(load_profile["min_throughput_rps"]),
+            max_artifact_age_hours=4.0,
+        )
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    temp_path.replace(output_path)
     print(json.dumps(payload, indent=2, sort_keys=True))
     if not bool(payload.get("meets_targets")):
         return 1

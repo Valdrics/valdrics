@@ -84,6 +84,23 @@ def _resolve_repo_root(repo_root: Path) -> Path:
     return resolved
 
 
+def _checked_in_evidence_paths(repo_root: Path) -> set[Path]:
+    evidence_dir = repo_root / "docs" / "ops" / "evidence"
+    if not evidence_dir.exists():
+        return set()
+    return {path.resolve() for path in evidence_dir.iterdir() if path.is_file()}
+
+
+def _protected_output_paths(repo_root: Path) -> set[Path]:
+    return {
+        (repo_root / "scripts" / "generate_provenance_manifest.py").resolve(),
+        (repo_root / ".github" / "workflows" / "sbom.yml").resolve(),
+        (repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json").resolve(),
+        (repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md").resolve(),
+        *_checked_in_evidence_paths(repo_root),
+    }
+
+
 def _resolve_output_path(repo_root: Path, output: Path) -> Path:
     raw_output = Path(output)
     if raw_output.is_absolute():
@@ -96,6 +113,10 @@ def _resolve_output_path(repo_root: Path, output: Path) -> Path:
         raise ValueError("output must stay within repo root") from exc
     if resolved.exists() and not resolved.is_file():
         raise ValueError("output must be a file path within repo root")
+    if resolved in _protected_output_paths(repo_root):
+        raise ValueError(
+            "output must not overwrite provenance generator source or checked-in supply-chain assets"
+        )
     return resolved
 
 
@@ -261,11 +282,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         repo_root,
         dependency_inputs,
     )
+    normalized_sbom_dir = _normalize_repo_relative_path(
+        repo_root,
+        args.sbom_dir,
+        field="sbom_dir",
+    )
     sbom_dir: Path | None
-    if args.allow_missing_sbom and not (repo_root / args.sbom_dir).exists():
+    if args.allow_missing_sbom and not (repo_root / normalized_sbom_dir).exists():
         sbom_dir = None
     else:
-        sbom_dir = args.sbom_dir
+        sbom_dir = normalized_sbom_dir
     output_relative = output_path.relative_to(repo_root)
     if output_relative in normalized_dependency_inputs:
         raise ValueError(
@@ -273,12 +299,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             f"{output_relative.as_posix()}"
         )
     if sbom_dir is not None:
-        normalized_sbom_dir = _normalize_repo_relative_path(
-            repo_root,
-            sbom_dir,
-            field="sbom_dir",
-        )
-        absolute_sbom_dir = (repo_root / normalized_sbom_dir).resolve()
+        absolute_sbom_dir = (repo_root / sbom_dir).resolve()
         if absolute_sbom_dir.exists() and absolute_sbom_dir.is_dir():
             for candidate in absolute_sbom_dir.glob("*.json"):
                 if output_path == candidate.resolve():

@@ -67,6 +67,11 @@ def test_generate_pkg_fin_policy_decisions_rejects_input_output_collision(
         "scripts/verify_pkg_fin_policy_decisions.py",
         "docs/ops/evidence/pkg_fin_policy_decisions_TEMPLATE.json",
         "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json",
+        "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
+        "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json",
+        "docs/ops/evidence/enforcement_stress_artifact_TEMPLATE.json",
+        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/evidence/README.md",
     ],
 )
 def test_generate_pkg_fin_policy_decisions_rejects_protected_output_collisions(
@@ -163,6 +168,11 @@ def test_generate_pkg_fin_policy_decisions_rejects_relative_protected_output_fro
 ) -> None:
     repo_root = tmp_path / "repo"
     repo_root.mkdir(parents=True, exist_ok=True)
+    protected_output = (
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json"
+    )
+    protected_output.parent.mkdir(parents=True, exist_ok=True)
+    protected_output.write_text("{}", encoding="utf-8")
     telemetry = repo_root / "telemetry.json"
     telemetry.write_text(json.dumps(_telemetry_payload()), encoding="utf-8")
     outside_cwd = tmp_path / "outside"
@@ -227,12 +237,35 @@ def test_generate_pkg_fin_policy_decisions_resolves_relative_paths_from_repo_roo
             "max_artifact_age_hours": 24.0,
         }
     ]
-    assert verify_evidence_calls == [
-        {
-            "evidence_path": output,
-            "max_artifact_age_hours": 4.0,
-        }
-    ]
+    assert len(verify_evidence_calls) == 1
+    assert verify_evidence_calls[0]["max_artifact_age_hours"] == 4.0
+    assert verify_evidence_calls[0]["evidence_path"].parent == output.parent
+    assert verify_evidence_calls[0]["evidence_path"] != output
+
+
+def test_generate_pkg_fin_policy_decisions_rejects_relative_paths_that_escape_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(generator, "_repo_root", lambda: repo_root)
+
+    with pytest.raises(
+        ValueError,
+        match="telemetry_snapshot_path must stay within repo root when relative",
+    ):
+        main(
+            [
+                "--output",
+                "artifacts/pkg_fin_policy_decisions.json",
+                "--telemetry-snapshot-path",
+                "../escape/telemetry.json",
+            ]
+        )
 
 
 def test_generate_pkg_fin_policy_decisions_verifies_telemetry_snapshot_first(
@@ -275,12 +308,43 @@ def test_generate_pkg_fin_policy_decisions_verifies_telemetry_snapshot_first(
             "max_artifact_age_hours": 24.0,
         }
     ]
-    assert verify_evidence_calls == [
-        {
-            "evidence_path": output,
-            "max_artifact_age_hours": 4.0,
-        }
-    ]
+    assert len(verify_evidence_calls) == 1
+    assert verify_evidence_calls[0]["max_artifact_age_hours"] == 4.0
+    assert verify_evidence_calls[0]["evidence_path"].parent == output.parent
+    assert verify_evidence_calls[0]["evidence_path"] != output
+
+
+def test_generate_pkg_fin_policy_decisions_does_not_leave_output_when_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    telemetry = tmp_path / "telemetry.json"
+    output = tmp_path / "pkg_fin_policy_decisions.json"
+    telemetry.write_text(json.dumps(_telemetry_payload()), encoding="utf-8")
+    verify_evidence_calls: list[Path] = []
+
+    monkeypatch.setattr(generator, "verify_snapshot", lambda **_: 0)
+
+    def _fake_verify_evidence(*, evidence_path: Path, max_artifact_age_hours: float) -> int:
+        del max_artifact_age_hours
+        verify_evidence_calls.append(evidence_path)
+        raise ValueError("pkg fin verification failed")
+
+    monkeypatch.setattr(generator, "verify_evidence", _fake_verify_evidence)
+
+    with pytest.raises(ValueError, match="pkg fin verification failed"):
+        main(
+            [
+                "--output",
+                str(output),
+                "--telemetry-snapshot-path",
+                str(telemetry),
+            ]
+        )
+
+    assert not output.exists()
+    assert verify_evidence_calls
+    assert all(path != output for path in verify_evidence_calls)
 
 
 @pytest.mark.parametrize(

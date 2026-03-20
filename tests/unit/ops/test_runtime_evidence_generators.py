@@ -48,6 +48,51 @@ def test_generate_finance_telemetry_snapshot_emits_verifiable_artifact(
     assert verify_snapshot(snapshot_path=output, max_artifact_age_hours=4.0) == 0
 
 
+def test_generate_finance_telemetry_snapshot_does_not_leave_output_when_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "finance_telemetry_snapshot.json"
+    verify_calls: list[Path] = []
+
+    async def _fake_generate_snapshot(**_: object) -> dict[str, object]:
+        return {
+            "captured_at": "2026-03-01T00:00:00+00:00",
+            "window": {
+                "start": "2026-02-01T00:00:00+00:00",
+                "end": "2026-02-28T23:59:59+00:00",
+            },
+            "gate_results": {
+                "telemetry_gate_required_tiers_present": True,
+                "telemetry_gate_window_valid": True,
+                "telemetry_gate_percentiles_valid": True,
+                "telemetry_gate_artifact_fresh": True,
+                "telemetry_gate_free_tier_guardrails_bounded": True,
+                "telemetry_gate_free_tier_margin_guarded": True,
+            },
+        }
+
+    def _fake_verify_snapshot(*, snapshot_path: Path, max_artifact_age_hours: float) -> int:
+        verify_calls.append(snapshot_path)
+        raise ValueError("snapshot verification failed")
+
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._generate_snapshot",
+        _fake_generate_snapshot,
+    )
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot.verify_snapshot",
+        _fake_verify_snapshot,
+    )
+
+    with pytest.raises(ValueError, match="snapshot verification failed"):
+        generate_finance_telemetry_snapshot_main(["--output", str(output)])
+
+    assert not output.exists()
+    assert verify_calls
+    assert all(path != output for path in verify_calls)
+
+
 def test_generate_finance_telemetry_snapshot_rejects_database_output_collision(
     tmp_path: Path,
 ) -> None:
@@ -118,6 +163,12 @@ def test_generate_finance_telemetry_snapshot_does_not_create_database_parent_on_
         "scripts/collect_finance_telemetry_snapshot.py",
         "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
         "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json",
+        "docs/ops/evidence/finance_committee_packet_assumptions_TEMPLATE.json",
+        "docs/ops/evidence/finance_committee_packet_assumptions_2026-02-28.json",
+        "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
+        "docs/ops/evidence/finance_guardrails_2026-02-27.json",
+        "docs/ops/evidence/pkg_fin_policy_decisions_TEMPLATE.json",
+        "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json",
     ],
 )
 def test_generate_finance_telemetry_snapshot_rejects_protected_output_collisions(
@@ -267,12 +318,42 @@ def test_generate_finance_telemetry_snapshot_resolves_relative_paths_from_repo_r
         == 0
     )
     assert output.exists()
-    assert verify_calls == [
-        {
-            "snapshot_path": output,
-            "max_artifact_age_hours": 4.0,
-        }
-    ]
+    assert len(verify_calls) == 1
+    assert verify_calls[0]["max_artifact_age_hours"] == 4.0
+    assert verify_calls[0]["snapshot_path"].parent == output.parent
+    assert verify_calls[0]["snapshot_path"] != output
+
+
+def test_generate_finance_telemetry_snapshot_rejects_relative_database_path_that_escapes_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._repo_root",
+        lambda: repo_root,
+    )
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._generate_snapshot",
+        lambda **_: (_ for _ in ()).throw(AssertionError("snapshot generation should not run")),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="database_path must stay within repo root when relative",
+    ):
+        generate_finance_telemetry_snapshot_main(
+            [
+                "--output",
+                "artifacts/finance_telemetry_snapshot.json",
+                "--database-path",
+                "../escape/finance.sqlite",
+            ]
+        )
 
 
 def test_generate_finance_telemetry_snapshot_rejects_directory_database_path(
@@ -348,6 +429,8 @@ def test_generate_pricing_benchmark_register_rejects_invalid_source_age_threshol
     [
         "scripts/verify_pricing_benchmark_register.py",
         "docs/ops/evidence/pricing_benchmark_register_TEMPLATE.json",
+        "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
+        "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
     ],
 )
 def test_generate_pricing_benchmark_register_rejects_protected_output_collisions(
@@ -456,6 +539,60 @@ def test_generate_pricing_benchmark_register_resolves_relative_output_from_repo_
         == 0
     )
     assert (repo_root / "artifacts" / "pricing_benchmark_register.json").exists()
+
+
+def test_generate_pricing_benchmark_register_does_not_leave_output_when_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "pricing_benchmark_register.json"
+    verify_calls: list[Path] = []
+
+    def _fake_verify_register(*, register_path: Path, max_source_age_days: float) -> int:
+        del max_source_age_days
+        verify_calls.append(register_path)
+        raise ValueError("pricing verification failed")
+
+    monkeypatch.setattr(pricing_generator, "verify_register", _fake_verify_register)
+
+    with pytest.raises(ValueError, match="pricing verification failed"):
+        generate_pricing_benchmark_register_main(
+            [
+                "--output",
+                str(output),
+                "--max-source-age-days",
+                "120",
+            ]
+        )
+
+    assert not output.exists()
+    assert verify_calls
+    assert all(path != output for path in verify_calls)
+
+
+def test_generate_pricing_benchmark_register_rejects_relative_output_that_escapes_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(pricing_generator, "_repo_root", lambda: repo_root)
+
+    with pytest.raises(
+        ValueError,
+        match="output must stay within repo root when relative",
+    ):
+        generate_pricing_benchmark_register_main(
+            [
+                "--output",
+                "../escape/pricing_benchmark_register.json",
+                "--max-source-age-days",
+                "120",
+            ]
+        )
 
 
 @pytest.mark.parametrize(
@@ -736,6 +873,8 @@ def test_generate_valdrics_disposition_register_rejects_source_audit_output_coll
         "scripts/verify_valdrics_disposition_freshness.py",
         "docs/ops/evidence/valdrics_disposition_register_TEMPLATE.json",
         "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
+        "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
+        "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
     ],
 )
 def test_generate_valdrics_disposition_register_rejects_protected_output_collisions(
@@ -837,13 +976,85 @@ def test_generate_valdrics_disposition_register_resolves_relative_paths_from_rep
     assert expected_output.exists()
     payload = json.loads(expected_output.read_text(encoding="utf-8"))
     assert payload["source_audit_path"] == source_audit.as_posix()
-    assert verify_calls == [
-        {
-            "register_path": expected_output,
-            "max_artifact_age_days": 45.0,
-            "max_review_window_days": 120.0,
+    assert len(verify_calls) == 1
+    assert verify_calls[0]["max_artifact_age_days"] == 45.0
+    assert verify_calls[0]["max_review_window_days"] == 120.0
+    assert verify_calls[0]["register_path"].parent == expected_output.parent
+    assert verify_calls[0]["register_path"] != expected_output
+
+
+def test_generate_valdrics_disposition_register_does_not_leave_output_when_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "valdrics_disposition_register.json"
+    verify_calls: list[Path] = []
+
+    probe_results = {
+        probe.probe_id: {
+            "probe_id": probe.probe_id,
+            "command": " ".join(probe.command),
+            "passed": True,
+            "output_excerpt": "ok",
         }
-    ]
+        for probe in valdrics_generator.RUNTIME_PROBES
+    }
+    monkeypatch.setattr(
+        "scripts.generate_valdrics_disposition_register._collect_probe_results",
+        lambda **_: probe_results,
+    )
+
+    def _fake_verify(*, register_path: Path, max_artifact_age_days: float, max_review_window_days: float) -> int:
+        del max_artifact_age_days, max_review_window_days
+        verify_calls.append(register_path)
+        raise ValueError("valdrics verification failed")
+
+    monkeypatch.setattr(valdrics_generator, "verify_disposition_register", _fake_verify)
+
+    with pytest.raises(ValueError, match="valdrics verification failed"):
+        generate_valdrics_disposition_register_main(
+            [
+                "--output",
+                str(output),
+                "--source-audit-path",
+                "runtime://ci/deep_debt_audit_2026-03-05",
+            ]
+        )
+
+    assert not output.exists()
+    assert verify_calls
+    assert all(path != output for path in verify_calls)
+
+
+def test_generate_valdrics_disposition_register_rejects_relative_paths_that_escape_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(valdrics_generator, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        "scripts.generate_valdrics_disposition_register._collect_probe_results",
+        lambda **_: (_ for _ in ()).throw(
+            AssertionError("probe collection should not run for escaping paths")
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="relative path must stay within repo root",
+    ):
+        generate_valdrics_disposition_register_main(
+            [
+                "--output",
+                "artifacts/valdrics_disposition_register.json",
+                "--source-audit-path",
+                "../escape/source_audit.md",
+            ]
+        )
 
 
 def test_generate_valdrics_disposition_register_rejects_output_parent_file(

@@ -50,6 +50,12 @@ def _protected_output_paths() -> set[Path]:
         repo_root / "scripts" / "verify_finance_telemetry_snapshot.py",
         repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json",
         repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
     }
 
 
@@ -59,6 +65,10 @@ def _resolve_output_path(value: str) -> Path:
         resolved = raw.resolve()
     else:
         resolved = (_repo_root() / raw).resolve()
+        try:
+            resolved.relative_to(_repo_root())
+        except ValueError as exc:
+            raise ValueError("output must stay within repo root when relative") from exc
     if resolved.exists() and not resolved.is_file():
         raise ValueError(f"output must be a file path: {resolved.as_posix()}")
     if resolved in _protected_output_paths():
@@ -72,7 +82,12 @@ def _resolve_database_path(value: str) -> Path:
     raw = Path(str(value)).expanduser()
     if raw.is_absolute():
         return raw.resolve()
-    return (_repo_root() / raw).resolve()
+    resolved = (_repo_root() / raw).resolve()
+    try:
+        resolved.relative_to(_repo_root())
+    except ValueError as exc:
+        raise ValueError("database_path must stay within repo root when relative") from exc
+    return resolved
 
 
 def _ensure_output_parent_dir(output_path: Path) -> None:
@@ -101,6 +116,26 @@ def _ensure_parent_dir(path: Path, *, field_name: str) -> None:
         if current == current.parent:
             return
         current = current.parent
+
+
+def _write_verified_snapshot(*, output_path: Path, payload: dict[str, object]) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=output_path.parent,
+        prefix=f".{output_path.stem}.",
+        suffix=f"{output_path.suffix}.tmp",
+        delete=False,
+    ) as handle:
+        temp_path = Path(handle.name)
+        handle.write(json.dumps(payload, indent=2, sort_keys=True))
+    try:
+        verify_snapshot(snapshot_path=temp_path, max_artifact_age_hours=4.0)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    temp_path.replace(output_path)
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -310,9 +345,7 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    verify_snapshot(snapshot_path=output_path, max_artifact_age_hours=4.0)
+    _write_verified_snapshot(output_path=output_path, payload=payload)
     print(f"Generated finance telemetry snapshot: {output_path}")
     return 0
 

@@ -446,6 +446,39 @@ def test_generate_managed_runtime_env_rejects_invalid_aws_trust_principal_arn(
         )
 
 
+def test_generate_managed_runtime_env_does_not_leave_outputs_when_report_staging_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template = tmp_path / ".env.example"
+    output = tmp_path / "staging.env"
+    report_path = tmp_path / "staging.report.json"
+    _write(template, "API_URL=\nFRONTEND_URL=\nDATABASE_URL=\n")
+    original_stage = managed_runtime_env_generator._stage_text_file
+
+    def _failing_stage(path: Path, content: str) -> Path:
+        if path == report_path:
+            raise RuntimeError("report staging failed")
+        return original_stage(path, content)
+
+    monkeypatch.setattr(
+        managed_runtime_env_generator,
+        "_stage_text_file",
+        _failing_stage,
+    )
+
+    with pytest.raises(RuntimeError, match="report staging failed"):
+        generate_managed_runtime_env(
+            template_path=template,
+            output_path=output,
+            report_path=report_path,
+            environment="staging",
+        )
+
+    assert not output.exists()
+    assert not report_path.exists()
+
+
 def test_generate_managed_runtime_env_rejects_template_path_collisions(
     tmp_path: Path,
 ) -> None:
@@ -487,6 +520,8 @@ def test_generate_managed_runtime_env_rejects_non_file_template_path(
     [
         ("output_path", ".env.example"),
         ("report_path", "scripts/validate_runtime_env.py"),
+        ("output_path", "docs/ops/evidence/finance_guardrails_TEMPLATE.json"),
+        ("report_path", "docs/ops/key-rotation-drill-2026-02-27.md"),
     ],
 )
 def test_generate_managed_runtime_env_rejects_protected_output_targets(
@@ -652,3 +687,28 @@ def test_main_resolves_explicit_relative_paths_from_repo_root(
     assert captured["report_path"] == (
         repo_root / ".runtime" / "staging.report.json"
     ).resolve()
+
+
+def test_main_rejects_relative_paths_that_escape_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(managed_runtime_env_generator, "_repo_root", lambda: repo_root)
+
+    with pytest.raises(ValueError, match="output_path must stay within repo root when relative"):
+        managed_runtime_env_generator.main(
+            [
+                "--environment",
+                "staging",
+                "--template-path",
+                ".env.example",
+                "--output-path",
+                "../escape/staging.env",
+            ]
+        )

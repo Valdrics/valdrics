@@ -114,7 +114,11 @@ async def test_simulate_user_records_failure_and_exception(monkeypatch):
         lambda: DummyClient(),
     )
     sleep_mock = AsyncMock()
-    monkeypatch.setattr("app.shared.core.performance_testing.asyncio.sleep", sleep_mock)
+
+    async def fake_sleep(self, delay):
+        await sleep_mock(delay)
+
+    monkeypatch.setattr(LoadTester, "_sleep", fake_sleep)
 
     await tester._simulate_user(0, test_start_time=time.time())
 
@@ -184,7 +188,11 @@ async def test_simulate_user_records_metrics(monkeypatch):
         lambda: DummyClient(),
     )
     sleep_mock = AsyncMock()
-    monkeypatch.setattr("app.shared.core.performance_testing.asyncio.sleep", sleep_mock)
+
+    async def fake_sleep(self, delay):
+        await sleep_mock(delay)
+
+    monkeypatch.setattr(LoadTester, "_sleep", fake_sleep)
 
     with (
         patch(
@@ -239,7 +247,11 @@ async def test_simulate_user_records_exception_metrics(monkeypatch):
         lambda: ExplodingClient(),
     )
     sleep_mock = AsyncMock()
-    monkeypatch.setattr("app.shared.core.performance_testing.asyncio.sleep", sleep_mock)
+
+    async def fake_sleep(self, delay):
+        await sleep_mock(delay)
+
+    monkeypatch.setattr(LoadTester, "_sleep", fake_sleep)
 
     with (
         patch(
@@ -299,7 +311,11 @@ async def test_simulate_user_forwards_configured_headers(monkeypatch):
         lambda: HeaderCapturingClient(),
     )
     sleep_mock = AsyncMock()
-    monkeypatch.setattr("app.shared.core.performance_testing.asyncio.sleep", sleep_mock)
+
+    async def fake_sleep(self, delay):
+        await sleep_mock(delay)
+
+    monkeypatch.setattr(LoadTester, "_sleep", fake_sleep)
 
     await tester._simulate_user(0, test_start_time=time.time())
 

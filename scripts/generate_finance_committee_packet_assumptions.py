@@ -20,23 +20,39 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _checked_in_evidence_paths(repo_root: Path) -> set[Path]:
+    evidence_dir = repo_root / "docs" / "ops" / "evidence"
+    if not evidence_dir.exists():
+        return set()
+    return {path.resolve() for path in evidence_dir.iterdir() if path.is_file()}
+
+
 def _protected_output_paths() -> set[Path]:
     repo_root = _repo_root()
     return {
         Path(__file__).resolve(),
         repo_root / "scripts" / "generate_finance_telemetry_snapshot.py",
         repo_root / "scripts" / "verify_finance_telemetry_snapshot.py",
-        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json",
+        repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md",
+        *_checked_in_evidence_paths(repo_root),
     }
 
 
-def _resolve_output_path(value: str) -> Path:
+def _resolve_repo_relative_path(value: str, *, field_name: str) -> Path:
     raw = Path(str(value)).expanduser()
     if raw.is_absolute():
-        resolved = raw.resolve()
-    else:
-        resolved = (_repo_root() / raw).resolve()
+        return raw.resolve()
+    resolved = (_repo_root() / raw).resolve()
+    try:
+        resolved.relative_to(_repo_root())
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must stay within repo root when relative") from exc
+    return resolved
+
+
+def _resolve_output_path(value: str) -> Path:
+    resolved = _resolve_repo_relative_path(value, field_name="output")
     if resolved.exists() and not resolved.is_file():
         raise ValueError(f"output must be a file path: {resolved.as_posix()}")
     if resolved in _protected_output_paths():
@@ -47,10 +63,7 @@ def _resolve_output_path(value: str) -> Path:
 
 
 def _resolve_input_path(value: str) -> Path:
-    raw = Path(str(value)).expanduser()
-    if raw.is_absolute():
-        return raw.resolve()
-    return (_repo_root() / raw).resolve()
+    return _resolve_repo_relative_path(value, field_name="telemetry_path")
 
 
 def _ensure_output_parent_dir(output_path: Path) -> None:

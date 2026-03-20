@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -145,7 +146,24 @@ def _resolve_output_path(*, repo_root: Path, output: str) -> Path:
     protected_paths = {
         Path(__file__).resolve(),
         (repo_root / "scripts" / "verify_feature_enforceability_matrix.py").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json").resolve(),
         (repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json").resolve(),
+        (repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json").resolve(),
     }
     if out_path in protected_paths:
         raise ValueError(
@@ -178,17 +196,40 @@ def _ensure_output_parent_dir(output_path: Path) -> None:
         current = current.parent
 
 
-def main(argv: list[str] | None = None) -> int:
+def _write_verified_matrix(
+    *,
+    out_path: Path,
+    payload: dict[str, object],
+    repo_root: Path,
+) -> None:
     from scripts.verify_feature_enforceability_matrix import verify_matrix
 
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=out_path.parent,
+        prefix=f".{out_path.stem}.",
+        suffix=f"{out_path.suffix}.tmp",
+        delete=False,
+    ) as handle:
+        temp_path = Path(handle.name)
+        handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    try:
+        verify_matrix(artifact_path=temp_path, repo_root=repo_root)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    temp_path.replace(out_path)
+
+
+def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     repo_root = _repo_root()
     payload = generate_matrix(repo_root=repo_root)
     out_path = _resolve_output_path(repo_root=repo_root, output=str(args.out))
     _ensure_output_parent_dir(out_path)
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    verify_matrix(artifact_path=out_path, repo_root=repo_root)
+    _write_verified_matrix(out_path=out_path, payload=payload, repo_root=repo_root)
     print(
         "Feature enforceability matrix generated: "
         f"path={out_path.relative_to(repo_root)} features={len(payload.get('features', {}))}"

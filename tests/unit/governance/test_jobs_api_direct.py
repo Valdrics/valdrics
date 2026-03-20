@@ -72,3 +72,47 @@ async def test_internal_process_jobs_runs_inline_when_dispatch_fails() -> None:
         "status": "completed",
         "message": "Background job processing completed inline",
     }
+
+
+@pytest.mark.asyncio
+async def test_internal_process_jobs_runs_inline_when_celery_is_eager() -> None:
+    session = AsyncMock()
+    processor = AsyncMock()
+
+    @asynccontextmanager
+    async def session_context():
+        yield session
+
+    processor_cls = MagicMock(return_value=processor)
+    celery_app = MagicMock()
+    celery_app.conf.task_always_eager = True
+
+    with (
+        patch("app.shared.core.celery_app.celery_app", celery_app),
+        patch(
+            "app.modules.governance.api.v1.jobs.async_session_maker",
+            return_value=session_context(),
+        ),
+        patch(
+            "app.modules.governance.api.v1.jobs.mark_session_system_context",
+            new=AsyncMock(),
+        ) as mark_system,
+        patch(
+            "app.modules.governance.api.v1.jobs.JobProcessor",
+            processor_cls,
+        ),
+    ):
+        result = await internal_process_jobs(
+            background_tasks=BackgroundTasks(),
+            _db=MagicMock(),
+            _auth=None,
+        )
+
+    celery_app.send_task.assert_not_called()
+    mark_system.assert_awaited_once_with(session)
+    processor_cls.assert_called_once_with(session)
+    processor.process_pending_jobs.assert_awaited_once()
+    assert result == {
+        "status": "completed",
+        "message": "Background job processing completed inline",
+    }

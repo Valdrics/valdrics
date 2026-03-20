@@ -36,6 +36,7 @@ from app.shared.db.session_context_ops import (
 )
 from app.shared.db.session_rls_ops import check_rls_policy as _check_rls_policy_impl
 from app.shared.db.connect_args import build_connect_args as _build_connect_args_impl
+from app.shared.db.sqlite_datetime import register_sqlite_datetime_adapters
 
 logger = structlog.get_logger()
 __all__ = ["ValdricsException"]
@@ -201,6 +202,8 @@ def _build_db_runtime() -> _DBRuntime:
         logger.debug("missing_db_url_in_testing_ignoring")
 
     effective_url, use_null_pool, external_pooler = _resolve_effective_url(settings_obj)
+    if "sqlite" in effective_url:
+        register_sqlite_datetime_adapters()
     connect_args = _build_connect_args(settings_obj, effective_url)
     pool_config = _build_pool_config(
         settings_obj, effective_url, use_null_pool, external_pooler

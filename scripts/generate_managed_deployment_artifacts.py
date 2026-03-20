@@ -8,7 +8,9 @@ import ipaddress
 import json
 from pathlib import Path
 import re
+import shutil
 import sys
+import tempfile
 from typing import Any
 from urllib.parse import urlparse
 
@@ -136,11 +138,16 @@ def _resolve_default_path(path: Path) -> Path:
     return (_repo_root() / path).resolve()
 
 
-def _resolve_cli_path(path: Path) -> Path:
+def _resolve_cli_path(path: Path, *, field_name: str) -> Path:
     raw = Path(path).expanduser()
     if raw.is_absolute():
         return raw.resolve()
-    return (_repo_root() / raw).resolve()
+    resolved = (_repo_root() / raw).resolve()
+    try:
+        resolved.relative_to(_repo_root())
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must stay within repo root when relative") from exc
+    return resolved
 
 
 def _selected_llm_provider(values: dict[str, str]) -> str:
@@ -796,7 +803,6 @@ def generate_managed_deployment_artifacts(
     )
     terraform_runtime_json = json.dumps(helm_secret_payload, sort_keys=True)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
     (
         koyeb_api_path,
         koyeb_worker_path,
@@ -808,41 +814,6 @@ def generate_managed_deployment_artifacts(
         terraform_tfvars_path,
         report_path,
     ) = _artifact_output_paths(output_dir)
-
-    koyeb_api_path.write_text(
-        yaml.safe_dump(
-            _koyeb_manifest(values, environment=normalized_environment, component="api"),
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-    koyeb_worker_path.write_text(
-        yaml.safe_dump(
-            _koyeb_manifest(values, environment=normalized_environment, component="worker"),
-            sort_keys=False,
-        ),
-        encoding="utf-8",
-    )
-    koyeb_secrets_path.write_text(
-        json.dumps(koyeb_secret_payload, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    koyeb_dashboard_env_path.write_text(
-        json.dumps(koyeb_dashboard_env, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    koyeb_release_path.write_text(
-        json.dumps(koyeb_release_metadata, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    helm_values_path.write_text(
-        yaml.safe_dump(helm_values, sort_keys=False),
-        encoding="utf-8",
-    )
-    helm_secret_path.write_text(
-        json.dumps(helm_secret_payload, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
     terraform_tfvars_payload = {
         "environment": _terraform_environment(normalized_environment),
         "runtime_secret_name": _remote_secret_key(normalized_environment),
@@ -854,10 +825,6 @@ def generate_managed_deployment_artifacts(
             else ""
         ),
     }
-    terraform_tfvars_path.write_text(
-        json.dumps(terraform_tfvars_payload, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
 
     terraform_remaining_inputs = list(TERRAFORM_BASE_REQUIRED_INPUTS)
     if normalized_environment == "production":
@@ -900,7 +867,50 @@ def generate_managed_deployment_artifacts(
         ),
         "ready_for_helm": not runtime_blockers and not _placeholder_keys(helm_secret_payload),
     }
-    report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
+
+    artifact_contents = {
+        koyeb_api_path.name: yaml.safe_dump(
+            _koyeb_manifest(values, environment=normalized_environment, component="api"),
+            sort_keys=False,
+        ),
+        koyeb_worker_path.name: yaml.safe_dump(
+            _koyeb_manifest(values, environment=normalized_environment, component="worker"),
+            sort_keys=False,
+        ),
+        koyeb_secrets_path.name: json.dumps(koyeb_secret_payload, indent=2, sort_keys=True),
+        koyeb_dashboard_env_path.name: json.dumps(koyeb_dashboard_env, indent=2, sort_keys=True),
+        koyeb_release_path.name: json.dumps(koyeb_release_metadata, indent=2, sort_keys=True),
+        helm_values_path.name: yaml.safe_dump(helm_values, sort_keys=False),
+        helm_secret_path.name: json.dumps(helm_secret_payload, indent=2, sort_keys=True),
+        terraform_tfvars_path.name: json.dumps(terraform_tfvars_payload, indent=2, sort_keys=True),
+        report_path.name: json.dumps(report, indent=2, sort_keys=True),
+    }
+
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging_dir = Path(
+        tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent)
+    )
+    promoted_paths: list[Path] = []
+    try:
+        staged_paths: list[tuple[Path, Path]] = []
+        for final_path in _artifact_output_paths(output_dir):
+            staged_path = staging_dir / final_path.name
+            staged_path.write_text(
+                artifact_contents[final_path.name],
+                encoding="utf-8",
+            )
+            staged_paths.append((staged_path, final_path))
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        for staged_path, final_path in staged_paths:
+            staged_path.replace(final_path)
+            promoted_paths.append(final_path)
+    except Exception:
+        for final_path in promoted_paths:
+            final_path.unlink(missing_ok=True)
+        raise
+    finally:
+        shutil.rmtree(staging_dir, ignore_errors=True)
     return report
 
 
@@ -961,12 +971,14 @@ def main(argv: list[str] | None = None) -> int:
     runtime_env_file = (
         _resolve_default_path(Path(".runtime") / f"{args.environment}.env")
         if args.runtime_env_file is None
-        else _resolve_cli_path(args.runtime_env_file)
+        else _resolve_cli_path(
+            args.runtime_env_file, field_name="runtime_env_file"
+        )
     )
     output_dir = (
         _resolve_default_path(DEFAULT_OUTPUT_ROOT / str(args.environment))
         if args.output_dir is None
-        else _resolve_cli_path(args.output_dir)
+        else _resolve_cli_path(args.output_dir, field_name="output_dir")
     )
     report = generate_managed_deployment_artifacts(
         environment=str(args.environment),

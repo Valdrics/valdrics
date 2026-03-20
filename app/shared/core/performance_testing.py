@@ -81,6 +81,10 @@ class LoadTester:
         self.results = LoadTestResult()
         self._running = False
 
+    async def _sleep(self, delay_seconds: float) -> None:
+        """Isolated sleep seam for testability without patching global asyncio state."""
+        await asyncio.sleep(delay_seconds)
+
     async def run_load_test(self) -> LoadTestResult:
         """Run the load test and return results."""
         logger.info(
@@ -131,7 +135,7 @@ class LoadTester:
             delay = (
                 user_id / self.config.concurrent_users
             ) * self.config.ramp_up_seconds
-            await asyncio.sleep(delay)
+            await self._sleep(delay)
 
         time.time()
 
@@ -204,7 +208,7 @@ class LoadTester:
                     ).inc()
 
                 # Small delay between requests to avoid overwhelming
-                await asyncio.sleep(0.1)
+                await self._sleep(0.1)
 
     def _calculate_metrics(self, total_duration: float) -> None:
         """Calculate final performance metrics."""

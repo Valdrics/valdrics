@@ -483,12 +483,43 @@ def test_generate_finance_committee_packet_resolves_relative_paths_from_repo_roo
             "max_artifact_age_hours": None,
         }
     ]
-    assert verify_evidence_calls == [
-        {
-            "evidence_path": guardrails_path,
-            "allow_failed_gates": True,
-        }
-    ]
+    assert len(verify_evidence_calls) == 1
+    assert verify_evidence_calls[0]["allow_failed_gates"] is True
+    assert verify_evidence_calls[0]["evidence_path"].name == guardrails_path.name
+    assert verify_evidence_calls[0]["evidence_path"] != guardrails_path
+
+
+def test_generate_finance_committee_packet_rejects_relative_paths_that_escape_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    inputs_dir = repo_root / "inputs"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+    assumptions = inputs_dir / "assumptions.json"
+    _write(assumptions, _assumptions_payload())
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(
+        "scripts.generate_finance_committee_packet._repo_root",
+        lambda: repo_root,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="telemetry_path must stay within repo root when relative",
+    ):
+        main(
+            [
+                "--telemetry-path",
+                "../escape/telemetry.json",
+                "--assumptions-path",
+                "inputs/assumptions.json",
+                "--output-dir",
+                "artifacts",
+            ]
+        )
 
 
 def test_generate_finance_committee_packet_rejects_output_dir_parent_file(
@@ -512,6 +543,119 @@ def test_generate_finance_committee_packet_rejects_output_dir_parent_file(
                 str(blocked_parent / "committee-output"),
             ]
         )
+
+
+def test_generate_finance_committee_packet_does_not_leave_outputs_when_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    telemetry = tmp_path / "telemetry.json"
+    assumptions = tmp_path / "assumptions.json"
+    output_dir = tmp_path / "output"
+    _write(telemetry, _telemetry_payload())
+    _write(assumptions, _assumptions_payload())
+
+    monkeypatch.setattr(
+        "scripts.generate_finance_committee_packet.verify_evidence",
+        lambda **_: (_ for _ in ()).throw(ValueError("finance guardrails verification failed")),
+    )
+
+    with pytest.raises(ValueError, match="finance guardrails verification failed"):
+        main(
+            [
+                "--telemetry-path",
+                str(telemetry),
+                "--assumptions-path",
+                str(assumptions),
+                "--output-dir",
+                str(output_dir),
+            ]
+        )
+
+    assert not (output_dir / "finance_guardrails_2026-02.json").exists()
+    assert not (output_dir / "finance_committee_packet_2026-02.json").exists()
+    assert not (output_dir / "finance_committee_tier_unit_economics_2026-02.csv").exists()
+    assert not (output_dir / "finance_committee_scenarios_2026-02.csv").exists()
+
+
+def test_generate_finance_committee_packet_does_not_leave_outputs_when_alert_fail_on_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    telemetry = tmp_path / "telemetry.json"
+    assumptions = tmp_path / "assumptions.json"
+    output_dir = tmp_path / "output"
+    payload = _assumptions_payload()
+    payload["thresholds"]["min_blended_gross_margin_percent"] = 99.0
+    _write(telemetry, _telemetry_payload())
+    _write(assumptions, payload)
+
+    monkeypatch.setattr(
+        "scripts.generate_finance_committee_packet.httpx.post",
+        lambda *_, **__: (_ for _ in ()).throw(RuntimeError("webhook failed")),
+    )
+
+    with pytest.raises(RuntimeError, match="failed to send finance alert webhook"):
+        main(
+            [
+                "--telemetry-path",
+                str(telemetry),
+                "--assumptions-path",
+                str(assumptions),
+                "--output-dir",
+                str(output_dir),
+                "--alert-webhook-url",
+                "https://alerts.example.test/hook",
+                "--alert-webhook-fail-on-error",
+            ]
+        )
+
+    assert not (output_dir / "finance_guardrails_2026-02.json").exists()
+    assert not (output_dir / "finance_committee_packet_2026-02.json").exists()
+    assert not (output_dir / "finance_committee_tier_unit_economics_2026-02.csv").exists()
+    assert not (output_dir / "finance_committee_scenarios_2026-02.csv").exists()
+
+
+def test_generate_finance_committee_packet_does_not_leave_outputs_when_csv_staging_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    telemetry = tmp_path / "telemetry.json"
+    assumptions = tmp_path / "assumptions.json"
+    output_dir = tmp_path / "output"
+    _write(telemetry, _telemetry_payload())
+    _write(assumptions, _assumptions_payload())
+    original_write_csv = __import__(
+        "scripts.generate_finance_committee_packet",
+        fromlist=["write_csv"],
+    ).write_csv
+
+    def _failing_write_csv(path: Path, rows: list[dict[str, object]]) -> None:
+        if path.name == "finance_committee_scenarios_2026-02.csv":
+            raise RuntimeError("scenario csv staging failed")
+        original_write_csv(path, rows)
+
+    monkeypatch.setattr(
+        "scripts.generate_finance_committee_packet.write_csv",
+        _failing_write_csv,
+    )
+
+    with pytest.raises(RuntimeError, match="scenario csv staging failed"):
+        main(
+            [
+                "--telemetry-path",
+                str(telemetry),
+                "--assumptions-path",
+                str(assumptions),
+                "--output-dir",
+                str(output_dir),
+            ]
+        )
+
+    assert not (output_dir / "finance_guardrails_2026-02.json").exists()
+    assert not (output_dir / "finance_committee_packet_2026-02.json").exists()
+    assert not (output_dir / "finance_committee_tier_unit_economics_2026-02.csv").exists()
+    assert not (output_dir / "finance_committee_scenarios_2026-02.csv").exists()
 
 
 def test_generate_finance_committee_packet_rejects_directory_assumptions_path(

@@ -570,6 +570,29 @@ def test_main_resolves_explicit_relative_paths_from_repo_root(
     ).resolve()
 
 
+def test_main_rejects_relative_paths_that_escape_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(managed_deployment_generator, "_repo_root", lambda: repo_root)
+
+    with pytest.raises(ValueError, match="runtime_env_file must stay within repo root when relative"):
+        managed_deployment_generator.main(
+            [
+                "--environment",
+                "staging",
+                "--runtime-env-file",
+                "../escape/staging.env",
+            ]
+        )
+
+
 def test_generate_managed_deployment_artifacts_rejects_file_output_dir(
     tmp_path: Path,
 ) -> None:
@@ -644,3 +667,55 @@ def test_generate_managed_deployment_artifacts_rejects_blocked_output_dir_parent
             runtime_env_file=runtime_env,
             output_dir=blocked_parent / "deploy" / "production",
         )
+
+
+def test_generate_managed_deployment_artifacts_does_not_leave_outputs_when_report_build_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime_env = tmp_path / "production.env"
+    output_dir = tmp_path / "deploy" / "production"
+    _write_env(
+        runtime_env,
+        [
+            "ENVIRONMENT=production",
+            "ENABLE_SCHEDULER=true",
+            "WEB_CONCURRENCY=2",
+            "API_URL=https://api.runtime.example",
+            "FRONTEND_URL=https://console.runtime.example",
+            "LOG_LEVEL=INFO",
+            "LLM_PROVIDER=groq",
+            "GROQ_API_KEY=test-groq-key",
+            "DATABASE_URL=postgresql+asyncpg://postgres:postgres@db.example.com:5432/postgres",
+            "REDIS_URL=redis://redis.example.com:6379/0",
+            "SUPABASE_URL=https://example.supabase.co",
+            "SUPABASE_JWT_SECRET=ci-supabase-jwt-secret-32-chars-0000",
+            "TRUSTED_PROXY_CIDRS='[\"203.0.113.10/32\"]'",
+            "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=arn:aws:iam::123456789012:role/ValdricsControlPlane",
+            "OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com:4317",
+            "PAYSTACK_SECRET_KEY=sk_live_runtime_paystack_key",
+            "PAYSTACK_PUBLIC_KEY=pk_live_runtime_paystack_key",
+            "SENTRY_DSN=https://key@example.com/1",
+        ],
+    )
+    original_json_dumps = managed_deployment_generator.json.dumps
+
+    def _failing_json_dumps(payload: object, *args: object, **kwargs: object) -> str:
+        if isinstance(payload, dict) and "artifacts" in payload:
+            raise RuntimeError("deployment report build failed")
+        return original_json_dumps(payload, *args, **kwargs)
+
+    monkeypatch.setattr(managed_deployment_generator.json, "dumps", _failing_json_dumps)
+
+    with pytest.raises(RuntimeError, match="deployment report build failed"):
+        generate_managed_deployment_artifacts(
+            environment="production",
+            runtime_env_file=runtime_env,
+            output_dir=output_dir,
+            release_tag="2026.03.19",
+            api_image_digest="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            dashboard_image_digest="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        )
+
+    for artifact_path in managed_deployment_generator._artifact_output_paths(output_dir):
+        assert not artifact_path.exists()

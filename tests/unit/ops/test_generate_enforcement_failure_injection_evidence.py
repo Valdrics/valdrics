@@ -53,6 +53,8 @@ def test_generate_evidence_requires_non_empty_profile(tmp_path: Path) -> None:
         "scripts/verify_enforcement_failure_injection_evidence.py",
         "tests/unit/enforcement/test_enforcement_api.py",
         "docs/ops/evidence/enforcement_failure_injection_2026-02-27.json",
+        "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
+        "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
     ],
 )
 def test_generate_evidence_rejects_protected_output_collisions(
@@ -99,6 +101,38 @@ def test_generate_evidence_rejects_relative_protected_output_from_outside_repo(
     with pytest.raises(ValueError, match="output must not overwrite failure-injection"):
         generator.generate_evidence(
             output=Path("docs/ops/evidence/enforcement_failure_injection_2026-02-27.json"),
+            executed_by="exec@valdrics.local",
+            approved_by="approver@valdrics.local",
+            profile="enforcement_failure_injection",
+            cwd=repo_root,
+            timeout_seconds=60.0,
+        )
+
+
+def test_generate_evidence_rejects_relative_output_that_escapes_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(generator, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        generator,
+        "_run_scenario",
+        lambda *_, **__: (_ for _ in ()).throw(
+            AssertionError("scenario execution should not run for escaping output paths")
+        ),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="output must stay within repo root when relative",
+    ):
+        generator.generate_evidence(
+            output=Path("../escape/failure_injection.json"),
             executed_by="exec@valdrics.local",
             approved_by="approver@valdrics.local",
             profile="enforcement_failure_injection",
@@ -209,7 +243,23 @@ def test_generate_evidence_writes_summary_and_scenarios(
 def test_main_exit_code_follows_overall_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    def _fake_generate_evidence(**_: object) -> tuple[dict[str, object], bool]:
+    def _fake_generate_evidence(**kwargs: object) -> tuple[dict[str, object], bool]:
+        output = kwargs["output"]
+        assert isinstance(output, Path)
+        output.write_text(
+            json.dumps(
+                {
+                    "profile": "enforcement_failure_injection",
+                    "summary": {
+                        "total_scenarios": 5,
+                        "passed_scenarios": 5,
+                        "failed_scenarios": 0,
+                        "overall_passed": True,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
         return (
             {
                 "profile": "enforcement_failure_injection",
@@ -243,13 +293,132 @@ def test_main_exit_code_follows_overall_result(
         ]
     )
     assert exit_code == 0
-    assert verify_calls == [
-        {
-            "evidence_path": tmp_path / "artifact.json",
-            "expected_profile": "enforcement_failure_injection",
-            "max_artifact_age_hours": 4.0,
-        }
-    ]
+    assert len(verify_calls) == 1
+    verify_path = verify_calls[0]["evidence_path"]
+    assert isinstance(verify_path, Path)
+    assert verify_path.parent == tmp_path
+    assert verify_path != tmp_path / "artifact.json"
+    assert verify_calls[0]["expected_profile"] == "enforcement_failure_injection"
+    assert verify_calls[0]["max_artifact_age_hours"] == 4.0
+    assert (tmp_path / "artifact.json").exists()
+
+
+def test_main_does_not_leave_output_when_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "artifact.json"
+
+    def _fake_generate_evidence(**kwargs: object) -> tuple[dict[str, object], bool]:
+        staged_output = kwargs["output"]
+        assert isinstance(staged_output, Path)
+        staged_output.write_text(
+            json.dumps(
+                {
+                    "profile": "enforcement_failure_injection",
+                    "summary": {
+                        "total_scenarios": 5,
+                        "passed_scenarios": 5,
+                        "failed_scenarios": 0,
+                        "overall_passed": True,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        return (
+            {
+                "profile": "enforcement_failure_injection",
+                "summary": {
+                    "total_scenarios": 5,
+                    "passed_scenarios": 5,
+                    "failed_scenarios": 0,
+                    "overall_passed": True,
+                },
+            },
+            True,
+        )
+
+    monkeypatch.setattr(generator, "generate_evidence", _fake_generate_evidence)
+    monkeypatch.setattr(
+        generator,
+        "verify_evidence",
+        lambda **_: (_ for _ in ()).throw(ValueError("failure injection verification failed")),
+    )
+
+    with pytest.raises(ValueError, match="failure injection verification failed"):
+        generator.main(
+            [
+                "--output",
+                str(output),
+                "--executed-by",
+                "exec@valdrics.local",
+                "--approved-by",
+                "approve@valdrics.local",
+            ]
+        )
+
+    assert not output.exists()
+
+
+def test_main_promotes_verified_temp_output_to_final_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "artifact.json"
+    staged_outputs: list[Path] = []
+
+    def _fake_generate_evidence(**kwargs: object) -> tuple[dict[str, object], bool]:
+        staged_output = kwargs["output"]
+        assert isinstance(staged_output, Path)
+        staged_outputs.append(staged_output)
+        staged_output.write_text(
+            json.dumps(
+                {
+                    "profile": "enforcement_failure_injection",
+                    "summary": {
+                        "total_scenarios": 5,
+                        "passed_scenarios": 5,
+                        "failed_scenarios": 0,
+                        "overall_passed": True,
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        return (
+            {
+                "profile": "enforcement_failure_injection",
+                "summary": {
+                    "total_scenarios": 5,
+                    "passed_scenarios": 5,
+                    "failed_scenarios": 0,
+                    "overall_passed": True,
+                },
+            },
+            True,
+        )
+
+    monkeypatch.setattr(generator, "generate_evidence", _fake_generate_evidence)
+    monkeypatch.setattr(generator, "verify_evidence", lambda **_: 0)
+
+    assert (
+        generator.main(
+            [
+                "--output",
+                str(output),
+                "--executed-by",
+                "exec@valdrics.local",
+                "--approved-by",
+                "approve@valdrics.local",
+            ]
+        )
+        == 0
+    )
+
+    assert output.exists()
+    assert staged_outputs
+    assert all(not staged_path.exists() for staged_path in staged_outputs)
 
 
 def test_main_resolves_relative_output_from_repo_root(
@@ -304,13 +473,13 @@ def test_main_resolves_relative_output_from_repo_root(
     )
     expected_output = repo_root / "artifacts" / "failure_injection.json"
     assert expected_output.exists()
-    assert verify_calls == [
-        {
-            "evidence_path": expected_output,
-            "expected_profile": "enforcement_failure_injection",
-            "max_artifact_age_hours": 4.0,
-        }
-    ]
+    assert len(verify_calls) == 1
+    verify_path = verify_calls[0]["evidence_path"]
+    assert isinstance(verify_path, Path)
+    assert verify_path.parent == expected_output.parent
+    assert verify_path != expected_output
+    assert verify_calls[0]["expected_profile"] == "enforcement_failure_injection"
+    assert verify_calls[0]["max_artifact_age_hours"] == 4.0
 
 
 def test_main_rejects_invalid_profile_before_generation(

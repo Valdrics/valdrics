@@ -156,7 +156,7 @@ async def test_process_jobs_internal_success(async_client: AsyncClient):
             headers={"X-Internal-Job-Secret": "s" * 32},
         )
         assert response.status_code == 200
-        assert response.json()["status"] == "accepted"
+        assert response.json()["status"] == "completed"
 
 
 @pytest.mark.asyncio

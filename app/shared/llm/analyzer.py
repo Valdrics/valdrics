@@ -1,7 +1,6 @@
 # mypy: disable-error-code=import-untyped
 from __future__ import annotations
 
-import asyncio
 import copy
 import json
 import os
@@ -85,18 +84,18 @@ class FinOpsAnalyzer:
         return self.prompt
 
     async def _load_system_prompt_async(self) -> str:
-        """Load system prompt from YAML in a thread pool or use fallback."""
+        """Load system prompt from YAML or use fallback.
+
+        The prompt file is a tiny local asset. Reading it synchronously avoids
+        spinning up the default executor for a trivial filesystem read and keeps
+        async test/runtime teardown free of stray executor lifecycle work.
+        """
         prompt_path = os.path.join(os.path.dirname(__file__), "prompts.yaml")
 
         try:
             if os.path.exists(prompt_path):
-                loop = asyncio.get_running_loop()
-
-                def _read_file() -> Any:
-                    with open(prompt_path, "r") as f:
-                        return yaml.safe_load(f)
-
-                registry = await loop.run_in_executor(None, _read_file)
+                with open(prompt_path, "r", encoding="utf-8") as f:
+                    registry = yaml.safe_load(f)
                 if isinstance(registry, dict) and "finops_analysis" in registry:
                     prompt_entry = registry["finops_analysis"]
                     if isinstance(prompt_entry, dict):

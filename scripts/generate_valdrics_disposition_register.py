@@ -9,6 +9,7 @@ import math
 import re
 import subprocess  # nosec B404 - controlled local verifier execution only
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -96,6 +97,20 @@ def _protected_output_paths() -> set[Path]:
     return {
         Path(__file__).resolve(),
         repo_root / "scripts" / "verify_valdrics_disposition_freshness.py",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json",
         repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json",
         repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json",
     }
@@ -105,7 +120,12 @@ def _resolve_repo_relative_path(value: str) -> Path:
     raw = Path(str(value)).expanduser()
     if raw.is_absolute():
         return raw.resolve()
-    return (_repo_root() / raw).resolve()
+    resolved = (_repo_root() / raw).resolve()
+    try:
+        resolved.relative_to(_repo_root())
+    except ValueError as exc:
+        raise ValueError("relative path must stay within repo root") from exc
+    return resolved
 
 
 def _resolve_output_path(value: str) -> Path:
@@ -254,6 +274,36 @@ def _collect_probe_results(*, timeout_seconds: float) -> dict[str, dict[str, Any
     return results
 
 
+def _write_verified_register(
+    *,
+    output_path: Path,
+    payload: dict[str, Any],
+    max_artifact_age_days: float,
+    max_review_window_days: float,
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=output_path.parent,
+        prefix=f".{output_path.stem}.",
+        suffix=f"{output_path.suffix}.tmp",
+        delete=False,
+    ) as handle:
+        temp_path = Path(handle.name)
+        handle.write(json.dumps(payload, indent=2, sort_keys=True))
+    try:
+        verify_disposition_register(
+            register_path=temp_path,
+            max_artifact_age_days=max_artifact_age_days,
+            max_review_window_days=max_review_window_days,
+        )
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    temp_path.replace(output_path)
+
+
 def _disposition_from_probe_results(
     *,
     finding_id: str,
@@ -343,10 +393,9 @@ def main(argv: list[str] | None = None) -> int:
         source_audit_path=source_audit_path,
         probe_timeout_seconds=probe_timeout_seconds,
     )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    verify_disposition_register(
-        register_path=output_path,
+    _write_verified_register(
+        output_path=output_path,
+        payload=payload,
         max_artifact_age_days=max_artifact_age_days,
         max_review_window_days=max_review_window_days,
     )

@@ -195,6 +195,31 @@ def test_resolve_output_path_rejects_directory_output(tmp_path: Path) -> None:
         _resolve_output_path(repo_root, output_dir)
 
 
+@pytest.mark.parametrize(
+    "protected_output",
+    [
+        Path("scripts/generate_provenance_manifest.py"),
+        Path(".github/workflows/sbom.yml"),
+        Path("docs/ops/evidence/finance_guardrails_TEMPLATE.json"),
+        Path("docs/ops/evidence/valdrics_disposition_register_2026-02-28.json"),
+        Path("docs/ops/key-rotation-drill-2026-02-27.md"),
+        Path("docs/ops/evidence/README.md"),
+    ],
+)
+def test_resolve_output_path_rejects_protected_supply_chain_assets(
+    tmp_path: Path,
+    protected_output: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    _write(repo_root / protected_output, "tracked\n")
+
+    with pytest.raises(
+        ValueError,
+        match="output must not overwrite provenance generator source or checked-in supply-chain assets",
+    ):
+        _resolve_output_path(repo_root, protected_output)
+
+
 def test_resolve_output_path_treats_relative_output_as_repo_root_relative(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -326,6 +351,31 @@ def test_main_rejects_output_collision_with_dependency_input(tmp_path: Path) -> 
         )
 
 
+def test_main_rejects_output_collision_with_protected_supply_chain_asset(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    _write(repo_root / "pyproject.toml", "[project]\nname='x'\n")
+    _write(repo_root / ".github/workflows/sbom.yml", "name: SBOM\n")
+
+    with pytest.raises(
+        ValueError,
+        match="output must not overwrite provenance generator source or checked-in supply-chain assets",
+    ):
+        main(
+            [
+                "--repo-root",
+                str(repo_root),
+                "--output",
+                str(repo_root / ".github/workflows/sbom.yml"),
+                "--allow-missing-sbom",
+                "--dependency-input",
+                "pyproject.toml",
+            ]
+        )
+
+
 def test_main_rejects_output_collision_with_sbom_artifact(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     repo_root.mkdir(parents=True, exist_ok=True)
@@ -343,5 +393,51 @@ def test_main_rejects_output_collision_with_sbom_artifact(tmp_path: Path) -> Non
                 "pyproject.toml",
                 "--sbom-dir",
                 "sbom",
+            ]
+        )
+
+
+def test_main_rejects_allow_missing_sbom_with_absolute_path_outside_repo_root(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    _write(repo_root / "pyproject.toml", "[project]\nname='x'\n")
+
+    with pytest.raises(ValueError, match="sbom_dir must be relative to repo root"):
+        main(
+            [
+                "--repo-root",
+                str(repo_root),
+                "--output",
+                str(repo_root / "artifacts" / "provenance.json"),
+                "--allow-missing-sbom",
+                "--dependency-input",
+                "pyproject.toml",
+                "--sbom-dir",
+                str(tmp_path / "missing-sbom"),
+            ]
+        )
+
+
+def test_main_rejects_allow_missing_sbom_with_relative_escape_outside_repo_root(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    _write(repo_root / "pyproject.toml", "[project]\nname='x'\n")
+
+    with pytest.raises(ValueError, match="sbom_dir must stay within repo root"):
+        main(
+            [
+                "--repo-root",
+                str(repo_root),
+                "--output",
+                str(repo_root / "artifacts" / "provenance.json"),
+                "--allow-missing-sbom",
+                "--dependency-input",
+                "pyproject.toml",
+                "--sbom-dir",
+                "../missing-sbom",
             ]
         )

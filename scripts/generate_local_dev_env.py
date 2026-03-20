@@ -22,15 +22,27 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _checked_in_evidence_paths(repo_root: Path) -> set[Path]:
+    evidence_dir = repo_root / "docs" / "ops" / "evidence"
+    if not evidence_dir.exists():
+        return set()
+    return {path.resolve() for path in evidence_dir.iterdir() if path.is_file()}
+
+
 def _resolve_default_path(path: Path) -> Path:
     return (_repo_root() / path).resolve()
 
 
-def _resolve_cli_path(path: Path) -> Path:
+def _resolve_cli_path(path: Path, *, field_name: str) -> Path:
     raw = Path(path).expanduser()
     if raw.is_absolute():
         return raw.resolve()
-    return (_repo_root() / raw).resolve()
+    resolved = (_repo_root() / raw).resolve()
+    try:
+        resolved.relative_to(_repo_root())
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must stay within repo root when relative") from exc
+    return resolved
 
 
 def _protected_output_paths() -> set[Path]:
@@ -38,6 +50,9 @@ def _protected_output_paths() -> set[Path]:
     return {
         Path(__file__).resolve(),
         repo_root / ".env.example",
+        repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json",
+        repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md",
+        *_checked_in_evidence_paths(repo_root),
     }
 
 
@@ -174,8 +189,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    template_path = _resolve_cli_path(args.template_path)
-    output_path = _resolve_cli_path(args.output_path)
+    template_path = _resolve_cli_path(args.template_path, field_name="template_path")
+    output_path = _resolve_cli_path(args.output_path, field_name="output_path")
     output_path = generate_local_dev_env(
         template_path=template_path,
         output_path=output_path,

@@ -432,6 +432,13 @@ async def internal_process_jobs(
     try:
         from app.shared.core.celery_app import celery_app
 
+        if getattr(getattr(celery_app, "conf", None), "task_always_eager", False) is True:
+            await run_processor()
+            return {
+                "status": "completed",
+                "message": "Background job processing completed inline",
+            }
+
         celery_app.send_task("scheduler.process_background_jobs")
         return {
             "status": "accepted",

@@ -194,6 +194,9 @@ def test_generate_local_dev_env_rejects_directory_output_path(
     [
         ".env.example",
         "scripts/generate_local_dev_env.py",
+        "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
+        "docs/ops/key-rotation-drill-2026-02-27.md",
+        "docs/ops/evidence/README.md",
     ],
 )
 def test_generate_local_dev_env_rejects_protected_output_targets(
@@ -294,3 +297,26 @@ def test_main_resolves_explicit_relative_paths_from_repo_root(
     )
     assert captured["template_path"] == (repo_root / ".env.example").resolve()
     assert captured["output_path"] == (repo_root / ".env.dev").resolve()
+
+
+def test_main_rejects_relative_paths_that_escape_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(local_dev_env_generator, "_repo_root", lambda: repo_root)
+
+    with pytest.raises(ValueError, match="template_path must stay within repo root when relative"):
+        local_dev_env_generator.main(
+            [
+                "--template-path",
+                "../escape/.env.example",
+                "--output-path",
+                ".env.dev",
+            ]
+        )

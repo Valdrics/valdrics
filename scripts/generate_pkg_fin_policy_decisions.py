@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -46,13 +47,21 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _checked_in_evidence_paths(repo_root: Path) -> set[Path]:
+    evidence_dir = repo_root / "docs" / "ops" / "evidence"
+    if not evidence_dir.exists():
+        return set()
+    return {path.resolve() for path in evidence_dir.iterdir() if path.is_file()}
+
+
 def _protected_output_paths() -> set[Path]:
     repo_root = _repo_root()
     return {
         Path(__file__).resolve(),
         repo_root / "scripts" / "verify_pkg_fin_policy_decisions.py",
-        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json",
+        repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md",
+        *_checked_in_evidence_paths(repo_root),
     }
 
 
@@ -62,6 +71,10 @@ def _resolve_output_path(value: str) -> Path:
         resolved = raw.resolve()
     else:
         resolved = (_repo_root() / raw).resolve()
+        try:
+            resolved.relative_to(_repo_root())
+        except ValueError as exc:
+            raise ValueError("output must stay within repo root when relative") from exc
     if resolved.exists() and not resolved.is_file():
         raise ValueError(f"output must be a file path: {resolved.as_posix()}")
     if resolved in _protected_output_paths():
@@ -75,7 +88,14 @@ def _resolve_input_path(value: str) -> Path:
     raw = Path(str(value)).expanduser()
     if raw.is_absolute():
         return raw.resolve()
-    return (_repo_root() / raw).resolve()
+    resolved = (_repo_root() / raw).resolve()
+    try:
+        resolved.relative_to(_repo_root())
+    except ValueError as exc:
+        raise ValueError(
+            "telemetry_snapshot_path must stay within repo root when relative"
+        ) from exc
+    return resolved
 
 
 def _ensure_output_parent_dir(output_path: Path) -> None:
@@ -113,6 +133,26 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Telemetry window months observed (must be >= 2 for gate pass).",
     )
     return parser.parse_args(argv)
+
+
+def _write_verified_evidence(*, output_path: Path, payload: dict[str, object]) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=output_path.parent,
+        prefix=f".{output_path.stem}.",
+        suffix=f"{output_path.suffix}.tmp",
+        delete=False,
+    ) as handle:
+        temp_path = Path(handle.name)
+        handle.write(json.dumps(payload, indent=2, sort_keys=True))
+    try:
+        verify_evidence(evidence_path=temp_path, max_artifact_age_hours=4.0)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    temp_path.replace(output_path)
 
 
 def _load_json(path: Path, *, field: str) -> dict[str, Any]:
@@ -363,10 +403,7 @@ def main(argv: list[str] | None = None) -> int:
         months_observed=int(args.months_observed),
     )
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-
-    verify_evidence(evidence_path=output_path, max_artifact_age_hours=4.0)
+    _write_verified_evidence(output_path=output_path, payload=payload)
     print(f"Generated PKG/FIN policy decision evidence: {output_path}")
     return 0
 

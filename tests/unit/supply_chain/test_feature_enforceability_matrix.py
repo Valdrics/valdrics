@@ -100,6 +100,9 @@ def test_main_rejects_scanned_source_root_output() -> None:
     [
         "scripts/verify_feature_enforceability_matrix.py",
         "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
+        "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
+        "docs/ops/key-rotation-drill-2026-02-27.md",
     ],
 )
 def test_resolve_output_path_rejects_protected_artifacts(output: str) -> None:
@@ -183,4 +186,45 @@ def test_main_self_verifies_generated_matrix(
 
     assert main(["--out", "ops/matrix.json"]) == 0
     assert output.exists()
-    assert verify_calls == [(output, tmp_path)]
+    assert len(verify_calls) == 1
+    artifact_path, repo_root = verify_calls[0]
+    assert repo_root == tmp_path
+    assert artifact_path.parent == output.parent
+    assert artifact_path != output
+
+
+def test_main_does_not_leave_output_when_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "ops" / "matrix.json"
+
+    monkeypatch.setattr(matrix_generator, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        matrix_generator,
+        "generate_matrix",
+        lambda *, repo_root: {
+            "captured_at": "2026-03-19T12:00:00+00:00",
+            "scope": {
+                "paid_tiers": ["starter", "growth", "pro", "enterprise"],
+                "source_of_truth": "app/shared/core/pricing.py",
+                "scanner_roots": ["app/modules", "app/shared"],
+            },
+            "features": {
+                "api_access": {
+                    "status": "runtime_gated",
+                    "evidence": ["app/modules/example.py"],
+                }
+            },
+        },
+    )
+    monkeypatch.setattr(
+        matrix_verifier,
+        "verify_matrix",
+        lambda **_: (_ for _ in ()).throw(ValueError("matrix verification failed")),
+    )
+
+    with pytest.raises(ValueError, match="matrix verification failed"):
+        main(["--out", "ops/matrix.json"])
+
+    assert not output.exists()

@@ -96,6 +96,36 @@ def test_generate_managed_migration_env_rejects_shared_output_and_report_path(
         )
 
 
+def test_generate_managed_migration_env_does_not_leave_outputs_when_report_staging_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "staging.migrate.env"
+    report_path = tmp_path / "staging.migrate.report.json"
+    original_stage = managed_migration_env_generator._stage_text_file
+
+    def _failing_stage(path: Path, content: str) -> Path:
+        if path == report_path:
+            raise RuntimeError("report staging failed")
+        return original_stage(path, content)
+
+    monkeypatch.setattr(
+        managed_migration_env_generator,
+        "_stage_text_file",
+        _failing_stage,
+    )
+
+    with pytest.raises(RuntimeError, match="report staging failed"):
+        generate_managed_migration_env(
+            output_path=output,
+            report_path=report_path,
+            environment="staging",
+        )
+
+    assert not output.exists()
+    assert not report_path.exists()
+
+
 @pytest.mark.parametrize("field_name", ["output_path", "report_path"])
 def test_generate_managed_migration_env_rejects_directory_targets(
     tmp_path: Path,
@@ -221,11 +251,36 @@ def test_main_resolves_explicit_relative_paths_from_repo_root(
     ).resolve()
 
 
+def test_main_rejects_relative_paths_that_escape_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(managed_migration_env_generator, "_repo_root", lambda: repo_root)
+
+    with pytest.raises(ValueError, match="output_path must stay within repo root when relative"):
+        managed_migration_env_generator.main(
+            [
+                "--environment",
+                "staging",
+                "--output-path",
+                "../escape/staging.migrate.env",
+            ]
+        )
+
+
 @pytest.mark.parametrize(
     ("field_name", "relative_target"),
     [
         ("output_path", ".env.example"),
         ("report_path", "scripts/validate_migration_env.py"),
+        ("output_path", "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json"),
+        ("report_path", "docs/ops/feature_enforceability_matrix_2026-02-27.json"),
     ],
 )
 def test_generate_managed_migration_env_rejects_protected_output_targets(

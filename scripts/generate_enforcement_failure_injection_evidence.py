@@ -9,6 +9,7 @@ import math
 import os
 import subprocess  # nosec B404 - controlled local pytest invocation only
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -129,6 +130,20 @@ def _protected_output_paths() -> set[Path]:
         repo_root / "scripts" / "verify_enforcement_failure_injection_evidence.py",
         repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json",
         repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
+        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json",
+        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json",
+        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json",
     }
     for scenario in SCENARIOS:
         for selector in scenario.selectors:
@@ -144,6 +159,10 @@ def _resolve_output_path(value: Path | str) -> Path:
         resolved = raw.resolve()
     else:
         resolved = (_repo_root() / raw).resolve()
+        try:
+            resolved.relative_to(_repo_root())
+        except ValueError as exc:
+            raise ValueError("output must stay within repo root when relative") from exc
     if resolved.exists() and not resolved.is_file():
         raise ValueError(f"output must be a file path: {resolved.as_posix()}")
     if resolved in _protected_output_paths():
@@ -294,19 +313,36 @@ def main(argv: list[str] | None = None) -> int:
         field="pytest_timeout_seconds",
     )
     output_path = _resolve_output_path(Path(args.output))
-    artifact, passed = generate_evidence(
-        output=output_path,
-        executed_by=str(args.executed_by),
-        approved_by=str(args.approved_by),
-        profile=str(args.profile),
-        cwd=Path(__file__).resolve().parents[1],
-        timeout_seconds=pytest_timeout_seconds,
-    )
-    verify_evidence(
-        evidence_path=output_path,
-        expected_profile=EXPECTED_PROFILE,
-        max_artifact_age_hours=4.0,
-    )
+    _ensure_output_parent_dir(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=output_path.parent,
+        prefix=f".{output_path.stem}.",
+        suffix=f"{output_path.suffix}.tmp",
+        delete=False,
+    ) as handle:
+        staged_output_path = Path(handle.name)
+    try:
+        artifact, passed = generate_evidence(
+            output=staged_output_path,
+            executed_by=str(args.executed_by),
+            approved_by=str(args.approved_by),
+            profile=str(args.profile),
+            cwd=Path(__file__).resolve().parents[1],
+            timeout_seconds=pytest_timeout_seconds,
+        )
+        verify_evidence(
+            evidence_path=staged_output_path,
+            expected_profile=EXPECTED_PROFILE,
+            max_artifact_age_hours=4.0,
+        )
+        staged_output_path.replace(output_path)
+    except Exception:
+        staged_output_path.unlink(missing_ok=True)
+        output_path.unlink(missing_ok=True)
+        raise
     print(json.dumps(artifact, indent=2, sort_keys=True))
     return 0 if passed else 1
 

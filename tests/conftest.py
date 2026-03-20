@@ -12,8 +12,11 @@ Provides:
 pytest_plugins = ("tests.unit.shared.adapters.aws_cur_test_helpers",)
 
 import asyncio
+import inspect
 import os
 import sys
+import threading
+from contextlib import suppress
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock, patch
 
@@ -86,6 +89,72 @@ if TYPE_CHECKING:
 # Environment variables are already set at the top
 
 # Import all models to register them in SQLAlchemy mapper globally for all tests
+
+
+_ORIGINAL_ASYNCIO_RUNNER_CLOSE = asyncio.Runner.close
+_REAL_ASYNCIO_SLEEP = asyncio.sleep
+
+
+def _close_runner_with_wake_thread(runner: asyncio.Runner) -> None:
+    state_initialized = getattr(asyncio.runners, "_State").INITIALIZED
+    state_closed = getattr(asyncio.runners, "_State").CLOSED
+    if getattr(runner, "_state", None) is not state_initialized:
+        return
+    try:
+        loop = runner._loop
+        asyncio.runners._cancel_all_tasks(loop)
+        loop.run_until_complete(_await_with_asyncio_heartbeat(loop.shutdown_asyncgens()))
+        loop.run_until_complete(
+            _await_with_asyncio_heartbeat(
+                loop.shutdown_default_executor(
+                    asyncio.runners.constants.THREAD_JOIN_TIMEOUT
+                )
+            )
+        )
+    finally:
+        if getattr(runner, "_set_event_loop", False):
+            asyncio.events.set_event_loop(None)
+        loop.close()
+        runner._loop = None
+        runner._state = state_closed
+
+
+asyncio.Runner.close = _close_runner_with_wake_thread
+
+
+async def _heartbeat_loop(stop: asyncio.Event) -> None:
+    while not stop.is_set():
+        await _REAL_ASYNCIO_SLEEP(0.01)
+
+
+class _AsyncioHeartbeat:
+    def __init__(self) -> None:
+        self._stop = asyncio.Event()
+        self._task: asyncio.Task[None] | None = None
+
+    async def __aenter__(self) -> "_AsyncioHeartbeat":
+        self._task = asyncio.create_task(_heartbeat_loop(self._stop))
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        self._stop.set()
+        if self._task is not None:
+            self._task.cancel()
+            with suppress(asyncio.CancelledError):
+                await self._task
+
+
+async def _await_with_asyncio_heartbeat(awaitable):
+    async with _AsyncioHeartbeat():
+        return await awaitable
+
+
+def _run_async_with_heartbeat(awaitable) -> None:
+    asyncio.run(_await_with_asyncio_heartbeat(awaitable))
+
+
+async def _dispose_async_engine(engine) -> None:
+    await _await_with_asyncio_heartbeat(engine.dispose())
 
 
 def _register_models():
@@ -209,7 +278,7 @@ def async_engine(tmp_path_factory):
 
     engine = create_async_engine(db_url, echo=False)
     yield engine
-    asyncio.run(engine.dispose())
+    asyncio.run(_dispose_async_engine(engine))
 
     for suffix in ("", "-journal", "-shm", "-wal"):
         Path(f"{db_path}{suffix}").unlink(missing_ok=True)
@@ -659,6 +728,54 @@ def cost_record_factory():
 # ============================================================================
 
 
+@pytest.fixture
+def event_loop():
+    """
+    Provide a test event loop with an external wake thread.
+
+    In constrained runners, cross-thread callbacks are not always sufficient to
+    wake the loop promptly. The wake thread keeps the selector responsive during
+    test execution and loop shutdown.
+    """
+    loop = asyncio.new_event_loop()
+    try:
+        previous_loop = asyncio.get_event_loop_policy().get_event_loop()
+    except RuntimeError:
+        previous_loop = None
+
+    asyncio.set_event_loop(loop)
+    stop = threading.Event()
+
+    def _wake_loop() -> None:
+        while not stop.wait(0.01):
+            try:
+                loop.call_soon_threadsafe(lambda: None)
+            except RuntimeError:
+                break
+
+    wake_thread = threading.Thread(
+        target=_wake_loop,
+        name="pytest-event-loop-waker",
+        daemon=True,
+    )
+    wake_thread.start()
+    try:
+        yield loop
+    finally:
+        stop.set()
+        wake_thread.join(timeout=1)
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        except RuntimeError:
+            pass
+        try:
+            loop.run_until_complete(loop.shutdown_default_executor())
+        except RuntimeError:
+            pass
+        asyncio.set_event_loop(previous_loop)
+        loop.close()
+
+
 @pytest.fixture(autouse=True)
 def set_testing_env():
     """Ensure TESTING is set for all tests."""
@@ -666,12 +783,29 @@ def set_testing_env():
     yield
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def keep_asyncio_loop_awake(request):
+    if not inspect.iscoroutinefunction(getattr(request.node, "obj", None)):
+        yield
+        return
+
+    async with _AsyncioHeartbeat():
+        yield
+
+
 @pytest.fixture(autouse=True)
-def clean_dependency_overrides(app):
-    """Ensure dependency overrides are cleared after every test to prevent state bleeding."""
-    # We yield first, so the test runs. Then we clear overrides.
+def clean_dependency_overrides():
+    """Clear dependency overrides without forcing app import for non-API tests."""
     yield
-    app.dependency_overrides.clear()
+
+    import sys
+
+    if "app.main" not in sys.modules:
+        return
+
+    import app.main as app_main
+
+    app_main.app.dependency_overrides.clear()
 
 
 @pytest.fixture(autouse=True)
@@ -690,7 +824,7 @@ def reset_shared_http_clients():
 def reset_settings_cache():
     """Ensure settings are fresh for every test to prevent leakage."""
     from app.shared.core.config import get_settings
-    from app.shared.db.session import reset_db_runtime
+    from app.shared.db.session import dispose_db_runtime
     import sys
 
     # 1. Clear the lru_cache
@@ -708,13 +842,13 @@ def reset_settings_cache():
         app_main.settings = settings
 
     # 3. Reset DB runtime
-    reset_db_runtime()
+    _run_async_with_heartbeat(dispose_db_runtime())
 
     yield
 
     # Teardown: ensure we don't leave it in a broken state
     get_settings.cache_clear()
-    reset_db_runtime()
+    _run_async_with_heartbeat(dispose_db_runtime())
     
     # 4. Sync app.main if it exists
     if "app.main" in sys.modules:

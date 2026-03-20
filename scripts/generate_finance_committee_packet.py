@@ -6,6 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import shutil
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -30,11 +32,16 @@ def _protected_output_paths() -> set[Path]:
     }
 
 
-def _resolve_repo_relative_path(value: str) -> Path:
+def _resolve_repo_relative_path(value: str, *, field_name: str) -> Path:
     raw = Path(str(value)).expanduser()
     if raw.is_absolute():
         return raw.resolve()
-    return (_repo_root() / raw).resolve()
+    resolved = (_repo_root() / raw).resolve()
+    try:
+        resolved.relative_to(_repo_root())
+    except ValueError as exc:
+        raise ValueError(f"{field_name} must stay within repo root when relative") from exc
+    return resolved
 
 
 def _ensure_output_dir_parent(output_dir: Path) -> None:
@@ -133,9 +140,18 @@ def _parse_positive_float_arg(value: float, *, field: str) -> float:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    telemetry_path = _resolve_repo_relative_path(str(args.telemetry_path))
-    assumptions_path = _resolve_repo_relative_path(str(args.assumptions_path))
-    output_dir = _resolve_repo_relative_path(str(args.output_dir))
+    telemetry_path = _resolve_repo_relative_path(
+        str(args.telemetry_path),
+        field_name="telemetry_path",
+    )
+    assumptions_path = _resolve_repo_relative_path(
+        str(args.assumptions_path),
+        field_name="assumptions_path",
+    )
+    output_dir = _resolve_repo_relative_path(
+        str(args.output_dir),
+        field_name="output_dir",
+    )
     telemetry_resolved = telemetry_path.resolve()
     assumptions_resolved = assumptions_path.resolve()
     if telemetry_resolved == assumptions_resolved:
@@ -188,30 +204,55 @@ def main(argv: list[str] | None = None) -> int:
                 f"{output_path.as_posix()}"
             )
 
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    guardrails_text = json.dumps(finance_guardrails, indent=2, sort_keys=True)
+    committee_text = json.dumps(committee_packet, indent=2, sort_keys=True)
+    staging_dir = Path(
+        tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent)
+    )
+    temp_guardrails_path = staging_dir / guardrails_path.name
+    temp_committee_path = staging_dir / committee_path.name
+    temp_tiers_csv_path = staging_dir / tiers_csv_path.name
+    temp_scenarios_csv_path = staging_dir / scenarios_csv_path.name
+    temp_guardrails_path.write_text(guardrails_text, encoding="utf-8")
+    temp_committee_path.write_text(
+        committee_text,
+        encoding="utf-8",
+    )
+    write_csv(temp_tiers_csv_path, tier_rows)
+    write_csv(temp_scenarios_csv_path, scenario_rows)
+    try:
+        verify_evidence(evidence_path=temp_guardrails_path, allow_failed_gates=True)
+        _send_alert_if_needed(
+            webhook_url=(str(args.alert_webhook_url).strip() if args.alert_webhook_url else None),
+            webhook_timeout_seconds=_parse_positive_float_arg(
+                float(args.alert_webhook_timeout_seconds),
+                field="alert_webhook_timeout_seconds",
+            ),
+            webhook_fail_on_error=bool(args.alert_webhook_fail_on_error),
+            packet_summary=committee_packet["summary"],
+            gate_results=committee_packet["gate_results"],
+        )
+    except Exception:
+        shutil.rmtree(staging_dir, ignore_errors=True)
+        raise
+    promoted_paths: list[Path] = []
     output_dir.mkdir(parents=True, exist_ok=True)
-    guardrails_path.write_text(
-        json.dumps(finance_guardrails, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    committee_path.write_text(
-        json.dumps(committee_packet, indent=2, sort_keys=True),
-        encoding="utf-8",
-    )
-    write_csv(tiers_csv_path, tier_rows)
-    write_csv(scenarios_csv_path, scenario_rows)
-
-    verify_evidence(evidence_path=guardrails_path, allow_failed_gates=True)
-
-    _send_alert_if_needed(
-        webhook_url=(str(args.alert_webhook_url).strip() if args.alert_webhook_url else None),
-        webhook_timeout_seconds=_parse_positive_float_arg(
-            float(args.alert_webhook_timeout_seconds),
-            field="alert_webhook_timeout_seconds",
-        ),
-        webhook_fail_on_error=bool(args.alert_webhook_fail_on_error),
-        packet_summary=committee_packet["summary"],
-        gate_results=committee_packet["gate_results"],
-    )
+    try:
+        for staged_path, final_path in (
+            (temp_guardrails_path, guardrails_path),
+            (temp_committee_path, committee_path),
+            (temp_tiers_csv_path, tiers_csv_path),
+            (temp_scenarios_csv_path, scenarios_csv_path),
+        ):
+            staged_path.replace(final_path)
+            promoted_paths.append(final_path)
+    except Exception:
+        for final_path in promoted_paths:
+            final_path.unlink(missing_ok=True)
+        raise
+    finally:
+        shutil.rmtree(staging_dir, ignore_errors=True)
 
     print(f"Generated finance guardrails: {guardrails_path}")
     print(f"Generated finance committee packet: {committee_path}")

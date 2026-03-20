@@ -333,20 +333,89 @@ def test_main_self_verifies_generated_artifact(
 
     assert exit_code == 0
     assert json.loads(output.read_text(encoding="utf-8")) == payload
-    assert verify_calls == [
-        {
-            "evidence_path": output,
-            "expected_profile": "enforcement",
-            "min_rounds": 3,
-            "min_duration_seconds": 30,
-            "min_concurrent_users": 10,
-            "required_database_engine": "postgresql",
+    assert len(verify_calls) == 1
+    assert verify_calls[0]["expected_profile"] == "enforcement"
+    assert verify_calls[0]["min_rounds"] == 3
+    assert verify_calls[0]["min_duration_seconds"] == 30
+    assert verify_calls[0]["min_concurrent_users"] == 10
+    assert verify_calls[0]["required_database_engine"] == "postgresql"
+    assert verify_calls[0]["max_p95_seconds"] == 2.0
+    assert verify_calls[0]["max_error_rate_percent"] == 1.0
+    assert verify_calls[0]["min_throughput_rps"] == 0.5
+    assert verify_calls[0]["max_artifact_age_hours"] == 4.0
+    assert verify_calls[0]["evidence_path"].parent == output.parent
+    assert verify_calls[0]["evidence_path"] != output
+
+
+def test_main_does_not_leave_output_when_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output = tmp_path / "enforcement_stress.json"
+    payload = {
+        "profile": "enforcement",
+        "runner": "scripts/load_test_api.py",
+        "runtime": {"database_engine": "postgresql"},
+        "captured_at": "2026-03-18T12:00:00+00:00",
+        "endpoints": list(ENFORCEMENT_ENDPOINTS),
+        "duration_seconds": 30,
+        "concurrent_users": 10,
+        "rounds": 3,
+        "runs": [{}, {}, {}],
+        "results": {
+            "total_requests": 300,
+            "successful_requests": 300,
+            "failed_requests": 0,
+            "throughput_rps": 1.0,
+            "avg_response_time": 0.2,
+            "median_response_time": 0.2,
+            "p95_response_time": 0.4,
+            "p99_response_time": 0.5,
+            "min_response_time": 0.1,
+            "max_response_time": 0.6,
+            "errors_sample": [],
+        },
+        "min_throughput_rps": 1.0,
+        "preflight": {"enabled": True, "passed": True, "failures": []},
+        "thresholds": {
             "max_p95_seconds": 2.0,
             "max_error_rate_percent": 1.0,
             "min_throughput_rps": 0.5,
-            "max_artifact_age_hours": 4.0,
-        }
-    ]
+        },
+        "evaluation": {
+            "rounds": [],
+            "overall_meets_targets": True,
+            "worst_p95_seconds": 0.4,
+            "min_throughput_rps": 1.0,
+        },
+        "meets_targets": True,
+    }
+    verify_calls: list[Path] = []
+
+    async def _fake_generate_evidence(args: Namespace) -> dict[str, object]:
+        assert args.output == str(output)
+        return payload
+
+    def _fake_verify(**kwargs: object) -> int:
+        verify_calls.append(kwargs["evidence_path"])
+        raise ValueError("stress verification failed")
+
+    monkeypatch.setattr(stress_generator, "generate_evidence", _fake_generate_evidence)
+    monkeypatch.setattr(stress_generator, "verify_evidence", _fake_verify)
+
+    with pytest.raises(ValueError, match="stress verification failed"):
+        stress_generator.main(
+            [
+                "--output",
+                str(output),
+                "--database-url",
+                "postgresql+asyncpg://user:pass@db.example.com:5432/app",
+            ]
+        )
+
+    assert not output.exists()
+    assert verify_calls
+    assert all(path != output for path in verify_calls)
 
 
 @pytest.mark.parametrize(
@@ -356,6 +425,8 @@ def test_main_self_verifies_generated_artifact(
         "scripts/load_test_api.py",
         "docs/ops/evidence/enforcement_stress_artifact_TEMPLATE.json",
         "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
+        "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
+        "docs/ops/evidence/pricing_benchmark_register_2026-02-27.json",
     ],
 )
 def test_main_rejects_protected_output_collisions(
@@ -403,6 +474,37 @@ def test_main_rejects_relative_protected_output_from_outside_repo(
             [
                 "--output",
                 "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
+                "--database-url",
+                "postgresql+asyncpg://user:pass@db.example.com:5432/app",
+            ]
+        )
+
+
+def test_main_rejects_relative_output_that_escapes_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(stress_generator, "_repo_root", lambda: repo_root)
+
+    async def _unexpected_generate_evidence(args: Namespace) -> dict[str, object]:
+        del args
+        raise AssertionError("stress generation should not run for escaping output paths")
+
+    monkeypatch.setattr(stress_generator, "generate_evidence", _unexpected_generate_evidence)
+
+    with pytest.raises(
+        ValueError,
+        match="output must stay within repo root when relative",
+    ):
+        stress_generator.main(
+            [
+                "--output",
+                "../escape/enforcement_stress.json",
                 "--database-url",
                 "postgresql+asyncpg://user:pass@db.example.com:5432/app",
             ]

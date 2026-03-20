@@ -114,6 +114,11 @@ def test_generate_finance_committee_packet_assumptions_rejects_input_output_coll
         "scripts/verify_finance_telemetry_snapshot.py",
         "scripts/generate_finance_telemetry_snapshot.py",
         "docs/ops/evidence/finance_committee_packet_assumptions_TEMPLATE.json",
+        "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
+        "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json",
+        "docs/ops/evidence/pricing_benchmark_register_TEMPLATE.json",
+        "docs/ops/key-rotation-drill-2026-02-27.md",
+        "docs/ops/evidence/README.md",
     ],
 )
 def test_generate_finance_committee_packet_assumptions_rejects_protected_output_collisions(
@@ -197,6 +202,11 @@ def test_generate_finance_committee_packet_assumptions_rejects_relative_protecte
 ) -> None:
     repo_root = tmp_path / "repo"
     repo_root.mkdir(parents=True, exist_ok=True)
+    protected_output = (
+        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json"
+    )
+    protected_output.parent.mkdir(parents=True, exist_ok=True)
+    protected_output.write_text("{}", encoding="utf-8")
     telemetry = repo_root / "telemetry.json"
     telemetry.write_text(json.dumps(_telemetry_payload()), encoding="utf-8")
     outside_cwd = tmp_path / "outside"
@@ -243,3 +253,31 @@ def test_generate_finance_committee_packet_assumptions_resolves_relative_paths_f
     assert (
         repo_root / "artifacts" / "finance_committee_packet_assumptions.json"
     ).exists()
+
+
+def test_generate_finance_committee_packet_assumptions_rejects_relative_paths_that_escape_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    inputs_dir = repo_root / "inputs"
+    inputs_dir.mkdir(parents=True, exist_ok=True)
+    telemetry = inputs_dir / "telemetry.json"
+    telemetry.write_text(json.dumps(_telemetry_payload()), encoding="utf-8")
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(finance_assumptions_generator, "_repo_root", lambda: repo_root)
+
+    with pytest.raises(
+        ValueError,
+        match="telemetry_path must stay within repo root when relative",
+    ):
+        main(
+            [
+                "--output",
+                "artifacts/finance_committee_packet_assumptions.json",
+                "--telemetry-path",
+                "../escape/finance_telemetry_snapshot.json",
+            ]
+        )

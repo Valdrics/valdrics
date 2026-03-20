@@ -8,6 +8,7 @@ import math
 import os
 import subprocess  # nosec B404 - controlled local pytest invocation only
 import sys
+import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -173,7 +174,24 @@ def _protected_output_paths() -> set[Path]:
     protected = {
         Path(__file__).resolve(),
         (repo_root / "scripts" / "verify_key_rotation_drill_evidence.py").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json").resolve(),
         (repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md").resolve(),
+        (repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json").resolve(),
+        (repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json").resolve(),
     }
     for check in _all_drill_checks():
         selector_path = str(check.selector).split("::", 1)[0].strip()
@@ -188,6 +206,10 @@ def _resolve_output_path(value: str) -> Path:
         output_path = raw.resolve()
     else:
         output_path = (_repo_root() / raw).resolve()
+        try:
+            output_path.relative_to(_repo_root())
+        except ValueError as exc:
+            raise ValueError("output must stay within repo root when relative") from exc
     if output_path.exists() and not output_path.is_file():
         raise ValueError(f"output must be a file path: {output_path.as_posix()}")
     if output_path in _protected_output_paths():
@@ -366,16 +388,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     failed = [key for key, passed in field_results.items() if not passed]
     overall_passed = not failed
-
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        _build_markdown(
-            field_results=field_results,
-            selector_results=selector_results,
-            _selector_logs=selector_logs,
-            overall_passed=overall_passed,
-        ),
-        encoding="utf-8",
+    artifact_text = _build_markdown(
+        field_results=field_results,
+        selector_results=selector_results,
+        _selector_logs=selector_logs,
+        overall_passed=overall_passed,
     )
 
     if failed:
@@ -383,8 +400,20 @@ def main(argv: list[str] | None = None) -> int:
             f"{selector}: {selector_logs.get(selector, '')}"
             for selector in sorted(selector_logs)
         )
-        print(f"Generated key-rotation drill evidence: {output_path}")
         if bool(args.allow_check_failures):
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=output_path.parent,
+                prefix=f".{output_path.stem}.",
+                suffix=f"{output_path.suffix}.tmp",
+                delete=False,
+            ) as handle:
+                temp_path = Path(handle.name)
+                handle.write(artifact_text)
+            temp_path.replace(output_path)
+            print(f"Generated key-rotation drill evidence: {output_path}")
             print(
                 "Key-rotation drill evidence captured failing selectors: "
                 + ", ".join(sorted(failed))
@@ -396,10 +425,26 @@ def main(argv: list[str] | None = None) -> int:
             + f"\n{details}"
         )
 
-    verify_key_rotation_drill_evidence(
-        drill_path=output_path,
-        max_drill_age_days=max_drill_age_days,
-    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=output_path.parent,
+        prefix=f".{output_path.stem}.",
+        suffix=f"{output_path.suffix}.tmp",
+        delete=False,
+    ) as handle:
+        temp_path = Path(handle.name)
+        handle.write(artifact_text)
+    try:
+        verify_key_rotation_drill_evidence(
+            drill_path=temp_path,
+            max_drill_age_days=max_drill_age_days,
+        )
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+    temp_path.replace(output_path)
     print(f"Generated key-rotation drill evidence: {output_path}")
     return 0
 
