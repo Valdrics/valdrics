@@ -1,6 +1,38 @@
 .public-site-shell {
+	--public-shell-bg: linear-gradient(
+		180deg,
+		rgb(246 249 251) 0%,
+		rgb(246 249 251) 18rem,
+		rgb(247 250 252) 100%
+	);
+	--public-header-border: rgb(15 23 42 / 0.08);
+	--public-header-bg: rgb(250 252 253 / 0.9);
+	--public-header-shadow: 0 16px 36px rgb(15 23 42 / 0.08);
+	--public-nav-link-color: #3d5368;
+	--public-nav-link-hover: var(--color-brand-600);
+	--public-dropdown-border: rgb(8 126 164 / 0.12);
+	--public-dropdown-bg: rgb(255 255 255 / 0.94);
+	--public-dropdown-shadow: 0 18px 40px rgb(15 23 42 / 0.12);
+	--public-dropdown-item-color: #385166;
+	--public-dropdown-item-hover-bg: rgb(8 126 164 / 0.08);
+	--public-dropdown-item-hover-color: var(--color-brand-600);
+	--public-menu-toggle-color: #3d5368;
+	--public-menu-toggle-border: rgb(8 126 164 / 0.12);
+	--public-menu-toggle-bg: rgb(255 255 255 / 0.88);
+	--public-menu-toggle-shadow: 0 10px 22px rgb(15 23 42 / 0.08);
+	--public-menu-toggle-hover-bg: rgb(255 255 255 / 0.96);
+	--public-menu-toggle-hover-color: var(--color-brand-600);
+	--public-secondary-bg: rgb(255 255 255 / 0.74);
+	--public-secondary-color: #173041;
+	--public-secondary-border: rgb(8 126 164 / 0.14);
+	--public-secondary-hover-bg: rgb(255 255 255);
+	--public-secondary-hover-border: rgb(8 126 164 / 0.24);
 	min-height: 100vh;
-	background:
+	background: var(--public-shell-bg);
+}
+
+.public-site-shell[data-public-tone='landing'] {
+	--public-shell-bg:
 		radial-gradient(820px 260px at 18% 0%, rgb(34 211 238 / 0.1), transparent 58%),
 		radial-gradient(720px 280px at 85% 4%, rgb(16 185 129 / 0.08), transparent 52%),
 		linear-gradient(
@@ -10,16 +42,43 @@
 			rgb(246 249 251) 18rem,
 			rgb(247 250 252) 100%
 		);
+	--public-header-border: rgb(255 255 255 / 0.08);
+	--public-header-bg:
+		linear-gradient(180deg, rgb(7 17 24 / 0.88), rgb(7 17 24 / 0.74)),
+		radial-gradient(420px 140px at 14% 0%, rgb(34 211 238 / 0.08), transparent 70%);
+	--public-header-shadow: 0 18px 42px rgb(2 8 14 / 0.18);
+	--public-nav-link-color: var(--color-ink-300);
+	--public-nav-link-hover: var(--color-ink-50);
+	--public-dropdown-border: rgb(255 255 255 / 0.08);
+	--public-dropdown-bg:
+		linear-gradient(180deg, rgb(9 18 27 / 0.98), rgb(8 16 24 / 0.96)),
+		radial-gradient(360px 120px at 18% 0%, rgb(34 211 238 / 0.12), transparent 72%);
+	--public-dropdown-shadow: 0 24px 48px rgb(2 8 14 / 0.28);
+	--public-dropdown-item-color: var(--color-ink-200);
+	--public-dropdown-item-hover-bg: rgb(34 211 238 / 0.12);
+	--public-dropdown-item-hover-color: var(--color-ink-50);
+	--public-menu-toggle-color: var(--color-ink-100);
+	--public-menu-toggle-border: rgb(255 255 255 / 0.12);
+	--public-menu-toggle-bg: rgb(255 255 255 / 0.04);
+	--public-menu-toggle-shadow: 0 12px 24px rgb(2 8 14 / 0.22);
+	--public-menu-toggle-hover-bg: rgb(255 255 255 / 0.08);
+	--public-menu-toggle-hover-color: var(--color-ink-50);
+	--public-secondary-bg: rgb(255 255 255 / 0.05);
+	--public-secondary-color: var(--color-ink-50);
+	--public-secondary-border: rgb(255 255 255 / 0.14);
+	--public-secondary-hover-bg: rgb(255 255 255 / 0.1);
+	--public-secondary-hover-border: rgb(34 211 238 / 0.22);
 }
 
 .public-site-header {
 	position: sticky;
 	top: 0;
 	z-index: 50;
-	border-bottom: 1px solid rgb(15 23 42 / 0.08);
-	background: rgb(250 252 253 / 0.9);
-	backdrop-filter: blur(14px);
-	-webkit-backdrop-filter: blur(14px);
+	border-bottom: 1px solid var(--public-header-border);
+	background: var(--public-header-bg);
+	backdrop-filter: blur(18px);
+	-webkit-backdrop-filter: blur(18px);
+	box-shadow: var(--public-header-shadow);
 }
 
 .public-site-main {
@@ -161,12 +220,14 @@
 	align-items: center;
 	min-height: 2.25rem;
 	padding: 0.2rem 0;
-	color: #3d5368;
-	transition: color var(--duration-fast) var(--ease-out);
+	color: var(--public-nav-link-color);
+	transition:
+		color var(--duration-fast) var(--ease-out),
+		opacity var(--duration-fast) var(--ease-out);
 }
 
 .public-nav-link:hover {
-	color: var(--color-brand-600);
+	color: var(--public-nav-link-hover);
 }
 
 .public-nav-dropdown {
@@ -177,12 +238,12 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 0.25rem;
-	color: #3d5368;
+	color: var(--public-nav-link-color);
 	transition: color var(--duration-fast) var(--ease-out);
 }
 
 .public-nav-dropdown-trigger:hover {
-	color: var(--color-brand-600);
+	color: var(--public-nav-link-hover);
 }
 
 .public-nav-dropdown-trigger svg {
@@ -197,9 +258,9 @@
 	min-width: 12rem;
 	padding: 0.45rem;
 	border-radius: 0.75rem;
-	border: 1px solid rgb(8 126 164 / 0.12);
-	background: rgb(255 255 255 / 0.94);
-	box-shadow: 0 18px 40px rgb(15 23 42 / 0.12);
+	border: 1px solid var(--public-dropdown-border);
+	background: var(--public-dropdown-bg);
+	box-shadow: var(--public-dropdown-shadow);
 	backdrop-filter: blur(10px);
 	-webkit-backdrop-filter: blur(10px);
 }
@@ -208,15 +269,15 @@
 	display: block;
 	padding: 0.5rem 0.6rem;
 	border-radius: 0.45rem;
-	color: #385166;
+	color: var(--public-dropdown-item-color);
 	transition:
 		background-color var(--duration-fast) var(--ease-out),
 		color var(--duration-fast) var(--ease-out);
 }
 
 .public-nav-dropdown-item:hover {
-	background: rgb(8 126 164 / 0.08);
-	color: var(--color-brand-600);
+	background: var(--public-dropdown-item-hover-bg);
+	color: var(--public-dropdown-item-hover-color);
 }
 
 .public-nav-dropdown-item:focus-visible,
@@ -244,15 +305,15 @@
 	display: inline-flex;
 	align-items: center;
 	gap: 0.45rem;
-	color: #3d5368;
-	border: 1px solid rgb(8 126 164 / 0.12);
-	background: rgb(255 255 255 / 0.88);
-	box-shadow: 0 10px 22px rgb(15 23 42 / 0.08);
+	color: var(--public-menu-toggle-color);
+	border: 1px solid var(--public-menu-toggle-border);
+	background: var(--public-menu-toggle-bg);
+	box-shadow: var(--public-menu-toggle-shadow);
 }
 
 .public-nav-menu-toggle:hover:not(:disabled) {
-	background: rgb(255 255 255 / 0.96);
-	color: var(--color-brand-600);
+	background: var(--public-menu-toggle-hover-bg);
+	color: var(--public-menu-toggle-hover-color);
 }
 
 .public-nav-menu-label {
@@ -300,14 +361,14 @@
 }
 
 .public-nav-secondary .btn-secondary {
-	background: rgb(255 255 255 / 0.74);
-	color: #173041;
-	border: 1px solid rgb(8 126 164 / 0.14);
+	background: var(--public-secondary-bg);
+	color: var(--public-secondary-color);
+	border: 1px solid var(--public-secondary-border);
 }
 
 .public-nav-secondary .btn-secondary:hover:not(:disabled) {
-	background: rgb(255 255 255);
-	border-color: rgb(8 126 164 / 0.24);
+	background: var(--public-secondary-hover-bg);
+	border-color: var(--public-secondary-hover-border);
 }
 
 .public-nav-secondary .btn-primary,

@@ -12,7 +12,7 @@ const PUBLIC_ROUTES: readonly PublicRoute[] = [
 	{
 		path: '/',
 		mainHeading:
-			/turn cloud, saas, and software spend into governed action|move from spend visibility to owner-routed action|control cost-changing actions with approvals|protect margin with one governed system/i
+			/govern spend without slowing delivery|one governed path from spend signal to action|turn spend signals into owner-routed action|one governed path from variance to action|approve spend-changing actions with evidence|one controlled path from anomaly to execution|protect margin with governed spend decisions|one governed path from variance to board-ready proof/i
 	},
 	{ path: '/docs', mainHeading: /documentation/i },
 	{ path: '/docs/quick-start-workspace', mainHeading: /quick start a valdrics workspace/i },

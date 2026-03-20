@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { base } from '$app/paths';
+	import { page } from '$app/stores';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
 	import {
 		PUBLIC_CONTACT_CHANNELS,
@@ -45,9 +46,12 @@
 		closePublicResourcesMenu,
 		children
 	}: Props = $props();
+
+	const landingPath = `${base || ''}/`;
+	let publicTone = $derived($page.url.pathname === landingPath ? 'landing' : 'default');
 </script>
 
-<div class="public-site-shell">
+<div class="public-site-shell" data-public-tone={publicTone}>
 	<header class="public-site-header">
 		<nav class="container public-top-nav mx-auto flex items-center justify-between gap-4 px-6 py-4">
 			<a

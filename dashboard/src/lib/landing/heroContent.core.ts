@@ -10,31 +10,29 @@ export const HERO_ROLE_CONTEXT: Record<
 	}
 > = Object.freeze({
 	cto: {
-		controlTitle: 'Govern cloud, SaaS, and software spend without slowing delivery.',
-		metricsTitle: 'From dashboards and tickets to one governed spend action system.',
+		controlTitle: 'Govern spend without slowing delivery.',
+		metricsTitle: 'One governed path from spend signal to action.',
 		subtitle:
-			'Valdrics routes cost, usage, and policy signals to owners, approvals, workflow execution, and exportable proof across cloud and software.',
+			'Valdrics routes cloud, SaaS, and software spend signals to owners, approvals, workflow execution, and exportable proof.',
 		primaryIntent: 'engineering_control'
 	},
 	finops: {
-		controlTitle: 'Move from spend visibility to owner-routed action across cloud and software.',
-		metricsTitle: 'From spend reporting to one governed action path.',
+		controlTitle: 'Turn spend signals into owner-routed action.',
+		metricsTitle: 'One governed path from variance to action.',
 		subtitle:
-			'Valdrics connects anomalies, chargeback, remediation, and savings proof so finance and engineering work from one decision system.',
+			'Valdrics connects anomalies, chargeback, remediation, and savings proof so finance and engineering work from one governed decision path.',
 		primaryIntent: 'finops_governance'
 	},
 	security: {
-		controlTitle:
-			'Control cost-changing actions with approvals, workflow routing, and audit-ready proof.',
-		metricsTitle: 'From spend anomalies to controlled execution.',
+		controlTitle: 'Approve spend-changing actions with evidence.',
+		metricsTitle: 'One controlled path from anomaly to execution.',
 		subtitle:
 			'Valdrics keeps policy checks, approval lineage, and decision evidence attached before spend-changing actions move.',
 		primaryIntent: 'security_governance'
 	},
 	cfo: {
-		controlTitle:
-			'Protect margin with one governed system for cloud, SaaS, and software decisions.',
-		metricsTitle: 'From variance reporting to board-ready action and proof.',
+		controlTitle: 'Protect margin with governed spend decisions.',
+		metricsTitle: 'One governed path from variance to board-ready proof.',
 		subtitle:
 			'Valdrics ties spend movement to accountable owners, approvals, and measurable proof before variance turns into board-level noise.',
 		primaryIntent: 'executive_briefing'

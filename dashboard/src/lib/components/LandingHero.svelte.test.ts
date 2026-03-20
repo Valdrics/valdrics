@@ -56,7 +56,7 @@ describe('LandingHero', () => {
 			heroView.getByText(/detect waste\. route the owner\. approve the action\. keep the proof\./i)
 		).toBeTruthy();
 		expect(
-			heroView.getByText(/routes cost, usage, and policy signals to owners, approvals/i)
+			heroView.getByText(/routes cloud, saas, and software spend signals to owners, approvals/i)
 		).toBeTruthy();
 		const secondaryCta = heroView.getByRole('link', { name: /see pricing/i });
 		expect(secondaryCta).toBeTruthy();
