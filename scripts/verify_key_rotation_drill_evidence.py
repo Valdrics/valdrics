@@ -8,6 +8,11 @@ from pathlib import Path
 import re
 from typing import Any
 
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_repo_relative_path_from_root as _resolve_repo_relative_path_from_root,
+)
+
 DEFAULT_DRILL_PATH = "docs/ops/key-rotation-drill-2026-02-27.md"
 DEFAULT_MAX_DRILL_AGE_DAYS = 120.0
 
@@ -35,6 +40,21 @@ REQUIRED_SOURCE_FIELDS: tuple[str, ...] = tuple(
 )
 
 _FIELD_RE = re.compile(r"^- ([a-z0-9_]+):\s*(.+)\s*$")
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_drill_path(path: Path) -> Path:
+    resolved = _resolve_repo_relative_path_from_root(
+        _repo_root(),
+        path,
+        field_name="drill_path",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"Drill evidence path must be a file: {resolved}")
+    return resolved
 
 
 def _utcnow() -> datetime:
@@ -69,6 +89,8 @@ def _parse_iso_date(value: Any, *, field: str) -> date:
 def _load_raw(path: Path) -> str:
     if not path.exists():
         raise FileNotFoundError(f"Drill evidence file not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"Drill evidence path must be a file: {path}")
     return path.read_text(encoding="utf-8")
 
 
@@ -189,10 +211,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    return verify_key_rotation_drill_evidence(
-        drill_path=Path(args.drill_path),
-        max_drill_age_days=float(args.max_drill_age_days),
-    )
+    try:
+        return verify_key_rotation_drill_evidence(
+            drill_path=_resolve_drill_path(Path(args.drill_path)),
+            max_drill_age_days=float(args.max_drill_age_days),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[key-rotation-drill] failed: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

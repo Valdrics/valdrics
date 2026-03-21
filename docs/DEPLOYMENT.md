@@ -33,6 +33,14 @@ All deployment profiles must satisfy these checks:
 - immutable image or deployment versioning
 - any forecasting break-glass expiry must remain within the configured max break-glass window
 
+Machine-readable source of truth:
+
+- `scripts/managed_deployment_contract.py` defines the shared deployment/runtime key contract.
+- `.runtime/<environment>.report.json` is the authoritative runtime env blocker inventory.
+- `.runtime/<environment>.migrate.report.json` is the authoritative migration env blocker inventory.
+- `.runtime/deploy/<environment>/deployment.report.json` is the authoritative deployment artifact blocker inventory.
+- `docs/runbooks/production_env_checklist.md` is the operator runbook; the generated reports remain the canonical key-level contract.
+
 ## Profile A: Koyeb Managed Services
 
 Repository evidence:

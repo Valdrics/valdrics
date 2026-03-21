@@ -11,7 +11,17 @@ import sys
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.env_generation_common import render_env
+from scripts.env_generation_common import (
+    checked_in_evidence_paths as _checked_in_evidence_paths_shared,
+    promote_staged_file as _promote_staged_file,
+    protected_output_paths_from_root as _protected_output_paths_from_root,
+    render_env,
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root as _resolve_cli_path_from_root,
+    resolve_default_path_from_root as _resolve_default_path_from_root,
+    ensure_parent_dir as _ensure_parent_dir_shared,
+    stage_text_file as _stage_text_file,
+)
 
 DEFAULT_TEMPLATE_PATH = Path(".env.example")
 DEFAULT_OUTPUT_PATH = Path(".env.dev")
@@ -19,55 +29,39 @@ DEFAULT_SEED = "valdrics-local-dev-seed-v1"
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
 
 
 def _checked_in_evidence_paths(repo_root: Path) -> set[Path]:
-    evidence_dir = repo_root / "docs" / "ops" / "evidence"
-    if not evidence_dir.exists():
-        return set()
-    return {path.resolve() for path in evidence_dir.iterdir() if path.is_file()}
+    return _checked_in_evidence_paths_shared(repo_root)
 
 
 def _resolve_default_path(path: Path) -> Path:
-    return (_repo_root() / path).resolve()
+    return _resolve_default_path_from_root(_repo_root(), path)
 
 
 def _resolve_cli_path(path: Path, *, field_name: str) -> Path:
-    raw = Path(path).expanduser()
-    if raw.is_absolute():
-        return raw.resolve()
-    resolved = (_repo_root() / raw).resolve()
-    try:
-        resolved.relative_to(_repo_root())
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must stay within repo root when relative") from exc
-    return resolved
+    return _resolve_cli_path_from_root(_repo_root(), path, field_name=field_name)
 
 
 def _protected_output_paths() -> set[Path]:
-    repo_root = _repo_root()
-    return {
-        Path(__file__).resolve(),
-        repo_root / ".env.example",
-        repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json",
-        repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md",
-        *_checked_in_evidence_paths(repo_root),
-    }
+    return _protected_output_paths_from_root(
+        _repo_root(),
+        __file__,
+        ".env.example",
+        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/key-rotation-drill-2026-02-27.md",
+        "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
+        "docs/ops/evidence/README.md",
+    )
 
 
 def _ensure_output_parent_dir(output_path: Path) -> None:
-    current = output_path.parent
-    while True:
-        if current.exists():
-            if not current.is_dir():
-                raise ValueError(
-                    f"output_path parent must be a directory path: {current.as_posix()}"
-                )
-            return
-        if current == current.parent:
-            return
-        current = current.parent
+    _ensure_parent_dir_shared(output_path, field_name="output_path")
+
+
+def _stage_output_file(output_path: Path, rendered: str) -> Path:
+    return _stage_text_file(output_path, rendered)
 
 
 def _derive_digest(seed: str, key: str) -> bytes:
@@ -155,8 +149,12 @@ def generate_local_dev_env(
         template_path.read_text(encoding="utf-8").splitlines(),
         _build_overrides(seed),
     )
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(rendered, encoding="utf-8")
+    staged_output_path = _stage_output_file(output_path, rendered)
+    _promote_staged_file(
+        staged_output_path,
+        output_path,
+        cleanup_output_on_failure=True,
+    )
     return output_path
 
 

@@ -60,7 +60,7 @@ async def test_main_records_duration_and_enforces_max_duration(
     monkeypatch.setattr(
         run_disaster_recovery_drill,
         "_parse_args",
-        lambda: type(
+        lambda _argv=None: type(
             "Args",
             (),
             {
@@ -128,7 +128,7 @@ async def test_main_fails_when_duration_exceeds_objective(
     monkeypatch.setattr(
         run_disaster_recovery_drill,
         "_parse_args",
-        lambda: type(
+        lambda _argv=None: type(
             "Args",
             (),
             {
@@ -175,4 +175,88 @@ async def test_main_fails_when_duration_exceeds_objective(
     )
 
     with pytest.raises(SystemExit, match="exceeded rebuild-and-verify objective"):
+        await run_disaster_recovery_drill.main()
+
+
+@pytest.mark.asyncio
+async def test_main_resolves_relative_output_from_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    out_path = tmp_path / "dr.json"
+    monkeypatch.setattr(run_disaster_recovery_drill, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        run_disaster_recovery_drill,
+        "_parse_args",
+        lambda _argv=None: type(
+            "Args",
+            (),
+            {
+                "url": "http://127.0.0.1:8000",
+                "out": "dr.json",
+                "max_duration_seconds": 10,
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        run_disaster_recovery_drill,
+        "create_access_token",
+        lambda *_args, **_kwargs: "token",
+    )
+
+    class Client:
+        def __init__(self, *args, **kwargs):
+            del args, kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def request(self, method, url, headers=None, json=None):
+            del method, headers, json
+
+            class Response:
+                status_code = 200
+
+                @staticmethod
+                def json():
+                    return {"url": url, "ok": True}
+
+            return Response()
+
+    monkeypatch.setattr(run_disaster_recovery_drill.httpx, "AsyncClient", Client)
+
+    await run_disaster_recovery_drill.main()
+
+    captured = json.loads(capsys.readouterr().out)
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["duration_seconds"] == captured["duration_seconds"]
+
+
+@pytest.mark.asyncio
+async def test_main_rejects_directory_output_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    monkeypatch.setattr(
+        run_disaster_recovery_drill,
+        "_parse_args",
+        lambda _argv=None: type(
+            "Args",
+            (),
+            {
+                "url": "http://127.0.0.1:8000",
+                "out": str(output_dir),
+                "max_duration_seconds": 10,
+            },
+        )(),
+    )
+
+    with pytest.raises(SystemExit, match="out must be a file path"):
         await run_disaster_recovery_drill.main()

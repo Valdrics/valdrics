@@ -16,7 +16,7 @@ LOAD_TEST_PROFILES: tuple[str, ...] = (
 )
 
 
-def parse_load_test_args() -> argparse.Namespace:
+def parse_load_test_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a small API load test.")
     parser.add_argument(
         "--url", dest="url", default="http://127.0.0.1:8000", help="Base URL"
@@ -148,4 +148,4 @@ def parse_load_test_args() -> argparse.Namespace:
         action="store_true",
         help="Publish the load test evidence to the tenant audit log (Pro+ admin only).",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)

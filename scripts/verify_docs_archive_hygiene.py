@@ -5,11 +5,15 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 import re
 from typing import Iterable
 
 
-DEFAULT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ROOT = _repo_root_for(__file__)
 DATED_DOC_PATTERN = re.compile(r"(?:^|[_-])\d{4}-\d{2}-\d{2}(?:[_-]|$)")
 TEXT_EXTENSIONS = {
     ".md",
@@ -63,6 +67,21 @@ PROHIBITED_ACTIVE_DOCS = {
         "Historical audit snapshots belong under docs/archive/reviews/."
     ),
 }
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_root(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="root")
+
+
+def _validate_root(root: Path) -> None:
+    if not root.exists():
+        raise ValueError(f"root does not exist: {root}")
+    if not root.is_dir():
+        raise ValueError(f"root must be a directory: {root}")
 
 
 def _iter_text_files(root: Path) -> Iterable[Path]:
@@ -130,6 +149,7 @@ def _repo_references(
 
 
 def verify_docs_archive_hygiene(*, root: Path) -> list[str]:
+    _validate_root(root)
     errors: list[str] = []
 
     for path_str, replacement in sorted(PROHIBITED_ACTIVE_DOCS.items()):
@@ -169,7 +189,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    errors = verify_docs_archive_hygiene(root=args.root.resolve())
+    try:
+        errors = verify_docs_archive_hygiene(root=_resolve_root(args.root))
+    except ValueError as exc:
+        print(f"[docs-archive-hygiene] failed: {exc}")
+        return 2
     if errors:
         print("Documentation archive hygiene violations detected:")
         for error in errors:

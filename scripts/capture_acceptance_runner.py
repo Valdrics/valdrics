@@ -12,6 +12,7 @@ from urllib.parse import urlencode, urljoin
 import httpx
 
 from app.shared.core.evidence_capture import redact_secrets
+from scripts.env_generation_common import promote_staged_file, stage_json_file, stage_text_file
 
 EVIDENCE_CAPTURE_RECOVERABLE_EXCEPTIONS = (
     httpx.HTTPError,
@@ -54,12 +55,13 @@ def safe_mkdir(path: Path) -> None:
 
 
 def write_text(path: Path, content: str) -> None:
-    safe_mkdir(path.parent)
-    path.write_text(content, encoding="utf-8")
+    staged_path = stage_text_file(path, content)
+    promote_staged_file(staged_path, path)
 
 
 def write_json(path: Path, payload: Any) -> None:
-    write_text(path, json.dumps(payload, indent=2, sort_keys=True))
+    staged_path = stage_json_file(path, payload, indent=2, sort_keys=True)
+    promote_staged_file(staged_path, path)
 
 
 def format_exception(exc: Exception) -> str:

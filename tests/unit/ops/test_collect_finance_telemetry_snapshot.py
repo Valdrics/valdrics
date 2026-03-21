@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import json
+import os
 from datetime import datetime, timezone
+from pathlib import Path
 
+import pytest
+
+import scripts.collect_finance_telemetry_snapshot as telemetry_collector
 from scripts.collect_finance_telemetry_snapshot import (
     _build_snapshot_payload,
     _percentile,
+    main,
 )
 
 
@@ -51,3 +58,85 @@ def test_build_snapshot_payload_populates_tier_revenue_and_gates() -> None:
     assert revenues["free"] == 0.0
     assert revenues["starter"] > 0.0
     assert revenues["growth"] > revenues["starter"]
+
+
+def test_main_resolves_relative_output_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = Path(telemetry_collector.__file__).resolve().parents[1]
+    output_path = repo_root / "tmp-finance-telemetry.json"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        telemetry_collector,
+        "_default_window",
+        lambda: (datetime(2026, 2, 1, tzinfo=timezone.utc).date(), datetime(2026, 2, 28, tzinfo=timezone.utc).date()),
+    )
+    async def _fake_collect_snapshot(**kwargs):
+        del kwargs
+        return {
+            "captured_at": "2026-02-28T00:00:00Z",
+            "window": {"start": "2026-02-01T00:00:00Z", "end": "2026-03-01T00:00:00Z", "label": "2026-02"},
+        }
+
+    monkeypatch.setattr(telemetry_collector, "collect_snapshot", _fake_collect_snapshot)
+    try:
+        assert main(["--output", "tmp-finance-telemetry.json"]) == 0
+        assert json.loads(output_path.read_text(encoding="utf-8"))["captured_at"] == "2026-02-28T00:00:00Z"
+    finally:
+        output_path.unlink(missing_ok=True)
+
+
+def test_main_rejects_relative_output_repo_escape() -> None:
+    assert main(["--output", os.path.join("..", "outside.json")]) == 2
+
+
+def test_main_rejects_directory_output_path(tmp_path: Path) -> None:
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    with pytest.raises(ValueError, match="output must be a file path"):
+        telemetry_collector._resolve_output_path(output_dir)
+
+
+def test_main_rejects_blocked_output_parent(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    blocked_parent = tmp_path / "blocked"
+    blocked_parent.write_text("not-a-dir", encoding="utf-8")
+    async def _fake_collect_snapshot(**kwargs):
+        del kwargs
+        return {"captured_at": "2026-02-28T00:00:00Z"}
+
+    monkeypatch.setattr(telemetry_collector, "collect_snapshot", _fake_collect_snapshot)
+    monkeypatch.setattr(
+        telemetry_collector,
+        "_default_window",
+        lambda: (datetime(2026, 2, 1, tzinfo=timezone.utc).date(), datetime(2026, 2, 28, tzinfo=timezone.utc).date()),
+    )
+
+    assert main(["--output", str(blocked_parent / "out.json")]) == 2
+
+
+def test_main_returns_two_when_output_write_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fake_collect_snapshot(**kwargs):
+        del kwargs
+        return {"captured_at": "2026-02-28T00:00:00Z"}
+
+    monkeypatch.setattr(telemetry_collector, "collect_snapshot", _fake_collect_snapshot)
+    monkeypatch.setattr(
+        telemetry_collector,
+        "_default_window",
+        lambda: (
+            datetime(2026, 2, 1, tzinfo=timezone.utc).date(),
+            datetime(2026, 2, 28, tzinfo=timezone.utc).date(),
+        ),
+    )
+    monkeypatch.setattr(
+        telemetry_collector,
+        "stage_json_file",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    assert main(["--output", str(tmp_path / "out.json")]) == 2

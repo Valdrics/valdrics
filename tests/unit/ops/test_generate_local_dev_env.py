@@ -236,6 +236,34 @@ def test_generate_local_dev_env_rejects_blocked_output_parent(
         )
 
 
+def test_generate_local_dev_env_does_not_leave_output_when_promotion_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    template = tmp_path / ".env.template"
+    output = tmp_path / ".env.dev"
+    path_type = type(output)
+    original_replace = path_type.replace
+    _write(template, "CSRF_SECRET_KEY=\nENCRYPTION_KEY=\n")
+
+    def _failing_replace(self: Path, target: Path) -> Path:
+        if self.parent == output.parent and Path(target) == output:
+            raise OSError("simulated promotion failure")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(path_type, "replace", _failing_replace)
+
+    with pytest.raises(OSError, match="simulated promotion failure"):
+        generate_local_dev_env(
+            template_path=template,
+            output_path=output,
+            seed="seed-10",
+        )
+
+    assert not output.exists()
+    assert not list(output.parent.glob(f".{output.stem}.*{output.suffix}.tmp"))
+
+
 def test_main_resolves_default_paths_from_repo_root(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

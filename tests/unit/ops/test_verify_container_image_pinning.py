@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scripts.verify_container_image_pinning import (
     main,
     verify_container_image_pinning,
@@ -154,3 +156,27 @@ def test_verify_container_image_pinning_flags_unresolved_required_variable(
 def test_main_returns_failure_for_missing_default_compose_files(tmp_path: Path) -> None:
     exit_code = main(["--repo-root", str(tmp_path)])
     assert exit_code == 1
+
+
+def test_verify_container_image_pinning_rejects_non_directory_repo_root(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo-root.txt"
+    repo_root.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="repo_root must be a directory"):
+        verify_container_image_pinning(repo_root=repo_root)
+
+
+def test_main_rejects_relative_compose_path_escape(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+
+    assert main(["--repo-root", str(repo_root), "--compose-path", "../escape/docker-compose.yml"]) == 2
+
+
+def test_main_rejects_directory_compose_path(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    compose_dir = repo_root / "docker-compose.yml"
+    compose_dir.mkdir()
+
+    assert main(["--repo-root", str(repo_root), "--compose-path", "docker-compose.yml"]) == 2

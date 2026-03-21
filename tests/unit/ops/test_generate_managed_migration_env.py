@@ -281,6 +281,7 @@ def test_main_rejects_relative_paths_that_escape_repo_root(
         ("report_path", "scripts/validate_migration_env.py"),
         ("output_path", "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json"),
         ("report_path", "docs/ops/feature_enforceability_matrix_2026-02-27.json"),
+        ("output_path", "docs/ops/evidence/README.md"),
     ],
 )
 def test_generate_managed_migration_env_rejects_protected_output_targets(

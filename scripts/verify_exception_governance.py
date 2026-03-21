@@ -8,6 +8,11 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
+import tempfile
 from typing import Iterable
 
 
@@ -15,12 +20,27 @@ DEFAULT_ROOTS: tuple[Path, ...] = (Path("app"), Path("scripts"))
 DEFAULT_BASELINE_PATH = Path("docs/ops/evidence/exception_governance_baseline.json")
 
 
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
 def _normalize_site_path(path: Path) -> str:
     resolved = path.resolve()
     try:
-        return resolved.relative_to(Path.cwd().resolve()).as_posix()
+        return resolved.relative_to(_repo_root()).as_posix()
     except ValueError:
         return resolved.as_posix()
+
+
+def _resolve_root_path(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="root")
+
+
+def _resolve_baseline_path(path: Path) -> Path:
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name="baseline_path")
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"baseline_path must be a file path: {resolved.as_posix()}")
+    return resolved
 
 
 @dataclass(frozen=True)
@@ -92,19 +112,54 @@ def collect_exception_sites(*, roots: tuple[Path, ...]) -> tuple[ExceptionSite, 
     return tuple(sorted(sites, key=lambda item: (item.path, item.line, item.kind)))
 
 
+def _ensure_baseline_parent_dir(baseline_path: Path) -> None:
+    current = baseline_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"baseline_path parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
 def write_baseline(
     *,
     baseline_path: Path,
     roots: tuple[Path, ...],
     sites: tuple[ExceptionSite, ...],
 ) -> None:
-    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    if baseline_path.exists() and not baseline_path.is_file():
+        raise ValueError(f"baseline_path must be a file path: {baseline_path.as_posix()}")
+    _ensure_baseline_parent_dir(baseline_path)
     payload = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
         "roots": [root.as_posix() for root in roots],
         "sites": [asdict(site) for site in sites],
     }
-    baseline_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    suffix = baseline_path.suffix or ".json"
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=baseline_path.parent,
+        prefix=f".{baseline_path.stem}.",
+        suffix=f"{suffix}.tmp",
+        delete=False,
+    ) as handle:
+        staged_path = Path(handle.name)
+    staged_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    promotion_completed = False
+    try:
+        staged_path.replace(baseline_path)
+        promotion_completed = True
+    finally:
+        if not promotion_completed:
+            staged_path.unlink(missing_ok=True)
+            baseline_path.unlink(missing_ok=True)
 
 
 def _load_baseline(baseline_path: Path) -> tuple[ExceptionSite, ...]:
@@ -182,7 +237,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    roots = tuple(Path(item) for item in args.root) if args.root else DEFAULT_ROOTS
+    try:
+        roots = (
+            tuple(_resolve_root_path(Path(item)) for item in args.root)
+            if args.root
+            else tuple(_resolve_root_path(path) for path in DEFAULT_ROOTS)
+        )
+        baseline_path = _resolve_baseline_path(args.baseline_path)
+    except ValueError as exc:
+        print(f"[exception-governance] failed: {exc}")
+        return 2
     missing = [root for root in roots if not root.exists()]
     if missing and not args.allow_missing_root:
         print("Missing scan roots: " + ", ".join(path.as_posix() for path in missing))
@@ -193,17 +257,21 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.write_baseline:
         write_baseline(
-            baseline_path=args.baseline_path,
+            baseline_path=baseline_path,
             roots=available_roots,
             sites=current,
         )
         print(
-            f"Exception baseline refreshed: {args.baseline_path.as_posix()} "
+            f"Exception baseline refreshed: {baseline_path.as_posix()} "
             f"(sites={len(current)})"
         )
         return 0
 
-    baseline = _load_baseline(args.baseline_path)
+    try:
+        baseline = _load_baseline(baseline_path)
+    except FileNotFoundError as exc:
+        print(f"[exception-governance] failed: {exc}")
+        return 2
     added, removed, bare = verify_against_baseline(current=current, baseline=baseline)
     if bare:
         print("Bare except handlers are forbidden:")

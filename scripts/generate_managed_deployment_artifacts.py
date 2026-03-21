@@ -19,41 +19,27 @@ import yaml
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.env_generation_common import parse_env_file
-
-
+from scripts.env_generation_common import (
+    parse_env_file,
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root as _resolve_cli_path_from_root,
+    resolve_default_path_from_root as _resolve_default_path_from_root,
+)
+from scripts.managed_deployment_contract import (
+    KOYEB_DASHBOARD_PUBLIC_ENV_KEYS,
+    LLM_PROVIDER_SECRET_NAME,
+    RUNTIME_BLOCKER_KEYS,
+    SUPPORTED_ENVIRONMENTS,
+    TERRAFORM_BASE_REQUIRED_INPUTS,
+    contains_placeholder as _contains_placeholder,
+    selected_llm_provider as _selected_llm_provider_shared,
+    selected_llm_provider_env_key as _selected_llm_provider_env_key,
+)
 DEFAULT_OUTPUT_ROOT = Path(".runtime/deploy")
-PLACEHOLDER_PREFIX = "REPLACE_WITH_"
-SUPPORTED_ENVIRONMENTS = ("staging", "production")
 DEFAULT_KOYEB_IMAGE_REGISTRY = "ghcr.io/valdrics"
 DEFAULT_RELEASE_TAG = "REPLACE_WITH_RELEASE_TAG"
 DEFAULT_API_IMAGE_DIGEST = "REPLACE_WITH_API_IMAGE_DIGEST"
 DEFAULT_DASHBOARD_IMAGE_DIGEST = "REPLACE_WITH_DASHBOARD_IMAGE_DIGEST"
-LLM_PROVIDER_ENV_KEY = {
-    "groq": "GROQ_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "claude": "CLAUDE_API_KEY",
-    "google": "GOOGLE_API_KEY",
-}
-LLM_PROVIDER_SECRET_NAME = {
-    "groq": "valdrics-groq-key",
-    "openai": "valdrics-openai-key",
-    "claude": "valdrics-claude-key",
-    "google": "valdrics-google-key",
-}
-RUNTIME_BLOCKER_KEYS = (
-    "API_URL",
-    "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN",
-    "DATABASE_URL",
-    "FRONTEND_URL",
-    "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "PAYSTACK_PUBLIC_KEY",
-    "PAYSTACK_SECRET_KEY",
-    "REDIS_URL",
-    "SENTRY_DSN",
-    "SUPABASE_JWT_SECRET",
-    "TRUSTED_PROXY_CIDRS",
-)
 KOYEB_SHARED_SECRET_NAMES = {
     "DATABASE_URL": "valdrics-database-url",
     "REDIS_URL": "valdrics-redis-url",
@@ -108,7 +94,6 @@ HELM_SECRET_EXCLUDED_KEYS = frozenset(HELM_INLINE_ENV_KEYS) | {
     "SUPABASE_URL",
     "TESTING",
 }
-TERRAFORM_BASE_REQUIRED_INPUTS = ("external_id", "valdrics_account_id")
 FORECASTER_BREAK_GLASS_KEYS = (
     "FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK",
     "FORECASTER_BREAK_GLASS_REASON",
@@ -119,11 +104,6 @@ OUTBOUND_TLS_BREAK_GLASS_KEYS = (
     "OUTBOUND_TLS_BREAK_GLASS_REASON",
     "OUTBOUND_TLS_BREAK_GLASS_EXPIRES_AT",
 )
-KOYEB_DASHBOARD_PUBLIC_ENV_KEYS = (
-    "PUBLIC_API_URL",
-    "PUBLIC_SUPABASE_URL",
-    "PUBLIC_SUPABASE_ANON_KEY",
-)
 
 
 def _string_value(values: dict[str, str], key: str, default: str = "") -> str:
@@ -131,41 +111,29 @@ def _string_value(values: dict[str, str], key: str, default: str = "") -> str:
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
 
 
 def _resolve_default_path(path: Path) -> Path:
-    return (_repo_root() / path).resolve()
+    return _resolve_default_path_from_root(_repo_root(), path)
 
 
 def _resolve_cli_path(path: Path, *, field_name: str) -> Path:
-    raw = Path(path).expanduser()
-    if raw.is_absolute():
-        return raw.resolve()
-    resolved = (_repo_root() / raw).resolve()
-    try:
-        resolved.relative_to(_repo_root())
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must stay within repo root when relative") from exc
-    return resolved
+    return _resolve_cli_path_from_root(_repo_root(), path, field_name=field_name)
+
+
+def _protected_output_roots(repo_root: Path) -> tuple[Path, ...]:
+    return (
+        (repo_root / "app").resolve(),
+        (repo_root / "docs").resolve(),
+        (repo_root / "scripts").resolve(),
+        (repo_root / "tests").resolve(),
+        (repo_root / ".github").resolve(),
+    )
 
 
 def _selected_llm_provider(values: dict[str, str]) -> str:
-    normalized = _string_value(values, "LLM_PROVIDER", "groq").strip().lower()
-    if normalized not in LLM_PROVIDER_ENV_KEY:
-        raise ValueError(
-            "LLM_PROVIDER must be one of: "
-            + ", ".join(sorted(LLM_PROVIDER_ENV_KEY))
-        )
-    return normalized
-
-
-def _selected_llm_provider_env_key(values: dict[str, str]) -> str:
-    return LLM_PROVIDER_ENV_KEY[_selected_llm_provider(values)]
-
-
-def _contains_placeholder(value: str) -> bool:
-    return PLACEHOLDER_PREFIX in str(value or "")
+    return _selected_llm_provider_shared(values)
 
 
 def _is_truthy(value: str) -> bool:
@@ -777,6 +745,15 @@ def generate_managed_deployment_artifacts(
     if output_dir.exists() and not output_dir.is_dir():
         raise ValueError(f"output_dir must be a directory path: {output_dir.as_posix()}")
     _ensure_output_dir_parent(output_dir)
+    output_dir_resolved = output_dir.resolve()
+    for protected_root in _protected_output_roots(_repo_root()):
+        try:
+            output_dir_resolved.relative_to(protected_root)
+        except ValueError:
+            continue
+        raise ValueError(
+            "output_dir must not point inside source, test, workflow, or checked-in documentation roots"
+        )
     runtime_env_resolved = runtime_env_file.resolve()
     for artifact_path in _artifact_output_paths(output_dir):
         if artifact_path.resolve() == runtime_env_resolved:
@@ -837,7 +814,7 @@ def generate_managed_deployment_artifacts(
         "runtime_validation_blockers": runtime_blockers,
         "koyeb_secret_names": sorted(koyeb_secret_payload),
         "koyeb_secret_value_blockers": _placeholder_keys(koyeb_secret_payload),
-        "koyeb_dashboard_public_env_keys": sorted(koyeb_dashboard_env),
+        "koyeb_dashboard_public_env_keys": list(KOYEB_DASHBOARD_PUBLIC_ENV_KEYS),
         "koyeb_dashboard_public_env_blockers": koyeb_dashboard_env_blockers,
         "koyeb_release_value_blockers": koyeb_release_value_blockers,
         "helm_runtime_secret_keys": sorted(helm_secret_payload),
@@ -891,6 +868,7 @@ def generate_managed_deployment_artifacts(
         tempfile.mkdtemp(prefix=f".{output_dir.name}-", dir=output_dir.parent)
     )
     promoted_paths: list[Path] = []
+    promotion_completed = False
     try:
         staged_paths: list[tuple[Path, Path]] = []
         for final_path in _artifact_output_paths(output_dir):
@@ -905,11 +883,11 @@ def generate_managed_deployment_artifacts(
         for staged_path, final_path in staged_paths:
             staged_path.replace(final_path)
             promoted_paths.append(final_path)
-    except Exception:
-        for final_path in promoted_paths:
-            final_path.unlink(missing_ok=True)
-        raise
+        promotion_completed = True
     finally:
+        if not promotion_completed:
+            for final_path in promoted_paths:
+                final_path.unlink(missing_ok=True)
         shutil.rmtree(staging_dir, ignore_errors=True)
     return report
 

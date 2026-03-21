@@ -7,6 +7,10 @@ import argparse
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 PLACEHOLDER_TOKEN_RE = re.compile(
     r"\b(todo|tbd|placeholder|replace(?:_|-)?me|changeme)\b",
@@ -85,6 +89,14 @@ REQUIRED_DOCUMENTS: tuple[DocumentRequirement, ...] = (
 )
 
 
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_docs_root(value: str) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), Path(str(value)), field_name="docs_root")
+
+
 def verify_architecture_docs(docs_root: Path) -> tuple[str, ...]:
     errors: list[str] = []
     for requirement in REQUIRED_DOCUMENTS:
@@ -110,7 +122,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--docs-root",
         default=str(
-            Path(__file__).resolve().parents[1] / "docs" / "architecture"
+            _repo_root() / "docs" / "architecture"
         ),
         help="Path to architecture docs directory.",
     )
@@ -119,7 +131,19 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    docs_root = Path(args.docs_root).resolve()
+    docs_root = _resolve_docs_root(str(args.docs_root))
+    if not docs_root.exists():
+        print(
+            "[verify_architecture_decision_records] "
+            f"docs_root not found: {docs_root}"
+        )
+        return 2
+    if not docs_root.is_dir():
+        print(
+            "[verify_architecture_decision_records] "
+            f"docs_root must be a directory: {docs_root}"
+        )
+        return 2
     errors = verify_architecture_docs(docs_root)
     if errors:
         print(
@@ -138,4 +162,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

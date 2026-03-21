@@ -6,6 +6,10 @@ import argparse
 import shutil
 import subprocess  # nosec B404 - controlled local git invocation only
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 FORBIDDEN_PERSONAL_EMAIL_DOMAINS: frozenset[str] = frozenset(
     {
@@ -26,6 +30,21 @@ REQUIRED_POSITIVE_INTEGER_KEYS: tuple[str, ...] = (
 )
 
 DEFAULT_TEMPLATE_PATH = Path(".env.example")
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_repo_root(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="repo_root")
+
+
+def _resolve_template_path(*, repo_root: Path, template_path: Path) -> Path:
+    resolved = resolve_cli_path_from_root(repo_root.resolve(), template_path, field_name="template_path")
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"Template path must be a file: {resolved}")
+    return resolved
 
 
 def _strip_wrapping_quotes(value: str) -> str:
@@ -86,11 +105,18 @@ def _validate_positive_integer(values: dict[str, str], key: str) -> str | None:
 
 def verify_env_hygiene(*, repo_root: Path, template_path: Path) -> tuple[str, ...]:
     errors: list[str] = []
-    resolved_template = (
-        template_path
-        if template_path.is_absolute()
-        else (repo_root / template_path).resolve()
-    )
+    if not repo_root.exists():
+        return (f"repo_root does not exist: {repo_root.as_posix()}",)
+    if not repo_root.is_dir():
+        return (f"repo_root must be a directory: {repo_root.as_posix()}",)
+
+    try:
+        resolved_template = _resolve_template_path(
+            repo_root=repo_root,
+            template_path=template_path,
+        )
+    except ValueError as exc:
+        return (str(exc),)
 
     tracked_env_files = _tracked_env_files(repo_root)
     if tracked_env_files:
@@ -162,7 +188,11 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    repo_root = args.repo_root.resolve()
+    try:
+        repo_root = _resolve_repo_root(args.repo_root)
+    except ValueError as exc:
+        print(f"[env-hygiene] failed: {exc}")
+        return 2
     errors = verify_env_hygiene(
         repo_root=repo_root,
         template_path=args.template_path,

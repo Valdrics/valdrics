@@ -208,3 +208,21 @@ def test_verify_contracts_reports_missing_and_forbidden_phrases(tmp_path: Path) 
         "docs/architecture/overview.md: forbidden phrase present 'Zero external dependencies'"
         in errors
     )
+
+
+def test_verify_contracts_rejects_missing_root(tmp_path: Path) -> None:
+    missing_root = tmp_path / "missing-root"
+    assert verify_contracts(root=missing_root) == [f"root not found: {missing_root}"]
+
+
+def test_verify_contracts_rejects_non_directory_root(tmp_path: Path) -> None:
+    root_file = tmp_path / "root.txt"
+    root_file.write_text("not-a-directory\n", encoding="utf-8")
+    assert verify_contracts(root=root_file) == [f"root must be a directory: {root_file}"]
+
+
+def test_verify_contracts_rejects_directory_target(tmp_path: Path) -> None:
+    target_dir = tmp_path / "docs" / "architecture" / "overview.md"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    errors = verify_contracts(root=tmp_path)
+    assert "docs/architecture/overview.md: target must be a file" in errors

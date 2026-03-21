@@ -43,6 +43,78 @@ def test_verify_feature_enforceability_matrix_rejects_missing_paid_feature(
         verify_matrix(artifact_path=out, repo_root=REPO_ROOT)
 
 
+def test_verify_feature_enforceability_matrix_rejects_directory_artifact(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="matrix artifact must be a file"):
+        verify_matrix(artifact_path=tmp_path, repo_root=REPO_ROOT)
+
+
+def test_verify_feature_enforceability_matrix_rejects_evidence_repo_escape(
+    tmp_path: Path,
+) -> None:
+    payload = generate_matrix(repo_root=REPO_ROOT)
+    payload["features"]["api_access"]["evidence"] = ["../outside.py"]  # type: ignore[index]
+    out = tmp_path / "matrix.json"
+    out.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="evidence path must stay within repo root"):
+        verify_matrix(artifact_path=out, repo_root=REPO_ROOT)
+
+
+def test_verify_feature_enforceability_matrix_rejects_directory_evidence(
+    tmp_path: Path,
+) -> None:
+    payload = generate_matrix(repo_root=REPO_ROOT)
+    payload["features"]["api_access"]["evidence"] = ["docs"]  # type: ignore[index]
+    out = tmp_path / "matrix.json"
+    out.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="evidence path must be a file"):
+        verify_matrix(artifact_path=out, repo_root=REPO_ROOT)
+
+
+def test_verify_feature_enforceability_matrix_main_resolves_relative_path_from_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    matrix_path = repo_root / "docs" / "ops" / "matrix.json"
+    matrix_path.parent.mkdir(parents=True)
+    matrix_path.write_text(json.dumps(generate_matrix(repo_root=REPO_ROOT)), encoding="utf-8")
+
+    captured: list[Path] = []
+
+    monkeypatch.setattr(matrix_verifier, "_repo_root", lambda: repo_root)
+
+    def _fake_verify_matrix(*, artifact_path: Path, repo_root: Path) -> None:
+        captured.append(artifact_path)
+
+    monkeypatch.setattr(matrix_verifier, "verify_matrix", _fake_verify_matrix)
+
+    old_cwd = Path.cwd()
+    try:
+        import os
+        os.chdir(tmp_path)
+        assert matrix_verifier.main(["--matrix-path", "docs/ops/matrix.json"]) == 0
+    finally:
+        os.chdir(old_cwd)
+
+    assert captured == [matrix_path]
+
+
+def test_verify_feature_enforceability_matrix_main_rejects_relative_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(matrix_verifier, "_repo_root", lambda: repo_root)
+
+    assert matrix_verifier.main(["--matrix-path", "../escape/matrix.json"]) == 2
+
+
 def test_feature_runtime_gate_detection_handles_multiline_calls() -> None:
     raw = """
 from app.shared.core.dependencies import requires_feature
@@ -103,6 +175,7 @@ def test_main_rejects_scanned_source_root_output() -> None:
         "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
         "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
         "docs/ops/key-rotation-drill-2026-02-27.md",
+        "docs/ops/evidence/README.md",
     ],
 )
 def test_resolve_output_path_rejects_protected_artifacts(output: str) -> None:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
+import scripts.verify_pkg_fin_policy_decisions as pkg_fin_verifier
 from scripts.verify_pkg_fin_policy_decisions import (
     REQUIRED_DECISION_BACKLOG_IDS,
     main,
@@ -311,3 +313,39 @@ def test_main_accepts_valid_payload(tmp_path: Path) -> None:
     path = tmp_path / "pkg-fin-policy.json"
     _write(path, _valid_payload())
     assert main(["--evidence-path", str(path)]) == 0
+
+
+def test_main_resolves_relative_evidence_path_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    path = repo_root / "docs" / "ops" / "pkg-fin-policy.json"
+    _write(path, _valid_payload())
+    monkeypatch.setattr(pkg_fin_verifier, "_repo_root", lambda: repo_root)
+
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        assert main(["--evidence-path", "docs/ops/pkg-fin-policy.json"]) == 0
+    finally:
+        os.chdir(old_cwd)
+
+
+def test_main_rejects_relative_evidence_path_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(pkg_fin_verifier, "_repo_root", lambda: repo_root)
+
+    assert main(["--evidence-path", "../escape/pkg-fin-policy.json"]) == 2
+
+
+def test_main_rejects_directory_input(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "pkg-fin-dir"
+    evidence_dir.mkdir()
+
+    assert main(["--evidence-path", str(evidence_dir)]) == 2

@@ -6,19 +6,25 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from pathlib import Path
-import shlex
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
+import shlex
 import subprocess
 import sys
 import tempfile
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from scripts.env_generation_common import (
+    promote_staged_file,
+    repo_root_for,
+    resolve_cli_path_from_root,
+    stage_text_file,
+)
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = repo_root_for(__file__)
 LOCAL_DRILL_ENV_SEED = "valdrics-webhook-job-reliability-drill-v1"
 
 
@@ -80,6 +86,13 @@ DRILL_SCENARIOS: tuple[DrillScenario, ...] = (
         ),
     ),
 )
+
+
+def _resolve_output_path(path: Path) -> Path:
+    resolved = resolve_cli_path_from_root(REPO_ROOT, path, field_name="out")
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"out must be a file path: {resolved}")
+    return resolved
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -212,7 +225,12 @@ def _run_pytest_targets(targets: tuple[str, ...]) -> dict[str, object]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
+    try:
+        args = _parse_args(argv)
+        output_path = _resolve_output_path(Path(str(args.out))) if args.out else None
+    except ValueError as exc:
+        print(f"[webhook-job-reliability-drill] failed: {exc}")
+        return 2
     captured_at = datetime.now(timezone.utc).isoformat()
     report: dict[str, object] = {
         "runner": "scripts/run_webhook_job_reliability_drill.py",
@@ -248,8 +266,13 @@ def main(argv: list[str] | None = None) -> int:
 
     rendered = json.dumps(report, indent=2, sort_keys=True)
     print(rendered)
-    if args.out:
-        Path(args.out).write_text(rendered, encoding="utf-8")
+    if output_path is not None:
+        try:
+            staged_path = stage_text_file(output_path, rendered)
+            promote_staged_file(staged_path, output_path)
+        except OSError as exc:
+            print(f"[webhook-job-reliability-drill] failed: {exc}")
+            return 2
 
     if not report["all_passed"]:
         raise SystemExit("Webhook/job reliability drill failed")

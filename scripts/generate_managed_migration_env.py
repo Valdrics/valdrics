@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import tempfile
 from pathlib import Path
 import sys
 from typing import Any
@@ -13,89 +12,47 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.env_generation_common import render_env
+from scripts.env_generation_common import (
+    ensure_parent_dir as _ensure_parent_dir,
+    protected_output_paths_from_root as _protected_output_paths_from_root,
+    render_env,
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root as _resolve_cli_path_from_root,
+    resolve_default_path_from_root as _resolve_default_path_from_root,
+    stage_text_file as _stage_text_file,
+)
+from scripts.managed_deployment_contract import (
+    PLACEHOLDER_PREFIX,
+    SUPPORTED_DB_SSL_MODES,
+    SUPPORTED_ENVIRONMENTS,
+    required_migration_operator_input_keys as _required_operator_input_keys,
+)
 
 
 DEFAULT_OUTPUT_DIR = Path(".runtime")
-PLACEHOLDER_PREFIX = "REPLACE_WITH_"
-SUPPORTED_ENVIRONMENTS = ("staging", "production")
-SUPPORTED_DB_SSL_MODES = ("disable", "require", "verify-ca", "verify-full")
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
 
 
 def _resolve_default_path(path: Path) -> Path:
-    return (_repo_root() / path).resolve()
+    return _resolve_default_path_from_root(_repo_root(), path)
 
 
 def _resolve_cli_path(path: Path, *, field_name: str) -> Path:
-    raw = Path(path).expanduser()
-    if raw.is_absolute():
-        return raw.resolve()
-    resolved = (_repo_root() / raw).resolve()
-    try:
-        resolved.relative_to(_repo_root())
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must stay within repo root when relative") from exc
-    return resolved
+    return _resolve_cli_path_from_root(_repo_root(), path, field_name=field_name)
 
 
 def _protected_output_paths() -> set[Path]:
-    repo_root = _repo_root()
-    return {
-        Path(__file__).resolve(),
-        repo_root / ".env.example",
-        repo_root / "scripts" / "validate_migration_env.py",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json",
-        repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json",
-        repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md",
-        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
-        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json",
-    }
-
-
-def _ensure_parent_dir(path: Path, *, field_name: str) -> None:
-    current = path.parent
-    while True:
-        if current.exists():
-            if not current.is_dir():
-                raise ValueError(
-                    f"{field_name} parent must be a directory path: {current.as_posix()}"
-                )
-            return
-        if current == current.parent:
-            return
-        current = current.parent
-
-
-def _stage_text_file(path: Path, content: str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=path.parent,
-        prefix=f".{path.stem}.",
-        suffix=f"{path.suffix}.tmp",
-        delete=False,
-    ) as handle:
-        temp_path = Path(handle.name)
-        handle.write(content)
-    return temp_path
+    return _protected_output_paths_from_root(
+        _repo_root(),
+        __file__,
+        ".env.example",
+        "scripts/validate_migration_env.py",
+        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/key-rotation-drill-2026-02-27.md",
+    )
 
 
 def _placeholder(name: str) -> str:
@@ -157,16 +114,6 @@ def _migration_blockers(values: dict[str, str]) -> list[str]:
         blockers.append("DB_SSL_CA_CERT_PATH")
 
     return blockers
-
-
-def _required_operator_input_keys(values: dict[str, str]) -> list[str]:
-    required_keys = ["DATABASE_URL"]
-    db_ssl_mode = str(values.get("DB_SSL_MODE", "require") or "require").strip().lower()
-    if db_ssl_mode in {"verify-ca", "verify-full"}:
-        required_keys.append("DB_SSL_CA_CERT_PATH")
-    return required_keys
-
-
 def generate_managed_migration_env(
     *,
     output_path: Path,
@@ -220,23 +167,23 @@ def generate_managed_migration_env(
         ),
     }
     staged_output = _stage_text_file(output_path, rendered)
+    staged_report: Path | None = None
+    promotion_completed = False
     try:
         staged_report = _stage_text_file(
             report_path,
             json.dumps(report, indent=2, sort_keys=True),
         )
-    except Exception:
-        staged_output.unlink(missing_ok=True)
-        raise
-    try:
         staged_output.replace(output_path)
         staged_report.replace(report_path)
-    except Exception:
-        staged_output.unlink(missing_ok=True)
-        staged_report.unlink(missing_ok=True)
-        output_path.unlink(missing_ok=True)
-        report_path.unlink(missing_ok=True)
-        raise
+        promotion_completed = True
+    finally:
+        if not promotion_completed:
+            staged_output.unlink(missing_ok=True)
+            if staged_report is not None:
+                staged_report.unlink(missing_ok=True)
+            output_path.unlink(missing_ok=True)
+            report_path.unlink(missing_ok=True)
     return report
 
 

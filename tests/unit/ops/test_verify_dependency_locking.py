@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from scripts.verify_dependency_locking import main, verify_dependency_locking
 
 
@@ -263,3 +265,27 @@ def test_verify_dependency_locking_flags_dockerfile_that_skips_lockfile(tmp_path
     errors = verify_dependency_locking(repo_root=tmp_path)
     assert any("must install a pinned uv release" in item for item in errors)
     assert any("must not bypass the lockfile" in item for item in errors)
+
+
+def test_verify_dependency_locking_rejects_non_directory_repo_root(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo-root.txt"
+    repo_root.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="repo_root must be a directory"):
+        verify_dependency_locking(repo_root=repo_root)
+
+
+def test_main_rejects_relative_path_escape(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+
+    assert main(["--repo-root", str(repo_root), "--pyproject-path", "../escape/pyproject.toml"]) == 2
+
+
+def test_main_rejects_directory_pyproject_path(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    pyproject_dir = repo_root / "pyproject.toml"
+    pyproject_dir.mkdir()
+
+    assert main(["--repo-root", str(repo_root), "--pyproject-path", "pyproject.toml"]) == 2

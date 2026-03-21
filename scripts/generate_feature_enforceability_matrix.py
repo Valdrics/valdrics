@@ -4,15 +4,22 @@
 from __future__ import annotations
 
 import argparse
-import json
 import re
-import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable
 
 from app.shared.core.pricing import FeatureFlag, PricingTier, get_tier_config
+from scripts.env_generation_common import (
+    checked_in_evidence_paths as _checked_in_evidence_paths_shared,
+    ensure_parent_dir as _ensure_parent_dir_shared,
+    promote_staged_file as _promote_staged_file,
+    protected_output_paths_from_root as _protected_output_paths_from_root,
+    repo_root_for as _repo_root_for,
+    resolve_contained_repo_path_from_root as _resolve_contained_repo_path_from_root,
+    stage_json_file as _stage_json_file,
+)
 
 
 @dataclass(frozen=True)
@@ -27,7 +34,7 @@ class EnforceabilityEvidence:
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
 
 
 def _python_files(roots: Iterable[Path]) -> list[Path]:
@@ -135,36 +142,28 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def _checked_in_evidence_paths(repo_root: Path) -> set[Path]:
+    return _checked_in_evidence_paths_shared(repo_root)
+
+
 def _resolve_output_path(*, repo_root: Path, output: str) -> Path:
-    out_path = (repo_root / str(output)).resolve()
-    try:
-        out_path.relative_to(repo_root)
-    except ValueError as exc:
-        raise ValueError("out must resolve inside the repository root") from exc
+    out_path = _resolve_contained_repo_path_from_root(
+        repo_root,
+        output,
+        field_name="out",
+    )
     if out_path.exists() and not out_path.is_file():
         raise ValueError("out must be a file path inside the repository root")
-    protected_paths = {
-        Path(__file__).resolve(),
-        (repo_root / "scripts" / "verify_feature_enforceability_matrix.py").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json").resolve(),
-        (repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json").resolve(),
-        (repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json").resolve(),
-        (repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json").resolve(),
-    }
+    protected_paths = _protected_output_paths_from_root(
+        repo_root,
+        __file__,
+        "scripts/verify_feature_enforceability_matrix.py",
+        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/key-rotation-drill-2026-02-27.md",
+        "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
+        "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
+        "docs/ops/evidence/README.md",
+    )
     if out_path in protected_paths:
         raise ValueError(
             "out must not overwrite feature-enforceability source, verifier, or checked-in artifact files"
@@ -183,17 +182,7 @@ def _resolve_output_path(*, repo_root: Path, output: str) -> Path:
 
 
 def _ensure_output_parent_dir(output_path: Path) -> None:
-    current = output_path.parent
-    while True:
-        if current.exists():
-            if not current.is_dir():
-                raise ValueError(
-                    f"out parent must be a directory path: {current.as_posix()}"
-                )
-            return
-        if current == current.parent:
-            return
-        current = current.parent
+    _ensure_parent_dir_shared(output_path, field_name="out")
 
 
 def _write_verified_matrix(
@@ -204,23 +193,13 @@ def _write_verified_matrix(
 ) -> None:
     from scripts.verify_feature_enforceability_matrix import verify_matrix
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=out_path.parent,
-        prefix=f".{out_path.stem}.",
-        suffix=f"{out_path.suffix}.tmp",
-        delete=False,
-    ) as handle:
-        temp_path = Path(handle.name)
-        handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    temp_path = _stage_json_file(out_path, payload, trailing_newline=True)
     try:
         verify_matrix(artifact_path=temp_path, repo_root=repo_root)
+        _promote_staged_file(temp_path, out_path)
     except Exception:
         temp_path.unlink(missing_ok=True)
         raise
-    temp_path.replace(out_path)
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
+import scripts.verify_pkg015_launch_gate as pkg015_verifier
 from scripts.verify_pkg015_launch_gate import main, verify_pkg015_launch_gate
 
 
@@ -141,3 +143,56 @@ def test_main_accepts_valid_inputs(tmp_path: Path) -> None:
         )
         == 0
     )
+
+
+def test_main_resolves_relative_paths_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    gap_path = repo_root / "docs" / "ops" / "gap.md"
+    matrix_path = repo_root / "docs" / "ops" / "matrix.json"
+    _write(gap_path, _gap_register_payload())
+    matrix_path.write_text(json.dumps(_matrix_payload()), encoding="utf-8")
+
+    monkeypatch.setattr(pkg015_verifier, "_repo_root", lambda: repo_root)
+
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        assert (
+            main(
+                [
+                    "--gap-register",
+                    "docs/ops/gap.md",
+                    "--matrix-path",
+                    "docs/ops/matrix.json",
+                ]
+            )
+            == 0
+        )
+    finally:
+        os.chdir(old_cwd)
+
+
+def test_main_rejects_relative_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(pkg015_verifier, "_repo_root", lambda: repo_root)
+
+    assert main(["--gap-register", "../escape/gap.md"]) == 2
+
+
+def test_main_rejects_directory_inputs(
+    tmp_path: Path,
+) -> None:
+    gap_dir = tmp_path / "gap-dir"
+    gap_dir.mkdir()
+    matrix_dir = tmp_path / "matrix-dir"
+    matrix_dir.mkdir()
+
+    assert main(["--gap-register", str(gap_dir), "--matrix-path", str(matrix_dir)]) == 2

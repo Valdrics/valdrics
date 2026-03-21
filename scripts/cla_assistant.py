@@ -24,6 +24,8 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
+from scripts.env_generation_common import repo_root_for, resolve_cli_path_from_root
+
 DEFAULT_SIGN_PHRASE = "I have read the CLA Document and I hereby sign the CLA"
 DEFAULT_SIGNATURES_PATH = "signatures/version1/cla.json"
 DEFAULT_SIGNATURE_BRANCH = "cla-signatures"
@@ -34,6 +36,10 @@ DEFAULT_ALLOWLIST = (
     "renovate[bot]",
     "github-actions[bot]",
 )
+
+
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
 
 
 @dataclass(frozen=True)
@@ -416,6 +422,19 @@ def _load_event(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _resolve_event_path(path: str) -> Path:
+    resolved = resolve_cli_path_from_root(
+        _repo_root(),
+        Path(path),
+        field_name="event-path",
+    )
+    if not resolved.exists():
+        raise ValueError(f"event-path does not exist: {resolved}")
+    if not resolved.is_file():
+        raise ValueError(f"event-path must be a file path: {resolved}")
+    return resolved
+
+
 def _get_pull_request_number(event_name: str, event: dict[str, Any]) -> int:
     if event_name == "pull_request_target":
         number = event.get("number")
@@ -642,27 +661,33 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     if not args.event_name:
-        raise SystemExit("GITHUB_EVENT_NAME/--event-name is required")
+        print("GITHUB_EVENT_NAME/--event-name is required", file=sys.stderr)
+        return 2
     if not args.event_path:
-        raise SystemExit("GITHUB_EVENT_PATH/--event-path is required")
-    event = _load_event(Path(args.event_path))
-    client = GitHubClient(
-        token=str(args.token),
-        repository=str(args.repository),
-        api_url=str(args.api_url),
-    )
-    return run(
-        event_name=str(args.event_name),
-        event=event,
-        client=client,
-        signatures_path=str(args.signatures_path),
-        signatures_branch=str(args.signatures_branch),
-        sign_phrase=str(args.sign_phrase),
-        allowlist=_normalize_allowlist(str(args.allowlist)),
-        repository=str(args.repository),
-        server_url=str(args.server_url),
-        status_context=str(args.status_context),
-    )
+        print("GITHUB_EVENT_PATH/--event-path is required", file=sys.stderr)
+        return 2
+    try:
+        event = _load_event(_resolve_event_path(str(args.event_path)))
+        client = GitHubClient(
+            token=str(args.token),
+            repository=str(args.repository),
+            api_url=str(args.api_url),
+        )
+        return run(
+            event_name=str(args.event_name),
+            event=event,
+            client=client,
+            signatures_path=str(args.signatures_path),
+            signatures_branch=str(args.signatures_branch),
+            sign_phrase=str(args.sign_phrase),
+            allowlist=_normalize_allowlist(str(args.allowlist)),
+            repository=str(args.repository),
+            server_url=str(args.server_url),
+            status_context=str(args.status_context),
+        )
+    except (GitHubApiError, OSError, ValueError) as exc:
+        print(f"CLA assistant failed: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

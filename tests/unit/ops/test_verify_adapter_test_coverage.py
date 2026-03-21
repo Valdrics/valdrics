@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import pytest
+
+import scripts.verify_adapter_test_coverage as adapter_verifier
 from scripts.verify_adapter_test_coverage import find_uncovered_adapters, main
 
 
@@ -63,3 +67,34 @@ def test_main_returns_success_when_all_adapters_covered(tmp_path: Path) -> None:
 
     assert exit_code == 0
 
+
+def test_main_resolves_relative_roots_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    adapters_root = repo_root / "adapters"
+    tests_root = repo_root / "tests"
+    _write(adapters_root / "alpha.py", "VALUE = 1\n")
+    _write(tests_root / "test_adapter_refs.py", "import app.shared.adapters.alpha\n")
+    monkeypatch.setattr(adapter_verifier, "_repo_root", lambda: repo_root)
+
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        exit_code = main(["--adapters-root", "adapters", "--tests-root", "tests"])
+    finally:
+        os.chdir(old_cwd)
+
+    assert exit_code == 0
+
+
+def test_main_rejects_relative_root_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(adapter_verifier, "_repo_root", lambda: repo_root)
+
+    assert main(["--adapters-root", "../escape/adapters"]) == 2

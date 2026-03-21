@@ -66,6 +66,22 @@ Set these in production runtime (Koyeb/Kubernetes/etc):
   - `OUTBOUND_TLS_BREAK_GLASS_REASON=<incident/ticket reference>`
   - `OUTBOUND_TLS_BREAK_GLASS_EXPIRES_AT=<ISO-8601 UTC future timestamp>`
 
+Contract source of truth:
+
+- Treat the generated reports as authoritative for exact key inventories and blocker sets.
+- The grouped checklist above is operator guidance; the exact machine-readable contract is emitted by the managed generators and enforced by `scripts/verify_managed_deployment_bundle.py`.
+- Runtime env authority: `.runtime/<environment>.report.json`
+- Migration env authority: `.runtime/<environment>.migrate.report.json`
+- Deployment env authority: `.runtime/deploy/<environment>/deployment.report.json`
+
+Inspect the exact required keys from the generated reports instead of copying lists by hand:
+
+```bash
+jq '.required_operator_input_keys, .declared_but_not_runtime_required' .runtime/production.report.json
+jq '.required_operator_input_keys' .runtime/production.migrate.report.json
+jq '.koyeb_dashboard_public_env_keys, .terraform_remaining_inputs' .runtime/deploy/production/deployment.report.json
+```
+
 ## 2a. Generate the runtime scaffold first
 
 Use the repo-managed generator to create staging or production env scaffolds with fresh
@@ -209,6 +225,18 @@ Default outputs:
 - `.runtime/deploy/<environment>/terraform.runtime.auto.tfvars.json`
 - `.runtime/deploy/<environment>/deployment.report.json`
 
+Public dashboard contract notes:
+
+- The dashboard service now has a first-class public-marketing/runtime contract. Treat these as required Koyeb dashboard public env values whenever the public site is promoted:
+  - `PUBLIC_API_URL`
+  - `PUBLIC_SUPABASE_URL`
+  - `PUBLIC_SUPABASE_ANON_KEY`
+- The generated deployment bundle records these under `koyeb_dashboard_public_env_keys` and `koyeb_dashboard_public_env_blockers`.
+- The generated output directory must include both:
+  - `.runtime/deploy/<environment>/koyeb-dashboard-env.json`
+  - `.runtime/deploy/<environment>/koyeb-release.json`
+- If either file is missing, regenerate the deployment artifacts before promotion. Do not hand-edit the deployment report.
+
 The deployment report separates:
 
 - `runtime_validation_blockers`: app-runtime values still blocking startup
@@ -233,6 +261,7 @@ This check fails if any of the following drift:
 - migration blockers vs `.runtime/production.migrate.report.json`
 - deployment blockers/readiness vs `.runtime/deploy/production/deployment.report.json`
 - generated artifact paths or secret payload indexes
+- dashboard public env artifact presence (`koyeb-dashboard-env.json`) and immutable release metadata (`koyeb-release.json`)
 
 Promotion should not proceed when the bundle verifier fails.
 

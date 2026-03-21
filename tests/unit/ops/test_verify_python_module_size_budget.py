@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import pytest
+
+import scripts.verify_python_module_size_budget as python_budget_verifier
 from scripts.verify_python_module_size_budget import (
     PREFERRED_MAX_LINES,
     collect_module_size_cluster_signals,
@@ -223,3 +227,74 @@ def test_main_skips_cluster_warning_by_default(
     captured = capsys.readouterr().out
     assert exit_code == 0
     assert "clustered near line budget" not in captured
+
+
+def test_collect_module_size_violations_rejects_non_directory_root(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "root.txt"
+    root.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="root must be a directory"):
+        collect_module_size_violations(root)
+
+
+def test_main_rejects_non_directory_root(tmp_path: Path) -> None:
+    root = tmp_path / "root.txt"
+    root.write_text("not-a-directory", encoding="utf-8")
+
+    assert main(["--root", str(root)]) == 2
+
+
+def test_main_resolves_relative_root_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = Path(python_budget_verifier.__file__).resolve().parents[1]
+    captured: dict[str, Path] = {}
+
+    def _capture_preferred(root: Path, *, preferred_max_lines: int) -> tuple[object, ...]:
+        captured["root"] = root
+        return ()
+
+    def _capture_violations(
+        root: Path,
+        *,
+        default_max_lines: int,
+        overrides: dict[str, int] | None = None,
+    ) -> tuple[object, ...]:
+        captured["root"] = root
+        return ()
+
+    def _capture_clusters(
+        root: Path,
+        *,
+        cluster_min_lines: int,
+        cluster_max_lines: int,
+    ) -> tuple[object, ...]:
+        captured["root"] = root
+        return ()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        python_budget_verifier,
+        "collect_module_size_preferred_breaches",
+        _capture_preferred,
+    )
+    monkeypatch.setattr(
+        python_budget_verifier,
+        "collect_module_size_violations",
+        _capture_violations,
+    )
+    monkeypatch.setattr(
+        python_budget_verifier,
+        "collect_module_size_cluster_signals",
+        _capture_clusters,
+    )
+
+    assert main(["--root", "app/.."]) == 0
+    assert captured["root"] == repo_root
+
+
+def test_main_rejects_relative_root_repo_escape() -> None:
+    assert main(["--root", os.path.join("..", "..")]) == 2

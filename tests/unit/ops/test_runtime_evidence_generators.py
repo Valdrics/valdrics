@@ -169,6 +169,7 @@ def test_generate_finance_telemetry_snapshot_does_not_create_database_parent_on_
         "docs/ops/evidence/finance_guardrails_2026-02-27.json",
         "docs/ops/evidence/pkg_fin_policy_decisions_TEMPLATE.json",
         "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json",
+        "docs/ops/evidence/README.md",
     ],
 )
 def test_generate_finance_telemetry_snapshot_rejects_protected_output_collisions(
@@ -431,6 +432,7 @@ def test_generate_pricing_benchmark_register_rejects_invalid_source_age_threshol
         "docs/ops/evidence/pricing_benchmark_register_TEMPLATE.json",
         "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
         "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
+        "docs/ops/evidence/README.md",
     ],
 )
 def test_generate_pricing_benchmark_register_rejects_protected_output_collisions(
@@ -875,6 +877,7 @@ def test_generate_valdrics_disposition_register_rejects_source_audit_output_coll
         "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
         "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
         "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
+        "docs/ops/evidence/README.md",
     ],
 )
 def test_generate_valdrics_disposition_register_rejects_protected_output_collisions(

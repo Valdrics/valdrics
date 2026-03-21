@@ -7,7 +7,6 @@ import argparse
 import base64
 import ipaddress
 import json
-import tempfile
 from pathlib import Path
 import re
 import secrets
@@ -18,134 +17,54 @@ from urllib.parse import urlparse
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.env_generation_common import render_env
-
+from scripts.env_generation_common import (
+    ensure_parent_dir as _ensure_parent_dir,
+    protected_output_paths_from_root as _protected_output_paths_from_root,
+    render_env,
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root as _resolve_cli_path_from_root,
+    resolve_default_path_from_root as _resolve_default_path_from_root,
+    stage_text_file as _stage_text_file,
+)
+from scripts.managed_deployment_contract import (
+    DECLARED_EXTERNAL_VALUE_KEYS,
+    DECLARED_NONBLOCKING_EXTERNAL_KEYS,
+    DEFAULT_LLM_PROVIDER,
+    DERIVED_EXTERNAL_KEYS,
+    INTERNAL_SECRET_KEYS,
+    PLACEHOLDER_PREFIX,
+    RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS,
+    SUPPORTED_ENVIRONMENTS,
+    SUPPORTED_LLM_PROVIDERS,
+    identify_runtime_unresolved_keys as _identify_unresolved_keys,
+    required_runtime_operator_input_keys as _required_operator_input_keys,
+)
 
 DEFAULT_TEMPLATE_PATH = Path(".env.example")
 DEFAULT_OUTPUT_DIR = Path(".runtime")
-PLACEHOLDER_PREFIX = "REPLACE_WITH_"
-DEFAULT_LLM_PROVIDER = "groq"
-SUPPORTED_ENVIRONMENTS = ("staging", "production")
-SUPPORTED_LLM_PROVIDERS = ("groq", "openai", "claude", "google")
-
-DECLARED_EXTERNAL_VALUE_KEYS = (
-    "API_URL",
-    "FRONTEND_URL",
-    "CORS_ORIGINS",
-    "DATABASE_URL",
-    "REDIS_URL",
-    "SUPABASE_URL",
-    "SUPABASE_ANON_KEY",
-    "SUPABASE_JWT_SECRET",
-    "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN",
-    "PAYSTACK_SECRET_KEY",
-    "PAYSTACK_PUBLIC_KEY",
-    "SENTRY_DSN",
-    "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "TRUSTED_PROXY_CIDRS",
-)
-RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS = (
-    "API_URL",
-    "FRONTEND_URL",
-    "DATABASE_URL",
-    "REDIS_URL",
-    "SUPABASE_JWT_SECRET",
-    "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN",
-    "PAYSTACK_SECRET_KEY",
-    "PAYSTACK_PUBLIC_KEY",
-    "SENTRY_DSN",
-    "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "TRUSTED_PROXY_CIDRS",
-)
-DERIVED_EXTERNAL_KEYS = ("CORS_ORIGINS",)
-DECLARED_NONBLOCKING_EXTERNAL_KEYS = ("SUPABASE_URL", "SUPABASE_ANON_KEY")
-
-INTERNAL_SECRET_KEYS = (
-    "CSRF_SECRET_KEY",
-    "ENCRYPTION_KEY",
-    "KDF_SALT",
-    "ADMIN_API_KEY",
-    "INTERNAL_JOB_SECRET",
-    "INTERNAL_METRICS_AUTH_TOKEN",
-    "ENFORCEMENT_APPROVAL_TOKEN_SECRET",
-    "ENFORCEMENT_EXPORT_SIGNING_SECRET",
-)
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
 
 
 def _resolve_default_path(path: Path) -> Path:
-    return (_repo_root() / path).resolve()
+    return _resolve_default_path_from_root(_repo_root(), path)
 
 
 def _resolve_cli_path(path: Path, *, field_name: str) -> Path:
-    raw = Path(path).expanduser()
-    if raw.is_absolute():
-        return raw.resolve()
-    resolved = (_repo_root() / raw).resolve()
-    try:
-        resolved.relative_to(_repo_root())
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must stay within repo root when relative") from exc
-    return resolved
+    return _resolve_cli_path_from_root(_repo_root(), path, field_name=field_name)
 
 
 def _protected_output_paths() -> set[Path]:
-    repo_root = _repo_root()
-    return {
-        Path(__file__).resolve(),
-        repo_root / ".env.example",
-        repo_root / "scripts" / "validate_runtime_env.py",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json",
-        repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json",
-        repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md",
-        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
-        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json",
-    }
-
-
-def _ensure_parent_dir(path: Path, *, field_name: str) -> None:
-    current = path.parent
-    while True:
-        if current.exists():
-            if not current.is_dir():
-                raise ValueError(
-                    f"{field_name} parent must be a directory path: {current.as_posix()}"
-                )
-            return
-        if current == current.parent:
-            return
-        current = current.parent
-
-
-def _stage_text_file(path: Path, content: str) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=path.parent,
-        prefix=f".{path.stem}.",
-        suffix=f"{path.suffix}.tmp",
-        delete=False,
-    ) as handle:
-        temp_path = Path(handle.name)
-        handle.write(content)
-    return temp_path
+    return _protected_output_paths_from_root(
+        _repo_root(),
+        __file__,
+        ".env.example",
+        "scripts/validate_runtime_env.py",
+        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/key-rotation-drill-2026-02-27.md",
+    )
 
 
 def _generate_hex(length: int = 64) -> str:
@@ -475,40 +394,6 @@ def _build_overrides(
     return overrides
 
 
-def _selected_llm_provider_key(values: dict[str, str]) -> str | None:
-    llm_provider = str(values.get("LLM_PROVIDER", DEFAULT_LLM_PROVIDER) or "").strip().lower()
-    return {
-        "groq": "GROQ_API_KEY",
-        "openai": "OPENAI_API_KEY",
-        "claude": "CLAUDE_API_KEY",
-        "google": "GOOGLE_API_KEY",
-    }.get(llm_provider)
-
-
-def _identify_unresolved_keys(values: dict[str, str], candidate_keys: tuple[str, ...]) -> list[str]:
-    unresolved: list[str] = []
-    for key in candidate_keys:
-        value = str(values.get(key, "") or "").strip()
-        if not value or PLACEHOLDER_PREFIX in value:
-            unresolved.append(key)
-
-    provider_key = _selected_llm_provider_key(values)
-    if provider_key:
-        provider_value = str(values.get(provider_key, "") or "").strip()
-        if not provider_value or PLACEHOLDER_PREFIX in provider_value:
-            unresolved.append(provider_key)
-
-    return sorted(set(unresolved))
-
-
-def _required_operator_input_keys(values: dict[str, str]) -> list[str]:
-    required_keys = list(RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS)
-    provider_key = _selected_llm_provider_key(values)
-    if provider_key:
-        required_keys.append(provider_key)
-    return sorted(set(required_keys))
-
-
 def _render_output(template_lines: list[str], overrides: dict[str, str]) -> str:
     rendered = render_env(template_lines, overrides)
     header = [
@@ -621,23 +506,23 @@ def generate_managed_runtime_env(
         "migration_command": "uv run alembic upgrade head",
     }
     staged_output = _stage_text_file(output_path, rendered)
+    staged_report: Path | None = None
+    promotion_completed = False
     try:
         staged_report = _stage_text_file(
             report_path,
             json.dumps(report, indent=2, sort_keys=True),
         )
-    except Exception:
-        staged_output.unlink(missing_ok=True)
-        raise
-    try:
         staged_output.replace(output_path)
         staged_report.replace(report_path)
-    except Exception:
-        staged_output.unlink(missing_ok=True)
-        staged_report.unlink(missing_ok=True)
-        output_path.unlink(missing_ok=True)
-        report_path.unlink(missing_ok=True)
-        raise
+        promotion_completed = True
+    finally:
+        if not promotion_completed:
+            staged_output.unlink(missing_ok=True)
+            if staged_report is not None:
+                staged_report.unlink(missing_ok=True)
+            output_path.unlink(missing_ok=True)
+            report_path.unlink(missing_ok=True)
     return report
 
 

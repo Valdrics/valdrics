@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
+import scripts.verify_valdrics_disposition_freshness as valdrics_verifier
 from scripts.verify_valdrics_disposition_freshness import (
     DEFAULT_REQUIRED_FINDING_IDS,
     main,
@@ -234,6 +236,53 @@ def test_main_accepts_valid_payload(tmp_path: Path) -> None:
         )
         == 0
     )
+
+
+def test_main_resolves_relative_register_path_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    register_path = repo_root / "docs" / "ops" / "valdrics.json"
+    _write(register_path, _valid_payload())
+
+    monkeypatch.setattr(valdrics_verifier, "_repo_root", lambda: repo_root)
+    monkeypatch.chdir(tmp_path)
+
+    assert (
+        main(
+            [
+                "--register-path",
+                "docs/ops/valdrics.json",
+                "--max-artifact-age-days",
+                "45",
+                "--max-review-window-days",
+                "120",
+                "--as-of",
+                "2026-03-15T00:00:00Z",
+            ]
+        )
+        == 0
+    )
+
+
+def test_main_rejects_relative_register_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(valdrics_verifier, "_repo_root", lambda: repo_root)
+
+    assert main(["--register-path", os.path.join("..", "escape.json")]) == 2
+
+
+def test_main_rejects_directory_register_path(tmp_path: Path) -> None:
+    register_dir = tmp_path / "register-dir"
+    register_dir.mkdir()
+
+    assert main(["--register-path", str(register_dir)]) == 2
 
 
 @pytest.mark.parametrize(

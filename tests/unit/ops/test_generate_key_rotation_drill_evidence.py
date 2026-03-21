@@ -160,6 +160,7 @@ def test_main_rejects_non_positive_max_drill_age_before_running_checks(
         "docs/ops/key-rotation-drill-2026-02-27.md",
         "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
         "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
+        "docs/ops/evidence/README.md",
     ],
 )
 def test_main_rejects_output_collisions_with_protected_drill_files(

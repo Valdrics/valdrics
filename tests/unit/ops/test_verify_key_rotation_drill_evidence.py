@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import os
 from pathlib import Path
 
 import pytest
@@ -172,3 +173,48 @@ def test_main_succeeds_for_valid_file(tmp_path: Path) -> None:
     )
 
     assert exit_code == 0
+
+
+def test_main_resolves_relative_drill_path_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    path = repo_root / "docs" / "ops" / "drill.md"
+    _write(path, _valid_doc())
+    monkeypatch.setattr(drill_verifier, "_repo_root", lambda: repo_root)
+
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        exit_code = drill_verifier.main(
+            [
+                "--drill-path",
+                "docs/ops/drill.md",
+                "--max-drill-age-days",
+                "99999",
+            ]
+        )
+    finally:
+        os.chdir(old_cwd)
+
+    assert exit_code == 0
+
+
+def test_main_rejects_relative_drill_path_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(drill_verifier, "_repo_root", lambda: repo_root)
+
+    assert drill_verifier.main(["--drill-path", "../escape/drill.md"]) == 2
+
+
+def test_main_rejects_directory_drill_path(tmp_path: Path) -> None:
+    drill_dir = tmp_path / "drill-dir"
+    drill_dir.mkdir()
+
+    assert drill_verifier.main(["--drill-path", str(drill_dir)]) == 2

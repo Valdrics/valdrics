@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
+import scripts.verify_monthly_finance_evidence_refresh as monthly_refresh_verifier
 from scripts.verify_monthly_finance_evidence_refresh import (
     main,
     verify_monthly_refresh,
@@ -132,6 +134,78 @@ def test_main_accepts_valid_payloads(tmp_path: Path) -> None:
         ]
     )
     assert exit_code == 0
+
+
+def test_main_resolves_relative_paths_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = monthly_refresh_verifier.Path(monthly_refresh_verifier.__file__).resolve().parents[1]
+    finance_guardrails = repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json"
+    finance_telemetry = repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json"
+    pkg_fin = repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json"
+    monkeypatch.chdir(tmp_path)
+
+    assert (
+        main(
+            [
+                "--finance-guardrails-path",
+                os.path.relpath(finance_guardrails, repo_root),
+                "--finance-telemetry-snapshot-path",
+                os.path.relpath(finance_telemetry, repo_root),
+                "--pkg-fin-policy-decisions-path",
+                os.path.relpath(pkg_fin, repo_root),
+                "--as-of",
+                "2026-03-15T00:00:00Z",
+            ]
+        )
+        == 0
+    )
+
+
+def test_main_rejects_relative_repo_escape(tmp_path: Path) -> None:
+    outside_artifact = tmp_path / "outside.json"
+    _write(outside_artifact, captured_at="2026-02-27T10:00:00Z")
+    repo_root = monthly_refresh_verifier.Path(monthly_refresh_verifier.__file__).resolve().parents[1]
+
+    assert (
+        main(
+            [
+                "--finance-guardrails-path",
+                os.path.relpath(outside_artifact, repo_root),
+                "--finance-telemetry-snapshot-path",
+                str(outside_artifact),
+                "--pkg-fin-policy-decisions-path",
+                str(outside_artifact),
+                "--as-of",
+                "2026-03-15T00:00:00Z",
+            ]
+        )
+        == 2
+    )
+
+
+def test_main_rejects_directory_artifact_path(tmp_path: Path) -> None:
+    artifact_dir = tmp_path / "artifact-dir"
+    artifact_dir.mkdir()
+    artifact_file = tmp_path / "artifact.json"
+    _write(artifact_file, captured_at="2026-02-27T10:00:00Z")
+
+    assert (
+        main(
+            [
+                "--finance-guardrails-path",
+                str(artifact_dir),
+                "--finance-telemetry-snapshot-path",
+                str(artifact_file),
+                "--pkg-fin-policy-decisions-path",
+                str(artifact_file),
+                "--as-of",
+                "2026-03-15T00:00:00Z",
+            ]
+        )
+        == 2
+    )
 
 
 @pytest.mark.parametrize(

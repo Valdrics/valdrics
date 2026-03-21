@@ -4,11 +4,20 @@
 from __future__ import annotations
 
 import argparse
-import json
 import tempfile
 from pathlib import Path
 from typing import Any
 
+from scripts.env_generation_common import (
+    checked_in_evidence_paths as _checked_in_evidence_paths_shared,
+    ensure_parent_dir as _ensure_parent_dir_shared,
+    promote_staged_file as _promote_staged_file,
+    protected_output_paths_from_root as _protected_output_paths_from_root,
+    repo_root_for as _repo_root_for,
+    resolve_output_path_from_root as _resolve_output_path_from_root,
+    resolve_repo_relative_path_from_root as _resolve_repo_relative_path_from_root,
+    stage_json_file as _stage_json_file_shared,
+)
 from scripts.finance_committee_packet_assumptions_engine import (
     derive_assumptions_inputs,
 )
@@ -17,49 +26,42 @@ from scripts.verify_finance_telemetry_snapshot import verify_snapshot
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
 
 
 def _checked_in_evidence_paths(repo_root: Path) -> set[Path]:
-    evidence_dir = repo_root / "docs" / "ops" / "evidence"
-    if not evidence_dir.exists():
-        return set()
-    return {path.resolve() for path in evidence_dir.iterdir() if path.is_file()}
+    return _checked_in_evidence_paths_shared(repo_root)
 
 
 def _protected_output_paths() -> set[Path]:
-    repo_root = _repo_root()
-    return {
-        Path(__file__).resolve(),
-        repo_root / "scripts" / "generate_finance_telemetry_snapshot.py",
-        repo_root / "scripts" / "verify_finance_telemetry_snapshot.py",
-        repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json",
-        repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md",
-        *_checked_in_evidence_paths(repo_root),
-    }
+    return _protected_output_paths_from_root(
+        _repo_root(),
+        __file__,
+        "scripts/generate_finance_telemetry_snapshot.py",
+        "scripts/verify_finance_telemetry_snapshot.py",
+        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/key-rotation-drill-2026-02-27.md",
+    )
 
 
 def _resolve_repo_relative_path(value: str, *, field_name: str) -> Path:
-    raw = Path(str(value)).expanduser()
-    if raw.is_absolute():
-        return raw.resolve()
-    resolved = (_repo_root() / raw).resolve()
-    try:
-        resolved.relative_to(_repo_root())
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must stay within repo root when relative") from exc
-    return resolved
+    return _resolve_repo_relative_path_from_root(
+        _repo_root(),
+        value,
+        field_name=field_name,
+    )
 
 
 def _resolve_output_path(value: str) -> Path:
-    resolved = _resolve_repo_relative_path(value, field_name="output")
-    if resolved.exists() and not resolved.is_file():
-        raise ValueError(f"output must be a file path: {resolved.as_posix()}")
-    if resolved in _protected_output_paths():
-        raise ValueError(
+    return _resolve_output_path_from_root(
+        _repo_root(),
+        value,
+        field_name="output",
+        protected_paths=_protected_output_paths(),
+        protected_error=(
             "output must not overwrite finance assumptions source, telemetry generator, verifier, or checked-in evidence files"
-        )
-    return resolved
+        ),
+    )
 
 
 def _resolve_input_path(value: str) -> Path:
@@ -67,17 +69,14 @@ def _resolve_input_path(value: str) -> Path:
 
 
 def _ensure_output_parent_dir(output_path: Path) -> None:
-    current = output_path.parent
-    while True:
-        if current.exists():
-            if not current.is_dir():
-                raise ValueError(
-                    f"output parent must be a directory path: {current.as_posix()}"
-                )
-            return
-        if current == current.parent:
-            return
-        current = current.parent
+    _ensure_parent_dir_shared(output_path, field_name="output")
+
+
+def _stage_json_file(output_path: Path, payload: dict[str, Any]) -> Path:
+    return _stage_json_file_shared(
+        output_path,
+        payload,
+    )
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -142,8 +141,12 @@ def main(argv: list[str] | None = None) -> int:
     assumptions = derive_assumptions_inputs(telemetry=telemetry)
     assumptions["source_telemetry_path"] = source_telemetry
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(assumptions, indent=2, sort_keys=True), encoding="utf-8")
+    staged_output_path = _stage_json_file(output_path, assumptions)
+    _promote_staged_file(
+        staged_output_path,
+        output_path,
+        cleanup_output_on_failure=True,
+    )
     print(f"Generated finance committee packet assumptions: {output_path}")
     return 0
 

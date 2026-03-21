@@ -3,9 +3,11 @@ from __future__ import annotations
 import math
 from pathlib import Path
 import json
+import os
 
 import pytest
 
+import scripts.verify_enforcement_stress_evidence as stress_verifier
 from scripts.verify_enforcement_stress_evidence import main, verify_evidence
 
 
@@ -258,6 +260,35 @@ def test_verify_evidence_rejects_missing_enforcement_endpoint(tmp_path: Path) ->
     _write(path, payload)
     with pytest.raises(ValueError, match="enforcement API endpoints"):
         _verify(path)
+
+
+def test_main_resolves_relative_evidence_path_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    path = repo_root / "docs" / "ops" / "stress.json"
+    _write(path, _valid_payload())
+    monkeypatch.setattr(stress_verifier, "_repo_root", lambda: repo_root)
+
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        assert main(["--evidence-path", "docs/ops/stress.json"]) == 0
+    finally:
+        os.chdir(old_cwd)
+
+
+def test_main_rejects_relative_evidence_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(stress_verifier, "_repo_root", lambda: repo_root)
+
+    assert main(["--evidence-path", "../escape/stress.json"]) == 2
 
 
 def test_verify_evidence_rejects_underpowered_or_incomplete_profile(tmp_path: Path) -> None:

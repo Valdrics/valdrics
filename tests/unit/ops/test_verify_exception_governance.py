@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
+import pytest
+
+import scripts.verify_exception_governance as exception_governance_verifier
 from scripts.verify_exception_governance import (
     ExceptionSite,
     collect_exception_sites,
@@ -116,3 +120,105 @@ def test_repo_baseline_matches_current_exception_sites() -> None:
         ]
     )
     assert exit_code == 0
+
+
+def test_main_write_baseline_does_not_leave_output_when_promotion_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "code"
+    baseline_path = tmp_path / "baseline.json"
+    path_type = type(baseline_path)
+    original_replace = path_type.replace
+    _write(
+        root / "sample.py",
+        "\n".join(
+            [
+                "def f():",
+                "    try:",
+                "        return 1",
+                "    except Exception as exc:",
+                "        return str(exc)",
+            ]
+        ),
+    )
+
+    def _failing_replace(self: Path, target: Path) -> Path:
+        if self.parent == baseline_path.parent and Path(target) == baseline_path:
+            raise OSError("simulated promotion failure")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(path_type, "replace", _failing_replace)
+
+    with pytest.raises(OSError, match="simulated promotion failure"):
+        main(
+            [
+                "--root",
+                str(root),
+                "--baseline-path",
+                str(baseline_path),
+                "--write-baseline",
+            ]
+        )
+
+    assert not baseline_path.exists()
+    assert not list(baseline_path.parent.glob(f".{baseline_path.stem}.*{baseline_path.suffix}.tmp"))
+
+
+def test_main_resolves_default_roots_and_baseline_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = Path(exception_governance_verifier.__file__).resolve().parents[1]
+    captured: dict[str, object] = {}
+
+    def _capture_sites(*, roots: tuple[Path, ...]) -> tuple[ExceptionSite, ...]:
+        captured["roots"] = roots
+        return ()
+
+    def _capture_write(
+        *,
+        baseline_path: Path,
+        roots: tuple[Path, ...],
+        sites: tuple[ExceptionSite, ...],
+    ) -> None:
+        captured["baseline_path"] = baseline_path
+        captured["write_roots"] = roots
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        exception_governance_verifier,
+        "collect_exception_sites",
+        _capture_sites,
+    )
+    monkeypatch.setattr(
+        exception_governance_verifier,
+        "write_baseline",
+        _capture_write,
+    )
+
+    assert main(["--write-baseline"]) == 0
+    assert captured["roots"] == (repo_root / "app", repo_root / "scripts")
+    assert captured["write_roots"] == (repo_root / "app", repo_root / "scripts")
+    assert captured["baseline_path"] == (
+        repo_root / "docs" / "ops" / "evidence" / "exception_governance_baseline.json"
+    )
+
+
+def test_main_rejects_relative_root_repo_escape() -> None:
+    assert main(["--root", os.path.join("..", ".."), "--write-baseline"]) == 2
+
+
+def test_main_rejects_relative_baseline_repo_escape() -> None:
+    assert (
+        main(
+            [
+                "--root",
+                str(REPO_ROOT / "app"),
+                "--baseline-path",
+                os.path.join("..", "outside.json"),
+                "--write-baseline",
+            ]
+        )
+        == 2
+    )

@@ -49,7 +49,7 @@ def _fail(resp: httpx.Response, prefix: str) -> None:
 
 
 def _api_get(client: httpx.Client, url: str, headers: dict[str, str]) -> Any:
-    resp = client.get(url, headers=headers, timeout=30)
+    resp = client.get(url, headers=headers, timeout=REQUEST_TIMEOUT)
     if resp.status_code >= 400:
         _fail(resp, f"GET {url} failed")
     return _safe_json(resp)
@@ -61,7 +61,7 @@ def _api_post(
     headers: dict[str, str],
     json_body: dict[str, Any] | None = None,
 ) -> Any:
-    resp = client.post(url, headers=headers, json=json_body, timeout=30)
+    resp = client.post(url, headers=headers, json=json_body, timeout=REQUEST_TIMEOUT)
     if resp.status_code >= 400:
         _fail(resp, f"POST {url} failed")
     return _safe_json(resp)
@@ -94,7 +94,7 @@ def _build_client() -> httpx.Client:
     return httpx.Client(follow_redirects=True, timeout=REQUEST_TIMEOUT)
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         description="Verify pending_approval remediation flow against live API."
     )
@@ -112,7 +112,7 @@ def main() -> None:
         action="store_true",
         help="Execute again after approval (requires --approve).",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     token = _must_env("VALDRICS_TOKEN")
     try:

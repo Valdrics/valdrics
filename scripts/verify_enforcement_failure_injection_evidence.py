@@ -9,6 +9,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_repo_relative_path_from_root as _resolve_repo_relative_path_from_root,
+)
+
 
 REQUIRED_SCENARIO_IDS: tuple[str, ...] = (
     "FI-001",
@@ -19,9 +24,26 @@ REQUIRED_SCENARIO_IDS: tuple[str, ...] = (
 )
 
 
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_evidence_path(path: Path) -> Path:
+    resolved = _resolve_repo_relative_path_from_root(
+        _repo_root(),
+        path,
+        field_name="evidence_path",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"Evidence file must be a file: {resolved}")
+    return resolved
+
+
 def _load_payload(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Evidence file not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"Evidence file must be a file: {path}")
     raw = path.read_text(encoding="utf-8")
     try:
         payload = json.loads(raw)
@@ -223,11 +245,15 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    return verify_evidence(
-        evidence_path=Path(str(args.evidence_path)),
-        expected_profile=str(args.expected_profile),
-        max_artifact_age_hours=args.max_artifact_age_hours,
-    )
+    try:
+        return verify_evidence(
+            evidence_path=_resolve_evidence_path(Path(str(args.evidence_path))),
+            expected_profile=str(args.expected_profile),
+            max_artifact_age_hours=args.max_artifact_age_hours,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[enforcement-failure-injection] failed: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

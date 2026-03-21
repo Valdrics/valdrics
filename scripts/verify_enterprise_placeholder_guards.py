@@ -6,6 +6,10 @@ import argparse
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 from typing import Iterable, Sequence
 
 DEFAULT_STRICT_SCAN_ROOTS: tuple[Path, ...] = (
@@ -45,6 +49,14 @@ DEFAULT_MARKER_PATTERNS: tuple[str, ...] = (
 
 DEFAULT_FILE_EXTENSIONS: tuple[str, ...] = (".py",)
 DEFAULT_FULL_ALLOWLIST_FILE = Path("scripts/placeholder_guard_allowlist_full.txt")
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_repo_path(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="root")
 
 
 @dataclass(frozen=True)
@@ -158,10 +170,10 @@ def load_allow_rules(path: Path) -> list[AllowRule]:
 
 def _resolve_scan_roots(profile: str, explicit_roots: Sequence[str]) -> tuple[Path, ...]:
     if explicit_roots:
-        return tuple(Path(item) for item in explicit_roots)
+        return tuple(_resolve_repo_path(Path(item)) for item in explicit_roots)
     if profile == "full":
-        return DEFAULT_FULL_SCAN_ROOTS
-    return DEFAULT_STRICT_SCAN_ROOTS
+        return tuple(_resolve_repo_path(path) for path in DEFAULT_FULL_SCAN_ROOTS)
+    return tuple(_resolve_repo_path(path) for path in DEFAULT_STRICT_SCAN_ROOTS)
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -212,9 +224,12 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = _parse_args(argv)
-
-    roots = _resolve_scan_roots(args.profile, args.root)
+    try:
+        args = _parse_args(argv)
+        roots = _resolve_scan_roots(args.profile, args.root)
+    except ValueError as exc:
+        print(f"[enterprise-placeholder-guards] failed: {exc}")
+        return 2
     patterns = (
         tuple(DEFAULT_MARKER_PATTERNS) + tuple(args.pattern)
         if args.pattern
@@ -227,7 +242,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     allow_rules: list[AllowRule] = []
     if allowlist_path is not None:
-        allow_rules = load_allow_rules(allowlist_path)
+        allow_rules = load_allow_rules(_resolve_repo_path(allowlist_path))
 
     missing_roots = [root for root in roots if not root.exists()]
     if missing_roots and not args.allow_missing_root:

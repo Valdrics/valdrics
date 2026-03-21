@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
+import scripts.cla_assistant as cla_assistant_module
 from scripts.cla_assistant import (
     COMMENT_MARKER,
     ClaState,
@@ -188,3 +192,77 @@ def test_comment_sync_403_does_not_block_status_update() -> None:
             "context": "cla-assistant",
         }
     ]
+
+
+def test_main_resolves_relative_event_path_from_repo_root(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    event_path = tmp_path / "events" / "pr.json"
+    event_path.parent.mkdir(parents=True)
+    event_path.write_text(
+        json.dumps({"number": 17, "repository": {"default_branch": "main"}}),
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    class _Client:
+        def __init__(self, *, token: str, repository: str, api_url: str) -> None:
+            captured["client"] = {
+                "token": token,
+                "repository": repository,
+                "api_url": api_url,
+            }
+
+    def _fake_run(**kwargs):
+        captured["run"] = kwargs
+        return 0
+
+    monkeypatch.setattr(cla_assistant_module, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(cla_assistant_module, "GitHubClient", _Client)
+    monkeypatch.setattr(cla_assistant_module, "run", _fake_run)
+
+    exit_code = cla_assistant_module.main(
+        [
+            "--event-name",
+            "pull_request_target",
+            "--event-path",
+            "events/pr.json",
+            "--repository",
+            "Valdrics/valdrics",
+            "--token",
+            "token",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["client"] == {
+        "token": "token",
+        "repository": "Valdrics/valdrics",
+        "api_url": "https://api.github.com",
+    }
+    assert captured["run"]["event"]["number"] == 17
+
+
+def test_main_rejects_event_path_escape(
+    monkeypatch,
+    tmp_path: Path,
+    capsys,
+) -> None:
+    monkeypatch.setattr(cla_assistant_module, "_repo_root", lambda: tmp_path)
+
+    exit_code = cla_assistant_module.main(
+        [
+            "--event-name",
+            "pull_request_target",
+            "--event-path",
+            "../outside.json",
+            "--repository",
+            "Valdrics/valdrics",
+            "--token",
+            "token",
+        ]
+    )
+
+    assert exit_code == 2
+    assert "event-path must stay within repo root when relative" in capsys.readouterr().err

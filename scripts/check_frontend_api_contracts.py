@@ -15,6 +15,10 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 
 @dataclass(frozen=True)
@@ -22,6 +26,14 @@ class FrontendPathRef:
     path: str
     file_path: Path
     expression: str
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_repo_root(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="repo_root")
 
 
 def _read_text(path: Path) -> str:
@@ -256,15 +268,19 @@ def run(repo_root: Path) -> int:
     return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--repo-root",
-        default=str(Path(__file__).resolve().parents[1]),
+        default=str(_repo_root()),
         help="Repository root path",
     )
-    args = parser.parse_args()
-    return run(Path(args.repo_root).resolve())
+    args = parser.parse_args(argv)
+    try:
+        return run(_resolve_repo_root(Path(str(args.repo_root))))
+    except ValueError as exc:
+        print(f"[api-contract] failed: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

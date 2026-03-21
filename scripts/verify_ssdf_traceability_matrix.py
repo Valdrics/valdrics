@@ -5,6 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 from typing import Any
 
 
@@ -36,12 +40,18 @@ ALLOWED_STATUSES: set[str] = {"implemented_baseline", "partial", "planned"}
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
+
+
+def _resolve_matrix_path(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="matrix_path")
 
 
 def load_matrix(matrix_path: Path) -> dict[str, Any]:
     if not matrix_path.exists():
         raise FileNotFoundError(f"SSDF matrix file not found: {matrix_path}")
+    if not matrix_path.is_file():
+        raise ValueError(f"SSDF matrix path must be a file: {matrix_path}")
     raw = matrix_path.read_text(encoding="utf-8")
     try:
         payload = json.loads(raw)
@@ -107,10 +117,20 @@ def validate_matrix(matrix: dict[str, Any], *, repo_root: Path) -> None:
                 raise ValueError(
                     f"Practice {practice_id} evidence path must be relative: {raw_path}"
                 )
-            full_path = repo_root / rel_path
+            full_path = (repo_root / rel_path).resolve()
+            try:
+                full_path.relative_to(repo_root.resolve())
+            except ValueError as exc:
+                raise ValueError(
+                    f"Practice {practice_id} evidence path must stay within repo root: {raw_path}"
+                ) from exc
             if not full_path.exists():
                 raise ValueError(
                     f"Practice {practice_id} evidence path does not exist: {raw_path}"
+                )
+            if not full_path.is_file():
+                raise ValueError(
+                    f"Practice {practice_id} evidence path must be a file: {raw_path}"
                 )
 
     missing = sorted(set(REQUIRED_PRACTICE_IDS) - seen_ids)
@@ -144,7 +164,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    matrix_path = Path(str(args.matrix_path))
+    matrix_path = _resolve_matrix_path(Path(str(args.matrix_path)))
     return verify_matrix_file(matrix_path)
 
 

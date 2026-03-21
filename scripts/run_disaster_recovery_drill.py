@@ -8,14 +8,25 @@ import asyncio
 import json
 import time
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
 
 from app.shared.core.auth import create_access_token
+from scripts.env_generation_common import (
+    ensure_parent_dir,
+    promote_staged_file,
+    repo_root_for,
+    resolve_cli_path_from_root,
+    stage_json_file,
+)
+
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run a DR drill against a rebuilt application instance."
     )
@@ -31,7 +42,19 @@ def _parse_args() -> argparse.Namespace:
         default=1200,
         help="Fail if the rebuild-and-verify drill exceeds this duration.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def _resolve_output_path(value: str) -> Path:
+    resolved = resolve_cli_path_from_root(
+        _repo_root(),
+        Path(value),
+        field_name="out",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"out must be a file path: {resolved}")
+    ensure_parent_dir(resolved, field_name="out")
+    return resolved
 
 
 async def _request_json(
@@ -50,8 +73,12 @@ async def _request_json(
     return int(response.status_code), payload
 
 
-async def main() -> None:
-    args = _parse_args()
+async def main(argv: list[str] | None = None) -> None:
+    args = _parse_args(argv)
+    try:
+        output_path = _resolve_output_path(str(args.out)) if args.out else None
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
     started_at = datetime.now(timezone.utc)
     monotonic_start = time.perf_counter()
     base_url = str(args.url).rstrip("/")
@@ -118,9 +145,12 @@ async def main() -> None:
     evidence["duration_seconds"] = duration_seconds
     evidence["rebuild_and_verify_objective_seconds"] = int(args.max_duration_seconds)
 
-    if args.out:
-        with open(args.out, "w", encoding="utf-8") as handle:
-            json.dump(evidence, handle, indent=2, sort_keys=True)
+    if output_path is not None:
+        try:
+            staged_path = stage_json_file(output_path, evidence, indent=2, sort_keys=True)
+            promote_staged_file(staged_path, output_path)
+        except OSError as exc:
+            raise SystemExit(f"Failed to write disaster recovery evidence: {exc}") from exc
 
     print(json.dumps(evidence, indent=2, sort_keys=True))
 

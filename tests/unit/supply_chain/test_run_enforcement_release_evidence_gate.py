@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import subprocess
 
 import pytest
 
+import scripts.run_enforcement_release_evidence_gate as release_gate_module
 from scripts.run_enforcement_release_evidence_gate import (
     build_gate_environment,
     main,
@@ -289,10 +291,11 @@ def test_run_release_gate_invokes_enterprise_gate_with_env(
 
     captured: dict[str, object] = {}
 
-    def _fake_run(cmd, *, check: bool, env: dict[str, str]):
+    def _fake_run(cmd, *, check: bool, env: dict[str, str], cwd: Path):
         del check
         captured["cmd"] = list(cmd)
         captured["env"] = dict(env)
+        captured["cwd"] = cwd
         return subprocess.CompletedProcess(args=cmd, returncode=0)
 
     monkeypatch.setattr(
@@ -331,6 +334,7 @@ def test_run_release_gate_invokes_enterprise_gate_with_env(
         "scripts/run_enterprise_tdd_gate.py",
         "--dry-run",
     ]
+    assert captured["cwd"] == release_gate_module.Path(release_gate_module.__file__).resolve().parents[1]
     env = captured["env"]
     assert env["ENFORCEMENT_STRESS_EVIDENCE_REQUIRED"] == "true"
     assert env["ENFORCEMENT_FAILURE_INJECTION_EVIDENCE_REQUIRED"] == "true"
@@ -425,9 +429,15 @@ def test_main_dry_run_succeeds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     _write(stress)
     _write(failure)
 
+    captured: dict[str, object] = {}
+
+    def _fake_run(cmd, *, check, env, cwd):
+        captured["cwd"] = cwd
+        return subprocess.CompletedProcess(args=cmd, returncode=0)
+
     monkeypatch.setattr(
         "scripts.run_enforcement_release_evidence_gate.subprocess.run",
-        lambda cmd, *, check, env: subprocess.CompletedProcess(args=cmd, returncode=0),
+        _fake_run,
     )
     monkeypatch.setattr(
         "scripts.run_enforcement_release_evidence_gate._resolve_uv_executable",
@@ -453,3 +463,57 @@ def test_main_dry_run_succeeds(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         ]
     )
     assert exit_code == 0
+    assert captured["cwd"] == release_gate_module.Path(release_gate_module.__file__).resolve().parents[1]
+
+
+def test_main_resolves_relative_paths_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    stress = repo_root / "stress.json"
+    failure = repo_root / "failure.json"
+    _write(stress)
+    _write(failure)
+    monkeypatch.setattr(release_gate_module, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        release_gate_module,
+        "run_release_gate",
+        lambda **kwargs: 0,
+    )
+    monkeypatch.chdir(tmp_path)
+
+    assert (
+        main(
+            [
+                "--stress-evidence-path",
+                "stress.json",
+                "--failure-evidence-path",
+                "failure.json",
+                "--dry-run",
+            ]
+        )
+        == 0
+    )
+
+
+def test_main_rejects_relative_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(release_gate_module, "_repo_root", lambda: repo_root)
+
+    assert (
+        main(
+            [
+                "--stress-evidence-path",
+                os.path.join("..", "stress.json"),
+                "--failure-evidence-path",
+                "failure.json",
+            ]
+        )
+        == 2
+    )

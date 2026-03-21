@@ -5,10 +5,12 @@ import subprocess
 
 import pytest
 
+import scripts.verify_supply_chain_attestations as attestation_verifier
 from scripts.verify_supply_chain_attestations import (
     DEFAULT_ARTIFACT_PATHS,
     MIN_GH_VERSION,
     _repo_slug_from_remote_url,
+    _resolve_repo_from_git_remote,
     build_verify_command,
     check_gh_cli_version,
     main,
@@ -91,6 +93,39 @@ def test_repo_slug_from_remote_url_supports_common_github_formats() -> None:
     assert _repo_slug_from_remote_url("https://gitlab.com/acme/repo.git") == ""
 
 
+def test_resolve_repo_from_git_remote_uses_repo_root_cwd(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    captured: dict[str, Path | None] = {}
+
+    monkeypatch.setattr(attestation_verifier, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(attestation_verifier, "_resolve_git_executable", lambda: "git")
+
+    def _fake_run(
+        cmd: list[str],
+        *,
+        cwd: Path | None = None,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        captured["cwd"] = cwd
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="git@github.com:Valdrics/valdrics.git\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(attestation_verifier.subprocess, "run", _fake_run)
+
+    assert _resolve_repo_from_git_remote() == "Valdrics/valdrics"
+    assert captured["cwd"] == repo_root
+
+
 def test_check_gh_cli_version_rejects_old_version(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -102,6 +137,7 @@ def test_check_gh_cli_version_rejects_old_version(
     def _fake_run(
         cmd: list[str],
         *,
+        cwd: Path | None = None,
         check: bool,
         capture_output: bool,
         text: bool,
@@ -135,6 +171,7 @@ def test_check_gh_cli_version_rejects_missing_attestation_subcommand(
     def _fake_run(
         cmd: list[str],
         *,
+        cwd: Path | None = None,
         check: bool,
         capture_output: bool,
         text: bool,
@@ -175,6 +212,7 @@ def test_check_gh_cli_version_accepts_supported_cli(
     def _fake_run(
         cmd: list[str],
         *,
+        cwd: Path | None = None,
         check: bool,
         capture_output: bool,
         text: bool,
@@ -215,6 +253,7 @@ def test_verify_attestations_executes_gh_verify_for_each_artifact(
     def _fake_run(
         cmd: list[str],
         *,
+        cwd: Path | None = None,
         check: bool,
         capture_output: bool,
         text: bool,
@@ -267,6 +306,7 @@ def test_verify_attestations_rejects_empty_verification_results(
     def _fake_run(
         cmd: list[str],
         *,
+        cwd: Path | None = None,
         check: bool,
         capture_output: bool,
         text: bool,
@@ -311,6 +351,7 @@ def test_verify_attestations_retries_transient_failures_then_succeeds(
     def _fake_run(
         cmd: list[str],
         *,
+        cwd: Path | None = None,
         check: bool,
         capture_output: bool,
         text: bool,
@@ -369,6 +410,7 @@ def test_verify_attestations_raises_after_transient_retry_budget_exhausted(
     def _fake_run(
         cmd: list[str],
         *,
+        cwd: Path | None = None,
         check: bool,
         capture_output: bool,
         text: bool,
@@ -411,6 +453,63 @@ def test_verify_attestations_raises_after_transient_retry_budget_exhausted(
     assert sleep_delays == [2.0, 4.0, 8.0]
 
 
+def test_verify_attestations_runs_gh_commands_from_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    artifact = repo_root / "sbom.json"
+    _write(artifact, '{"a":1}')
+    captured_cwds: list[Path | None] = []
+
+    monkeypatch.setattr(attestation_verifier, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(attestation_verifier, "_resolve_gh_executable", lambda: "gh")
+
+    def _fake_run(
+        cmd: list[str],
+        *,
+        cwd: Path | None = None,
+        check: bool,
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        captured_cwds.append(cwd)
+        if cmd[:2] == ["gh", "version"]:
+            return subprocess.CompletedProcess(
+                args=cmd,
+                returncode=0,
+                stdout="gh version 2.67.0 (2025-05-06)\n",
+                stderr="",
+            )
+        if cmd[:3] == ["gh", "attestation", "verify"] and cmd[-1] == "--help":
+            return subprocess.CompletedProcess(
+                args=cmd,
+                returncode=0,
+                stdout="Verify artifact attestations",
+                stderr="",
+            )
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout='[{"verificationResult":{"verifiedTimestamps":[]}}]',
+            stderr="",
+        )
+
+    monkeypatch.setattr(attestation_verifier.subprocess, "run", _fake_run)
+
+    exit_code = verify_attestations(
+        repo="acme/valdrics",
+        signer_workflow=".github/workflows/sbom.yml",
+        artifacts=(artifact,),
+        dry_run=False,
+    )
+
+    assert exit_code == 0
+    assert captured_cwds
+    assert all(cwd == repo_root for cwd in captured_cwds)
+
+
 def test_main_dry_run_succeeds(tmp_path: Path) -> None:
     artifact = tmp_path / "sbom.json"
     _write(artifact, '{"a":1}')
@@ -445,4 +544,93 @@ def test_main_dry_run_uses_git_remote_and_default_artifacts(
     assert exit_code == 0
     assert "Valdrics/valdrics" in captured
     for artifact in DEFAULT_ARTIFACT_PATHS:
-        assert artifact.as_posix() in captured
+        assert str((attestation_verifier._repo_root() / artifact).resolve()) in captured
+
+
+def test_main_resolves_relative_artifact_from_repo_root_when_run_from_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(attestation_verifier, "_repo_root", lambda: repo_root)
+    captured: dict[str, object] = {}
+
+    def _fake_verify_attestations(**kwargs: object) -> int:
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(attestation_verifier, "verify_attestations", _fake_verify_attestations)
+
+    exit_code = main(
+        [
+            "--repo",
+            "acme/valdrics",
+            "--artifact",
+            "sbom/runtime-sbom.json",
+            "--dry-run",
+        ]
+    )
+
+    assert exit_code == 0
+    assert captured["artifacts"] == (
+        (repo_root / "sbom" / "runtime-sbom.json").resolve(),
+    )
+
+
+def test_main_resolves_default_artifacts_from_repo_root_when_run_from_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(attestation_verifier, "_repo_root", lambda: repo_root)
+    monkeypatch.delenv("GITHUB_REPOSITORY", raising=False)
+    monkeypatch.setattr(
+        attestation_verifier,
+        "_resolve_repo_from_git_remote",
+        lambda: "Valdrics/valdrics",
+    )
+    captured: dict[str, object] = {}
+
+    def _fake_verify_attestations(**kwargs: object) -> int:
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(attestation_verifier, "verify_attestations", _fake_verify_attestations)
+
+    exit_code = main(["--dry-run"])
+
+    assert exit_code == 0
+    assert captured["artifacts"] == tuple(
+        (repo_root / artifact).resolve() for artifact in DEFAULT_ARTIFACT_PATHS
+    )
+
+
+def test_main_rejects_relative_artifact_that_escapes_repo_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    outside_cwd = tmp_path / "outside"
+    outside_cwd.mkdir(parents=True, exist_ok=True)
+    monkeypatch.chdir(outside_cwd)
+    monkeypatch.setattr(attestation_verifier, "_repo_root", lambda: repo_root)
+
+    with pytest.raises(ValueError, match="artifact must stay within repo root when relative"):
+        main(
+            [
+                "--repo",
+                "acme/valdrics",
+                "--artifact",
+                "../escape/sbom.json",
+                "--dry-run",
+            ]
+        )

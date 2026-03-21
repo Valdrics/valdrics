@@ -55,6 +55,7 @@ def test_generate_evidence_requires_non_empty_profile(tmp_path: Path) -> None:
         "docs/ops/evidence/enforcement_failure_injection_2026-02-27.json",
         "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
         "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
+        "docs/ops/evidence/README.md",
     ],
 )
 def test_generate_evidence_rejects_protected_output_collisions(
@@ -86,6 +87,11 @@ def test_generate_evidence_rejects_relative_protected_output_from_outside_repo(
 ) -> None:
     repo_root = tmp_path / "repo"
     repo_root.mkdir(parents=True, exist_ok=True)
+    protected_output = (
+        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json"
+    )
+    protected_output.parent.mkdir(parents=True, exist_ok=True)
+    protected_output.write_text("{}", encoding="utf-8")
     outside_cwd = tmp_path / "outside"
     outside_cwd.mkdir(parents=True, exist_ok=True)
     monkeypatch.chdir(outside_cwd)
@@ -212,6 +218,7 @@ def test_generate_evidence_writes_summary_and_scenarios(
         )
 
     monkeypatch.setattr(generator, "_run_scenario", _fake_run_scenario)
+    monkeypatch.setattr(generator, "verify_evidence", lambda **_: 0)
 
     output = tmp_path / "evidence.json"
     artifact, overall_passed = generator.generate_evidence(
@@ -240,12 +247,57 @@ def test_generate_evidence_writes_summary_and_scenarios(
     assert on_disk["execution_class"] == "staged"
 
 
+def test_generate_evidence_does_not_leave_output_when_verification_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_run_scenario(
+        scenario: generator.FailureScenario, *, cwd: Path, timeout_seconds: float
+    ) -> tuple[dict[str, object], bool]:
+        del cwd, timeout_seconds
+        return (
+            {
+                "id": scenario.scenario_id,
+                "status": "pass",
+                "duration_seconds": 0.5,
+                "checks": list(scenario.checks),
+                "evidence_refs": list(scenario.selectors),
+                "command": "pytest",
+                "result_tail": "ok",
+            },
+            True,
+        )
+
+    monkeypatch.setattr(generator, "_run_scenario", _fake_run_scenario)
+    monkeypatch.setattr(
+        generator,
+        "verify_evidence",
+        lambda **_: (_ for _ in ()).throw(ValueError("failure injection verification failed")),
+    )
+
+    output = tmp_path / "evidence.json"
+    with pytest.raises(ValueError, match="failure injection verification failed"):
+        generator.generate_evidence(
+            output=output,
+            executed_by="executor@valdrics.local",
+            approved_by="approver@valdrics.local",
+            profile="enforcement_failure_injection",
+            cwd=tmp_path,
+            timeout_seconds=60.0,
+        )
+
+    assert not output.exists()
+
+
 def test_main_exit_code_follows_overall_result(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    captured_outputs: list[Path] = []
+
     def _fake_generate_evidence(**kwargs: object) -> tuple[dict[str, object], bool]:
         output = kwargs["output"]
         assert isinstance(output, Path)
+        captured_outputs.append(output)
         output.write_text(
             json.dumps(
                 {
@@ -274,13 +326,6 @@ def test_main_exit_code_follows_overall_result(
         )
 
     monkeypatch.setattr(generator, "generate_evidence", _fake_generate_evidence)
-    verify_calls: list[dict[str, object]] = []
-
-    def _fake_verify(**kwargs: object) -> int:
-        verify_calls.append(kwargs)
-        return 0
-
-    monkeypatch.setattr(generator, "verify_evidence", _fake_verify)
 
     exit_code = generator.main(
         [
@@ -293,13 +338,7 @@ def test_main_exit_code_follows_overall_result(
         ]
     )
     assert exit_code == 0
-    assert len(verify_calls) == 1
-    verify_path = verify_calls[0]["evidence_path"]
-    assert isinstance(verify_path, Path)
-    assert verify_path.parent == tmp_path
-    assert verify_path != tmp_path / "artifact.json"
-    assert verify_calls[0]["expected_profile"] == "enforcement_failure_injection"
-    assert verify_calls[0]["max_artifact_age_hours"] == 4.0
+    assert captured_outputs == [tmp_path / "artifact.json"]
     assert (tmp_path / "artifact.json").exists()
 
 
@@ -310,41 +349,10 @@ def test_main_does_not_leave_output_when_verification_fails(
     output = tmp_path / "artifact.json"
 
     def _fake_generate_evidence(**kwargs: object) -> tuple[dict[str, object], bool]:
-        staged_output = kwargs["output"]
-        assert isinstance(staged_output, Path)
-        staged_output.write_text(
-            json.dumps(
-                {
-                    "profile": "enforcement_failure_injection",
-                    "summary": {
-                        "total_scenarios": 5,
-                        "passed_scenarios": 5,
-                        "failed_scenarios": 0,
-                        "overall_passed": True,
-                    },
-                }
-            ),
-            encoding="utf-8",
-        )
-        return (
-            {
-                "profile": "enforcement_failure_injection",
-                "summary": {
-                    "total_scenarios": 5,
-                    "passed_scenarios": 5,
-                    "failed_scenarios": 0,
-                    "overall_passed": True,
-                },
-            },
-            True,
-        )
+        assert kwargs["output"] == output
+        raise ValueError("failure injection verification failed")
 
     monkeypatch.setattr(generator, "generate_evidence", _fake_generate_evidence)
-    monkeypatch.setattr(
-        generator,
-        "verify_evidence",
-        lambda **_: (_ for _ in ()).throw(ValueError("failure injection verification failed")),
-    )
 
     with pytest.raises(ValueError, match="failure injection verification failed"):
         generator.main(
@@ -366,13 +374,13 @@ def test_main_promotes_verified_temp_output_to_final_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     output = tmp_path / "artifact.json"
-    staged_outputs: list[Path] = []
+    captured_outputs: list[Path] = []
 
     def _fake_generate_evidence(**kwargs: object) -> tuple[dict[str, object], bool]:
-        staged_output = kwargs["output"]
-        assert isinstance(staged_output, Path)
-        staged_outputs.append(staged_output)
-        staged_output.write_text(
+        final_output = kwargs["output"]
+        assert isinstance(final_output, Path)
+        captured_outputs.append(final_output)
+        final_output.write_text(
             json.dumps(
                 {
                     "profile": "enforcement_failure_injection",
@@ -400,7 +408,6 @@ def test_main_promotes_verified_temp_output_to_final_path(
         )
 
     monkeypatch.setattr(generator, "generate_evidence", _fake_generate_evidence)
-    monkeypatch.setattr(generator, "verify_evidence", lambda **_: 0)
 
     assert (
         generator.main(
@@ -417,8 +424,7 @@ def test_main_promotes_verified_temp_output_to_final_path(
     )
 
     assert output.exists()
-    assert staged_outputs
-    assert all(not staged_path.exists() for staged_path in staged_outputs)
+    assert captured_outputs == [output]
 
 
 def test_main_resolves_relative_output_from_repo_root(

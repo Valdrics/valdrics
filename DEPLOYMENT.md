@@ -164,3 +164,11 @@ Scaling rule:
 - [ ] HPA tested under load
 - [ ] Monitoring/alerting configured
 - [ ] SBOM generated and reviewed
+
+For the supported managed production contract and generated blocker reports, use:
+
+- `docs/DEPLOYMENT.md`
+- `docs/runbooks/production_env_checklist.md`
+- `.runtime/<environment>.report.json`
+- `.runtime/<environment>.migrate.report.json`
+- `.runtime/deploy/<environment>/deployment.report.json`

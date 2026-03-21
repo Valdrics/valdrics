@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
+import scripts.verify_enforcement_post_closure_sanity as post_closure_verifier
 from scripts.verify_enforcement_post_closure_sanity import (
     ARTIFACT_TEMPLATE_TOKENS,
     DIMENSION_TOKENS,
     EvidenceToken,
     GAP_REGISTER_REQUIRED_TOKENS,
+    main,
     validate_tokens,
     verify_post_closure_sanity,
 )
@@ -98,3 +101,52 @@ def test_gap_register_required_tokens_include_canonical_open_items_header() -> N
     assert "Current Open Items (Canonical, 2026-02-27)" in required
     assert "CI-EVID-001" in required
     assert "BENCH-DOC-001" in required
+
+
+def test_main_resolves_relative_paths_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    doc_path = repo_root / "docs" / "ops" / "sanity.md"
+    gap_path = repo_root / "docs" / "ops" / "gap.md"
+    doc_path.parent.mkdir(parents=True, exist_ok=True)
+    doc_path.write_text("sanity", encoding="utf-8")
+    gap_path.write_text("gap", encoding="utf-8")
+    captured: dict[str, Path] = {}
+
+    def _capture(*, doc_path: Path, gap_register_path: Path, repo_root: Path) -> int:
+        captured["doc"] = doc_path
+        captured["gap"] = gap_register_path
+        captured["repo_root"] = repo_root
+        return 0
+
+    monkeypatch.setattr(post_closure_verifier, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(post_closure_verifier, "verify_post_closure_sanity", _capture)
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["--doc-path", "docs/ops/sanity.md", "--gap-register", "docs/ops/gap.md"]) == 0
+    assert captured["doc"] == doc_path
+    assert captured["gap"] == gap_path
+    assert captured["repo_root"] == repo_root
+
+
+def test_main_rejects_relative_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(post_closure_verifier, "_repo_root", lambda: repo_root)
+
+    assert main(["--doc-path", os.path.join("..", "escape.md")]) == 2
+
+
+def test_main_rejects_directory_inputs(tmp_path: Path) -> None:
+    doc_dir = tmp_path / "doc-dir"
+    gap_dir = tmp_path / "gap-dir"
+    doc_dir.mkdir()
+    gap_dir.mkdir()
+
+    assert main(["--doc-path", str(doc_dir), "--gap-register", str(gap_dir)]) == 2

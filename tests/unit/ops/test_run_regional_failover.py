@@ -48,7 +48,7 @@ async def test_main_dry_run_emits_automated_failover_evidence(
     monkeypatch.setattr(
         run_regional_failover,
         "_parse_args",
-        lambda: SimpleNamespace(
+        lambda _argv=None: SimpleNamespace(
             secondary_region="us-west-2",
             secondary_db_instance_id="valdrics-db-prod-dr-us-west-2",
             secondary_api_origin="https://api-dr.valdrics.example",
@@ -81,7 +81,7 @@ async def test_main_promotes_replica_checks_health_and_updates_cloudflare(
     monkeypatch.setattr(
         run_regional_failover,
         "_parse_args",
-        lambda: SimpleNamespace(
+        lambda _argv=None: SimpleNamespace(
             secondary_region="us-west-2",
             secondary_db_instance_id="valdrics-db-prod-dr-us-west-2",
             secondary_api_origin="https://api-dr.valdrics.example",
@@ -212,7 +212,7 @@ async def test_main_blocks_cutover_when_readiness_is_not_dependency_healthy(
     monkeypatch.setattr(
         run_regional_failover,
         "_parse_args",
-        lambda: SimpleNamespace(
+        lambda _argv=None: SimpleNamespace(
             secondary_region="us-west-2",
             secondary_db_instance_id="valdrics-db-prod-dr-us-west-2",
             secondary_api_origin="https://api-dr.valdrics.example",
@@ -310,7 +310,7 @@ async def test_main_blocks_cutover_when_cloudflare_success_flag_is_false(
     monkeypatch.setattr(
         run_regional_failover,
         "_parse_args",
-        lambda: SimpleNamespace(
+        lambda _argv=None: SimpleNamespace(
             secondary_region="us-west-2",
             secondary_db_instance_id="valdrics-db-prod-dr-us-west-2",
             secondary_api_origin="https://api-dr.valdrics.example",
@@ -410,7 +410,7 @@ async def test_main_blocks_cutover_when_worker_heartbeat_is_missing(
     monkeypatch.setattr(
         run_regional_failover,
         "_parse_args",
-        lambda: SimpleNamespace(
+        lambda _argv=None: SimpleNamespace(
             secondary_region="us-west-2",
             secondary_db_instance_id="valdrics-db-prod-dr-us-west-2",
             secondary_api_origin="https://api-dr.valdrics.example",
@@ -498,4 +498,63 @@ async def test_main_blocks_cutover_when_worker_heartbeat_is_missing(
     monkeypatch.setattr(run_regional_failover.httpx, "AsyncClient", Client)
 
     with pytest.raises(SystemExit, match="worker heartbeat coverage"):
+        await run_regional_failover.main()
+
+
+@pytest.mark.asyncio
+async def test_main_resolves_relative_output_from_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    out_path = tmp_path / "regional_failover.json"
+    monkeypatch.setattr(run_regional_failover, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        run_regional_failover,
+        "_parse_args",
+        lambda _argv=None: SimpleNamespace(
+            secondary_region="us-west-2",
+            secondary_db_instance_id="valdrics-db-prod-dr-us-west-2",
+            secondary_api_origin="https://api-dr.valdrics.example",
+            api_record_name="api.valdrics.example",
+            cloudflare_zone_id="zone-123",
+            cloudflare_dns_record_id="record-123",
+            out="regional_failover.json",
+            max_promotion_wait_seconds=1800,
+            dry_run=True,
+        ),
+    )
+
+    await run_regional_failover.main()
+
+    captured = json.loads(capsys.readouterr().out)
+    written = json.loads(out_path.read_text(encoding="utf-8"))
+    assert written["duration_seconds"] == captured["duration_seconds"]
+
+
+@pytest.mark.asyncio
+async def test_main_rejects_directory_output_path(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    monkeypatch.setattr(
+        run_regional_failover,
+        "_parse_args",
+        lambda _argv=None: SimpleNamespace(
+            secondary_region="us-west-2",
+            secondary_db_instance_id="valdrics-db-prod-dr-us-west-2",
+            secondary_api_origin="https://api-dr.valdrics.example",
+            api_record_name="api.valdrics.example",
+            cloudflare_zone_id="zone-123",
+            cloudflare_dns_record_id="record-123",
+            out=str(output_dir),
+            max_promotion_wait_seconds=1800,
+            dry_run=True,
+        ),
+    )
+
+    with pytest.raises(SystemExit, match="out must be a file path"):
         await run_regional_failover.main()

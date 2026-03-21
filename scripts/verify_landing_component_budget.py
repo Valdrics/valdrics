@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 from typing import Any
 
 DEFAULT_HERO_PATH = Path("dashboard/src/lib/components/LandingHero.svelte")
@@ -31,6 +35,19 @@ class LandingBudgetVerificationError(RuntimeError):
     pass
 
 
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_repo_relative_path(path: Path, *, field_name: str) -> Path:
+    try:
+        return resolve_cli_path_from_root(_repo_root(), path, field_name=field_name)
+    except ValueError as exc:
+        raise LandingBudgetVerificationError(
+            f"{field_name} must stay within repo root when relative"
+        ) from exc
+
+
 def _line_count(path: Path) -> int:
     return len(path.read_text(encoding="utf-8").splitlines())
 
@@ -43,6 +60,12 @@ def verify_landing_component_budget(
 ) -> dict[str, Any]:
     if not hero_path.exists():
         raise LandingBudgetVerificationError(f"Hero file not found: {hero_path}")
+    if not hero_path.is_file():
+        raise LandingBudgetVerificationError(f"hero_path must be a file: {hero_path}")
+    if component_dir.exists() and not component_dir.is_dir():
+        raise LandingBudgetVerificationError(
+            f"component_dir must be a directory: {component_dir}"
+        )
     if max_hero_lines < 200:
         raise LandingBudgetVerificationError(
             "max_hero_lines is unrealistically low; expected >= 200"
@@ -104,8 +127,14 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     try:
         summary = verify_landing_component_budget(
-            hero_path=Path(str(args.hero_path)),
-            component_dir=Path(str(args.component_dir)),
+            hero_path=_resolve_repo_relative_path(
+                Path(str(args.hero_path)),
+                field_name="hero_path",
+            ),
+            component_dir=_resolve_repo_relative_path(
+                Path(str(args.component_dir)),
+                field_name="component_dir",
+            ),
             max_hero_lines=int(args.max_hero_lines),
         )
     except LandingBudgetVerificationError as exc:

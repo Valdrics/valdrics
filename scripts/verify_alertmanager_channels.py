@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 from typing import Any
 
 import yaml
@@ -28,6 +32,19 @@ _TRANSPORT_KEYS = (
 
 class AlertmanagerVerificationError(RuntimeError):
     pass
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_config_path(path: Path) -> Path:
+    try:
+        return resolve_cli_path_from_root(_repo_root(), path, field_name="config_path")
+    except ValueError as exc:
+        raise AlertmanagerVerificationError(
+            "config_path must stay within repo root when relative"
+        ) from exc
 
 
 def _receiver_has_transport(receiver: dict[str, Any]) -> bool:
@@ -149,6 +166,8 @@ def verify_alertmanager_config(raw_config: dict[str, Any]) -> None:
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
+    if path.exists() and not path.is_file():
+        raise AlertmanagerVerificationError(f"Alertmanager config path must be a file: {path}")
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -161,7 +180,7 @@ def _load_yaml(path: Path) -> dict[str, Any]:
     return raw
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Verify Alertmanager channels are active and wired by severity."
     )
@@ -170,13 +189,13 @@ def parse_args() -> argparse.Namespace:
         default="prometheus/alertmanager.yml",
         help="Path to Alertmanager YAML config.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = parse_args()
-    config_path = Path(args.config_path)
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
     try:
+        config_path = _resolve_config_path(Path(args.config_path))
         config = _load_yaml(config_path)
         verify_alertmanager_config(config)
     except AlertmanagerVerificationError as exc:

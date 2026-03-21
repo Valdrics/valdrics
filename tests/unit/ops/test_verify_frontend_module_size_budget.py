@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import pytest
+
+import scripts.verify_frontend_module_size_budget as frontend_budget_verifier
 from scripts.verify_frontend_module_size_budget import (
     PREFERRED_MAX_LINES,
     collect_frontend_module_size_preferred_breaches,
@@ -94,3 +98,60 @@ def test_main_returns_success_with_preferred_warnings(
     captured = capsys.readouterr().out
     assert exit_code == 0
     assert "warning found 1 module(s) above preferred target" in captured
+
+
+def test_collect_frontend_module_size_violations_rejects_non_directory_root(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "root.txt"
+    root.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="root must be a directory"):
+        collect_frontend_module_size_violations(root)
+
+
+def test_main_rejects_non_directory_root(tmp_path: Path) -> None:
+    root = tmp_path / "root.txt"
+    root.write_text("not-a-directory", encoding="utf-8")
+
+    assert main(["--root", str(root)]) == 2
+
+
+def test_main_resolves_relative_root_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = Path(frontend_budget_verifier.__file__).resolve().parents[1]
+    captured: dict[str, Path] = {}
+
+    def _capture_preferred(root: Path, *, preferred_max_lines: int) -> tuple[object, ...]:
+        captured["root"] = root
+        return ()
+
+    def _capture_violations(
+        root: Path,
+        *,
+        default_max_lines: int,
+        overrides: dict[str, int] | None = None,
+    ) -> tuple[object, ...]:
+        captured["root"] = root
+        return ()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        frontend_budget_verifier,
+        "collect_frontend_module_size_preferred_breaches",
+        _capture_preferred,
+    )
+    monkeypatch.setattr(
+        frontend_budget_verifier,
+        "collect_frontend_module_size_violations",
+        _capture_violations,
+    )
+
+    assert main(["--root", "dashboard/.."]) == 0
+    assert captured["root"] == repo_root
+
+
+def test_main_rejects_relative_root_repo_escape() -> None:
+    assert main(["--root", os.path.join("..", "..")]) == 2

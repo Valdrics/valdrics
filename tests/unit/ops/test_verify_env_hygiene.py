@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import pytest
+
+import scripts.verify_env_hygiene as env_hygiene_verifier
 from scripts.verify_env_hygiene import main, verify_env_hygiene
 
 
@@ -96,3 +100,98 @@ def test_main_returns_failure_for_missing_template(tmp_path: Path, monkeypatch) 
     )
 
     assert exit_code == 1
+
+
+def test_verify_env_hygiene_rejects_non_directory_repo_root(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo-root"
+    repo_root.write_text("not-a-directory", encoding="utf-8")
+
+    errors = verify_env_hygiene(
+        repo_root=repo_root,
+        template_path=Path(".env.example"),
+    )
+
+    assert errors == (f"repo_root must be a directory: {repo_root.as_posix()}",)
+
+
+def test_verify_env_hygiene_rejects_relative_template_repo_escape(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+
+    errors = verify_env_hygiene(
+        repo_root=repo_root,
+        template_path=Path("../outside.env"),
+    )
+
+    assert errors == ("template_path must stay within repo root when relative",)
+
+
+def test_verify_env_hygiene_rejects_directory_template_path(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    template_dir = repo_root / ".env.example"
+    template_dir.mkdir()
+
+    errors = verify_env_hygiene(
+        repo_root=repo_root,
+        template_path=Path(".env.example"),
+    )
+
+    assert errors == (f"Template path must be a file: {template_dir}",)
+
+
+def test_main_resolves_relative_template_path_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    template_path = repo_root / ".env.example"
+    _write(template_path, _valid_template())
+
+    monkeypatch.setattr(
+        "scripts.verify_env_hygiene._tracked_env_files",
+        lambda _repo_root: (),
+    )
+
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        exit_code = main(
+            [
+                "--repo-root",
+                str(repo_root),
+                "--template-path",
+                ".env.example",
+            ]
+        )
+    finally:
+        os.chdir(old_cwd)
+
+    assert exit_code == 0
+
+
+def test_main_resolves_relative_repo_root_from_repo_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = Path(env_hygiene_verifier.__file__).resolve().parents[1]
+    captured: dict[str, Path] = {}
+
+    def _capture(*, repo_root: Path, template_path: Path) -> tuple[str, ...]:
+        captured["repo_root"] = repo_root
+        captured["template_path"] = template_path
+        return ()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(env_hygiene_verifier, "verify_env_hygiene", _capture)
+
+    assert main(["--repo-root", ".", "--template-path", ".env.example"]) == 0
+    assert captured["repo_root"] == repo_root
+    assert captured["template_path"] == Path(".env.example")
+
+
+def test_main_rejects_relative_repo_root_repo_escape() -> None:
+    assert main(["--repo-root", os.path.join("..", "..")]) == 2

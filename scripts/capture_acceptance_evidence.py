@@ -26,8 +26,13 @@ from scripts.capture_acceptance_runner import (
     CaptureResult,
     capture_acceptance_evidence as _capture_acceptance_evidence,
 )
+from scripts.env_generation_common import ensure_directory_path, repo_root_for, resolve_cli_path_from_root
 
 _ALL_INTERFACES_HOST = IPv4Address(0).compressed
+
+
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
 
 
 def _normalize_base_url(raw: str) -> str:
@@ -164,8 +169,29 @@ def _parse_close_window(
     return _previous_full_month()
 
 
+def _resolve_output_root(path: Path) -> Path:
+    resolved = resolve_cli_path_from_root(
+        _repo_root(),
+        path,
+        field_name="output-root",
+    )
+    if resolved.exists() and not resolved.is_dir():
+        raise ValueError(f"output-root must be a directory path: {resolved}")
+    ensure_directory_path(resolved, field_name="output-root")
+    evidence_dir = (_repo_root() / "docs" / "ops" / "evidence").resolve()
+    if resolved == evidence_dir or evidence_dir in resolved.parents:
+        raise ValueError(
+            "output-root must not write inside the checked-in docs/ops/evidence directory"
+        )
+    return resolved
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
+    try:
+        output_root = _resolve_output_root(Path(str(args.output_root)))
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
 
     transport: httpx.AsyncBaseTransport | None = None
     raw_url = str(args.url or "").strip()
@@ -217,7 +243,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         capture_acceptance_evidence(
             base_url=base_url,
             token=str(token).strip(),
-            output_root=Path(args.output_root),
+            output_root=output_root,
             start_date=start_date,
             end_date=end_date,
             close_start_date=close_start_date,
