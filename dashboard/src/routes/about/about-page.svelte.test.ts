@@ -13,25 +13,31 @@ vi.mock('$app/stores', () => ({
 }));
 
 describe('about page', () => {
-	it('renders a public company and review surface with direct contact channels', () => {
+	it('renders a public company, founder surface, and review channels', () => {
 		render(Page);
 
 		expect(
 			screen.getByRole('heading', {
 				level: 1,
-				name: /a governed operating layer for spend decisions/i
+				name: /meet the team behind valdrics/i
 			})
 		).toBeTruthy();
 		expect(
 			screen.getByRole('link', { name: /start free workspace/i }).getAttribute('href') || ''
 		).toContain('/auth/login?');
 		expect(
-			screen.getByRole('link', { name: /view pricing/i }).getAttribute('href') || ''
-		).toContain('/pricing?');
-		const docsLinks = screen.getAllByRole('link', { name: /^open docs$/i });
-		expect(docsLinks[0]?.getAttribute('href') || '').toContain('/docs?');
-		expect(screen.getByText(/public proof is intentionally prelaunch-safe/i)).toBeTruthy();
-		expect(screen.getByRole('link', { name: /licensing@valdrics\.com/i })).toBeTruthy();
+			screen.getAllByRole('link', { name: /open proof pack/i })[0]?.getAttribute('href') || ''
+		).toContain('/proof?');
+		expect(screen.getByText(/abdulgoniyy dare/i)).toBeTruthy();
+		expect(
+			screen.getByText(
+				/valdrics supports buyer evaluations across multiple regions\. deployment, residency, and procurement requirements that vary by region move through the enterprise review path\./i
+			)
+		).toBeTruthy();
+		expect(screen.getByText(/deployment claims stay factual/i)).toBeTruthy();
+		expect(screen.getAllByRole('link', { name: /open enterprise path/i }).length).toBeGreaterThan(
+			0
+		);
 		expect(screen.getByRole('link', { name: /legal@valdrics\.com/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /security@valdrics\.com/i })).toBeTruthy();
 	});

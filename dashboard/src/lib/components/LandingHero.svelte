@@ -3,21 +3,21 @@
 	import { assets, base } from '$app/paths';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import {
-		REALTIME_SIGNAL_SNAPSHOTS,
-		nextSnapshotIndex,
-		type SignalLaneId
-	} from '$lib/landing/realtimeSignalMap';
+	import { REALTIME_SIGNAL_SNAPSHOTS, nextSnapshotIndex } from '$lib/landing/realtimeSignalMap';
 	import {
 		resolveLandingExperiments,
 		shouldIncludeExperimentQueryParams,
 		type LandingExperimentAssignments
 	} from '$lib/landing/landingExperiment';
+	import {
+		resolveDetectedLandingCurrency,
+		resolveInitialLandingCurrency,
+		setLandingCurrencyPreference,
+		type LandingCurrencyCode
+	} from '$lib/landing/currencyPreference';
 	import type { LandingAttribution } from '$lib/landing/landingFunnel';
 	import {
 		DEFAULT_EXPERIMENT_ASSIGNMENTS,
-		DEMO_ROTATION_MS,
-		GEO_CURRENCY_HINT_TIMEOUT_MS,
 		LANDING_CONSENT_KEY,
 		LANDING_SCROLL_MILESTONES,
 		resolveLandingMotionProfile,
@@ -25,31 +25,23 @@
 	} from '$lib/landing/landingHeroConfig';
 	import {
 		buildLandingHeroSalesPath,
-		buildLandingHeroSignupPath,
-		trackIndexedLandingSelection
+		buildLandingHeroSignupPath
 	} from '$lib/landing/landingHeroActions';
 	import { mountLandingHeroBrowserRuntime } from '$lib/landing/landingHeroBrowserRuntime';
 	import { createLandingHeroTelemetryBridge } from '$lib/landing/landingHeroTelemetryBridge';
 	import { appendPublicAttribution } from '$lib/public/publicBuyingMotion';
 	import {
 		calculateLandingHeroScenarioMetrics,
-		formatLandingHeroCurrencyAmount,
-		resolveLandingHeroCurrencyCode
+		formatLandingHeroCurrencyAmount
 	} from '$lib/landing/landingHeroScenario';
 	import {
 		DEFAULT_LANDING_ROI_INPUTS,
 		normalizeLandingRoiInputs
 	} from '$lib/landing/roiCalculator';
 	import { getReducedMotionPreference } from '$lib/landing/reducedMotion';
-	import {
-		BUYER_ROLE_VIEWS,
-		CLOUD_HOOK_STATES,
-		HERO_ROLE_CONTEXT,
-		MICRO_DEMO_STEPS
-	} from '$lib/landing/heroContent';
+	import { BUYER_ROLE_VIEWS, HERO_ROLE_CONTEXT } from '$lib/landing/heroContent';
 	import LandingHeroView from '$lib/components/landing/LandingHeroView.svelte';
 	import './LandingHero.css';
-	const GEO_CURRENCY_HINT_ENDPOINT = `${base}/api/geo/currency`;
 	const DEFAULT_SIGNAL_SNAPSHOT = REALTIME_SIGNAL_SNAPSHOTS[0];
 	const ONE_PAGER_HREF = `${base}/resources/valdrics-enterprise-one-pager.md`,
 		RESOURCES_PATH = `${base}/resources`;
@@ -62,11 +54,8 @@
 	let signalMapInView = $state(true),
 		documentVisible = $state(true),
 		snapshotIndex = $state(0),
-		hookStateIndex = $state(0),
-		buyerRoleIndex = $state(0),
-		demoStepIndex = $state(0);
-	let activeLaneId = $state<SignalLaneId | null>(null),
-		visitorId = $state(''),
+		buyerRoleIndex = $state(0);
+	let visitorId = $state(''),
 		pageReferrer = $state('');
 	let experiments = $state<LandingExperimentAssignments>(
 		resolveLandingExperiments($page.url, DEFAULT_EXPERIMENT_ASSIGNMENTS.seed)
@@ -84,22 +73,23 @@
 		scenarioWindowMonths = $state(12),
 		scenarioAdjustCaptured = $state(false),
 		landingScrollProgressPct = $state(0);
-	let snapshotAutoplayPaused = $state(false),
-		demoAutoplayPaused = $state(false);
+	let snapshotAutoplayPaused = $state(false);
 	let prefersReducedMotion = $state(
 		getReducedMotionPreference(browser && typeof window !== 'undefined' ? window : undefined)
 	);
 	let telemetryEnabled = $state(false),
 		telemetryInitialized = $state(false),
 		cookieBannerVisible = $state(false),
-		roiCurrencyCode = $state('USD');
+		localCurrencyCode = $state<LandingCurrencyCode>(resolveDetectedLandingCurrency()),
+		roiCurrencyCode = $state<LandingCurrencyCode>(resolveInitialLandingCurrency());
 	let activeSnapshot = $derived(
 		REALTIME_SIGNAL_SNAPSHOTS[snapshotIndex] ?? DEFAULT_SIGNAL_SNAPSHOT
 	);
-	let activeHookState = $derived(CLOUD_HOOK_STATES[hookStateIndex] ?? CLOUD_HOOK_STATES[0]);
 	let activeBuyerRole = $derived(BUYER_ROLE_VIEWS[buyerRoleIndex] ?? BUYER_ROLE_VIEWS[0]);
 	let activeSignalLane = $derived(
-		activeSnapshot.lanes.find((lane) => lane.id === activeLaneId) ?? activeSnapshot.lanes[0]
+		activeSnapshot.lanes.find(
+			(lane) => lane.severity === 'watch' || lane.severity === 'critical'
+		) ?? activeSnapshot.lanes[0]
 	);
 	let heroContext = $derived(HERO_ROLE_CONTEXT[activeBuyerRole.id] ?? HERO_ROLE_CONTEXT.finops);
 	let heroTitle = $derived(
@@ -128,6 +118,7 @@
 		aboutHref = $derived(buildPublicPath(`${base}/about`, 'trust_about')),
 		docsHref = $derived(buildPublicPath(`${base}/docs`, 'trust_docs')),
 		statusHref = $derived(buildPublicPath(`${base}/status`, 'trust_status')),
+		proofHref = $derived(buildPublicPath(`${base}/proof`, 'trust_proof')),
 		plansEnterpriseHref = $derived(buildEnterpriseReviewHref('plans_enterprise')),
 		trustEnterpriseHref = $derived(buildEnterpriseReviewHref('trust_enterprise'));
 	let showBackToTop = $derived(landingScrollProgressPct >= 8),
@@ -153,9 +144,6 @@
 			documentVisible &&
 			signalMapInView &&
 			REALTIME_SIGNAL_SNAPSHOTS.length > 1
-	);
-	let shouldRotateDemoSteps = $derived(
-		!demoAutoplayPaused && !prefersReducedMotion && documentVisible && MICRO_DEMO_STEPS.length > 1
 	);
 	let roiInputs = $derived(
 		normalizeLandingRoiInputs({
@@ -184,32 +172,10 @@
 		}
 	});
 	$effect(() => {
-		if (!activeSignalLane && activeSnapshot.lanes[0]) {
-			activeLaneId = activeSnapshot.lanes[0].id;
-			return;
-		}
-		// Auto-synchronize focus during rotation
-		if (shouldRotateSnapshots) {
-			const watchLane = activeSnapshot.lanes.find(
-				(lane) => lane.severity === 'watch' || lane.severity === 'critical'
-			);
-			if (watchLane && watchLane.id !== activeLaneId) {
-				activeLaneId = watchLane.id;
-			}
-		}
-	});
-	$effect(() => {
 		if (!shouldRotateSnapshots) return;
 		const interval = setInterval(() => {
 			snapshotIndex = nextSnapshotIndex(snapshotIndex, REALTIME_SIGNAL_SNAPSHOTS.length);
 		}, SNAPSHOT_ROTATION_MS);
-		return () => clearInterval(interval);
-	});
-	$effect(() => {
-		if (!shouldRotateDemoSteps) return;
-		const interval = setInterval(() => {
-			demoStepIndex = nextSnapshotIndex(demoStepIndex, MICRO_DEMO_STEPS.length);
-		}, DEMO_ROTATION_MS);
 		return () => clearInterval(interval);
 	});
 	onMount(() =>
@@ -218,8 +184,6 @@
 			windowRef: window,
 			documentRef: document,
 			signalMapElement,
-			geoCurrencyHintTimeoutMs: GEO_CURRENCY_HINT_TIMEOUT_MS,
-			applyGeoCurrencyHint,
 			consentStorageKey: LANDING_CONSENT_KEY,
 			scrollMilestones: LANDING_SCROLL_MILESTONES,
 			initializeTelemetry: initialize,
@@ -280,9 +244,6 @@
 			extraParams
 		});
 	}
-	function buildPlanCtaHref(planId: string): string {
-		return buildSignupHref('start_plan', { plan: planId, source: 'plans' });
-	}
 	function buildTalkToSalesHref(source: string, intent?: string): string {
 		return buildLandingHeroSalesPath({
 			path: TALK_TO_SALES_PATH,
@@ -307,80 +268,19 @@
 			utm: attribution.utm
 		});
 	}
-	const pauseSnapshotAutoplay = () => {
-		snapshotAutoplayPaused = true;
-	};
-	const pauseDemoAutoplay = () => {
-		demoAutoplayPaused = true;
-	};
-	const selectSnapshot = (index: number) =>
-		trackIndexedLandingSelection({
-			index,
-			size: REALTIME_SIGNAL_SNAPSHOTS.length,
-			assign: (value) => {
-				pauseSnapshotAutoplay();
-				snapshotIndex = value;
-			},
-			eventName: 'snapshot_select',
-			section: 'signal_map',
-			value: REALTIME_SIGNAL_SNAPSHOTS[index]?.id,
-			markEngaged,
-			emitLandingTelemetrySafe,
-			buildTelemetryContext
-		});
-	const selectHookState = (index: number) =>
-		trackIndexedLandingSelection({
-			index,
-			size: CLOUD_HOOK_STATES.length,
-			assign: (value) => (hookStateIndex = value),
-			eventName: 'hook_toggle',
-			section: 'cloud_hook',
-			value: CLOUD_HOOK_STATES[index]?.id,
-			markEngaged,
-			emitLandingTelemetrySafe,
-			buildTelemetryContext
-		});
-	const selectDemoStep = (index: number) =>
-		trackIndexedLandingSelection({
-			index,
-			size: MICRO_DEMO_STEPS.length,
-			assign: (value) => {
-				pauseDemoAutoplay();
-				demoStepIndex = value;
-			},
-			eventName: 'micro_demo_step',
-			section: 'hero_demo',
-			value: MICRO_DEMO_STEPS[index]?.id,
-			markEngaged,
-			emitLandingTelemetrySafe,
-			buildTelemetryContext
-		});
-	const selectSignalLane = (laneId: SignalLaneId): void => {
-		pauseSnapshotAutoplay();
-		activeLaneId = laneId;
-		markEngaged();
-		emitLandingTelemetrySafe('lane_focus', 'signal_map', laneId, buildTelemetryContext('engaged'));
-	};
-	const handleSignalMapElementChange = (element: HTMLDivElement | null) =>
-		(signalMapElement = element);
 	const handleScenarioWasteWithoutChange = (value: number) => (scenarioWasteWithoutPct = value);
 	const handleScenarioWasteWithChange = (value: number) => (scenarioWasteWithPct = value);
 	const handleScenarioWindowChange = (value: number) => (scenarioWindowMonths = value);
 	const formatUsd = (amount: number, currency: string = roiCurrencyCode) =>
 		formatLandingHeroCurrencyAmount(amount, currency);
-	async function applyGeoCurrencyHint(signal: AbortSignal): Promise<void> {
-		roiCurrencyCode = await resolveLandingHeroCurrencyCode({
-			requestEndpoint: GEO_CURRENCY_HINT_ENDPOINT,
-			requestOrigin: $page.url.origin,
-			hostname: browser && typeof window !== 'undefined' ? window.location.hostname : undefined,
-			signal
-		});
+	function handleCurrencyCodeChange(value: LandingCurrencyCode): void {
+		roiCurrencyCode = value;
+		setLandingCurrencyPreference(value);
 	}
 </script>
 
 <LandingHeroView
 	{motionProfile}
-	{landingScrollProgressPct}
 	{canonicalUrl}
 	imageUrl={ogImageUrl}
 	{heroTitle}
@@ -390,21 +290,8 @@
 	{secondaryCtaHref}
 	{primaryCtaHref}
 	{secondaryCtaTelemetryValue}
-	ctaVariant={experiments.ctaVariant}
-	sectionOrderVariant={experiments.sectionOrderVariant}
-	cloudHookStates={CLOUD_HOOK_STATES}
-	{activeHookState}
-	{hookStateIndex}
-	onSelectHookState={selectHookState}
 	{activeSnapshot}
 	{activeSignalLane}
-	{signalMapInView}
-	{snapshotIndex}
-	{demoStepIndex}
-	onSelectSignalLane={selectSignalLane}
-	onSelectDemoStep={selectDemoStep}
-	onSelectSnapshot={selectSnapshot}
-	onSignalMapElementChange={handleSignalMapElementChange}
 	normalizedScenarioWasteWithoutPct={scenarioMetrics.normalizedScenarioWasteWithoutPct}
 	normalizedScenarioWasteWithPct={scenarioMetrics.normalizedScenarioWasteWithPct}
 	normalizedScenarioWindowMonths={scenarioMetrics.normalizedScenarioWindowMonths}
@@ -419,19 +306,20 @@
 	{scenarioWasteWithPct}
 	{scenarioWindowMonths}
 	{formatUsd}
+	{localCurrencyCode}
 	currencyCode={roiCurrencyCode}
+	onCurrencyCodeChange={handleCurrencyCodeChange}
 	onTrackScenarioAdjust={trackScenarioAdjust}
 	onScenarioWasteWithoutChange={handleScenarioWasteWithoutChange}
 	onScenarioWasteWithChange={handleScenarioWasteWithChange}
 	onScenarioWindowChange={handleScenarioWindowChange}
 	{roiPlannerHref}
 	{freeTierCtaHref}
-	{buildPlanCtaHref}
-	{plansEnterpriseHref}
 	{trustEnterpriseHref}
 	{aboutHref}
 	{docsHref}
 	{statusHref}
+	{proofHref}
 	{requestValidationBriefingHref}
 	onePagerHref={ONE_PAGER_HREF}
 	subscribeApiPath={SUBSCRIBE_API_PATH}

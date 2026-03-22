@@ -3,6 +3,10 @@
 	import { page } from '$app/stores';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
+	import {
+		PUBLIC_DEPLOYMENT_RESIDENCY_FACTS,
+		PUBLIC_TEAM_MEMBERS
+	} from '$lib/content/publicCompany';
 	import { PUBLIC_EXTENDED_CONTACT_CHANNELS } from '$lib/landing/publicNav';
 	import { appendPublicAttribution, buildPublicSignupHref } from '$lib/public/publicBuyingMotion';
 
@@ -12,10 +16,10 @@
 			source: 'about_page'
 		})
 	);
-	let pricingHref = $derived(
-		appendPublicAttribution(`${base}/pricing`, $page.url, {
+	let proofHref = $derived(
+		appendPublicAttribution(`${base}/proof`, $page.url, {
 			entry: 'about',
-			source: 'about_pricing'
+			source: 'about_proof'
 		})
 	);
 	let docsHref = $derived(
@@ -24,57 +28,88 @@
 			source: 'about_docs'
 		})
 	);
-	let statusHref = $derived(
-		appendPublicAttribution(`${base}/status`, $page.url, {
+	let enterpriseHref = $derived(
+		appendPublicAttribution(`${base}/enterprise`, $page.url, {
 			entry: 'about',
-			source: 'about_status'
+			source: 'about_enterprise'
+		})
+	);
+	let salesHref = $derived(
+		appendPublicAttribution(`${base}/talk-to-sales`, $page.url, {
+			entry: 'about',
+			source: 'about_sales'
 		})
 	);
 
-	const reviewPoints = [
+	const founder = PUBLIC_TEAM_MEMBERS[0];
+	const deploymentFact = PUBLIC_DEPLOYMENT_RESIDENCY_FACTS[0];
+	const coreContacts = PUBLIC_EXTENDED_CONTACT_CHANNELS.filter((channel) =>
+		['Enterprise', 'Sales', 'Security', 'Legal', 'Privacy'].includes(channel.label)
+	);
+
+	const heroSummaryItems = [
+		{ label: 'Company stage', value: 'Founder-led and publicly reviewable' },
 		{
-			label: 'Current stage',
-			value: 'Prelaunch with public pricing, docs, proof, and status surfaces live'
+			label: 'Public review',
+			value: 'Proof, docs, and enterprise diligence available upfront'
+		},
+		{ label: 'Evaluation style', value: 'Proof pack first, enterprise lane when needed' }
+	] as const;
+
+	const originCards = [
+		{
+			title: 'Why this company exists',
+			detail:
+				'Most teams can already see spend problems. The harder part is turning the alert into one accountable action path with approvals and proof.'
 		},
 		{
-			label: 'Buying paths',
-			value: 'Self-serve workspace path plus a formal enterprise diligence lane'
-		},
-		{
-			label: 'Review stance',
-			value: 'Read the docs, inspect the proof pack, and review the rollout path before onboarding'
+			title: 'What the public site should do',
+			detail:
+				'The public site should help buyers understand the company, the workflow, the pricing posture, and the review path without dumping internal product details on every page.'
 		}
 	] as const;
 
-	const operatingFacts = [
-		'Valdrics is built around owner-routed action, approvals, and reviewable proof rather than dashboard-only reporting.',
-		'The public site is intentionally transparent about pricing, current prelaunch status, and the absence of public customer case studies.',
-		'Early evaluators can choose between a self-serve workspace path and a formal enterprise validation lane depending on governance depth.'
-	] as const;
+	let reviewLinks = $derived([
+		{
+			label: 'Proof Pack',
+			href: proofHref,
+			note: 'Security posture, controls, and validation scope.'
+		},
+		{
+			label: 'Docs',
+			href: docsHref,
+			note: 'Technical validation, onboarding, and rollout guidance.'
+		},
+		{
+			label: 'Enterprise Path',
+			href: enterpriseHref,
+			note: 'Formal review lane for procurement, residency, and rollout governance.'
+		}
+	]);
 </script>
 
 <PublicPageMeta
 	title="About Valdrics"
-	description="About Valdrics: what the platform is, how evaluation works today, and which public review surfaces are available before broader rollout."
+	description="Meet the team behind Valdrics and review the proof, documentation, and enterprise evaluation surfaces."
 	pageType="WebPage"
 	pageSection="About"
-	keywords={['about valdrics', 'prelaunch', 'evaluation path', 'spend governance']}
+	keywords={['about valdrics', 'founder', 'company', 'proof pack', 'security review']}
 />
 
 <PublicMarketingPage
 	kicker="About Valdrics"
-	title="A governed operating layer for spend decisions"
-	subtitle="Valdrics is currently prelaunch. Buyers can review pricing, docs, proof pages, and system status before they connect a source or enter a procurement workflow."
+	title="Meet the team behind Valdrics"
+	subtitle="Valdrics is building a calmer operating layer for spend governance. Buyers should be able to see who we are, what we believe, and how to evaluate the product before any sales loop starts."
 	heroVariant="narrow"
 >
 	{#snippet heroActions()}
 		<a href={startFreeHref} class="btn btn-primary">Start Free Workspace</a>
-		<a href={pricingHref} class="btn btn-secondary">View Pricing</a>
-		<a href={docsHref} class="btn btn-secondary">Open Docs</a>
+		<a href={proofHref} class="btn btn-secondary">Open Proof Pack</a>
+		<a href={salesHref} class="btn btn-secondary">Talk to Sales</a>
 	{/snippet}
 
 	{#snippet heroMeta()}
-		{#each reviewPoints as item (item.label)}
+		{#each heroSummaryItems as item (item.label)}
 			<article class="public-page__meta-item">
 				<strong>{item.label}</strong>
 				<span>{item.value}</span>
@@ -83,67 +118,79 @@
 	{/snippet}
 
 	{#snippet children()}
-		<section class="public-page__section" aria-labelledby="about-what-title">
+		<section class="public-page__section" aria-labelledby="about-origin-title">
 			<div class="public-page__section-head">
-				<p class="public-page__eyebrow">What Valdrics is</p>
-				<h2 id="about-what-title" class="public-page__section-title">
-					Designed for teams that need control after detection
+				<p class="public-page__eyebrow">Company</p>
+				<h2 id="about-origin-title" class="public-page__section-title">Why Valdrics exists</h2>
+			</div>
+			<div class="public-page__grid public-page__grid--2">
+				{#each originCards as card (card.title)}
+					<article class="public-page__card">
+						<h3 class="public-page__card-title">{card.title}</h3>
+						<p class="public-page__card-copy">{card.detail}</p>
+					</article>
+				{/each}
+				{#if founder}
+					<article class="public-page__card public-page__card--featured">
+						<p class="public-page__card-kicker">Founder</p>
+						<h3 class="public-page__card-title">{founder.name}</h3>
+						<p class="public-page__inline-note"><strong>{founder.role}</strong></p>
+						<p class="public-page__card-copy">{founder.shortBio}</p>
+					</article>
+				{/if}
+			</div>
+			<p class="public-page__inline-note">
+				Valdrics supports buyer evaluations across multiple regions. Deployment, residency, and
+				procurement requirements that vary by region move through the enterprise review path.
+			</p>
+		</section>
+
+		<section class="public-page__section" aria-labelledby="about-review-title">
+			<div class="public-page__section-head">
+				<p class="public-page__eyebrow">Review path</p>
+				<h2 id="about-review-title" class="public-page__section-title">
+					How buyers can evaluate Valdrics before rollout
 				</h2>
-				<p class="public-page__section-subtitle">
-					Valdrics is not positioned as another cost dashboard. The platform is built to move a
-					spend issue from signal, to owner, to approval, to recorded proof across cloud, SaaS, and
-					software environments.
-				</p>
 			</div>
 			<div class="public-page__grid public-page__grid--3">
-				{#each operatingFacts as fact (fact)}
-					<article class="public-page__card public-page__card--dark">
-						<p class="public-page__card-copy">{fact}</p>
+				{#each reviewLinks as link (link.label)}
+					<article class="public-page__card">
+						<h3 class="public-page__card-title">{link.label}</h3>
+						<p class="public-page__card-copy">{link.note}</p>
+						<a href={link.href} class="btn btn-secondary">Open {link.label}</a>
 					</article>
 				{/each}
 			</div>
 		</section>
 
-		<section class="public-page__section" aria-labelledby="about-review-title">
-			<div class="public-page__band public-page__band--dark">
-				<div class="public-page__band-copy">
-					<p class="public-page__eyebrow">Current review surface</p>
-					<h2 id="about-review-title" class="public-page__section-title">
-						What buyers can review today
-					</h2>
-					<p class="public-page__section-subtitle">
-						Public proof is intentionally prelaunch-safe: no customer logos or outcome claims that
-						cannot be defended yet. Instead, Valdrics exposes pricing, docs, proof materials, and a
-						live status surface before broader rollout.
-					</p>
-				</div>
-				<div class="public-page__actions-row">
-					<a href={docsHref} class="btn btn-secondary">Open Docs</a>
-					<a href={statusHref} class="btn btn-secondary">View Status</a>
-					<a href={`${base}/proof`} class="btn btn-secondary">Open Proof Pack</a>
-				</div>
-			</div>
-		</section>
-
 		<section class="public-page__section" aria-labelledby="about-contact-title">
-			<div class="public-page__section-head">
-				<p class="public-page__eyebrow">Contact</p>
-				<h2 id="about-contact-title" class="public-page__section-title">Public contact surface</h2>
-				<p class="public-page__section-subtitle">
-					Commercial, technical, security, licensing, and legal review channels are available
-					publicly.
-				</p>
-			</div>
-			<div class="public-page__badge-cloud">
-				{#each PUBLIC_EXTENDED_CONTACT_CHANNELS as channel (channel.email)}
-					<a
-						href={channel.href}
-						class="public-page__badge"
-						aria-label={`${channel.label} contact ${channel.email}`}
-					>
-						{channel.label}: {channel.email}
-					</a>
-				{/each}
+			<div class="public-page__grid public-page__grid--2">
+				<article class="public-page__card">
+					<p class="public-page__eyebrow">Deployment stance</p>
+					<h2 id="about-contact-title" class="public-page__section-title">
+						Deployment claims stay factual
+					</h2>
+					<p class="public-page__card-copy">{deploymentFact?.answer}</p>
+					<div class="public-page__actions-row">
+						<a href={enterpriseHref} class="btn btn-secondary">Open Enterprise Path</a>
+						<a href={docsHref} class="btn btn-secondary">Open Docs</a>
+					</div>
+				</article>
+				<article class="public-page__card">
+					<p class="public-page__eyebrow">Contact</p>
+					<h2 class="public-page__section-title">Public contact surface</h2>
+					<div class="public-page__badge-cloud">
+						{#each coreContacts as channel (channel.email)}
+							<a
+								href={channel.href}
+								class="public-page__badge"
+								aria-label={`${channel.label} contact ${channel.email}`}
+							>
+								{channel.label}: {channel.email}
+							</a>
+						{/each}
+					</div>
+				</article>
 			</div>
 		</section>
 	{/snippet}

@@ -7,6 +7,10 @@ import ast
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 
 _REVISION_HEADER_RE = re.compile(r"^\s*Revision ID:\s*([a-f0-9_]+)\s*$", re.MULTILINE)
@@ -89,9 +93,22 @@ def _parse_revision_file(path: Path) -> RevisionNode:
     return RevisionNode(revision=revision, down_revisions=down_revisions, path=path)
 
 
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_migrations_path(path: Path) -> Path:
+    try:
+        return resolve_cli_path_from_root(_repo_root(), path, field_name="migrations_path")
+    except ValueError as exc:
+        raise RuntimeError("migrations_path must stay within repo root when relative") from exc
+
+
 def verify_alembic_heads(migrations_path: Path) -> tuple[str, ...]:
     if not migrations_path.exists():
         raise RuntimeError(f"Migrations path not found: {migrations_path}")
+    if not migrations_path.is_dir():
+        raise RuntimeError(f"Migrations path must be a directory: {migrations_path}")
 
     revision_files = sorted(
         p for p in migrations_path.glob("*.py") if p.name != "__init__.py"
@@ -124,7 +141,7 @@ def verify_alembic_heads(migrations_path: Path) -> tuple[str, ...]:
     return heads
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verify Alembic migration graph has exactly one head."
     )
@@ -133,9 +150,9 @@ def main() -> int:
         default="migrations/versions",
         help="Path to Alembic revisions directory.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    heads = verify_alembic_heads(Path(args.migrations_path))
+    heads = verify_alembic_heads(_resolve_migrations_path(Path(args.migrations_path)))
     print(
         "Alembic migration head integrity check passed. "
         f"Head revision: {heads[0]}"

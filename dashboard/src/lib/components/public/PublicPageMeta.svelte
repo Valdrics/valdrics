@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { assets } from '$app/paths';
 	import { page } from '$app/stores';
-	import createDOMPurify from 'dompurify';
 	import type { PublicContentEntry } from '$lib/content/publicContent';
 	import {
 		buildPublicContentStructuredData,
@@ -54,19 +53,15 @@
 		}
 		return [];
 	});
-	const DOMPurify = typeof window === 'undefined' ? null : createDOMPurify(window);
 	const structuredDataJson = $derived(
 		structuredData.map((value) =>
 			JSON.stringify(value).replaceAll('<', '\\u003c').replaceAll('</script', '<\\/script')
 		)
 	);
 	const structuredDataMarkup = $derived(
-		structuredDataJson.map((value) => {
-			const sanitizedValue = DOMPurify
-				? DOMPurify.sanitize(value, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] })
-				: value;
-			return '<script type="application/ld+json">' + sanitizedValue + '</scr' + 'ipt>';
-		})
+		structuredDataJson.map(
+			(value) => '<script type="application/ld+json">' + value + '</scr' + 'ipt>'
+		)
 	);
 </script>
 

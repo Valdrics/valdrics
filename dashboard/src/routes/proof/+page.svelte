@@ -3,7 +3,7 @@
 	import { page } from '$app/stores';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
-	import { listPublicContent } from '$lib/content/publicContent';
+	import { listPublicContent, type PublicContentEntry } from '$lib/content/publicContent';
 	import {
 		buildPublicEnterpriseHref,
 		buildPublicSignupHref,
@@ -11,6 +11,7 @@
 	} from '$lib/public/publicBuyingMotion';
 
 	const proofEntries = listPublicContent('proof');
+	const proofBySlug = new Map(proofEntries.map((entry) => [entry.slug, entry] as const));
 	let buyingMotion = $derived(resolvePublicBuyingMotion($page.url, 'enterprise_first'));
 	let startFreeHref = $derived(
 		buildPublicSignupHref(base, $page.url, {
@@ -25,19 +26,53 @@
 		})
 	);
 
+	function mustGetProof(slug: string): PublicContentEntry {
+		const entry = proofBySlug.get(slug);
+		if (!entry) {
+			throw new Error(`Unknown proof entry: ${slug}`);
+		}
+		return entry;
+	}
+
 	const heroHighlights = [
 		{
-			label: 'Control integrity',
-			value: 'Signals, ownership, approvals, and proof tied together in one loop'
+			label: 'What it covers',
+			value: 'Control model, access, approvals, deployment boundaries, and validation scope'
 		},
 		{
-			label: 'Execution trace',
-			value: 'Replayable approval chains, lane details, and recorded outcomes'
+			label: 'How to use it',
+			value: 'Start here for evaluation, then move to docs only when deeper review is needed'
 		},
 		{
-			label: 'Buyer-safe diligence',
-			value: 'Public proof categories for leadership, finance, security, and platform review'
+			label: 'What it avoids',
+			value: 'No fake customer proof and no generic compliance claims'
 		}
+	] as const;
+
+	const proofSequence = [
+		{
+			label: '01',
+			title: 'Verify the control model',
+			copy: 'Start with the access, approval, and record-integrity surfaces before you ask the buyer to trust a workflow.'
+		},
+		{
+			label: '02',
+			title: 'Pressure-test the risk questions',
+			copy: 'Review validation scope, operational posture, and deployment boundaries where the public site can answer clearly.'
+		},
+		{
+			label: '03',
+			title: 'Go deeper only when needed',
+			copy: 'Request a deeper enterprise review when the buyer needs deployment-specific or contract-specific answers.'
+		}
+	] as const;
+
+	const proofSpotlights = [
+		mustGetProof('safe-access-model'),
+		mustGetProof('identity-and-approval-controls'),
+		mustGetProof('decision-history-and-export-integrity'),
+		mustGetProof('deployment-and-data-residency'),
+		mustGetProof('validation-scope-and-operational-hardening')
 	] as const;
 </script>
 
@@ -51,8 +86,8 @@
 
 <PublicMarketingPage
 	kicker="Proof Pack"
-	title="Executive and technical proof for buyer diligence"
-	subtitle="This page consolidates high-signal proof categories used during evaluation cycles across leadership, security, finance, and platform teams."
+	title="Proof surfaces for buyer diligence"
+	subtitle="Review the control model, validation scope, and trust materials in the order serious buyers usually ask for them."
 >
 	{#snippet heroActions()}
 		{#if buyingMotion === 'enterprise_first'}
@@ -80,32 +115,55 @@
 	{/snippet}
 
 	{#snippet children()}
+		<section class="public-page__section" aria-labelledby="proof-sequence-title">
+			<div class="public-page__section-head">
+				<p class="public-page__eyebrow">Review sequence</p>
+				<h2 id="proof-sequence-title" class="public-page__section-title">
+					Use the proof pack in the same order buyers do
+				</h2>
+				<p class="public-page__section-subtitle">
+					This keeps the proof pack concrete instead of dumping every review topic on one screen.
+				</p>
+			</div>
+
+			<div class="public-page__flow-grid public-page__flow-grid--3">
+				{#each proofSequence as step (step.label)}
+					<article class="public-page__flow-card">
+						<p class="public-page__card-kicker">{step.label}</p>
+						<h2 class="public-page__card-title">{step.title}</h2>
+						<p class="public-page__card-copy">{step.copy}</p>
+					</article>
+				{/each}
+			</div>
+		</section>
+
 		<section class="public-page__section" aria-labelledby="proof-categories-title">
 			<div class="public-page__section-head">
 				<p class="public-page__eyebrow">Proof categories</p>
 				<h2 id="proof-categories-title" class="public-page__section-title">
-					Review the evidence surface by buying concern
+					Review the evidence surface by buyer question
 				</h2>
 				<p class="public-page__section-subtitle">
-					Each card below groups the public proof surface by the question buyers usually ask.
+					Each card below answers one recurring question from security, finance, leadership, or
+					procurement.
 				</p>
 			</div>
 
 			<div class="public-page__grid public-page__grid--2">
-				{#each proofEntries as entry (entry.slug)}
+				{#each proofSpotlights as entry (entry.slug)}
 					<article
 						class={`public-page__card ${
 							entry.slug === 'identity-and-approval-controls'
-								? 'public-page__card--dark'
-								: entry.slug === 'validation-scope-and-operational-hardening'
-									? 'public-page__card--accent public-page__card--featured'
-									: 'public-page__card--featured'
+								? 'public-page__card--accent public-page__card--featured'
+								: entry.slug === 'deployment-and-data-residency'
+									? 'public-page__card--featured'
+									: ''
 						}`}
 					>
 						<p class="public-page__card-kicker">{entry.kicker}</p>
 						<h2 class="public-page__card-title">{entry.title}</h2>
 						<p class="public-page__card-copy">{entry.summary}</p>
-						<ul class="public-page__list">
+						<ul class="public-page__list public-page__list--compact">
 							{#each entry.sections[0]?.bullets ?? [] as bullet (bullet)}
 								<li>{bullet}</li>
 							{/each}
@@ -117,15 +175,13 @@
 		</section>
 
 		<section class="public-page__section">
-			<div class="public-page__band public-page__band--dark">
+			<div class="public-page__band public-page__band--accent">
 				<div class="public-page__band-copy">
 					<p class="public-page__eyebrow">Next validation surfaces</p>
-					<h2 class="public-page__section-title">
-						Use the next layer of documentation only when you need it
-					</h2>
+					<h2 class="public-page__section-title">Go deeper only when the review needs it</h2>
 					<p class="public-page__section-subtitle">
-						Move from proof categories into product and API detail only when the buyer asks for
-						deeper validation.
+						Documentation, API detail, and enterprise contact stay available without overwhelming
+						the first proof surface.
 					</p>
 				</div>
 				<div class="public-page__actions-row">

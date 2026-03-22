@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import pytest
+
+import scripts.run_webhook_job_reliability_drill as reliability_drill
 from scripts.run_webhook_job_reliability_drill import (
     DRILL_SCENARIOS,
     LOCAL_DRILL_ENV_SEED,
     _build_local_bootstrap_database_path,
     _build_local_bootstrap_env,
+    main,
 )
 
 
@@ -94,3 +99,71 @@ def test_webhook_job_reliability_runbook_documents_required_metrics_and_alerts()
     assert "valdrics_scheduler_inline_fallback_total" in text
     assert "BackgroundJobDeadLetterGrowth" in text
     assert "SchedulerInlineFallbackActive" in text
+
+
+def test_main_resolves_relative_output_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = reliability_drill.REPO_ROOT
+    output_path = repo_root / "tmp-webhook-drill.json"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        reliability_drill,
+        "_current_alembic_heads",
+        lambda: ("abc123",),
+    )
+    monkeypatch.setattr(
+        reliability_drill,
+        "_run_local_sqlite_bootstrap",
+        lambda: {"passed": True},
+    )
+    monkeypatch.setattr(
+        reliability_drill,
+        "_run_pytest_targets",
+        lambda targets: {"passed": True, "targets": list(targets)},
+    )
+    try:
+        assert main(["--out", "tmp-webhook-drill.json"]) == 0
+        assert output_path.exists()
+    finally:
+        output_path.unlink(missing_ok=True)
+
+
+def test_main_rejects_relative_output_repo_escape() -> None:
+    assert main(["--out", os.path.join("..", "escape.json")]) == 2
+
+
+def test_main_rejects_directory_output_path(tmp_path: Path) -> None:
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    assert main(["--out", str(output_dir)]) == 2
+
+
+def test_main_returns_two_when_report_write_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        reliability_drill,
+        "_current_alembic_heads",
+        lambda: ("abc123",),
+    )
+    monkeypatch.setattr(
+        reliability_drill,
+        "_run_local_sqlite_bootstrap",
+        lambda: {"passed": True},
+    )
+    monkeypatch.setattr(
+        reliability_drill,
+        "_run_pytest_targets",
+        lambda targets: {"passed": True, "targets": list(targets)},
+    )
+    monkeypatch.setattr(
+        reliability_drill,
+        "stage_text_file",
+        lambda *args, **kwargs: (_ for _ in ()).throw(OSError("disk full")),
+    )
+
+    assert main(["--out", str(tmp_path / "report.json")]) == 2

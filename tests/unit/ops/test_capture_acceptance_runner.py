@@ -6,7 +6,9 @@ from datetime import date
 from pathlib import Path
 
 import httpx
+import pytest
 
+import scripts.capture_acceptance_runner as runner_module
 from scripts.capture_acceptance_runner import (
     build_capture_specs,
     capture_acceptance_evidence,
@@ -136,3 +138,26 @@ def test_capture_acceptance_evidence_continues_after_single_request_failure(
     manifest_failed = [item for item in manifest["results"] if not item["ok"]]
     assert len(manifest_failed) == 1
     assert manifest_failed[0]["name"] == "acceptance_kpis_json"
+
+
+def test_write_json_stages_before_promotion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_path = tmp_path / "artifact.json"
+    staged_path = tmp_path / ".artifact.json.tmp"
+
+    def _fake_stage(path: Path, payload: object, **_: object) -> Path:
+        assert path == output_path
+        staged_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        return staged_path
+
+    def _fake_promote(staged: Path, output: Path) -> None:
+        staged.replace(output)
+
+    monkeypatch.setattr(runner_module, "stage_json_file", _fake_stage)
+    monkeypatch.setattr(runner_module, "promote_staged_file", _fake_promote)
+
+    runner_module.write_json(output_path, {"ok": True})
+
+    assert json.loads(output_path.read_text(encoding="utf-8"))["ok"] is True

@@ -6,6 +6,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 import sys
 from typing import Any
 
@@ -19,19 +23,17 @@ from scripts.generate_managed_deployment_artifacts import (
     _placeholder_keys,
     _runtime_blockers,
 )
-from scripts.generate_managed_migration_env import (
-    _migration_blockers,
-    _required_operator_input_keys as _migration_required_operator_input_keys,
-)
+from scripts.generate_managed_migration_env import _migration_blockers
 from scripts.generate_managed_runtime_env import (
     DECLARED_EXTERNAL_VALUE_KEYS,
     RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS,
-    _identify_unresolved_keys,
-    _required_operator_input_keys as _runtime_required_operator_input_keys,
 )
-
-
-SUPPORTED_ENVIRONMENTS = ("staging", "production")
+from scripts.managed_deployment_contract import (
+    identify_runtime_unresolved_keys as _identify_unresolved_keys,
+    required_migration_operator_input_keys as _migration_required_operator_input_keys,
+    required_runtime_operator_input_keys as _runtime_required_operator_input_keys,
+    SUPPORTED_ENVIRONMENTS,
+)
 EXPECTED_DEPLOYMENT_ARTIFACT_KEYS = (
     "koyeb_api_manifest",
     "koyeb_worker_manifest",
@@ -49,6 +51,17 @@ EXPECTED_DEPLOYMENT_ARTIFACT_FILENAMES = {
         strict=True,
     )
 }
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_report_path(path: Path) -> Path:
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name="report paths")
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"report paths must be file paths: {resolved}")
+    return resolved
 
 
 def _normalize_path(path_value: str | Path, *, base_dir: Path) -> Path:
@@ -560,18 +573,26 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     environment = str(args.environment)
-    runtime_report = args.runtime_report or Path(".runtime") / f"{environment}.report.json"
-    migration_report = args.migration_report or Path(".runtime") / f"{environment}.migrate.report.json"
-    deployment_report = (
-        args.deployment_report
-        or Path(".runtime/deploy") / environment / "deployment.report.json"
-    )
+    try:
+        runtime_report = _resolve_report_path(
+            args.runtime_report or Path(".runtime") / f"{environment}.report.json"
+        )
+        migration_report = _resolve_report_path(
+            args.migration_report or Path(".runtime") / f"{environment}.migrate.report.json"
+        )
+        deployment_report = _resolve_report_path(
+            args.deployment_report
+            or Path(".runtime/deploy") / environment / "deployment.report.json"
+        )
+    except ValueError as exc:
+        print(f"[managed-deployment-bundle] failed: {exc}")
+        return 2
 
     errors = verify_managed_deployment_bundle(
         environment=environment,
-        runtime_report_path=runtime_report.resolve(),
-        migration_report_path=migration_report.resolve(),
-        deployment_report_path=deployment_report.resolve(),
+        runtime_report_path=runtime_report,
+        migration_report_path=migration_report,
+        deployment_report_path=deployment_report,
     )
     if errors:
         print("Managed deployment bundle verification failed:")
@@ -582,9 +603,9 @@ def main(argv: list[str] | None = None) -> int:
     print(
         "[managed-deployment-bundle] ok "
         f"environment={environment} "
-        f"runtime_report={runtime_report.resolve().as_posix()} "
-        f"migration_report={migration_report.resolve().as_posix()} "
-        f"deployment_report={deployment_report.resolve().as_posix()}"
+        f"runtime_report={runtime_report.as_posix()} "
+        f"migration_report={migration_report.as_posix()} "
+        f"deployment_report={deployment_report.as_posix()}"
     )
     return 0
 

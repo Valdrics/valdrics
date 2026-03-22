@@ -114,3 +114,62 @@ def test_main_returns_nonzero_when_bundle_is_incomplete(
     )
 
     assert exit_code == 1
+
+
+def test_main_resolves_relative_output_root_from_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    bundle_dir = tmp_path / "reports" / "acceptance" / "bundle"
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    called: dict[str, object] = {}
+
+    async def _fake_capture(**kwargs: object) -> tuple[Path, list[CaptureResult]]:
+        called.update(kwargs)
+        return (
+            bundle_dir,
+            [
+                CaptureResult(
+                    name="acceptance_kpis_json",
+                    path="bundle/acceptance_kpis.json",
+                    status_code=200,
+                    ok=True,
+                )
+            ],
+        )
+
+    monkeypatch.setattr(script_module, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(script_module, "capture_acceptance_evidence", _fake_capture)
+
+    exit_code = script_module.main(
+        [
+            "--url",
+            "http://127.0.0.1:8000",
+            "--token",
+            "abc.def.ghi",
+            "--output-root",
+            "reports/acceptance",
+        ]
+    )
+
+    assert exit_code == 0
+    assert called["output_root"] == tmp_path / "reports" / "acceptance"
+
+
+def test_main_rejects_output_root_that_is_a_file(
+    tmp_path: Path,
+) -> None:
+    output_root = tmp_path / "acceptance.txt"
+    output_root.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(SystemExit, match="output-root must be a directory path"):
+        script_module.main(
+            [
+                "--url",
+                "http://127.0.0.1:8000",
+                "--token",
+                "abc.def.ghi",
+                "--output-root",
+                str(output_root),
+            ]
+        )

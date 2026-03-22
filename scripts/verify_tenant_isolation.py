@@ -19,6 +19,7 @@ from typing import Any
 import httpx
 
 from app.shared.core.evidence_capture import sanitize_bearer_token
+from scripts.env_generation_common import repo_root_for
 
 
 DEFAULT_TESTS = [
@@ -30,6 +31,10 @@ DEFAULT_CHECKS = [
     "notification_settings_get_is_tenant_scoped",
     "audit_logs_endpoint_is_tenant_scoped",
 ]
+
+
+def _repo_root() -> str:
+    return str(repo_root_for(__file__))
 
 
 def _utc_now_iso() -> str:
@@ -62,6 +67,7 @@ def _git_sha() -> str | None:
     try:
         proc = subprocess.run(
             [git_executable, "rev-parse", "HEAD"],
+            cwd=_repo_root(),
             check=False,
             capture_output=True,
             text=True,
@@ -86,6 +92,7 @@ def run_pytest(tests: list[str]) -> dict[str, Any]:
     start = time.perf_counter()
     proc = subprocess.run(
         cmd,
+        cwd=_repo_root(),
         check=False,
         capture_output=True,
         text=True,
@@ -111,7 +118,7 @@ def run_pytest(tests: list[str]) -> dict[str, Any]:
     }
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Verify tenant isolation and optionally publish evidence."
     )
@@ -124,7 +131,7 @@ def main() -> int:
     parser.add_argument("--token", default=os.environ.get("VALDRICS_TOKEN"))
     parser.add_argument("--notes", default=None)
     parser.add_argument("--tests", nargs="*", default=DEFAULT_TESTS)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     tests = [str(t).strip() for t in (args.tests or []) if str(t).strip()]
     if not tests:

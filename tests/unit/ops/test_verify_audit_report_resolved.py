@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import pytest
+
+import scripts.verify_audit_report_resolved as audit_report_verifier
 from scripts.verify_audit_report_resolved import (
     main,
     parse_report_findings,
@@ -135,6 +139,80 @@ def test_main_flags_l02_duplicate_scripts(tmp_path: Path) -> None:
     )
 
     assert exit_code == 1
+
+
+def test_main_resolves_relative_repo_root_from_repo_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = Path(audit_report_verifier.__file__).resolve().parents[1]
+    captured: dict[str, Path] = {}
+
+    def _capture_run_checks(*, repo_root: Path, finding_ids: tuple[str, ...]):
+        captured["repo_root"] = repo_root
+        captured["finding_ids"] = Path  # sentinel to prove call executed
+        return (), ("ok",)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(audit_report_verifier, "run_checks", _capture_run_checks)
+
+    assert main(["--repo-root", ".", "--skip-report-check", "--finding", "C-01"]) == 0
+    assert captured["repo_root"] == repo_root
+
+
+def test_main_resolves_relative_report_path_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = Path(audit_report_verifier.__file__).resolve().parents[1]
+    report_path = repo_root / "tmp-relative-audit-report.md"
+    _write(report_path, "### C-01: Example finding\n")
+
+    def _capture_run_checks(*, repo_root: Path, finding_ids: tuple[str, ...]):
+        return (), ("ok",)
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(audit_report_verifier, "run_checks", _capture_run_checks)
+    try:
+        assert (
+            main(
+                [
+                    "--repo-root",
+                    ".",
+                    "--report-path",
+                    report_path.name,
+                    "--finding",
+                    "C-01",
+                ]
+            )
+            == 0
+        )
+    finally:
+        report_path.unlink(missing_ok=True)
+
+
+def test_main_rejects_relative_repo_root_repo_escape() -> None:
+    assert main(["--repo-root", os.path.join("..", ".."), "--skip-report-check"]) == 2
+
+
+def test_main_rejects_relative_report_path_repo_escape(tmp_path: Path) -> None:
+    repo_root = Path(audit_report_verifier.__file__).resolve().parents[1]
+    outside_report = tmp_path / "outside.md"
+    _write(outside_report, "### C-01: Example finding\n")
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(repo_root),
+                "--report-path",
+                os.path.relpath(outside_report, repo_root),
+                "--finding",
+                "C-01",
+            ]
+        )
+        == 2
+    )
 
 
 def test_main_flags_m09_missing_governance_tokens(tmp_path: Path) -> None:
@@ -319,3 +397,51 @@ def test_main_flags_h07_when_ratio_exceeds_budget(tmp_path: Path) -> None:
     )
 
     assert exit_code == 1
+
+
+def test_main_rejects_non_directory_repo_root(tmp_path: Path) -> None:
+    repo_root_file = tmp_path / "repo-root.txt"
+    repo_root_file.write_text("not-a-directory\n", encoding="utf-8")
+
+    exit_code = main(
+        [
+            "--repo-root",
+            str(repo_root_file),
+            "--skip-report-check",
+            "--finding",
+            "C-01",
+        ]
+    )
+
+    assert exit_code == 2
+
+
+def test_main_rejects_directory_report_path(tmp_path: Path) -> None:
+    report_dir = tmp_path / "report-dir"
+    report_dir.mkdir()
+    _write(
+        tmp_path / ".env.example",
+        "\n".join(
+            [
+                'APP_NAME="Valdrics"',
+                "CSRF_SECRET_KEY=",
+                "SMTP_USER=",
+                "DB_POOL_SIZE=20",
+                "DB_MAX_OVERFLOW=10",
+                "DB_POOL_TIMEOUT=30",
+            ]
+        ),
+    )
+
+    exit_code = main(
+        [
+            "--repo-root",
+            str(tmp_path),
+            "--report-path",
+            str(report_dir),
+            "--finding",
+            "C-01",
+        ]
+    )
+
+    assert exit_code == 2

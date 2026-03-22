@@ -9,11 +9,11 @@ test.describe('Landing Page Content', () => {
 		await expect(
 			page.getByRole('heading', {
 				level: 1,
-				name: /govern cloud, saas, and software spend without slowing delivery/i
+				name: /control cloud spend without slowing delivery|move from spend reports to accountable action|review spend-changing actions with context|protect margin with clearer spend decisions/i
 			})
 		).toBeVisible();
 		await expect(
-			page.getByRole('heading', { name: /realtime spend scenario simulator/i })
+			page.getByRole('heading', { name: /model the savings case in minutes/i })
 		).toBeVisible();
 	});
 

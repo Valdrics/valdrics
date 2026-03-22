@@ -5,6 +5,10 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 
 @dataclass(frozen=True)
@@ -192,7 +196,14 @@ ARTIFACT_TEMPLATE_TOKENS: tuple[EvidenceToken, ...] = (
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
+
+
+def _resolve_repo_relative_file(*, repo_root: Path, path: Path, label: str) -> Path:
+    resolved = resolve_cli_path_from_root(repo_root, path, field_name=label)
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"{label} must be a file: {resolved}")
+    return resolved
 
 
 def _read_text(path: Path) -> str:
@@ -274,11 +285,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     repo_root = _repo_root()
-    return verify_post_closure_sanity(
-        doc_path=repo_root / str(args.doc_path),
-        gap_register_path=repo_root / str(args.gap_register),
-        repo_root=repo_root,
-    )
+    try:
+        return verify_post_closure_sanity(
+            doc_path=_resolve_repo_relative_file(
+                repo_root=repo_root,
+                path=Path(str(args.doc_path)),
+                label="doc_path",
+            ),
+            gap_register_path=_resolve_repo_relative_file(
+                repo_root=repo_root,
+                path=Path(str(args.gap_register)),
+                label="gap_register",
+            ),
+            repo_root=repo_root,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[enforcement-post-closure-sanity] failed: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

@@ -10,6 +10,19 @@
 	} from '$lib/landing/realtimeSignalMap';
 	import { MICRO_DEMO_STEPS, SIGNAL_VALUE_CARDS } from '$lib/landing/heroContent';
 
+	const APPROVAL_STEP_CLASSES = [
+		'approval-chain-step-1',
+		'approval-chain-step-2',
+		'approval-chain-step-3',
+		'approval-chain-step-4'
+	] as const;
+	const APPROVAL_PROGRESS_CLASSES = [
+		'approval-chain-progress-0',
+		'approval-chain-progress-1',
+		'approval-chain-progress-2',
+		'approval-chain-progress-3'
+	] as const;
+
 	let {
 		activeSnapshot,
 		activeSignalLane,
@@ -42,11 +55,6 @@
 			activeSnapshot.lanes.findIndex((lane) => lane.id === activeSignalLane?.id)
 		)
 	);
-	let chainProgressPct = $derived(
-		activeSnapshot.lanes.length > 1
-			? Number(((activeLaneIndex / (activeSnapshot.lanes.length - 1)) * 100).toFixed(2))
-			: 0
-	);
 	let capturedAtLabel = $derived(
 		new Intl.DateTimeFormat('en-US', {
 			month: 'short',
@@ -59,6 +67,9 @@
 	let sourceCountLabel = $derived(
 		`${activeSnapshot.sources.length} source input${activeSnapshot.sources.length === 1 ? '' : 's'}`
 	);
+	let approvalProgressClass = $derived(
+		APPROVAL_PROGRESS_CLASSES[activeLaneIndex] ?? APPROVAL_PROGRESS_CLASSES[0]
+	);
 
 	$effect(() => {
 		onSignalMapElementChange(signalMapElement);
@@ -68,14 +79,18 @@
 		onSignalMapElementChange(null);
 	});
 
-	function stepProgressWidth(index: number): number {
-		if (demoStepIndex > index) return 100;
-		if (demoStepIndex < index) return 0;
-		return 62;
+	function lanePositionClass(index: number): string {
+		return APPROVAL_STEP_CLASSES[index] ?? APPROVAL_STEP_CLASSES[APPROVAL_STEP_CLASSES.length - 1];
+	}
+
+	function stepProgressClass(index: number): string {
+		if (demoStepIndex > index) return 'landing-demo-progress--complete';
+		if (demoStepIndex < index) return 'landing-demo-progress--pending';
+		return 'landing-demo-progress--active';
 	}
 </script>
 
-<div class="landing-preview fade-in-up" style="animation-delay: 170ms;">
+<div class="landing-preview fade-in-up fade-delay-signal">
 	<div class="glass-panel landing-preview-card" id="signal-map-card">
 		<div class="landing-preview-header">
 			<div class="landing-preview-title">
@@ -90,8 +105,7 @@
 
 		<div class="signal-map" class:is-paused={!signalMapInView} bind:this={signalMapElement}>
 			<div
-				class="approval-chain-shell"
-				style={`--approval-progress:${chainProgressPct}%;`}
+				class={`approval-chain-shell ${approvalProgressClass}`}
 				aria-describedby="signal-map-summary"
 			>
 				<div class="approval-chain-atmosphere" aria-hidden="true">
@@ -109,8 +123,7 @@
 					<div class="approval-chain-spoke approval-chain-spoke--sw"></div>
 					{#each activeSnapshot.lanes as lane, index (lane.id)}
 						<div
-							class={`approval-chain-orbit-node ${laneSeverityClass(lane.severity)} ${activeSignalLane?.id === lane.id ? 'is-active' : ''}`}
-							style={`--approval-node:${activeSnapshot.lanes.length > 1 ? (index / (activeSnapshot.lanes.length - 1)) * 100 : 0}%;`}
+							class={`approval-chain-orbit-node ${lanePositionClass(index)} ${laneSeverityClass(lane.severity)} ${activeSignalLane?.id === lane.id ? 'is-active' : ''}`}
 						></div>
 					{/each}
 				</div>
@@ -145,8 +158,7 @@
 					<div class="approval-chain-packet"></div>
 					{#each activeSnapshot.lanes as lane, index (lane.id)}
 						<div
-							class={`approval-chain-rail-stop ${laneSeverityClass(lane.severity)} ${activeSignalLane?.id === lane.id ? 'is-active' : ''}`}
-							style={`--approval-stop:${activeSnapshot.lanes.length > 1 ? (index / (activeSnapshot.lanes.length - 1)) * 100 : 0}%;`}
+							class={`approval-chain-rail-stop ${lanePositionClass(index)} ${laneSeverityClass(lane.severity)} ${activeSignalLane?.id === lane.id ? 'is-active' : ''}`}
 						></div>
 					{/each}
 				</div>
@@ -248,7 +260,6 @@
 									href={`${base}/auth/login?intent=demo_action`}
 									class="demo-action-btn"
 									role="button"
-									style="text-decoration: none;"
 								>
 									{activeSignalLane.actionLabel}
 								</a>
@@ -316,7 +327,7 @@
 									<div class="landing-demo-visual-meta">
 										<p>{step.title}</p>
 										<div class="landing-demo-visual-track">
-											<span style={`width:${stepProgressWidth(index)}%;`}></span>
+											<span class={`landing-demo-progress ${stepProgressClass(index)}`}></span>
 										</div>
 									</div>
 								</div>

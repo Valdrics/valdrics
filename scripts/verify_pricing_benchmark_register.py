@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_repo_relative_path_from_root as _resolve_repo_relative_path_from_root,
+)
+
 ALLOWED_SOURCE_CLASSES = {
     "vendor_pricing_page",
     "industry_benchmark_report",
@@ -24,6 +29,21 @@ DEFAULT_REQUIRED_SOURCE_CLASSES = (
 )
 DEFAULT_MINIMUM_SOURCE_COUNT = 5
 DEFAULT_MINIMUM_CONFIDENCE_SCORE = 0.7
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_register_path(path: Path) -> Path:
+    resolved = _resolve_repo_relative_path_from_root(
+        _repo_root(),
+        path,
+        field_name="register_path",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"Pricing benchmark register file must be a file: {resolved}")
+    return resolved
 
 
 def _parse_iso_utc(value: Any, *, field: str) -> datetime:
@@ -80,6 +100,8 @@ def _parse_bool(value: Any, *, field: str) -> bool:
 def _load_payload(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Pricing benchmark register file not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"Pricing benchmark register file must be a file: {path}")
     raw = path.read_text(encoding="utf-8")
     try:
         payload = json.loads(raw)
@@ -303,10 +325,14 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    return verify_register(
-        register_path=Path(args.register_path),
-        max_source_age_days=args.max_source_age_days,
-    )
+    try:
+        return verify_register(
+            register_path=_resolve_register_path(Path(args.register_path)),
+            max_source_age_days=args.max_source_age_days,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[pricing-benchmark-register] failed: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

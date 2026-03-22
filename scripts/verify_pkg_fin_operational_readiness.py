@@ -7,6 +7,11 @@ import argparse
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
+import tempfile
 from typing import Any
 
 from scripts.verify_finance_guardrails_evidence import (
@@ -18,6 +23,24 @@ from scripts.verify_finance_telemetry_snapshot import (
 from scripts.verify_pkg_fin_policy_decisions import (
     verify_evidence as verify_pkg_fin_policy_decisions_evidence,
 )
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_artifact_path(path: Path, *, field: str) -> Path:
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name=field)
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"{field} must be a file path: {resolved}")
+    return resolved
+
+
+def _resolve_output_path(path: Path) -> Path:
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name="output_path")
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"output_path must be a file path: {resolved.as_posix()}")
+    return resolved
 
 
 def _load_json_object(path: Path, *, field: str) -> dict[str, Any]:
@@ -47,6 +70,39 @@ def _read_bool_gate_map(payload: dict[str, Any], *, prefix: str) -> dict[str, bo
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output_path parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
+def _stage_summary_file(output_path: Path, summary: dict[str, Any]) -> Path:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    suffix = output_path.suffix or ".json"
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=output_path.parent,
+        prefix=f".{output_path.stem}.",
+        suffix=f"{suffix}.tmp",
+        delete=False,
+    ) as handle:
+        staged_output_path = Path(handle.name)
+    staged_output_path.write_text(
+        json.dumps(summary, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
+    return staged_output_path
 
 
 def verify_operational_readiness(
@@ -235,33 +291,56 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    summary = verify_operational_readiness(
-        policy_decisions_path=Path(str(args.policy_decisions_path)),
-        finance_guardrails_path=Path(str(args.finance_guardrails_path)),
-        telemetry_snapshot_path=Path(str(args.telemetry_snapshot_path)),
-        max_policy_age_hours=(
-            float(args.max_policy_age_hours) if args.max_policy_age_hours is not None else None
-        ),
-        max_finance_age_hours=(
-            float(args.max_finance_age_hours)
-            if args.max_finance_age_hours is not None
-            else None
-        ),
-        max_telemetry_age_hours=(
-            float(args.max_telemetry_age_hours)
-            if args.max_telemetry_age_hours is not None
-            else None
-        ),
-        allow_failed_fin_gates=bool(args.allow_failed_fin_gates),
-        require_production_observed_telemetry=bool(
-            args.require_production_observed_telemetry
-        ),
-        require_segregated_owners=bool(args.require_segregated_owners),
-    )
-    if args.output_path:
-        output_path = Path(str(args.output_path))
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8")
+    try:
+        summary = verify_operational_readiness(
+            policy_decisions_path=_resolve_artifact_path(
+                Path(str(args.policy_decisions_path)),
+                field="policy_decisions_path",
+            ),
+            finance_guardrails_path=_resolve_artifact_path(
+                Path(str(args.finance_guardrails_path)),
+                field="finance_guardrails_path",
+            ),
+            telemetry_snapshot_path=_resolve_artifact_path(
+                Path(str(args.telemetry_snapshot_path)),
+                field="telemetry_snapshot_path",
+            ),
+            max_policy_age_hours=(
+                float(args.max_policy_age_hours)
+                if args.max_policy_age_hours is not None
+                else None
+            ),
+            max_finance_age_hours=(
+                float(args.max_finance_age_hours)
+                if args.max_finance_age_hours is not None
+                else None
+            ),
+            max_telemetry_age_hours=(
+                float(args.max_telemetry_age_hours)
+                if args.max_telemetry_age_hours is not None
+                else None
+            ),
+            allow_failed_fin_gates=bool(args.allow_failed_fin_gates),
+            require_production_observed_telemetry=bool(
+                args.require_production_observed_telemetry
+            ),
+            require_segregated_owners=bool(args.require_segregated_owners),
+        )
+        if args.output_path:
+            output_path = _resolve_output_path(Path(str(args.output_path)))
+            _ensure_output_parent_dir(output_path)
+            staged_output_path = _stage_summary_file(output_path, summary)
+            promotion_completed = False
+            try:
+                staged_output_path.replace(output_path)
+                promotion_completed = True
+            finally:
+                if not promotion_completed:
+                    staged_output_path.unlink(missing_ok=True)
+                    output_path.unlink(missing_ok=True)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[pkg-fin-operational-readiness] failed: {exc}")
+        return 2
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
 

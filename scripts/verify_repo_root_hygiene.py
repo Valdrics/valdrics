@@ -6,6 +6,10 @@ import argparse
 import fnmatch
 from dataclasses import dataclass
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 
 PROHIBITED_ROOT_PATTERNS: tuple[str, ...] = (
@@ -34,9 +38,25 @@ class RootHygieneViolation:
     pattern: str
 
 
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_root(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="root")
+
+
+def _validate_root(root: Path) -> None:
+    if not root.exists():
+        raise ValueError(f"root does not exist: {root}")
+    if not root.is_dir():
+        raise ValueError(f"root must be a directory: {root}")
+
+
 def collect_root_hygiene_violations(
     root: Path, *, prohibited_patterns: tuple[str, ...] = PROHIBITED_ROOT_PATTERNS
 ) -> tuple[RootHygieneViolation, ...]:
+    _validate_root(root)
     violations: list[RootHygieneViolation] = []
     for child in root.iterdir():
         if not child.is_file():
@@ -56,7 +76,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--root",
-        default=str(Path(__file__).resolve().parents[1]),
+        default=str(_repo_root()),
         help="Repository root path (defaults to current repository).",
     )
     return parser
@@ -64,8 +84,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    root = Path(args.root).resolve()
-    violations = collect_root_hygiene_violations(root)
+    try:
+        root = _resolve_root(Path(str(args.root)))
+        violations = collect_root_hygiene_violations(root)
+    except ValueError as exc:
+        print(f"[repo-root-hygiene] failed: {exc}")
+        return 2
     if not violations:
         print(f"[repo-root-hygiene] ok root={root}")
         return 0

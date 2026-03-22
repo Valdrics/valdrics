@@ -7,8 +7,6 @@ type LandingHeroRuntimeArgs = {
 	windowRef: Window;
 	documentRef: Document;
 	signalMapElement: HTMLDivElement | null;
-	geoCurrencyHintTimeoutMs: number;
-	applyGeoCurrencyHint: (signal: AbortSignal) => Promise<void>;
 	onReducedMotionChange: (value: boolean) => void;
 	setPageReferrer: (value: string) => void;
 	consentStorageKey: string;
@@ -24,15 +22,6 @@ type LandingHeroRuntimeArgs = {
 };
 
 export function mountLandingHeroRuntime(args: LandingHeroRuntimeArgs): () => void {
-	const geoCurrencyController = new AbortController();
-	const geoCurrencyTimeout = setTimeout(
-		() => geoCurrencyController.abort(),
-		args.geoCurrencyHintTimeoutMs
-	);
-	void args.applyGeoCurrencyHint(geoCurrencyController.signal).finally(() => {
-		clearTimeout(geoCurrencyTimeout);
-	});
-
 	const storage = args.browserEnabled ? args.windowRef.localStorage : undefined;
 	const stopReducedMotionObservation = observeReducedMotionPreference(args.windowRef, (value) => {
 		args.onReducedMotionChange(value);
@@ -61,8 +50,6 @@ export function mountLandingHeroRuntime(args: LandingHeroRuntimeArgs): () => voi
 	});
 
 	return () => {
-		geoCurrencyController.abort();
-		clearTimeout(geoCurrencyTimeout);
 		stopReducedMotionObservation();
 		stopLandingLifecycle();
 	};

@@ -5,12 +5,12 @@ from __future__ import annotations
 
 import argparse
 import os
-from pathlib import Path
+from scripts.env_generation_common import repo_root_for
 import subprocess
 from typing import Callable
 
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = repo_root_for(__file__)
 
 
 CommandRunner = Callable[..., subprocess.CompletedProcess[str]]

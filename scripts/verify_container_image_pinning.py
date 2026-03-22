@@ -6,6 +6,7 @@ import argparse
 import os
 import re
 from pathlib import Path
+from scripts.env_generation_common import resolve_cli_path_from_root
 from typing import Any, Mapping
 
 import yaml
@@ -23,8 +24,20 @@ INTERPOLATION_RE = re.compile(r"\$\{([^}]+)\}")
 VARIABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
+def _resolve_repo_root(path: Path) -> Path:
+    resolved = Path(path).expanduser().resolve()
+    if not resolved.exists():
+        raise ValueError(f"repo_root does not exist: {resolved}")
+    if not resolved.is_dir():
+        raise ValueError(f"repo_root must be a directory: {resolved}")
+    return resolved
+
+
 def _resolve_path(*, repo_root: Path, compose_path: Path) -> Path:
-    return compose_path if compose_path.is_absolute() else repo_root / compose_path
+    resolved = resolve_cli_path_from_root(repo_root, compose_path, field_name="compose_path")
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"compose_path must be a file: {resolved}")
+    return resolved
 
 
 def _is_variable_ref(value: str) -> bool:
@@ -37,6 +50,8 @@ def _load_interpolation_environment(
     env_path = repo_root / ".env"
     resolved: dict[str, str] = {}
     if env_path.exists():
+        if not env_path.is_file():
+            raise ValueError(f".env path must be a file: {env_path}")
         resolved.update(
             {
                 str(key): str(value)
@@ -168,6 +183,7 @@ def verify_container_image_pinning(
     environment: Mapping[str, str] | None = None,
 ) -> tuple[str, ...]:
     errors: list[str] = []
+    repo_root = _resolve_repo_root(repo_root)
     interpolation_environment = _load_interpolation_environment(
         repo_root=repo_root,
         environment=environment,
@@ -224,12 +240,16 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    repo_root = args.repo_root.resolve()
     compose_paths = tuple(args.compose_path) or DEFAULT_COMPOSE_PATHS
-    errors = verify_container_image_pinning(
-        repo_root=repo_root,
-        compose_paths=compose_paths,
-    )
+    try:
+        repo_root = _resolve_repo_root(args.repo_root)
+        errors = verify_container_image_pinning(
+            repo_root=repo_root,
+            compose_paths=compose_paths,
+        )
+    except ValueError as exc:
+        print(f"[container-image-pinning] failed: {exc}")
+        return 2
     if errors:
         print("[container-image-pinning] FAILED")
         for item in errors:

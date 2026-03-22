@@ -4,75 +4,57 @@
 from __future__ import annotations
 
 import argparse
-import json
 import math
-import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from scripts.env_generation_common import (
+    checked_in_evidence_paths as _checked_in_evidence_paths_shared,
+    ensure_parent_dir as _ensure_parent_dir_shared,
+    promote_staged_file as _promote_staged_file,
+    protected_output_paths_from_root as _protected_output_paths_from_root,
+    repo_root_for as _repo_root_for,
+    resolve_output_path_from_root as _resolve_output_path_from_root,
+    stage_json_file as _stage_json_file,
+)
 from scripts.verify_pricing_benchmark_register import verify_register
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
+
+
+def _checked_in_evidence_paths(repo_root: Path) -> set[Path]:
+    return _checked_in_evidence_paths_shared(repo_root)
 
 
 def _protected_output_paths() -> set[Path]:
-    repo_root = _repo_root()
-    return {
-        Path(__file__).resolve(),
-        repo_root / "scripts" / "verify_pricing_benchmark_register.py",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json",
-        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
-        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json",
-    }
+    return _protected_output_paths_from_root(
+        _repo_root(),
+        __file__,
+        "scripts/verify_pricing_benchmark_register.py",
+        "docs/ops/evidence/pricing_benchmark_register_TEMPLATE.json",
+        "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
+        "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
+        "docs/ops/evidence/README.md",
+    )
 
 
 def _resolve_output_path(value: str) -> Path:
-    raw = Path(str(value)).expanduser()
-    if raw.is_absolute():
-        resolved = raw.resolve()
-    else:
-        resolved = (_repo_root() / raw).resolve()
-        try:
-            resolved.relative_to(_repo_root())
-        except ValueError as exc:
-            raise ValueError("output must stay within repo root when relative") from exc
-    if resolved.exists() and not resolved.is_file():
-        raise ValueError(f"output must be a file path: {resolved.as_posix()}")
-    if resolved in _protected_output_paths():
-        raise ValueError(
+    return _resolve_output_path_from_root(
+        _repo_root(),
+        value,
+        field_name="output",
+        protected_paths=_protected_output_paths(),
+        protected_error=(
             "output must not overwrite pricing benchmark source, verifier, or checked-in evidence files"
-        )
-    return resolved
+        ),
+    )
 
 
 def _ensure_output_parent_dir(output_path: Path) -> None:
-    current = output_path.parent
-    while True:
-        if current.exists():
-            if not current.is_dir():
-                raise ValueError(
-                    f"output parent must be a directory path: {current.as_posix()}"
-                )
-            return
-        if current == current.parent:
-            return
-        current = current.parent
+    _ensure_parent_dir_shared(output_path, field_name="output")
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -168,26 +150,16 @@ def _write_verified_register(
     payload: dict[str, object],
     max_source_age_days: float,
 ) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=output_path.parent,
-        prefix=f".{output_path.stem}.",
-        suffix=f"{output_path.suffix}.tmp",
-        delete=False,
-    ) as handle:
-        temp_path = Path(handle.name)
-        handle.write(json.dumps(payload, indent=2, sort_keys=True))
+    temp_path = _stage_json_file(output_path, payload)
     try:
         verify_register(
             register_path=temp_path,
             max_source_age_days=max_source_age_days,
         )
+        _promote_staged_file(temp_path, output_path)
     except Exception:
         temp_path.unlink(missing_ok=True)
         raise
-    temp_path.replace(output_path)
 
 
 def _normalize_confidence_score(value: Any, *, field: str) -> float:

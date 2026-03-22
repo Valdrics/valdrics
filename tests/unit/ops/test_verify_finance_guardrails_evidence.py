@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
 
+import scripts.verify_finance_guardrails_evidence as finance_verifier
 from scripts.verify_finance_guardrails_evidence import main, verify_evidence
 
 
@@ -159,3 +161,39 @@ def test_main_accepts_valid_payload(tmp_path: Path) -> None:
     path = tmp_path / "finance.json"
     _write(path, _valid_payload())
     assert main(["--evidence-path", str(path)]) == 0
+
+
+def test_main_resolves_relative_evidence_path_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    path = repo_root / "docs" / "ops" / "finance.json"
+    _write(path, _valid_payload())
+    monkeypatch.setattr(finance_verifier, "_repo_root", lambda: repo_root)
+
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        assert main(["--evidence-path", "docs/ops/finance.json"]) == 0
+    finally:
+        os.chdir(old_cwd)
+
+
+def test_main_rejects_relative_evidence_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(finance_verifier, "_repo_root", lambda: repo_root)
+
+    assert main(["--evidence-path", "../escape/finance.json"]) == 2
+
+
+def test_main_rejects_directory_input(tmp_path: Path) -> None:
+    evidence_dir = tmp_path / "finance-dir"
+    evidence_dir.mkdir()
+
+    assert main(["--evidence-path", str(evidence_dir)]) == 2

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
-from scripts.check_frontend_hygiene import run
+import scripts.check_frontend_hygiene as frontend_hygiene_script
+from scripts.check_frontend_hygiene import main, run
 
 
 def _write(path: Path, content: str) -> None:
@@ -148,3 +150,25 @@ def test_run_fails_when_svelte_uses_html_injection_without_sanitization(
 
     assert run(tmp_path) == 1
     assert "`{@html ...}` requires DOMPurify.sanitize(...)" in capsys.readouterr().out
+
+
+def test_main_resolves_relative_repo_root_from_repo_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_root = Path(frontend_hygiene_script.__file__).resolve().parents[1]
+    captured: dict[str, Path] = {}
+
+    def _capture(repo_root: Path) -> int:
+        captured["repo_root"] = repo_root
+        return 0
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(frontend_hygiene_script, "run", _capture)
+
+    assert main(["--repo-root", "."]) == 0
+    assert captured["repo_root"] == repo_root
+
+
+def test_main_rejects_relative_repo_root_escape() -> None:
+    assert main(["--repo-root", os.path.join("..", "..")]) == 2

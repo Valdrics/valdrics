@@ -6,6 +6,15 @@ import type { RequestHandler } from './$types';
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_EMAIL_LENGTH = 254;
+const BUYER_REGIONS = new Set([
+	'United States',
+	'United Kingdom',
+	'Africa',
+	'Europe (non-UK)',
+	'Middle East',
+	'Asia-Pacific',
+	'Other'
+]);
 const TEAM_SIZES = new Set(['1-5', '6-20', '21-50', '51-200', '201-1000', '1000+']);
 const TIMELINES = new Set(['this_month', 'this_quarter', 'next_quarter', 'evaluating']);
 const INTEREST_AREAS = new Set([
@@ -23,6 +32,7 @@ type TalkToSalesBody = {
 	email: string;
 	company: string;
 	role?: string;
+	buyerRegion?: string;
 	teamSize?: string;
 	deploymentScope?: string;
 	timeline?: string;
@@ -54,6 +64,7 @@ function normalizeBody(payload: unknown): TalkToSalesBody | null {
 		.toLowerCase();
 	const company = String(candidate.company ?? '').trim();
 	const role = normalizeOptionalString(candidate.role);
+	const buyerRegion = normalizeOptionalString(candidate.buyerRegion);
 	const teamSize = normalizeOptionalString(candidate.teamSize);
 	const deploymentScope = normalizeOptionalString(candidate.deploymentScope);
 	const timeline = normalizeOptionalString(candidate.timeline);
@@ -70,6 +81,7 @@ function normalizeBody(payload: unknown): TalkToSalesBody | null {
 	if (!email || email.length > MAX_EMAIL_LENGTH || !EMAIL_REGEX.test(email)) return null;
 	if (!company || company.length > 120) return null;
 	if (role && role.length > 120) return null;
+	if (buyerRegion && !BUYER_REGIONS.has(buyerRegion)) return null;
 	if (teamSize && !TEAM_SIZES.has(teamSize)) return null;
 	if (deploymentScope && deploymentScope.length > 200) return null;
 	if (timeline && !TIMELINES.has(timeline)) return null;
@@ -87,6 +99,7 @@ function normalizeBody(payload: unknown): TalkToSalesBody | null {
 		email,
 		company,
 		role,
+		buyerRegion,
 		teamSize,
 		deploymentScope,
 		timeline,

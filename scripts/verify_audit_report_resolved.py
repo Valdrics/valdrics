@@ -5,6 +5,10 @@ from __future__ import annotations
 import argparse
 import re
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 from scripts.audit_report_controls_registry import (
     FINDING_INDEX,
@@ -19,6 +23,18 @@ DEFAULT_REPORT_PATH = Path(
 )
 REPORT_FINDING_PATTERN = re.compile(r"^###\s+([CHML]-\d{2}):", re.MULTILINE)
 REPORT_GENERIC_FINDING_PATTERN = re.compile(r"^###\s+([A-Z]+-\d{2}):", re.MULTILINE)
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_repo_root(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="repo_root")
+
+
+def _resolve_report_path(path: Path, *, repo_root: Path) -> Path:
+    return resolve_cli_path_from_root(repo_root, path, field_name="report_path")
 
 
 def parse_report_findings(report_path: Path) -> tuple[str, ...]:
@@ -100,7 +116,17 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    repo_root = args.repo_root.resolve()
+    try:
+        repo_root = _resolve_repo_root(args.repo_root)
+    except ValueError as exc:
+        print(f"[audit-report] failed: {exc}")
+        return 2
+    if not repo_root.exists():
+        print(f"[audit-report] missing repo root: {repo_root.as_posix()}")
+        return 2
+    if not repo_root.is_dir():
+        print(f"[audit-report] repo root must be a directory: {repo_root.as_posix()}")
+        return 2
 
     selected = tuple(args.finding) if args.finding else FINDING_ORDER
     unknown = [finding for finding in selected if finding not in FINDING_INDEX]
@@ -110,7 +136,11 @@ def main(argv: list[str] | None = None) -> int:
 
     report_errors: list[str] = []
     if not args.skip_report_check:
-        report_path = args.report_path
+        try:
+            report_path = _resolve_report_path(args.report_path, repo_root=repo_root)
+        except ValueError as exc:
+            print(f"[audit-report] failed: {exc}")
+            return 2
         if not report_path.exists():
             if not args.allow_missing_report:
                 print(
@@ -121,6 +151,9 @@ def main(argv: list[str] | None = None) -> int:
             report_errors.append(
                 f"report not found (skipped heading validation): {report_path.as_posix()}"
             )
+        elif not report_path.is_file():
+            print(f"[audit-report] report path must be a file: {report_path.as_posix()}")
+            return 2
         else:
             report_findings = parse_report_findings(report_path)
             if report_findings:

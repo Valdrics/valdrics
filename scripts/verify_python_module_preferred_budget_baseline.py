@@ -7,6 +7,11 @@ import argparse
 import json
 from dataclasses import asdict
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
+import tempfile
 
 from scripts.verify_python_module_size_budget import (
     ModuleSizePreferredBreach,
@@ -14,8 +19,23 @@ from scripts.verify_python_module_size_budget import (
 )
 
 
-DEFAULT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ROOT = _repo_root_for(__file__)
 DEFAULT_BASELINE_PATH = Path("docs/ops/evidence/python_module_size_preferred_baseline.json")
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_root(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="root")
+
+
+def _resolve_baseline_path(path: Path, *, root: Path) -> Path:
+    resolved = resolve_cli_path_from_root(root, path, field_name="baseline_path")
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"baseline_path must be a file path: {resolved.as_posix()}")
+    return resolved
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -72,19 +92,54 @@ def _load_baseline(path: Path) -> tuple[ModuleSizePreferredBreach, ...]:
     return tuple(sorted(items, key=lambda item: item.path))
 
 
+def _ensure_baseline_parent_dir(path: Path) -> None:
+    current = path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"baseline_path parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
+
+
 def _write_baseline(
     *,
     path: Path,
     root: Path,
     breaches: tuple[ModuleSizePreferredBreach, ...],
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.exists() and not path.is_file():
+        raise ValueError(f"baseline_path must be a file path: {path.as_posix()}")
+    _ensure_baseline_parent_dir(path)
     payload = {
         # Keep the checked-in baseline stable across different local worktrees and CI paths.
         "root": ".",
         "breaches": [asdict(item) for item in breaches],
     }
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    suffix = path.suffix or ".json"
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        dir=path.parent,
+        prefix=f".{path.stem}.",
+        suffix=f"{suffix}.tmp",
+        delete=False,
+    ) as handle:
+        staged_path = Path(handle.name)
+    staged_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    promotion_completed = False
+    try:
+        staged_path.replace(path)
+        promotion_completed = True
+    finally:
+        if not promotion_completed:
+            staged_path.unlink(missing_ok=True)
+            path.unlink(missing_ok=True)
 
 
 def _by_key(
@@ -140,16 +195,16 @@ def verify_against_baseline(
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    root = args.root.resolve()
-    baseline_path = (
-        args.baseline_path
-        if args.baseline_path.is_absolute()
-        else root / args.baseline_path
-    )
-    current = collect_module_size_preferred_breaches(
-        root,
-        preferred_max_lines=int(args.preferred_max_lines),
-    )
+    try:
+        root = _resolve_root(args.root)
+        baseline_path = _resolve_baseline_path(args.baseline_path, root=root)
+        current = collect_module_size_preferred_breaches(
+            root,
+            preferred_max_lines=int(args.preferred_max_lines),
+        )
+    except ValueError as exc:
+        print(f"[python-module-preferred-budget-baseline] failed: {exc}")
+        return 2
 
     if args.write_baseline:
         _write_baseline(path=baseline_path, root=root, breaches=current)

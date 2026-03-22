@@ -4,11 +4,23 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 
 DEFAULT_ADAPTERS_ROOT = Path("app/shared/adapters")
 DEFAULT_TESTS_ROOT = Path("tests")
 DEFAULT_ALLOWLIST: frozenset[str] = frozenset({"__init__"})
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_repo_path(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="path")
 
 
 def _adapter_stems(adapters_root: Path) -> tuple[str, ...]:
@@ -88,11 +100,15 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    missing = find_uncovered_adapters(
-        adapters_root=args.adapters_root,
-        tests_root=args.tests_root,
-        allowlist=set(args.allowlist),
-    )
+    try:
+        missing = find_uncovered_adapters(
+            adapters_root=_resolve_repo_path(args.adapters_root),
+            tests_root=_resolve_repo_path(args.tests_root),
+            allowlist=set(args.allowlist),
+        )
+    except ValueError as exc:
+        print(f"[adapter-test-coverage] failed: {exc}")
+        return 2
     if missing:
         print("[adapter-test-coverage] FAILED")
         for stem in missing:
@@ -108,4 +124,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

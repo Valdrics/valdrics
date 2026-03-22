@@ -441,3 +441,38 @@ def test_main_rejects_allow_missing_sbom_with_relative_escape_outside_repo_root(
                 "../missing-sbom",
             ]
         )
+
+
+def test_main_does_not_leave_output_when_manifest_promotion_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    _write(repo_root / "pyproject.toml", "[project]\nname='x'\n")
+    output = repo_root / "artifacts" / "provenance.json"
+    path_type = type(output)
+    original_replace = path_type.replace
+
+    def _failing_replace(self: Path, target: Path) -> Path:
+        if self.parent == output.parent and Path(target) == output:
+            raise OSError("simulated promotion failure")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(path_type, "replace", _failing_replace)
+
+    with pytest.raises(OSError, match="simulated promotion failure"):
+        main(
+            [
+                "--repo-root",
+                str(repo_root),
+                "--output",
+                str(output),
+                "--allow-missing-sbom",
+                "--dependency-input",
+                "pyproject.toml",
+            ]
+        )
+
+    assert not output.exists()
+    assert not list(output.parent.glob(f".{output.stem}.*{output.suffix}.tmp"))

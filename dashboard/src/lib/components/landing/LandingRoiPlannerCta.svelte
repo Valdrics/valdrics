@@ -40,11 +40,23 @@
 			<div class="landing-roi-snapshot-bars" aria-hidden="true">
 				<div class="landing-roi-snapshot-row">
 					<span>Reactive path</span>
-					<div><i style="width: 100%;"></i></div>
+					<progress
+						class="landing-roi-snapshot-meter landing-roi-snapshot-meter--reactive"
+						max="100"
+						value="100"
+					>
+						100
+					</progress>
 				</div>
 				<div class="landing-roi-snapshot-row">
 					<span>Governed path</span>
-					<div><i style="width: 62%;"></i></div>
+					<progress
+						class="landing-roi-snapshot-meter landing-roi-snapshot-meter--governed"
+						max="100"
+						value="62"
+					>
+						62
+					</progress>
 				</div>
 			</div>
 		</div>

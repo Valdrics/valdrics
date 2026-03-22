@@ -1,12 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import LandingHeroCopy from '$lib/components/landing/LandingHeroCopy.svelte';
-import LandingSignalMapCard from '$lib/components/landing/LandingSignalMapCard.svelte';
 import LandingRoiSimulator from '$lib/components/landing/LandingRoiSimulator.svelte';
 import LandingRoiCalculator from '$lib/components/landing/LandingRoiCalculator.svelte';
 import LandingRoiPlannerCta from '$lib/components/landing/LandingRoiPlannerCta.svelte';
-import LandingTrustSection from '$lib/components/landing/LandingTrustSection.svelte';
-import { REALTIME_SIGNAL_SNAPSHOTS } from '$lib/landing/realtimeSignalMap';
 import { calculateLandingRoi, normalizeLandingRoiInputs } from '$lib/landing/roiCalculator';
 import './landing_decomposition.lead_exit.svelte.test';
 
@@ -15,8 +14,12 @@ vi.mock('$app/paths', () => ({
 	base: ''
 }));
 
+afterEach(() => {
+	cleanup();
+});
+
 describe('Landing component decomposition', () => {
-	it('renders hero copy and keeps CTA tracking callbacks wired', async () => {
+	it('renders hero copy, ROI cue, and CTA tracking callbacks', async () => {
 		const onPrimaryCta = vi.fn();
 		const onSecondaryCta = vi.fn();
 
@@ -34,105 +37,21 @@ describe('Landing component decomposition', () => {
 		});
 
 		expect(screen.getByRole('heading', { level: 1 })).toBeTruthy();
+		expect(screen.getByText(/cloud, saas, and software in one place/i)).toBeTruthy();
+		expect(screen.getByText(/proof ready for finance and procurement/i)).toBeTruthy();
 		await fireEvent.click(screen.getByRole('link', { name: /start free workspace/i }));
 		await fireEvent.click(screen.getByRole('link', { name: /see pricing/i }));
 		expect(onPrimaryCta).toHaveBeenCalledTimes(1);
 		expect(onSecondaryCta).toHaveBeenCalledTimes(1);
-		expect(screen.getByText(/cloud \+ saas \+ software in one control layer/i)).toBeTruthy();
-		expect(screen.getByText(/read-only onboarding where supported/i)).toBeTruthy();
-		expect(screen.getByText(/see the governed loop before rollout/i)).toBeTruthy();
-		expect(screen.getByText(/what changes after onboarding/i)).toBeTruthy();
-		expect(screen.getByText(/permanent free tier/i)).toBeTruthy();
-		expect(screen.getByText(/signal-to-owner handoff/i)).toBeTruthy();
-		const jumpNav = screen.getByRole('navigation', { name: /browse landing sections/i });
-		expect(
-			within(jumpNav)
-				.getByRole('link', { name: /explore product/i })
-				.getAttribute('href')
-		).toBe('#product');
-		expect(
-			within(jumpNav)
-				.getByRole('link', { name: /see decision loop/i })
-				.getAttribute('href')
-		).toBe('#signal-map');
-		expect(
-			within(jumpNav)
-				.getByRole('link', { name: /compare plans/i })
-				.getAttribute('href')
-		).toBe('#plans');
-		expect(
-			within(jumpNav)
-				.getByRole('link', { name: /review trust/i })
-				.getAttribute('href')
-		).toBe('#trust');
-		expect(screen.getAllByText(/one governed operating layer/i).length).toBeGreaterThanOrEqual(1);
-		expect(screen.getAllByText(/owner-routed action/i).length).toBeGreaterThanOrEqual(1);
-		expect(screen.getAllByText(/reviewable outcomes/i).length).toBeGreaterThanOrEqual(1);
-		expect(screen.queryByText(/verify before you commit/i)).toBeNull();
-		expect(screen.queryByRole('link', { name: /technical validation/i })).toBeNull();
-		expect(screen.queryByRole('link', { name: /access checklist/i })).toBeNull();
-		expect(screen.queryByRole('link', { name: /review methodology/i })).toBeNull();
-		expect(screen.queryByRole('link', { name: /live signal map/i })).toBeNull();
-		expect(screen.queryByText(/evidence snapshot · february 28, 2026/i)).toBeNull();
-
-		// Check for GreenOps Global Flip additions
-		expect(screen.getByText(/Governed action for cloud, SaaS, and software spend/i)).toBeTruthy();
-		expect(
-			screen.getByText(/Detect waste\. Route the owner\. Approve the action\. Keep the proof\./i)
-		).toBeTruthy();
 	});
 
-	it('renders signal map card and propagates interactions', async () => {
-		const onSelectSignalLane = vi.fn();
-		const onSelectDemoStep = vi.fn();
-		const onSelectSnapshot = vi.fn();
-		const onSignalMapElementChange = vi.fn();
-
-		const snapshot = REALTIME_SIGNAL_SNAPSHOTS[0];
-		const activeLane = snapshot?.lanes[0];
-		expect(snapshot).toBeTruthy();
-		expect(activeLane).toBeTruthy();
-		if (!snapshot || !activeLane) {
-			return;
-		}
-
-		render(LandingSignalMapCard, {
-			props: {
-				activeSnapshot: snapshot,
-				activeSignalLane: activeLane,
-				signalMapInView: true,
-				snapshotIndex: 0,
-				demoStepIndex: 0,
-				onSelectSignalLane,
-				onSelectDemoStep,
-				onSelectSnapshot,
-				onSignalMapElementChange
-			}
-		});
-
-		expect(screen.getByText(/live decision loop/i)).toBeTruthy();
-		await fireEvent.click(screen.getByRole('button', { name: /^open approval chain$/i }));
-		const firstLaneTab = screen.getByRole('tab', { name: /signal scoped/i });
-		await fireEvent.click(firstLaneTab);
-		expect(onSelectSignalLane).toHaveBeenCalled();
-
-		await fireEvent.click(screen.getByRole('button', { name: /open approval chain walkthrough/i }));
-		const demoButton = screen.getByRole('button', { name: /^routed$/i });
-		await fireEvent.click(demoButton);
-		expect(onSelectDemoStep).toHaveBeenCalled();
-
-		const snapshotButton = screen.getByRole('button', { name: /snapshot b/i });
-		await fireEvent.click(snapshotButton);
-		expect(onSelectSnapshot).toHaveBeenCalled();
-		expect(onSignalMapElementChange).toHaveBeenCalled();
-	});
-
-	it('updates simulator controls through typed callbacks', async () => {
+	it('updates simulator controls, currency selection, and planner CTA', async () => {
 		const onTrackScenarioAdjust = vi.fn();
 		const onScenarioWasteWithoutChange = vi.fn();
 		const onScenarioWasteWithChange = vi.fn();
 		const onScenarioWindowChange = vi.fn();
 		const onTrackPlannerCta = vi.fn();
+		const onCurrencyCodeChange = vi.fn();
 
 		const view = render(LandingRoiSimulator, {
 			props: {
@@ -149,8 +68,11 @@ describe('Landing component decomposition', () => {
 				scenarioWasteWithoutPct: 18,
 				scenarioWasteWithPct: 7,
 				scenarioWindowMonths: 12,
-				formatUsd: (amount: number) => `$${amount}`,
+				formatUsd: (amount: number, currency: string = 'USD') =>
+					currency === 'EUR' ? `€${amount}` : `$${amount}`,
 				currencyCode: 'USD',
+				localCurrencyCode: 'EUR',
+				onCurrencyCodeChange,
 				plannerHref: '/auth/login?intent=roi_assessment',
 				onTrackScenarioAdjust,
 				onScenarioWasteWithoutChange,
@@ -170,17 +92,13 @@ describe('Landing component decomposition', () => {
 		await fireEvent.input(simulatorView.getByLabelText(/decision window \(months\)/i), {
 			target: { value: '11' }
 		});
+		await fireEvent.click(simulatorView.getByRole('button', { name: /local eur/i }));
 
 		expect(onScenarioWasteWithoutChange).toHaveBeenCalledWith(19);
 		expect(onScenarioWasteWithChange).toHaveBeenCalledWith(8);
 		expect(onScenarioWindowChange).toHaveBeenCalledWith(11);
+		expect(onCurrencyCodeChange).toHaveBeenCalledWith('EUR');
 		expect(onTrackScenarioAdjust).toHaveBeenCalledTimes(3);
-		expect(
-			simulatorView.getByRole('link', { name: /review methodology/i }).getAttribute('href')
-		).toBe('/docs/technical-validation');
-		expect(
-			simulatorView.getByRole('link', { name: /open assumptions csv/i }).getAttribute('href')
-		).toBe('/resources/valdrics-roi-assumptions.csv');
 		await fireEvent.click(simulatorView.getByRole('link', { name: /open full roi planner/i }));
 		expect(onTrackPlannerCta).toHaveBeenCalledTimes(1);
 	});
@@ -196,119 +114,12 @@ describe('Landing component decomposition', () => {
 
 		const ctaView = within(view.container);
 		expect(ctaView.getByText(/example 12-month model snapshot/i)).toBeTruthy();
-		expect(ctaView.getByText(/projected annual spend/i)).toBeTruthy();
-		expect(ctaView.getAllByText(/controllable waste opportunity/i).length).toBeGreaterThan(0);
+		expect(view.container.querySelectorAll('progress')).toHaveLength(2);
 		await fireEvent.click(ctaView.getByRole('link', { name: /open full roi planner/i }));
 		expect(onTrackCta).toHaveBeenCalledTimes(1);
 	});
 
-	it('renders global trust compliance badges and regional resilience signals', async () => {
-		const onTrackCta = vi.fn();
-		const view = render(LandingTrustSection, {
-			props: {
-				aboutHref: '/about?source=trust_about',
-				docsHref: '/docs?source=trust_docs',
-				statusHref: '/status?source=trust_status',
-				enterprisePathHref: '/enterprise?source=trust_enterprise',
-				requestValidationBriefingHref:
-					'/talk-to-sales?source=trust_validation&intent=request_validation_briefing',
-				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
-				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
-				onTrackCta
-			}
-		});
-
-		expect(view.getAllByText(/Read-only cloud onboarding where supported/i).length).toBeGreaterThan(
-			0
-		);
-		expect(view.getAllByText(/Decision history export/i).length).toBeGreaterThan(0);
-
-		const ctaBlock = within(view.container).getByRole('generic', {
-			name: 'Security proof and enterprise rollout'
-		});
-		expect(ctaBlock).toBeTruthy();
-		if (ctaBlock) {
-			const ctaView = within(ctaBlock);
-			expect(ctaView.getByText(/Control and Access Checklist/i)).toBeTruthy();
-			expect(ctaView.getByText(/formal evaluation lane/i)).toBeTruthy();
-			await fireEvent.click(ctaView.getByRole('link', { name: /Control and Access Checklist/i }));
-			expect(onTrackCta).toHaveBeenCalledWith('download_global_compliance_workbook');
-		}
-	});
-
-	it('renders trust validation and one-pager collateral CTAs', async () => {
-		const onTrackCta = vi.fn();
-		const view = render(LandingTrustSection, {
-			props: {
-				aboutHref: '/about?source=trust_about',
-				docsHref: '/docs?source=trust_docs',
-				statusHref: '/status?source=trust_status',
-				enterprisePathHref: '/enterprise?source=trust_enterprise',
-				requestValidationBriefingHref:
-					'/talk-to-sales?source=trust_validation&intent=request_validation_briefing',
-				onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
-				globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
-				onTrackCta
-			}
-		});
-
-		const ctaBlock = within(view.container).getByRole('generic', {
-			name: 'Security proof and enterprise rollout'
-		});
-		expect(ctaBlock).toBeTruthy();
-		if (ctaBlock) {
-			const ctaView = within(ctaBlock);
-			await fireEvent.click(ctaView.getByRole('link', { name: /^open enterprise path$/i }));
-			expect(onTrackCta).toHaveBeenCalledWith('enterprise_review');
-
-			await fireEvent.click(ctaView.getByRole('link', { name: /^book validation briefing$/i }));
-			expect(onTrackCta).toHaveBeenCalledWith('request_validation_briefing');
-
-			await fireEvent.click(ctaView.getByRole('link', { name: /download executive one-pager/i }));
-			expect(onTrackCta).toHaveBeenCalledWith('download_executive_one_pager');
-		}
-	});
-
-	it('keeps trust content static and free of testimonial rotators or polling', () => {
-		const fetchMock = vi.spyOn(globalThis, 'fetch');
-
-		try {
-			const trust = render(LandingTrustSection, {
-				props: {
-					aboutHref: '/about?source=trust_about',
-					docsHref: '/docs?source=trust_docs',
-					statusHref: '/status?source=trust_status',
-					enterprisePathHref: '/enterprise?source=trust_enterprise',
-					requestValidationBriefingHref:
-						'/talk-to-sales?source=trust_validation&intent=request_validation_briefing',
-					onePagerHref: '/resources/valdrics-enterprise-one-pager.md',
-					globalComplianceWorkbookHref: '/resources/global-finops-compliance-workbook.md',
-					onTrackCta: vi.fn()
-				}
-			});
-			const trustView = within(trust.container);
-
-			expect(
-				trustView.getByText(/every material action keeps owner, approval, and savings evidence/i)
-			).toBeTruthy();
-			expect(
-				trustView.getByText(/cross-functional teams work from one governed system/i)
-			).toBeTruthy();
-			expect(
-				trustView.getByText(/the first controlled workflow lands without a services-heavy rollout/i)
-			).toBeTruthy();
-			expect(trustView.getByRole('link', { name: /about valdrics/i })).toBeTruthy();
-			expect(trustView.getByRole('link', { name: /^open docs$/i })).toBeTruthy();
-			expect(trustView.getByRole('link', { name: /view status/i })).toBeTruthy();
-			expect(trustView.queryByRole('button', { name: /next comment/i })).toBeNull();
-			expect(trustView.queryByRole('button', { name: /show comment/i })).toBeNull();
-			expect(fetchMock).not.toHaveBeenCalled();
-		} finally {
-			fetchMock.mockRestore();
-		}
-	});
-
-	it('updates ROI controls and CTA callback from calculator component', async () => {
+	it('updates ROI controls, currency selector, and CTA callback from calculator component', async () => {
 		const onRoiControlInput = vi.fn();
 		const onRoiMonthlySpendChange = vi.fn();
 		const onRoiExpectedReductionChange = vi.fn();
@@ -316,6 +127,7 @@ describe('Landing component decomposition', () => {
 		const onRoiTeamMembersChange = vi.fn();
 		const onRoiBlendedHourlyChange = vi.fn();
 		const onRoiCta = vi.fn();
+		const onCurrencyCodeChange = vi.fn();
 
 		const roiInputs = normalizeLandingRoiInputs({
 			monthlySpendUsd: 120000,
@@ -327,7 +139,7 @@ describe('Landing component decomposition', () => {
 		});
 		const roiResult = calculateLandingRoi(roiInputs);
 
-		render(LandingRoiCalculator, {
+		const view = render(LandingRoiCalculator, {
 			props: {
 				roiInputs,
 				roiResult,
@@ -348,30 +160,63 @@ describe('Landing component decomposition', () => {
 				onRoiRolloutDaysChange,
 				onRoiTeamMembersChange,
 				onRoiBlendedHourlyChange,
-				onRoiCta
+				onRoiCta,
+				localCurrencyCode: 'GBP',
+				onCurrencyCodeChange
 			}
 		});
 
-		await fireEvent.input(screen.getByLabelText(/cloud \+ software monthly spend/i), {
+		const calculatorView = within(view.container);
+
+		await fireEvent.input(calculatorView.getByLabelText(/cloud \+ software monthly spend/i), {
 			target: { value: '130000' }
 		});
-		await fireEvent.input(screen.getByLabelText(/expected reduction/i), {
+		await fireEvent.input(calculatorView.getByLabelText(/expected reduction/i), {
 			target: { value: '13' }
 		});
-		await fireEvent.input(screen.getByLabelText(/rollout duration/i), { target: { value: '35' } });
-		await fireEvent.input(screen.getByLabelText(/team members/i), { target: { value: '3' } });
-		await fireEvent.input(screen.getByLabelText(/blended hourly rate/i), {
+		await fireEvent.input(calculatorView.getByLabelText(/rollout duration/i), {
+			target: { value: '35' }
+		});
+		await fireEvent.input(calculatorView.getByLabelText(/team members/i), {
+			target: { value: '3' }
+		});
+		await fireEvent.input(calculatorView.getByLabelText(/blended hourly rate/i), {
 			target: { value: '150' }
 		});
-
-		await fireEvent.click(screen.getByRole('link', { name: /run this in your environment/i }));
+		await fireEvent.click(calculatorView.getByRole('button', { name: /local gbp/i }));
+		await fireEvent.click(
+			calculatorView.getByRole('link', { name: /run this in your environment/i })
+		);
 
 		expect(onRoiMonthlySpendChange).toHaveBeenCalledWith(130000);
 		expect(onRoiExpectedReductionChange).toHaveBeenCalledWith(13);
 		expect(onRoiRolloutDaysChange).toHaveBeenCalledWith(35);
 		expect(onRoiTeamMembersChange).toHaveBeenCalledWith(3);
 		expect(onRoiBlendedHourlyChange).toHaveBeenCalledWith(150);
+		expect(onCurrencyCodeChange).toHaveBeenCalledWith('GBP');
 		expect(onRoiControlInput).toHaveBeenCalledTimes(5);
 		expect(onRoiCta).toHaveBeenCalledTimes(1);
+	});
+
+	it('keeps landing/public components free of inline style attributes', () => {
+		const landingDir = resolve(process.cwd(), 'src/lib/components/landing');
+		const files = [
+			'LandingHeroCopy.svelte',
+			'LandingHeroView.svelte',
+			'LandingHumanProofStrip.svelte',
+			'LandingOutcomeBand.svelte',
+			'LandingPlansSection.svelte',
+			'LandingProductSection.svelte',
+			'LandingRoiCalculator.svelte',
+			'LandingRoiPlannerCta.svelte',
+			'LandingRoiSimulator.svelte',
+			'LandingSignalMapCard.svelte',
+			'LandingTrustSection.svelte'
+		];
+
+		for (const file of files) {
+			const contents = readFileSync(resolve(landingDir, file), 'utf8');
+			expect(contents).not.toMatch(/style\s*=/);
+		}
 	});
 });

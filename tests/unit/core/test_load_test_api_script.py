@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -58,6 +60,42 @@ def test_build_profile_endpoints_include_deep_health_flag():
     )
     assert endpoints[0] == load_test_api.DEEP_HEALTH_ENDPOINT
     assert load_test_api.LIVENESS_ENDPOINT in endpoints
+
+
+def test_resolve_output_path_rejects_relative_repo_escape():
+    with pytest.raises(ValueError, match="out must stay within repo root when relative"):
+        load_test_api._resolve_output_path(Path("../outside.json").as_posix())
+
+
+def test_resolve_output_path_rejects_directory(tmp_path: Path):
+    output_dir = tmp_path / "out"
+    output_dir.mkdir()
+
+    with pytest.raises(ValueError, match="out must be a file path"):
+        load_test_api._resolve_output_path(str(output_dir))
+
+
+def test_write_output_stages_before_promotion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    output_path = tmp_path / "report.json"
+    staged_path = tmp_path / ".report.json.tmp"
+
+    def _fake_stage(path: Path, payload: object, **_: object) -> Path:
+        assert path == output_path
+        staged_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        return staged_path
+
+    def _fake_promote(staged: Path, output: Path) -> None:
+        staged.replace(output)
+
+    monkeypatch.setattr(load_test_api, "stage_json_file", _fake_stage)
+    monkeypatch.setattr(load_test_api, "promote_staged_file", _fake_promote)
+
+    load_test_api._write_output(output_path, {"passed": True})
+
+    assert json.loads(output_path.read_text(encoding="utf-8"))["passed"] is True
 
 
 @pytest.mark.asyncio

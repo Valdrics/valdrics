@@ -25,7 +25,7 @@ test.describe('Onboarding Flow', () => {
 		await expect(
 			page.getByRole('heading', {
 				level: 1,
-				name: /govern cloud, saas, and software spend without slowing delivery/i
+				name: /govern spend without slowing delivery|turn cloud, saas, and software spend into governed action without slowing delivery|control cloud spend decisions|protect margin with governed spend decisions|one governed path from variance to board-ready proof/i
 			})
 		).toBeVisible();
 		await expect(

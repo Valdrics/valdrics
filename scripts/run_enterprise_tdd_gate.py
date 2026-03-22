@@ -9,6 +9,7 @@ import shutil
 import subprocess  # nosec B404 - controlled local gate execution only
 from collections.abc import Sequence
 from pathlib import Path
+from scripts.env_generation_common import repo_root_for as _repo_root_for
 
 from scripts.enterprise_tdd_gate_config import *  # noqa: F403
 from scripts.enterprise_tdd_gate_commands import build_gate_commands
@@ -20,7 +21,7 @@ _parse_coverage_report_args = _coverage.parse_coverage_report_args
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
 
 
 def _format_command(cmd: Sequence[str]) -> str:

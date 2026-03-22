@@ -199,8 +199,8 @@
 
 <PublicMarketingPage
 	kicker="Pricing"
-	title="Simple, transparent pricing"
-	subtitle="Start on the permanent free tier, prove one governed workflow, and upgrade only when you need broader provider coverage, stronger owner routing, or finance-grade governance."
+	title="Pricing that stays simple"
+	subtitle="Start on the permanent free tier, prove one workflow, and only move up when the team needs deeper governance, broader coverage, or formal finance operations."
 >
 	{#snippet heroActions()}
 		{#if buyingMotion === 'enterprise_first'}
@@ -283,30 +283,25 @@
 					</div>
 
 					<ul class="public-page__list">
-						{#each FREE_TIER_HIGHLIGHTS as feature (feature)}
+						{#each FREE_TIER_HIGHLIGHTS.slice(0, 3) as feature (feature)}
 							<li>{feature}</li>
 						{/each}
 					</ul>
 
-					<dl class="pricing-plan-context" aria-label="Free plan fit and upgrade path">
-						<div class="pricing-plan-context__row">
+					<dl class="pricing-plan-context" aria-label="Free plan fit">
+						<div class="pricing-plan-context__row pricing-plan-context__row--stacked">
 							<dt class="pricing-plan-context__label">Best for</dt>
 							<dd class="pricing-plan-context__value">{freeStory.bestFor}</dd>
-						</div>
-						<div class="pricing-plan-context__row">
-							<dt class="pricing-plan-context__label">Why teams upgrade</dt>
-							<dd class="pricing-plan-context__value">{freeStory.whyUpgrade}</dd>
 						</div>
 					</dl>
 
 					<div class="pricing-entry-card__footer">
-						<p class="public-page__inline-note">{FREE_TIER_LIMIT_NOTE}</p>
 						<div class="public-page__actions-row">
 							<a href={getFreeTierHref()} class="btn btn-primary">Start on Free Tier</a>
 							{#if isCurrentPlan('free')}
 								<span class="pricing-current-plan">Current plan active</span>
 							{:else}
-								<span class="pricing-support-note">Upgrade later if you need more automation.</span>
+								<span class="pricing-support-note">{FREE_TIER_LIMIT_NOTE}</span>
 							{/if}
 						</div>
 					</div>
@@ -341,24 +336,20 @@
 
 						<p class="pricing-plan-price__note">
 							{billingCycle === 'annual'
-								? `${formatUsd(plan.price_annual)} billed yearly. Effective ${formatUsd(getDisplayedMonthlyPrice(plan))}/mo. ${story.note}`
-								: `${formatUsd(plan.price_monthly)}/mo starting price. ${story.note}`}
+								? `${formatUsd(plan.price_annual)} billed yearly. Effective ${formatUsd(getDisplayedMonthlyPrice(plan))}/mo.`
+								: `${formatUsd(plan.price_monthly)}/mo starting price.`}
 						</p>
 
 						<ul class="public-page__list">
-							{#each plan.features as feature (feature)}
+							{#each plan.features.slice(0, 3) as feature (feature)}
 								<li>{feature}</li>
 							{/each}
 						</ul>
 
-						<dl class="pricing-plan-context" aria-label={`${plan.name} plan fit and upgrade path`}>
-							<div class="pricing-plan-context__row">
+						<dl class="pricing-plan-context" aria-label={`${plan.name} plan fit`}>
+							<div class="pricing-plan-context__row pricing-plan-context__row--stacked">
 								<dt class="pricing-plan-context__label">Best for</dt>
 								<dd class="pricing-plan-context__value">{story.bestFor}</dd>
-							</div>
-							<div class="pricing-plan-context__row">
-								<dt class="pricing-plan-context__label">Why teams upgrade</dt>
-								<dd class="pricing-plan-context__value">{story.whyUpgrade}</dd>
 							</div>
 						</dl>
 
@@ -391,11 +382,11 @@
 								</a>
 							{/if}
 
-							<p class="pricing-support-note">
-								{billingCycle === 'annual' && getAnnualSavings(plan) > 0
-									? `Save ${formatUsd(getAnnualSavings(plan))} per year versus monthly billing.`
-									: story.note}
-							</p>
+							{#if billingCycle === 'annual' && getAnnualSavings(plan) > 0}
+								<p class="pricing-support-note">
+									Save {formatUsd(getAnnualSavings(plan))} per year versus monthly billing.
+								</p>
+							{/if}
 						</div>
 					</article>
 				{/each}
@@ -403,15 +394,15 @@
 		</section>
 
 		<section class="public-page__section" aria-labelledby="pricing-enterprise-title">
-			<div class="public-page__band public-page__band--dark">
+			<div class="public-page__band public-page__band--accent">
 				<div class="public-page__band-copy">
 					<p class="public-page__eyebrow">Need enterprise review?</p>
 					<h2 id="pricing-enterprise-title" class="public-page__section-title">
-						Use the enterprise lane only when security or procurement needs a separate track
+						Keep the enterprise lane for buyers who truly need a separate diligence track
 					</h2>
 					<p class="public-page__section-subtitle">
-						Otherwise, start on Free, Starter, Growth, or Pro. Bring in sales when SCIM, private
-						deployment, procurement, or custom control requirements need their own buying path.
+						Most buyers should start with self-serve pricing. Move into enterprise review only when
+						procurement, private deployment, or custom control requirements need their own path.
 					</p>
 				</div>
 				<div class="public-page__actions-row">

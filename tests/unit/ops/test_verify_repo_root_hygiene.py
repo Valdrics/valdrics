@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
+import pytest
+
+import scripts.verify_repo_root_hygiene as repo_root_hygiene_verifier
 from scripts.verify_repo_root_hygiene import (
     collect_root_hygiene_violations,
     main,
@@ -40,3 +44,44 @@ def test_pytest_async_engine_uses_temp_directory_fixture() -> None:
     assert 'def async_engine(tmp_path_factory):' in conftest_text
     assert 'build_sqlite_test_database_path(tmp_path_factory.mktemp("sqlite-db"))' in conftest_text
     assert 'db_file = f"test_{uuid4().hex}.sqlite"' not in conftest_text
+
+
+def test_collect_root_hygiene_violations_rejects_non_directory_root(tmp_path: Path) -> None:
+    root = tmp_path / "root.txt"
+    root.write_text("not-a-directory", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="root must be a directory"):
+        collect_root_hygiene_violations(root)
+
+
+def test_main_rejects_non_directory_root(tmp_path: Path) -> None:
+    root = tmp_path / "root.txt"
+    root.write_text("not-a-directory", encoding="utf-8")
+
+    assert main(["--root", str(root)]) == 2
+
+
+def test_main_resolves_relative_root_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = Path(repo_root_hygiene_verifier.__file__).resolve().parents[1]
+    captured: dict[str, Path] = {}
+
+    def _capture(root: Path, *, prohibited_patterns: tuple[str, ...] = ()) -> tuple[object, ...]:
+        captured["root"] = root
+        return ()
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        repo_root_hygiene_verifier,
+        "collect_root_hygiene_violations",
+        _capture,
+    )
+
+    assert main(["--root", "."]) == 0
+    assert captured["root"] == repo_root
+
+
+def test_main_rejects_relative_root_repo_escape() -> None:
+    assert main(["--root", os.path.join("..", "..")]) == 2

@@ -21,6 +21,7 @@ import statistics
 import time
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
+from pathlib import Path
 from uuid import UUID
 
 import httpx
@@ -30,9 +31,20 @@ from app.models.background_job import JobStatus, JobType
 from app.modules.governance.domain.jobs.processor import JobProcessor, enqueue_job
 from app.shared.core.evidence_capture import sanitize_bearer_token
 from app.shared.db.session import async_session_maker
+from scripts.env_generation_common import (
+    ensure_parent_dir,
+    promote_staged_file,
+    repo_root_for,
+    resolve_cli_path_from_root,
+    stage_json_file,
+)
 
 
-def _parse_args() -> argparse.Namespace:
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run an end-to-end cost ingestion soak test."
     )
@@ -97,7 +109,24 @@ def _parse_args() -> argparse.Namespace:
         default=os.getenv("VALDRICS_API_URL", "http://127.0.0.1:8000").strip(),
         help="API base URL for --publish",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def _resolve_output_path(value: str) -> Path:
+    resolved = resolve_cli_path_from_root(
+        _repo_root(),
+        Path(value),
+        field_name="out",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"out must be a file path: {resolved}")
+    ensure_parent_dir(resolved, field_name="out")
+    return resolved
+
+
+def _write_output(path: Path, payload: dict[str, object]) -> None:
+    staged_path = stage_json_file(path, payload, indent=2, sort_keys=True)
+    promote_staged_file(staged_path, path)
 
 
 def _quantile(values: list[float], q: float) -> float | None:
@@ -251,8 +280,12 @@ async def _collect_job_runs(job_ids: list[str]) -> list[_JobRun]:
     return runs
 
 
-async def main() -> None:
-    args = _parse_args()
+async def main(argv: list[str] | None = None) -> None:
+    args = _parse_args(argv)
+    try:
+        output_path = _resolve_output_path(str(args.out)) if args.out else None
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
     tenant_id = await _resolve_tenant_id(str(args.tenant_id or "").strip())
     jobs = max(1, int(args.jobs or 1))
     workers = max(1, int(args.workers or 1))
@@ -379,9 +412,11 @@ async def main() -> None:
     }
 
     print(json.dumps(evidence_payload, indent=2, sort_keys=True))
-    if args.out:
-        with open(args.out, "w", encoding="utf-8") as fp:
-            json.dump(evidence_payload, fp, indent=2, sort_keys=True)
+    if output_path is not None:
+        try:
+            _write_output(output_path, evidence_payload)
+        except OSError as exc:
+            raise SystemExit(f"Failed to write ingestion soak output: {exc}") from exc
 
     if args.publish:
         raw_token = os.getenv("VALDRICS_TOKEN", "").strip()

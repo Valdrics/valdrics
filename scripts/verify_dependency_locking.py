@@ -6,6 +6,7 @@ import argparse
 import re
 import tomllib
 from pathlib import Path
+from scripts.env_generation_common import resolve_cli_path_from_root
 
 DEFAULT_REPO_ROOT = Path(".")
 DEFAULT_PYPROJECT_PATH = Path("pyproject.toml")
@@ -26,7 +27,28 @@ SETUP_UV_VERSION_PIN_RE = re.compile(
 )
 
 
+def _resolve_repo_root(path: Path) -> Path:
+    resolved = Path(path).expanduser().resolve()
+    if not resolved.exists():
+        raise ValueError(f"repo_root does not exist: {resolved}")
+    if not resolved.is_dir():
+        raise ValueError(f"repo_root must be a directory: {resolved}")
+    return resolved
+
+
+def _resolve_repo_path(*, repo_root: Path, path: Path, label: str, must_be_dir: bool = False) -> Path:
+    resolved = resolve_cli_path_from_root(repo_root, path, field_name=label)
+    if resolved.exists():
+        if must_be_dir and not resolved.is_dir():
+            raise ValueError(f"{label} must be a directory: {resolved}")
+        if not must_be_dir and not resolved.is_file():
+            raise ValueError(f"{label} must be a file: {resolved}")
+    return resolved
+
+
 def _read_text(path: Path) -> str:
+    if not path.is_file():
+        raise ValueError(f"path must be a file: {path}")
     return path.read_text(encoding="utf-8")
 
 
@@ -153,15 +175,30 @@ def verify_dependency_locking(
     dockerfile_paths: tuple[Path, ...] = DEFAULT_DOCKERFILE_PATHS,
 ) -> tuple[str, ...]:
     errors: list[str] = []
-    pyproject = pyproject_path if pyproject_path.is_absolute() else repo_root / pyproject_path
-    lockfile = lock_path if lock_path.is_absolute() else repo_root / lock_path
-    workflows = (
-        workflows_root
-        if workflows_root.is_absolute()
-        else repo_root / workflows_root
+    repo_root = _resolve_repo_root(repo_root)
+    pyproject = _resolve_repo_path(
+        repo_root=repo_root,
+        path=pyproject_path,
+        label="pyproject_path",
+    )
+    lockfile = _resolve_repo_path(
+        repo_root=repo_root,
+        path=lock_path,
+        label="lock_path",
+    )
+    workflows = _resolve_repo_path(
+        repo_root=repo_root,
+        path=workflows_root,
+        label="workflows_root",
+        must_be_dir=True,
     )
     dockerfiles = tuple(
-        path if path.is_absolute() else repo_root / path for path in dockerfile_paths
+        _resolve_repo_path(
+            repo_root=repo_root,
+            path=path,
+            label="dockerfile_path",
+        )
+        for path in dockerfile_paths
     )
 
     if not pyproject.exists():
@@ -257,14 +294,18 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    repo_root = args.repo_root.resolve()
-    errors = verify_dependency_locking(
-        repo_root=repo_root,
-        pyproject_path=args.pyproject_path,
-        lock_path=args.lock_path,
-        workflows_root=args.workflows_root,
-        dockerfile_paths=tuple(args.dockerfile_path) or DEFAULT_DOCKERFILE_PATHS,
-    )
+    try:
+        repo_root = _resolve_repo_root(args.repo_root)
+        errors = verify_dependency_locking(
+            repo_root=repo_root,
+            pyproject_path=args.pyproject_path,
+            lock_path=args.lock_path,
+            workflows_root=args.workflows_root,
+            dockerfile_paths=tuple(args.dockerfile_path) or DEFAULT_DOCKERFILE_PATHS,
+        )
+    except ValueError as exc:
+        print(f"[dependency-locking] failed: {exc}")
+        return 2
     if errors:
         print("[dependency-locking] FAILED")
         for item in errors:

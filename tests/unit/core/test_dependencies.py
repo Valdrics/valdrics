@@ -1,24 +1,40 @@
-import pytest
 """
 Tests for app/shared/core/dependencies.py - FastAPI dependencies
 """
 
+import inspect
 from unittest.mock import AsyncMock, patch
+from typing import Annotated, get_args, get_origin
 from uuid import uuid4
+
+import pytest
 from fastapi import HTTPException, status
+from fastapi.params import Depends
 
 from app.shared.core.dependencies import (
     get_llm_provider,
     get_analyzer,
     requires_feature,
 )
-from app.shared.core.auth import CurrentUser
+from app.shared.core.auth import CurrentUser, requires_role_with_db_context
 from app.models.tenant import UserRole
 from app.shared.core.pricing import PricingTier, FeatureFlag
 
 
 class TestDependencies:
     """Test FastAPI dependency functions."""
+
+    def test_requires_feature_uses_role_dependency_with_db_context(self):
+        """Feature gate dependencies should rebind tenant DB context."""
+        requires_feature.cache_clear()
+
+        feature_checker = requires_feature("advanced_analytics")
+        annotation = inspect.signature(feature_checker).parameters["user"].annotation
+
+        assert get_origin(annotation) is Annotated
+        metadata = get_args(annotation)[1:]
+        dependency = next(item for item in metadata if isinstance(item, Depends))
+        assert dependency.dependency is requires_role_with_db_context("member")
 
     def test_get_llm_provider(self):
         """Test getting LLM provider from settings."""

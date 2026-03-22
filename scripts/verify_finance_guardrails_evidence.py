@@ -10,6 +10,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_repo_relative_path_from_root as _resolve_repo_relative_path_from_root,
+)
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_evidence_path(path: Path) -> Path:
+    resolved = _resolve_repo_relative_path_from_root(
+        _repo_root(),
+        path,
+        field_name="evidence_path",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"Finance evidence path must be a file: {resolved}")
+    return resolved
+
 
 def _parse_iso_utc(value: Any, *, field: str) -> datetime:
     raw = str(value or "").strip()
@@ -59,6 +79,8 @@ def _parse_int(value: Any, *, field: str, min_value: int | None = None) -> int:
 def _load_payload(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Finance evidence file not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"Finance evidence path must be a file: {path}")
     raw = path.read_text(encoding="utf-8")
     try:
         payload = json.loads(raw)
@@ -375,16 +397,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    evidence_path = Path(str(args.evidence_path))
-    verify_evidence(
-        evidence_path=evidence_path,
-        max_artifact_age_hours=(
-            float(args.max_artifact_age_hours)
-            if args.max_artifact_age_hours is not None
-            else None
-        ),
-        allow_failed_gates=bool(args.allow_failed_gates),
-    )
+    try:
+        evidence_path = _resolve_evidence_path(Path(str(args.evidence_path)))
+        verify_evidence(
+            evidence_path=evidence_path,
+            max_artifact_age_hours=(
+                float(args.max_artifact_age_hours)
+                if args.max_artifact_age_hours is not None
+                else None
+            ),
+            allow_failed_gates=bool(args.allow_failed_gates),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[finance-guardrails-evidence] failed: {exc}")
+        return 2
     print(f"Finance guardrail evidence verified: {evidence_path}")
     return 0
 

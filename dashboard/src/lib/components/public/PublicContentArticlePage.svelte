@@ -18,6 +18,11 @@
 	let trackingEntry = $derived(
 		`${entry.kind}_${entry.slug}`.replace(/[^a-z0-9]+/gi, '_').toLowerCase()
 	);
+	const stageLabels = {
+		learn: 'Early evaluation',
+		evaluate: 'Team and buyer evaluation',
+		validate: 'Technical or procurement validation'
+	} as const;
 
 	function resolveHref(href: string, sourceSuffix: string): string {
 		if (/^(https?:|mailto:)/i.test(href)) return href;
@@ -43,6 +48,12 @@
 			timeZone: 'UTC'
 		})
 	);
+	const audienceLabel = $derived(
+		entry.audiences
+			.slice(0, 3)
+			.map((audience) => audience.charAt(0).toUpperCase() + audience.slice(1))
+			.join(' / ')
+	);
 </script>
 
 <PublicPageMeta title={entry.seoTitle} description={entry.seoDescription} contentEntry={entry} />
@@ -65,10 +76,24 @@
 					{/if}
 					<a href={resolveHref(hubHref, 'hub')} class="btn btn-secondary">{hubLabel}</a>
 				</div>
+				<div class="public-article-page__glance">
+					<article>
+						<span>Updated</span>
+						<strong>{updatedAtLabel}</strong>
+					</article>
+					<article>
+						<span>Best fit</span>
+						<strong>{stageLabels[entry.stage]}</strong>
+					</article>
+					<article>
+						<span>Audience</span>
+						<strong>{audienceLabel}</strong>
+					</article>
+				</div>
 				<div class="public-article-page__meta">
-					<span>Updated {updatedAtLabel}</span>
 					<span>{entry.readingMinutes} min read</span>
 					<span>{entry.stage}</span>
+					<span>{entry.kind}</span>
 				</div>
 				<div class="public-page__badge-cloud">
 					{#each entry.audiences as audience (audience)}

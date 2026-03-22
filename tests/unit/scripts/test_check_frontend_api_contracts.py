@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from scripts import check_frontend_api_contracts as script_module
@@ -113,3 +114,26 @@ def test_run_flags_missing_direct_api_refs(tmp_path: Path, monkeypatch, capsys) 
 
     assert script_module.run(repo_root) == 1
     assert "/api/geo/currency" in capsys.readouterr().out
+
+
+def test_main_resolves_relative_repo_root_from_repo_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_root = Path(script_module.__file__).resolve().parents[1]
+    captured: dict[str, Path] = {}
+
+    def _capture(repo_root: Path) -> int:
+        captured["repo_root"] = repo_root
+        return 0
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(script_module, "run", _capture)
+
+    assert script_module.main(["--repo-root", "."]) == 0
+    assert captured["repo_root"] == repo_root
+
+
+def test_main_rejects_relative_repo_root_escape(capsys) -> None:
+    assert script_module.main(["--repo-root", os.path.join("..", "..")]) == 2
+    assert "repo_root must stay within repo root when relative" in capsys.readouterr().out

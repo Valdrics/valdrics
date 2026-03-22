@@ -7,7 +7,11 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.reporting.api.v1.costs_models import CostAnomalyResponse, IngestionSLAResponse
-from app.shared.core.auth import CurrentUser, get_current_user, requires_role
+from app.shared.core.auth import (
+    CurrentUser,
+    get_current_user_with_db_context,
+    requires_role_with_db_context,
+)
 from app.shared.core.dependencies import requires_feature
 from app.shared.core.pricing import FeatureFlag
 from app.shared.core.rate_limit import analysis_limit
@@ -29,7 +33,7 @@ async def get_costs(
     end_date: date = Query(...),
     provider: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_db_context),
 ) -> Any:
     costs_api = _costs_api()
     return await costs_api.get_costs(
@@ -50,7 +54,7 @@ async def get_cost_breakdown(
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_db_context),
 ) -> Any:
     costs_api = _costs_api()
     return await costs_api.get_cost_breakdown(
@@ -115,7 +119,7 @@ async def get_canonical_quality(
     provider: Optional[str] = Query(default=None),
     notify_on_breach: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_db_context),
 ) -> Any:
     costs_api = _costs_api()
     return await costs_api.get_canonical_quality(
@@ -132,7 +136,7 @@ async def get_canonical_quality(
 async def get_cost_forecast(
     days: int = Query(30, ge=7, le=90),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_db_context),
 ) -> Any:
     costs_api = _costs_api()
     return await costs_api.get_cost_forecast(
@@ -199,7 +203,7 @@ async def trigger_ingest(
     start_date: Optional[date] = Query(default=None),
     end_date: Optional[date] = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(requires_role("admin")),
+    current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
 ) -> dict[str, str]:
     costs_api = _costs_api()
     return cast(

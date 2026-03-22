@@ -268,3 +268,47 @@
 		min-height: clamp(27rem, 50vh, 32rem);
 	}
 }
+
+/* Landing refresh 2026-03-21 */
+.landing {
+	background:
+		radial-gradient(960px 420px at 18% 0%, rgb(34 211 238 / 0.08), transparent 48%),
+		radial-gradient(880px 420px at 82% 10%, rgb(16 185 129 / 0.08), transparent 50%),
+		linear-gradient(180deg, rgb(7 17 24) 0%, rgb(8 17 25) 100%);
+}
+
+.landing .fade-delay-0 {
+	animation-delay: 0ms;
+}
+
+.landing .fade-delay-1 {
+	animation-delay: 80ms;
+}
+
+.landing .fade-delay-2 {
+	animation-delay: 180ms;
+}
+
+.landing .fade-delay-3 {
+	animation-delay: 230ms;
+}
+
+.landing .fade-delay-4 {
+	animation-delay: 250ms;
+}
+
+.landing .fade-delay-5 {
+	animation-delay: 260ms;
+}
+
+.landing .fade-delay-6 {
+	animation-delay: 270ms;
+}
+
+.landing .fade-delay-7 {
+	animation-delay: 300ms;
+}
+
+.landing .fade-delay-signal {
+	animation-delay: 170ms;
+}

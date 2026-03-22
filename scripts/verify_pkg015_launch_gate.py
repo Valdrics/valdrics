@@ -7,6 +7,7 @@ import argparse
 import json
 import re
 from pathlib import Path
+from scripts.env_generation_common import repo_root_for as _repo_root_for
 from typing import Any
 
 REQUIRED_GAP_ITEMS: tuple[str, ...] = (
@@ -40,9 +41,30 @@ _NARRATIVE_STATUS_RE = re.compile(
 )
 
 
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_repo_relative_file(*, repo_root: Path, path: Path, label: str) -> Path:
+    raw = Path(path).expanduser()
+    if raw.is_absolute():
+        resolved = raw.resolve()
+    else:
+        resolved = (repo_root / raw).resolve()
+        try:
+            resolved.relative_to(repo_root.resolve())
+        except ValueError as exc:
+            raise ValueError(f"{label} must stay within repo root when relative") from exc
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"{label} must be a file: {resolved}")
+    return resolved
+
+
 def _read_text(path: Path) -> str:
     if not path.exists():
         raise FileNotFoundError(f"Required file does not exist: {path}")
+    if not path.is_file():
+        raise ValueError(f"Required file path must be a file: {path}")
     return path.read_text(encoding="utf-8")
 
 
@@ -73,6 +95,8 @@ def _verify_required_item_statuses(statuses: dict[str, str]) -> None:
 def _load_matrix(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Feature enforceability matrix does not exist: {path}")
+    if not path.is_file():
+        raise ValueError(f"Feature enforceability matrix path must be a file: {path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Feature enforceability matrix payload must be an object")
@@ -145,11 +169,25 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    repo_root = Path(__file__).resolve().parents[1]
-    return verify_pkg015_launch_gate(
-        gap_register_path=(repo_root / str(args.gap_register)).resolve(),
-        matrix_path=(repo_root / str(args.matrix_path)).resolve(),
-    )
+    repo_root = _repo_root()
+    try:
+        gap_register_path = _resolve_repo_relative_file(
+            repo_root=repo_root,
+            path=Path(args.gap_register),
+            label="gap_register",
+        )
+        matrix_path = _resolve_repo_relative_file(
+            repo_root=repo_root,
+            path=Path(args.matrix_path),
+            label="matrix_path",
+        )
+        return verify_pkg015_launch_gate(
+            gap_register_path=gap_register_path,
+            matrix_path=matrix_path,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[pkg015-launch-gate] failed: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

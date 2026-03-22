@@ -281,3 +281,35 @@ def test_generate_finance_committee_packet_assumptions_rejects_relative_paths_th
                 "../escape/finance_telemetry_snapshot.json",
             ]
         )
+
+
+def test_generate_finance_committee_packet_assumptions_does_not_leave_output_when_promotion_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    telemetry = tmp_path / "telemetry.json"
+    telemetry.write_text(json.dumps(_telemetry_payload()), encoding="utf-8")
+    output = tmp_path / "artifacts" / "finance_committee_packet_assumptions.json"
+    path_type = type(output)
+    original_replace = path_type.replace
+
+    def _failing_replace(self: Path, target: Path) -> Path:
+        if self.parent == output.parent and Path(target) == output:
+            raise OSError("simulated promotion failure")
+        return original_replace(self, target)
+
+    monkeypatch.setattr(path_type, "replace", _failing_replace)
+    monkeypatch.setattr(finance_assumptions_generator, "verify_snapshot", lambda **_: 0)
+
+    with pytest.raises(OSError, match="simulated promotion failure"):
+        main(
+            [
+                "--output",
+                str(output),
+                "--telemetry-path",
+                str(telemetry),
+            ]
+        )
+
+    assert not output.exists()
+    assert not list(output.parent.glob(f".{output.stem}.*{output.suffix}.tmp"))

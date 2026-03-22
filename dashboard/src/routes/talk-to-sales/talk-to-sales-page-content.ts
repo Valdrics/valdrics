@@ -3,6 +3,7 @@ export type SalesInquiryForm = {
 	email: string;
 	company: string;
 	role: string;
+	buyerRegion: string;
 	teamSize: string;
 	deploymentScope: string;
 	timeline: string;
@@ -63,6 +64,17 @@ export const teamSizeOptions = [
 	{ value: '1000+', label: '1000+ people' }
 ] as const;
 
+export const buyerRegionOptions = [
+	{ value: '', label: 'Select buyer region' },
+	{ value: 'United States', label: 'United States' },
+	{ value: 'United Kingdom', label: 'United Kingdom' },
+	{ value: 'Africa', label: 'Africa' },
+	{ value: 'Europe (non-UK)', label: 'Europe (non-UK)' },
+	{ value: 'Middle East', label: 'Middle East' },
+	{ value: 'Asia-Pacific', label: 'Asia-Pacific' },
+	{ value: 'Other', label: 'Other' }
+] as const;
+
 export const timelineOptions = [
 	{ value: '', label: 'Select target timeline' },
 	{ value: 'this_month', label: 'This month' },
@@ -88,6 +100,7 @@ export function createInitialSalesInquiryForm(): SalesInquiryForm {
 		email: '',
 		company: '',
 		role: '',
+		buyerRegion: '',
 		teamSize: '',
 		deploymentScope: '',
 		timeline: '',

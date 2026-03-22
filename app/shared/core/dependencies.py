@@ -6,7 +6,7 @@ from functools import lru_cache
 from app.shared.core.config import get_settings
 from app.shared.llm.factory import LLMFactory
 from app.shared.llm.analyzer import FinOpsAnalyzer
-from app.shared.core.auth import CurrentUser, requires_role
+from app.shared.core.auth import CurrentUser, requires_role_with_db_context
 from app.shared.core.pricing import (
     PricingTier,
     is_feature_enabled,
@@ -33,7 +33,9 @@ def requires_feature(
     """Dependency to check if a feature is enabled for the user's tier."""
 
     async def feature_checker(
-        user: Annotated[CurrentUser, Depends(requires_role(required_role))],
+        user: Annotated[
+            CurrentUser, Depends(requires_role_with_db_context(required_role))
+        ],
     ) -> CurrentUser:
         tier_enum = normalize_tier(getattr(user, "tier", PricingTier.FREE))
 

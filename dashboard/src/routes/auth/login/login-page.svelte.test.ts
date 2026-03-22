@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 
@@ -155,5 +157,11 @@ describe('auth login page conversion flow', () => {
 			'/auth/callback?next=%2Froi-planner%3Fintent%3Droi_assessment'
 		);
 		expect(screen.getByRole('status').textContent).toMatch(/Secure sign-in link sent/i);
+	});
+
+	it('keeps the public auth page free of inline style attributes', () => {
+		const file = resolve(process.cwd(), 'src/routes/auth/login/+page.svelte');
+		const contents = readFileSync(file, 'utf8');
+		expect(contents).not.toMatch(/style\s*=/);
 	});
 });

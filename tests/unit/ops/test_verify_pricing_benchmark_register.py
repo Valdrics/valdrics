@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta, timezone
+import os
 from pathlib import Path
 
 import pytest
 
+import scripts.verify_pricing_benchmark_register as benchmark_verifier
 from scripts.verify_pricing_benchmark_register import main, verify_register
 
 
@@ -149,3 +151,32 @@ def test_main_accepts_valid_payload(tmp_path: Path) -> None:
     path = tmp_path / "pricing-register.json"
     _write(path, _base_payload())
     assert main(["--register-path", str(path)]) == 0
+
+
+def test_main_resolves_relative_register_path_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    path = repo_root / "docs" / "ops" / "pricing-register.json"
+    _write(path, _base_payload())
+    monkeypatch.setattr(benchmark_verifier, "_repo_root", lambda: repo_root)
+
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        assert main(["--register-path", "docs/ops/pricing-register.json"]) == 0
+    finally:
+        os.chdir(old_cwd)
+
+
+def test_main_rejects_relative_register_path_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(benchmark_verifier, "_repo_root", lambda: repo_root)
+
+    assert main(["--register-path", "../escape/pricing-register.json"]) == 2

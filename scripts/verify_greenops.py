@@ -20,7 +20,8 @@ async def verify_greenops_api():
     Standardizes BE-OPS-01: Authenticated Verification.
     """
     settings = get_settings()
-    base_url = os.getenv("API_URL", "http://localhost:8000")
+    base_url = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
+    failed = False
 
     # Require real auth in production; allow dev defaults ONLY if not in prod
     token = os.getenv("VERIFICATION_TOKEN")
@@ -31,7 +32,7 @@ async def verify_greenops_api():
             "❌ ERROR: No authentication provided (VERIFICATION_TOKEN or ADMIN_API_KEY)."
         )
         print("Aborting GreenOps verification for safety.")
-        return
+        return 1
 
     print(f"🧪 Starting Authenticated GreenOps API Verification on {base_url}...")
 
@@ -56,10 +57,13 @@ async def verify_greenops_api():
                 print(f"✅ Intensity Forecast: OK (Source: {data.get('source')})")
             elif r.status_code == 401:
                 print("❌ Auth Failed: 401 Unauthorized. Ensure token is valid.")
+                failed = True
             else:
                 print(f"❌ API Failed: {r.status_code} - {r.text}")
+                failed = True
         except GREENOPS_VERIFY_RECOVERABLE_EXCEPTIONS as e:
             print(f"❌ Connection Failed: {str(e)}")
+            failed = True
 
         # 2. Test Green Schedule
         print("\n⏰ Testing Green Schedule API (/api/v1/carbon/schedule)...")
@@ -74,11 +78,14 @@ async def verify_greenops_api():
                 )
             else:
                 print(f"❌ API Failed: {r.status_code} - {r.text}")
+                failed = True
         except GREENOPS_VERIFY_RECOVERABLE_EXCEPTIONS as e:
             print(f"❌ Connection Failed: {str(e)}")
+            failed = True
 
     print("\n🏆 GreenOps API Verification Complete.")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    asyncio.run(verify_greenops_api())
+    raise SystemExit(asyncio.run(verify_greenops_api()))

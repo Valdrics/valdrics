@@ -7,8 +7,6 @@ type LandingHeroBrowserRuntimeArgs = {
 	windowRef: Window;
 	documentRef: Document;
 	signalMapElement: HTMLDivElement | null;
-	geoCurrencyHintTimeoutMs: number;
-	applyGeoCurrencyHint: (signal: AbortSignal) => Promise<void>;
 	consentStorageKey: string;
 	scrollMilestones: readonly number[];
 	initializeTelemetry: () => void;
@@ -35,8 +33,6 @@ export function mountLandingHeroBrowserRuntime(args: LandingHeroBrowserRuntimeAr
 		windowRef: args.windowRef,
 		documentRef: args.documentRef,
 		signalMapElement: args.signalMapElement,
-		geoCurrencyHintTimeoutMs: args.geoCurrencyHintTimeoutMs,
-		applyGeoCurrencyHint: args.applyGeoCurrencyHint,
 		onReducedMotionChange: args.setPrefersReducedMotion,
 		setPageReferrer: args.setPageReferrer,
 		consentStorageKey: args.consentStorageKey,

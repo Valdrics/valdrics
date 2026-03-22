@@ -1,6 +1,53 @@
 export const RAW_PUBLIC_CONTENT_PROOF = [
 	{
 		kind: 'proof',
+		slug: 'deployment-and-data-residency',
+		title: 'Deployment and Data Residency Review',
+		summary:
+			'Review what the public site commits to today on deployment posture and how residency-specific requirements are handled in the enterprise lane.',
+		kicker: 'Proof Pack',
+		seoTitle: 'Deployment and Data Residency Review',
+		seoDescription:
+			'Review the current public deployment and data residency posture for Valdrics and where environment-specific diligence begins.',
+		updatedAt: '2026-03-21T00:00:00.000Z',
+		stage: 'validate',
+		readingMinutes: 4,
+		audiences: ['security', 'procurement', 'executive'],
+		primaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
+		secondaryCta: { label: 'Talk to Sales', href: '/talk-to-sales?source=proof_residency' },
+		sections: [
+			{
+				title: 'What the public site can say today',
+				body: [
+					'Current public materials do not commit to a region-specific residency promise. That is a deliberate constraint so the site does not overclaim what must be handled as a scoped deployment discussion.',
+					'The right public posture is to expose review materials early and move environment-specific requirements into the enterprise diligence lane.'
+				],
+				bullets: [
+					'No fabricated residency claim',
+					'Clear separation between public proof and scoped diligence',
+					'Buyer-safe review before environment-specific commitment'
+				]
+			},
+			{
+				title: 'What buyers can review before that conversation',
+				body: [
+					'Buyers can still review the access model, technical validation, pricing posture, system status, and company information before discussing deployment-region constraints.',
+					'That keeps the first conversation concrete without pretending the same deployment answer fits every region or every buyer.'
+				],
+				bullets: [
+					'Proof pack and docs stay public',
+					'Status and company review stay public',
+					'Residency-specific requirements move to enterprise evaluation'
+				]
+			}
+		],
+		related: [
+			{ kind: 'proof', slug: 'safe-access-model' },
+			{ kind: 'resources', slug: 'global-finops-compliance-workbook' }
+		]
+	},
+	{
+		kind: 'proof',
 		slug: 'safe-access-model',
 		title: 'Safe Access Model',
 		summary:
@@ -60,7 +107,7 @@ export const RAW_PUBLIC_CONTENT_PROOF = [
 		stage: 'validate',
 		readingMinutes: 5,
 		audiences: ['security', 'finance', 'platform'],
-		primaryCta: { label: 'See the Decision Loop', href: '/#signal-map' },
+		primaryCta: { label: 'See the Decision Loop', href: '/#product' },
 		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
 		sections: [
 			{

@@ -1,5 +1,7 @@
 <script lang="ts">
-	import type { LandingRoiInputs, LandingRoiResult } from '$lib/landing/roiCalculator';
+	import type { LandingCurrencyCode } from '$lib/landing/currencyPreference';
+	import LandingCurrencyToggle from '$lib/components/landing/LandingCurrencyToggle.svelte';
+	import { type LandingRoiInputs, type LandingRoiResult } from '$lib/landing/roiCalculator';
 
 	let {
 		roiInputs,
@@ -19,6 +21,8 @@
 		onRoiBlendedHourlyChange,
 		onRoiCta,
 		currencyCode = 'USD',
+		localCurrencyCode = 'USD',
+		onCurrencyCodeChange = () => {},
 		sectionId = 'roi',
 		heading = 'See your 12-month control ROI before you commit',
 		subtitle = 'Adjust spend and rollout assumptions to estimate savings velocity, payback timing, and net economic impact.',
@@ -41,7 +45,9 @@
 		onRoiTeamMembersChange: (value: number) => void;
 		onRoiBlendedHourlyChange: (value: number) => void;
 		onRoiCta: () => void;
-		currencyCode?: string;
+		currencyCode?: LandingCurrencyCode | string;
+		localCurrencyCode?: LandingCurrencyCode;
+		onCurrencyCodeChange?: (value: LandingCurrencyCode) => void;
 		sectionId?: string;
 		heading?: string;
 		subtitle?: string;
@@ -79,6 +85,10 @@
 			.trim()
 			.toUpperCase() || 'USD'
 	);
+
+	function updateCurrencyCode(value: LandingCurrencyCode): void {
+		onCurrencyCodeChange(value);
+	}
 </script>
 
 <section
@@ -91,6 +101,11 @@
 			<h2 class="landing-h2">{heading}</h2>
 			<p class="landing-section-sub">{subtitle}</p>
 		</div>
+		<LandingCurrencyToggle
+			currencyCode={activeCurrency}
+			{localCurrencyCode}
+			onCurrencyCodeChange={updateCurrencyCode}
+		/>
 	</div>
 
 	<div class="landing-roi-grid">

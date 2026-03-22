@@ -394,6 +394,7 @@ class EmailService:
         email: str,
         company: str,
         role: str | None,
+        buyer_region: str | None,
         team_size: str | None,
         deployment_scope: str | None,
         timeline: str | None,
@@ -450,6 +451,7 @@ class EmailService:
                 <div class="card"><span class="label">Work email</span><div class="value">{escape_html(email)}</div></div>
                 <div class="card"><span class="label">Company</span><div class="value">{escape_html(company)}</div></div>
                 <div class="card"><span class="label">Role</span><div class="value">{escape_html(role or "Not provided")}</div></div>
+                <div class="card"><span class="label">Buyer region</span><div class="value">{escape_html(buyer_region or "Not provided")}</div></div>
                 <div class="card"><span class="label">Team size</span><div class="value">{escape_html(team_size or "Not provided")}</div></div>
                 <div class="card"><span class="label">Timeline</span><div class="value">{escape_html(timeline or "Not provided")}</div></div>
                 <div class="card"><span class="label">Interest area</span><div class="value">{escape_html(interest_area or "Not provided")}</div></div>

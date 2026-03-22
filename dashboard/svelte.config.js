@@ -28,6 +28,7 @@ const config = {
 				'default-src': ['self'],
 				'script-src': ['self', 'https://*.supabase.co', 'https://challenges.cloudflare.com'],
 				'style-src': ['self'],
+				'style-src-attr': ['unsafe-hashes', 'sha256-S8qMpvofolR8Mpjy4kQvEm7m1q8clzU4dfDH0AmvZjo='],
 				'img-src': ['self', 'data:', 'https://*.supabase.co'],
 				'font-src': ['self', 'data:'],
 				'connect-src': connectSrc,

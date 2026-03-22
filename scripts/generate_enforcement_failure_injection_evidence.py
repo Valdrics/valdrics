@@ -9,12 +9,20 @@ import math
 import os
 import subprocess  # nosec B404 - controlled local pytest invocation only
 import sys
-import tempfile
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from scripts.env_generation_common import (
+    checked_in_evidence_paths as _checked_in_evidence_paths_shared,
+    ensure_parent_dir as _ensure_parent_dir_shared,
+    promote_staged_file as _promote_staged_file,
+    protected_output_paths_from_root as _protected_output_paths_from_root,
+    repo_root_for as _repo_root_for,
+    resolve_output_path_from_root as _resolve_output_path_from_root,
+    stage_json_file as _stage_json_file,
+)
 from scripts.verify_enforcement_failure_injection_evidence import verify_evidence
 
 
@@ -120,31 +128,24 @@ def _parse_positive_float_arg(value: float, *, field: str) -> float:
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
+
+
+def _checked_in_evidence_paths(repo_root: Path) -> set[Path]:
+    return _checked_in_evidence_paths_shared(repo_root)
 
 
 def _protected_output_paths() -> set[Path]:
     repo_root = _repo_root()
-    protected = {
-        Path(__file__).resolve(),
-        repo_root / "scripts" / "verify_enforcement_failure_injection_evidence.py",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_stress_artifact_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_committee_packet_assumptions_2026-02-28.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json",
-        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json",
-        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "pricing_benchmark_register_2026-02-27.json",
-        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "valdrics_disposition_register_2026-02-28.json",
-    }
+    protected = _protected_output_paths_from_root(
+        repo_root,
+        __file__,
+        "scripts/verify_enforcement_failure_injection_evidence.py",
+        "docs/ops/evidence/enforcement_failure_injection_2026-02-27.json",
+        "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
+        "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
+        "docs/ops/evidence/README.md",
+    )
     for scenario in SCENARIOS:
         for selector in scenario.selectors:
             selector_path = selector.split("::", 1)[0].strip()
@@ -154,36 +155,26 @@ def _protected_output_paths() -> set[Path]:
 
 
 def _resolve_output_path(value: Path | str) -> Path:
-    raw = Path(str(value)).expanduser()
-    if raw.is_absolute():
-        resolved = raw.resolve()
-    else:
-        resolved = (_repo_root() / raw).resolve()
-        try:
-            resolved.relative_to(_repo_root())
-        except ValueError as exc:
-            raise ValueError("output must stay within repo root when relative") from exc
-    if resolved.exists() and not resolved.is_file():
-        raise ValueError(f"output must be a file path: {resolved.as_posix()}")
-    if resolved in _protected_output_paths():
-        raise ValueError(
+    return _resolve_output_path_from_root(
+        _repo_root(),
+        value,
+        field_name="output",
+        protected_paths=_protected_output_paths(),
+        protected_error=(
             "output must not overwrite failure-injection source, verifier, selector, or template files"
-        )
-    return resolved
+        ),
+    )
 
 
 def _ensure_output_parent_dir(output_path: Path) -> None:
-    current = output_path.parent
-    while True:
-        if current.exists():
-            if not current.is_dir():
-                raise ValueError(
-                    f"output parent must be a directory path: {current.as_posix()}"
-                )
-            return
-        if current == current.parent:
-            return
-        current = current.parent
+    _ensure_parent_dir_shared(output_path, field_name="output")
+
+
+def _stage_artifact_file(output_path: Path, artifact: dict[str, object]) -> Path:
+    return _stage_json_file(
+        output_path,
+        artifact,
+    )
 
 
 def _run_scenario(
@@ -301,8 +292,22 @@ def generate_evidence(
         },
     }
 
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(artifact, indent=2, sort_keys=True), encoding="utf-8")
+    staged_output_path = _stage_artifact_file(output_path, artifact)
+    try:
+        verify_evidence(
+            evidence_path=staged_output_path,
+            expected_profile=EXPECTED_PROFILE,
+            max_artifact_age_hours=4.0,
+        )
+        _promote_staged_file(
+            staged_output_path,
+            output_path,
+            cleanup_output_on_failure=True,
+        )
+    except Exception:
+        staged_output_path.unlink(missing_ok=True)
+        output_path.unlink(missing_ok=True)
+        raise
     return artifact, overall_passed
 
 
@@ -313,36 +318,14 @@ def main(argv: list[str] | None = None) -> int:
         field="pytest_timeout_seconds",
     )
     output_path = _resolve_output_path(Path(args.output))
-    _ensure_output_parent_dir(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(
-        mode="w",
-        encoding="utf-8",
-        dir=output_path.parent,
-        prefix=f".{output_path.stem}.",
-        suffix=f"{output_path.suffix}.tmp",
-        delete=False,
-    ) as handle:
-        staged_output_path = Path(handle.name)
-    try:
-        artifact, passed = generate_evidence(
-            output=staged_output_path,
-            executed_by=str(args.executed_by),
-            approved_by=str(args.approved_by),
-            profile=str(args.profile),
-            cwd=Path(__file__).resolve().parents[1],
-            timeout_seconds=pytest_timeout_seconds,
-        )
-        verify_evidence(
-            evidence_path=staged_output_path,
-            expected_profile=EXPECTED_PROFILE,
-            max_artifact_age_hours=4.0,
-        )
-        staged_output_path.replace(output_path)
-    except Exception:
-        staged_output_path.unlink(missing_ok=True)
-        output_path.unlink(missing_ok=True)
-        raise
+    artifact, passed = generate_evidence(
+        output=output_path,
+        executed_by=str(args.executed_by),
+        approved_by=str(args.approved_by),
+        profile=str(args.profile),
+        cwd=_repo_root(),
+        timeout_seconds=pytest_timeout_seconds,
+    )
     print(json.dumps(artifact, indent=2, sort_keys=True))
     return 0 if passed else 1
 

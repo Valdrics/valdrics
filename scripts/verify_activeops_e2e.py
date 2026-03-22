@@ -1,7 +1,9 @@
 import asyncio
+import os
 from uuid import uuid4
 from sqlalchemy import select
 from app.shared.db.session import async_session_maker
+from app.shared.core.config import get_settings
 from app.models.remediation import RemediationRequest, RemediationAction
 # Import all models to ensure SQLAlchemy mappers are initialized
 
@@ -9,8 +11,30 @@ from app.models.tenant import Tenant, User
 from app.modules.optimization.domain import RemediationService
 
 
-async def verify_active_ops() -> None:
+def _allow_live_db_mutation() -> bool:
+    return os.getenv("ALLOW_LIVE_VERIFICATION_MUTATIONS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
+def _require_safe_environment() -> None:
+    settings = get_settings()
+    if settings.ENVIRONMENT == "production" and not _allow_live_db_mutation():
+        raise RuntimeError(
+            "Refusing to run ActiveOps E2E verification against production without "
+            "ALLOW_LIVE_VERIFICATION_MUTATIONS=true"
+        )
+
+
+async def verify_active_ops() -> int:
     print("🚀 Starting ActiveOps Dry-Run Verification...")
+    try:
+        _require_safe_environment()
+    except RuntimeError as exc:
+        print(f"❌ {exc}")
+        return 1
 
     async with async_session_maker() as db:
         # 1. Ensure a tenant exists
@@ -113,7 +137,8 @@ async def verify_active_ops() -> None:
 
         print(f"📊 Verified status: {persisted.status.value}")
         print("🏆 ActiveOps Verification PASSED.")
+    return 0
 
 
 if __name__ == "__main__":
-    asyncio.run(verify_active_ops())
+    raise SystemExit(asyncio.run(verify_active_ops()))

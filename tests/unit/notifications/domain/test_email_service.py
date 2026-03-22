@@ -100,6 +100,7 @@ async def test_send_sales_inquiry_notification_success(email_service):
             email="buyer@example.com",
             company="Example Inc",
             role="FinOps",
+            buyer_region="United States",
             team_size="21-50",
             deployment_scope="AWS + Datadog",
             timeline="this_quarter",
@@ -121,6 +122,7 @@ async def test_send_sales_inquiry_notification_success(email_service):
         sent_message = mock_server.sendmail.call_args.args[2]
         assert "Reply-To: buyer@example.com" in sent_message
         assert "Valdrics sales inquiry: Example Inc" in sent_message
+        assert "Buyer region" in sent_message
 
 
 @pytest.mark.asyncio
@@ -132,6 +134,7 @@ async def test_send_sales_inquiry_notification_rejects_header_injection(email_se
         email="buyer@example.com\r\nBcc:bad@example.com",
         company="Example Inc",
         role=None,
+        buyer_region=None,
         team_size=None,
         deployment_scope=None,
         timeline=None,

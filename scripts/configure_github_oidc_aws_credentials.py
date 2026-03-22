@@ -12,8 +12,20 @@ from urllib.parse import quote
 
 import httpx
 
+from scripts.env_generation_common import (
+    ensure_parent_dir,
+    promote_staged_file,
+    repo_root_for,
+    resolve_cli_path_from_root,
+    stage_json_file,
+)
 
-def _parse_args() -> argparse.Namespace:
+
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description=(
             "Exchange the GitHub Actions OIDC token for short-lived AWS credentials "
@@ -31,7 +43,7 @@ def _parse_args() -> argparse.Namespace:
         default="sts.amazonaws.com",
     )
     parser.add_argument("--out", default="")
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
 def _require_env(name: str) -> str:
@@ -125,6 +137,34 @@ def _write_github_env(
             handle.write(f"{line}\n")
 
 
+def _resolve_output_path(path: str) -> Path:
+    resolved = resolve_cli_path_from_root(
+        _repo_root(),
+        Path(path),
+        field_name="out",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"out must be a file path: {resolved}")
+    ensure_parent_dir(resolved, field_name="out")
+    return resolved
+
+
+def _resolve_github_env_path(path: str) -> Path:
+    raw = Path(path).expanduser()
+    if raw.is_absolute():
+        resolved = raw.resolve()
+    else:
+        resolved = resolve_cli_path_from_root(
+            _repo_root(),
+            raw,
+            field_name="GITHUB_ENV",
+        )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"GITHUB_ENV must be a file path: {resolved}")
+    ensure_parent_dir(resolved, field_name="GITHUB_ENV")
+    return resolved
+
+
 def _build_evidence_payload(
     *,
     role_arn: str,
@@ -146,11 +186,16 @@ def _build_evidence_payload(
     }
 
 
-def main() -> int:
-    args = _parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
     request_url = _require_env("ACTIONS_ID_TOKEN_REQUEST_URL")
     request_token = _require_env("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
-    github_env_path = _require_env("GITHUB_ENV")
+    try:
+        github_env_path = _resolve_github_env_path(_require_env("GITHUB_ENV"))
+        output_path = _resolve_output_path(str(args.out or "")) if args.out else None
+    except ValueError as exc:
+        print(f"OIDC AWS credential exchange input error: {exc}")
+        return 2
 
     oidc_token = _fetch_github_oidc_token(
         request_url=request_url,
@@ -164,7 +209,7 @@ def main() -> int:
         web_identity_token=oidc_token,
     )
     _write_github_env(
-        github_env_path=github_env_path,
+        github_env_path=str(github_env_path),
         credentials=credentials,
         region=args.region,
         role_arn=args.role_arn,
@@ -177,11 +222,9 @@ def main() -> int:
         session_name=args.session_name,
         identity=identity,
     )
-    if args.out:
-        Path(args.out).write_text(
-            json.dumps(evidence, indent=2, sort_keys=True),
-            encoding="utf-8",
-        )
+    if output_path is not None:
+        staged_path = stage_json_file(output_path, evidence, indent=2, sort_keys=True)
+        promote_staged_file(staged_path, output_path)
     print(json.dumps(evidence, indent=2, sort_keys=True))
     return 0
 

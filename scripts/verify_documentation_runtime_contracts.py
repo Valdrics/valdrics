@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from scripts.env_generation_common import repo_root_for
 
 
 @dataclass(frozen=True)
@@ -14,7 +15,7 @@ class DocumentationContract:
     forbidden_phrases: tuple[str, ...] = ()
 
 
-DEFAULT_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ROOT = repo_root_for(__file__)
 DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
     DocumentationContract(
         path="docs/architecture/overview.md",
@@ -245,11 +246,19 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
 
 
 def verify_contracts(*, root: Path) -> list[str]:
+    if not root.exists():
+        return [f"root not found: {root}"]
+    if not root.is_dir():
+        return [f"root must be a directory: {root}"]
+
     errors: list[str] = []
     for contract in DOCUMENTATION_CONTRACTS:
         target = root / contract.path
         if not target.exists():
             errors.append(f"missing file: {contract.path}")
+            continue
+        if not target.is_file():
+            errors.append(f"{contract.path}: target must be a file")
             continue
 
         text = target.read_text(encoding="utf-8")

@@ -4,11 +4,19 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
+from scripts.env_generation_common import (
+    checked_in_evidence_paths as _checked_in_evidence_paths_shared,
+    ensure_parent_dir as _ensure_parent_dir_shared,
+    promote_staged_file as _promote_staged_file,
+    protected_output_paths_from_root as _protected_output_paths_from_root,
+    repo_root_for as _repo_root_for,
+    resolve_contained_repo_path_from_root as _resolve_contained_repo_path_from_root,
+    stage_json_file as _stage_json_file,
+)
 
 SCHEMA_VERSION = "2026-02-23"
 DEFAULT_DEPENDENCY_INPUTS: tuple[Path, ...] = (
@@ -22,7 +30,7 @@ DEFAULT_DEPENDENCY_INPUTS: tuple[Path, ...] = (
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
 
 
 def _sha256_file(path: Path) -> str:
@@ -85,30 +93,29 @@ def _resolve_repo_root(repo_root: Path) -> Path:
 
 
 def _checked_in_evidence_paths(repo_root: Path) -> set[Path]:
-    evidence_dir = repo_root / "docs" / "ops" / "evidence"
-    if not evidence_dir.exists():
-        return set()
-    return {path.resolve() for path in evidence_dir.iterdir() if path.is_file()}
+    return _checked_in_evidence_paths_shared(repo_root)
 
 
 def _protected_output_paths(repo_root: Path) -> set[Path]:
-    return {
-        (repo_root / "scripts" / "generate_provenance_manifest.py").resolve(),
-        (repo_root / ".github" / "workflows" / "sbom.yml").resolve(),
-        (repo_root / "docs" / "ops" / "feature_enforceability_matrix_2026-02-27.json").resolve(),
-        (repo_root / "docs" / "ops" / "key-rotation-drill-2026-02-27.md").resolve(),
-        *_checked_in_evidence_paths(repo_root),
-    }
+    return _protected_output_paths_from_root(
+        repo_root,
+        repo_root / "scripts" / "generate_provenance_manifest.py",
+        ".github/workflows/sbom.yml",
+        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/key-rotation-drill-2026-02-27.md",
+        "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
+        "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
+        "docs/ops/evidence/README.md",
+    )
 
 
 def _resolve_output_path(repo_root: Path, output: Path) -> Path:
-    raw_output = Path(output)
-    if raw_output.is_absolute():
-        resolved = raw_output.resolve()
-    else:
-        resolved = (repo_root / raw_output).resolve()
     try:
-        resolved.relative_to(repo_root)
+        resolved = _resolve_contained_repo_path_from_root(
+            repo_root,
+            output,
+            field_name="output",
+        )
     except ValueError as exc:
         raise ValueError("output must stay within repo root") from exc
     if resolved.exists() and not resolved.is_file():
@@ -121,17 +128,20 @@ def _resolve_output_path(repo_root: Path, output: Path) -> Path:
 
 
 def _ensure_output_parent_dir(output_path: Path) -> None:
-    current = output_path.parent
-    while True:
-        if current.exists():
-            if not current.is_dir():
-                raise ValueError(
-                    f"output parent must be a directory path within repo root: {current.as_posix()}"
-                )
-            return
-        if current == current.parent:
-            return
-        current = current.parent
+    try:
+        _ensure_parent_dir_shared(output_path, field_name="output")
+    except ValueError as exc:
+        raise ValueError(
+            f"output parent must be a directory path within repo root: {output_path.parent.as_posix()}"
+        ) from exc
+
+
+def _stage_manifest_file(output_path: Path, manifest: dict[str, Any]) -> Path:
+    return _stage_json_file(
+        output_path,
+        manifest,
+        trailing_newline=True,
+    )
 
 
 def _resolve_file(repo_root: Path, relative_path: Path) -> Path:
@@ -316,10 +326,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
 
     _ensure_output_parent_dir(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    staged_output_path = _stage_manifest_file(output_path, manifest)
+    _promote_staged_file(
+        staged_output_path,
+        output_path,
+        cleanup_output_on_failure=True,
     )
     return 0
 

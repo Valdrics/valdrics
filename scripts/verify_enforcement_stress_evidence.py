@@ -7,7 +7,22 @@ import json
 import math
 from datetime import datetime, timezone
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 from typing import Any
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_evidence_path(path: Path) -> Path:
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name="evidence_path")
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"Evidence file must be a file: {resolved}")
+    return resolved
 
 
 def _parse_float(value: Any, *, field: str) -> float:
@@ -48,6 +63,8 @@ def _parse_iso_utc(value: Any, *, field: str) -> datetime:
 def _load_payload(path: Path) -> dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Evidence file not found: {path}")
+    if not path.is_file():
+        raise ValueError(f"Evidence file must be a file: {path}")
     raw = path.read_text(encoding="utf-8")
     try:
         payload = json.loads(raw)
@@ -461,22 +478,26 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    return verify_evidence(
-        evidence_path=Path(str(args.evidence_path)),
-        expected_profile=str(args.expected_profile),
-        min_rounds=int(args.min_rounds),
-        min_duration_seconds=int(args.min_duration_seconds),
-        min_concurrent_users=int(args.min_concurrent_users),
-        required_database_engine=str(args.required_database_engine),
-        max_p95_seconds=float(args.max_p95_seconds),
-        max_error_rate_percent=float(args.max_error_rate_percent),
-        min_throughput_rps=float(args.min_throughput_rps),
-        max_artifact_age_hours=(
-            float(args.max_artifact_age_hours)
-            if args.max_artifact_age_hours is not None
-            else None
-        ),
-    )
+    try:
+        return verify_evidence(
+            evidence_path=_resolve_evidence_path(Path(str(args.evidence_path))),
+            expected_profile=str(args.expected_profile),
+            min_rounds=int(args.min_rounds),
+            min_duration_seconds=int(args.min_duration_seconds),
+            min_concurrent_users=int(args.min_concurrent_users),
+            required_database_engine=str(args.required_database_engine),
+            max_p95_seconds=float(args.max_p95_seconds),
+            max_error_rate_percent=float(args.max_error_rate_percent),
+            min_throughput_rps=float(args.min_throughput_rps),
+            max_artifact_age_hours=(
+                float(args.max_artifact_age_hours)
+                if args.max_artifact_age_hours is not None
+                else None
+            ),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[enforcement-stress] failed: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

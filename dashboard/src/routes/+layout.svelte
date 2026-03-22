@@ -21,6 +21,12 @@
 	import { canAccessAdminHealth } from '$lib/entitlements';
 	import { allowedNavHrefs, normalizePersona } from '$lib/persona';
 	import {
+		persistPublicTheme,
+		resolveInitialPublicTheme,
+		togglePublicTheme as nextPublicTheme,
+		type PublicTheme
+	} from '$lib/public/publicTheme';
+	import {
 		getFocusableElements,
 		lockBodyScroll,
 		resolveNextFocusTarget
@@ -73,6 +79,8 @@
 	let publicResourcesMenuOpen = $state(false);
 	let publicResourcesPanel = $state<HTMLDivElement | null>(null);
 	let publicResourcesButton = $state<HTMLButtonElement | null>(null);
+	let publicTheme = $state<PublicTheme>('light');
+	let publicThemeLoaded = $state(false);
 	type LiveJobStore = {
 		activeJobsCount: number;
 		init: () => Promise<void> | void;
@@ -121,6 +129,32 @@
 		window.localStorage.setItem(NAV_SHOW_ALL_KEY, showAllNav ? '1' : '0');
 	});
 
+	$effect(() => {
+		if (!browser) return;
+		if (publicThemeLoaded) return;
+		publicTheme = resolveInitialPublicTheme({
+			storage: window.localStorage,
+			matchMedia:
+				typeof window.matchMedia === 'function' ? window.matchMedia.bind(window) : undefined
+		});
+		publicThemeLoaded = true;
+	});
+
+	$effect(() => {
+		if (!browser || !publicThemeLoaded) return;
+		persistPublicTheme(window.localStorage, publicTheme);
+	});
+
+	$effect(() => {
+		if (!browser || data.user) return;
+		document.documentElement.dataset.publicTheme = publicTheme;
+		document.documentElement.style.colorScheme = publicTheme;
+		return () => {
+			delete document.documentElement.dataset.publicTheme;
+			document.documentElement.style.removeProperty('color-scheme');
+		};
+	});
+
 	let visibleNavItems = $derived(
 		allNavItems.filter((item) => {
 			if (item.href !== '/admin/health') return true;
@@ -138,6 +172,11 @@
 		return `${normalizedBase}${normalizedPath}`;
 	}
 
+	function resolvePublicTone(pathname: string): 'default' | 'landing' {
+		return pathname === toAppPath('/') ? 'landing' : 'default';
+	}
+
+	let publicTone = $derived(resolvePublicTone($page.url.pathname));
 	let canonicalHref = $derived(new URL($page.url.pathname, $page.url.origin).toString());
 	let shouldNoIndex = $derived(
 		!!data.user ||
@@ -295,6 +334,10 @@
 	function closePublicResourcesMenu(): void {
 		publicResourcesMenuOpen = false;
 	}
+
+	function togglePublicTheme(): void {
+		publicTheme = nextPublicTheme(publicTheme);
+	}
 </script>
 
 <svelte:head>
@@ -343,6 +386,8 @@
 		<PublicSiteShell
 			{currentYear}
 			{toAppPath}
+			{publicTheme}
+			{publicTone}
 			bind:publicMenuOpen
 			bind:publicMenuPanel
 			bind:publicMenuButton
@@ -351,6 +396,7 @@
 			bind:publicResourcesButton
 			{togglePublicMenu}
 			{closePublicMenu}
+			{togglePublicTheme}
 			{togglePublicResourcesMenu}
 			{closePublicResourcesMenu}
 		>

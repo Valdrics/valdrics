@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
+import scripts.verify_managed_deployment_bundle as managed_bundle_verifier
 from scripts.generate_managed_deployment_artifacts import (
     generate_managed_deployment_artifacts,
 )
 from scripts.generate_managed_migration_env import generate_managed_migration_env
 from scripts.generate_managed_runtime_env import generate_managed_runtime_env
-from scripts.verify_managed_deployment_bundle import verify_managed_deployment_bundle
+from scripts.verify_managed_deployment_bundle import main, verify_managed_deployment_bundle
 
 
 def _write(path: Path, content: str) -> None:
@@ -226,3 +229,73 @@ def test_verify_managed_deployment_bundle_rejects_unexpected_artifact_filename(
     )
 
     assert any("deployment artifact path has unexpected filename" in error for error in errors)
+
+
+def test_main_resolves_default_report_paths_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    captured: dict[str, Path] = {}
+
+    def _capture(
+        *,
+        environment: str,
+        runtime_report_path: Path,
+        migration_report_path: Path,
+        deployment_report_path: Path,
+    ) -> list[str]:
+        captured["runtime"] = runtime_report_path
+        captured["migration"] = migration_report_path
+        captured["deployment"] = deployment_report_path
+        return []
+
+    monkeypatch.setattr(managed_bundle_verifier, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(managed_bundle_verifier, "verify_managed_deployment_bundle", _capture)
+    monkeypatch.chdir(tmp_path)
+
+    assert main(["--environment", "staging"]) == 0
+    assert captured["runtime"] == repo_root / ".runtime" / "staging.report.json"
+    assert captured["migration"] == repo_root / ".runtime" / "staging.migrate.report.json"
+    assert captured["deployment"] == (
+        repo_root / ".runtime" / "deploy" / "staging" / "deployment.report.json"
+    )
+
+
+def test_main_rejects_relative_report_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(managed_bundle_verifier, "_repo_root", lambda: repo_root)
+
+    assert (
+        main(
+            [
+                "--environment",
+                "staging",
+                "--runtime-report",
+                "../escape.report.json",
+            ]
+        )
+        == 2
+    )
+
+
+def test_main_rejects_directory_report_path(tmp_path: Path) -> None:
+    report_dir = tmp_path / "report-dir"
+    report_dir.mkdir()
+
+    assert (
+        main(
+            [
+                "--environment",
+                "staging",
+                "--runtime-report",
+                str(report_dir),
+            ]
+        )
+        == 2
+    )

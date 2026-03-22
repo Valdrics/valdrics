@@ -23,6 +23,7 @@ import os
 from typing import Any
 from datetime import date, timedelta
 from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 
@@ -31,6 +32,13 @@ from app.shared.core.performance_testing import (
     LoadTestConfig,
     LoadTester,
     format_exception_message,
+)
+from scripts.env_generation_common import (
+    ensure_parent_dir,
+    promote_staged_file,
+    repo_root_for,
+    resolve_cli_path_from_root,
+    stage_json_file,
 )
 from scripts.load_test_api_cli import parse_load_test_args
 from scripts.load_test_api_reporting import (
@@ -55,6 +63,27 @@ LOAD_TEST_PROBE_RECOVERABLE_EXCEPTIONS = (
 
 def _parse_args() -> argparse.Namespace:
     return parse_load_test_args()
+
+
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
+
+
+def _resolve_output_path(value: str) -> Path:
+    resolved = resolve_cli_path_from_root(
+        _repo_root(),
+        Path(value),
+        field_name="out",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"out must be a file path: {resolved}")
+    ensure_parent_dir(resolved, field_name="out")
+    return resolved
+
+
+def _write_output(path: Path, payload: dict[str, Any]) -> None:
+    staged_path = stage_json_file(path, payload, indent=2, sort_keys=True)
+    promote_staged_file(staged_path, path)
 
 
 def _resolve_date_window(args: argparse.Namespace) -> tuple[str, str]:
@@ -296,8 +325,12 @@ async def _run_preflight_checks(
     }
 
 
-async def main() -> None:
-    args = _parse_args()
+async def main(argv: list[str] | None = None) -> None:
+    args = parse_load_test_args(argv)
+    try:
+        output_path = _resolve_output_path(str(args.out)) if args.out else None
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
     endpoints = args.endpoints or _build_profile_endpoints(args)
 
     headers: dict[str, str] = {}
@@ -362,9 +395,11 @@ async def main() -> None:
                 runtime_snapshot=runtime_snapshot,
             )
             print(json.dumps(failure_payload, indent=2, sort_keys=True))
-            if args.out:
-                with open(args.out, "w", encoding="utf-8") as f:
-                    json.dump(failure_payload, f, indent=2, sort_keys=True)
+            if output_path is not None:
+                try:
+                    _write_output(output_path, failure_payload)
+                except OSError as exc:
+                    raise SystemExit(f"Failed to write output report: {exc}") from exc
             raise SystemExit(
                 "Preflight checks failed. Fix endpoint/auth/runtime health or re-run with --allow-preflight-failures."
             )
@@ -428,9 +463,11 @@ async def main() -> None:
         )
 
     print(json.dumps(evidence_payload, indent=2, sort_keys=True))
-    if args.out:
-        with open(args.out, "w", encoding="utf-8") as f:
-            json.dump(evidence_payload, f, indent=2, sort_keys=True)
+    if output_path is not None:
+        try:
+            _write_output(output_path, evidence_payload)
+        except OSError as exc:
+            raise SystemExit(f"Failed to write output report: {exc}") from exc
 
     if args.publish:
         if not token:

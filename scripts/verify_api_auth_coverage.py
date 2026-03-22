@@ -125,7 +125,11 @@ def load_app_for_audit() -> object:
 
 def main(argv: Iterable[str] | None = None) -> int:
     _ = argv
-    app = load_app_for_audit()
+    try:
+        app = load_app_for_audit()
+    except Exception as exc:
+        print(f"Auth coverage check failed to load app: {exc}")
+        return 2
     violations = collect_auth_coverage_violations(app)
     if not violations:
         print("Auth coverage check passed.")

@@ -10,7 +10,27 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_repo_relative_path_from_root as _resolve_repo_relative_path_from_root,
+)
+
 REQUIRED_TIERS = {"free", "starter", "growth", "pro", "enterprise"}
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_snapshot_path(path: Path) -> Path:
+    resolved = _resolve_repo_relative_path_from_root(
+        _repo_root(),
+        path,
+        field_name="snapshot_path",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"Finance telemetry snapshot file must be a file: {resolved}")
+    return resolved
 
 
 def _parse_iso_utc(value: Any, *, field: str) -> datetime:
@@ -420,14 +440,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    return verify_snapshot(
-        snapshot_path=Path(str(args.snapshot_path)),
-        max_artifact_age_hours=(
-            float(args.max_artifact_age_hours)
-            if args.max_artifact_age_hours is not None
-            else None
-        ),
-    )
+    try:
+        return verify_snapshot(
+            snapshot_path=_resolve_snapshot_path(Path(str(args.snapshot_path))),
+            max_artifact_age_hours=(
+                float(args.max_artifact_age_hours)
+                if args.max_artifact_age_hours is not None
+                else None
+            ),
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[finance-telemetry-snapshot] failed: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import math
+import os
 from pathlib import Path
 
 import pytest
 
+import scripts.verify_enforcement_failure_injection_evidence as failure_verifier
 from scripts.verify_enforcement_failure_injection_evidence import (
     main,
     verify_evidence,
@@ -175,3 +177,32 @@ def test_main_succeeds_for_valid_payload(tmp_path: Path) -> None:
     _write(path, _valid_payload())
     exit_code = main(["--evidence-path", str(path)])
     assert exit_code == 0
+
+
+def test_main_resolves_relative_evidence_path_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    path = repo_root / "docs" / "ops" / "failure.json"
+    _write(path, _valid_payload())
+    monkeypatch.setattr(failure_verifier, "_repo_root", lambda: repo_root)
+
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        assert main(["--evidence-path", "docs/ops/failure.json"]) == 0
+    finally:
+        os.chdir(old_cwd)
+
+
+def test_main_rejects_relative_evidence_repo_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    monkeypatch.setattr(failure_verifier, "_repo_root", lambda: repo_root)
+
+    assert main(["--evidence-path", "../escape/failure.json"]) == 2

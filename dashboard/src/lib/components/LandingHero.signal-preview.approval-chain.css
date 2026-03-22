@@ -224,3 +224,14 @@
 .approval-chain-stage.is-critical .approval-chain-stage-status {
 	color: rgb(251 113 133 / 0.96);
 }
+
+/* Landing refresh 2026-03-21 */
+.approval-chain-rail-stop,
+.approval-chain-orbit-node,
+.approval-chain-packet {
+	left: auto;
+}
+
+.demo-action-btn {
+	text-decoration: none;
+}

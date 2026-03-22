@@ -25,6 +25,11 @@
 
 <div class="public-page">
 	<section class="public-page__hero">
+		<div class="public-page__hero-motion" aria-hidden="true">
+			<span class="public-page__hero-orb public-page__hero-orb--left"></span>
+			<span class="public-page__hero-orb public-page__hero-orb--right"></span>
+			<span class="public-page__hero-grid"></span>
+		</div>
 		<div class="container mx-auto px-6">
 			<div class={`public-page__hero-panel ${heroVariant === 'narrow' ? 'is-narrow' : ''}`}>
 				{#if kicker}

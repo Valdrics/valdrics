@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 </script>
 
@@ -113,5 +114,27 @@
 			security-related disclosure or incident coordination, contact
 			<a class="underline" href="mailto:security@valdrics.com">security@valdrics.com</a>.
 		</p>
+	</section>
+
+	<section class="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-6">
+		<h2 class="text-xl font-semibold">10. Enterprise Privacy Review Path</h2>
+		<p class="text-sm text-ink-300">
+			Public privacy materials are meant to answer the first diligence questions without inventing a
+			universal deployment or processor answer. DPA requests, sub-processor review, and
+			residency-specific questions move into the enterprise/legal lane when a buyer needs scoped
+			answers.
+		</p>
+		<ul class="list-disc pl-5 text-sm text-ink-300 space-y-2">
+			<li>DPA and privacy review requests route through privacy and legal contacts.</li>
+			<li>Residency-specific and deployment-specific questions route through enterprise review.</li>
+			<li>Security disclosure and incident coordination stay on the security contact path.</li>
+		</ul>
+		<div class="flex flex-wrap gap-3 pt-2">
+			<a class="btn btn-secondary" href={`${base}/proof/deployment-and-data-residency`}>
+				Deployment and Residency Proof
+			</a>
+			<a class="btn btn-secondary" href={`${base}/enterprise`}> Enterprise Review Path </a>
+			<a class="btn btn-secondary" href={`${base}/talk-to-sales`}> Talk to Sales </a>
+		</div>
 	</section>
 </article>

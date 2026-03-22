@@ -10,6 +10,12 @@ import math
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
+from scripts.env_generation_common import (
+    promote_staged_file,
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+    stage_json_file,
+)
 from typing import Any
 
 from app.shared.core.pricing import PricingTier, TIER_CONFIG
@@ -44,6 +50,10 @@ FREE_TIER_GUARDRAIL_LIMIT_KEYS: tuple[str, ...] = (
 FREE_TIER_MAX_COST_PCT_OF_STARTER_MRR = 100.0
 
 
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
 def _parse_date(value: str, *, field: str) -> date:
     raw = str(value or "").strip()
     if not raw:
@@ -72,6 +82,27 @@ def _default_window() -> tuple[date, date]:
     end_date = first_of_month - timedelta(days=1)
     start_date = end_date.replace(day=1)
     return start_date, end_date
+
+
+def _resolve_output_path(path: Path) -> Path:
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name="output")
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"output must be a file path: {resolved}")
+    return resolved
+
+
+def _ensure_output_parent_dir(output_path: Path) -> None:
+    current = output_path.parent
+    while True:
+        if current.exists():
+            if not current.is_dir():
+                raise ValueError(
+                    f"output parent must be a directory path: {current.as_posix()}"
+                )
+            return
+        if current == current.parent:
+            return
+        current = current.parent
 
 
 def _to_float(value: Any) -> float:
@@ -350,30 +381,35 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
-    if args.start_date and args.end_date:
-        start_date = _parse_date(str(args.start_date), field="start_date")
-        end_date = _parse_date(str(args.end_date), field="end_date")
-    elif args.start_date or args.end_date:
-        raise ValueError("start_date and end_date must be provided together")
-    else:
-        start_date, end_date = _default_window()
+    try:
+        args = _parse_args(argv)
+        if args.start_date and args.end_date:
+            start_date = _parse_date(str(args.start_date), field="start_date")
+            end_date = _parse_date(str(args.end_date), field="end_date")
+        elif args.start_date or args.end_date:
+            raise ValueError("start_date and end_date must be provided together")
+        else:
+            start_date, end_date = _default_window()
 
-    window_start, window_end_exclusive = _window_bounds(start_date, end_date)
-    label = str(args.label).strip() if args.label else f"{start_date}_{end_date}"
-    payload = asyncio.run(
-        collect_snapshot(
-            window_start=window_start,
-            window_end_exclusive=window_end_exclusive,
-            label=label,
+        window_start, window_end_exclusive = _window_bounds(start_date, end_date)
+        label = str(args.label).strip() if args.label else f"{start_date}_{end_date}"
+        output_path = _resolve_output_path(Path(str(args.output)))
+        _ensure_output_parent_dir(output_path)
+        payload = asyncio.run(
+            collect_snapshot(
+                window_start=window_start,
+                window_end_exclusive=window_end_exclusive,
+                label=label,
+            )
         )
-    )
 
-    output_path = Path(str(args.output))
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
-    print(f"Finance telemetry snapshot written: {output_path}")
-    return 0
+        staged_path = stage_json_file(output_path, payload, indent=2, sort_keys=True)
+        promote_staged_file(staged_path, output_path)
+        print(f"Finance telemetry snapshot written: {output_path}")
+        return 0
+    except (OSError, ValueError) as exc:
+        print(f"[collect-finance-telemetry-snapshot] failed: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

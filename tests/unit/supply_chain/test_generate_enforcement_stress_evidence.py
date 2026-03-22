@@ -427,6 +427,7 @@ def test_main_does_not_leave_output_when_verification_fails(
         "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
         "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
         "docs/ops/evidence/pricing_benchmark_register_2026-02-27.json",
+        "docs/ops/evidence/README.md",
     ],
 )
 def test_main_rejects_protected_output_collisions(
@@ -554,20 +555,25 @@ def test_main_resolves_relative_output_from_repo_root(
     )
     expected_output = repo_root / "artifacts" / "enforcement_stress.json"
     assert expected_output.exists()
-    assert verify_calls == [
-        {
-            "evidence_path": expected_output,
-            "expected_profile": "enforcement",
-            "min_rounds": 3,
-            "min_duration_seconds": 30,
-            "min_concurrent_users": 10,
-            "required_database_engine": "postgresql",
-            "max_p95_seconds": 2.0,
-            "max_error_rate_percent": 1.0,
-            "min_throughput_rps": 0.5,
-            "max_artifact_age_hours": 4.0,
-        }
-    ]
+    assert len(verify_calls) == 1
+    verify_call = dict(verify_calls[0])
+    evidence_path = verify_call.pop("evidence_path")
+    assert isinstance(evidence_path, Path)
+    assert evidence_path.parent == expected_output.parent
+    assert evidence_path.name.startswith(".enforcement_stress.")
+    assert evidence_path.name.endswith(".json.tmp")
+    assert not evidence_path.exists()
+    assert verify_call == {
+        "expected_profile": "enforcement",
+        "min_rounds": 3,
+        "min_duration_seconds": 30,
+        "min_concurrent_users": 10,
+        "required_database_engine": "postgresql",
+        "max_p95_seconds": 2.0,
+        "max_error_rate_percent": 1.0,
+        "min_throughput_rps": 0.5,
+        "max_artifact_age_hours": 4.0,
+    }
 
 
 def test_main_rejects_output_parent_file(

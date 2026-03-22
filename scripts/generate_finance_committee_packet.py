@@ -14,6 +14,12 @@ from typing import Any
 
 import httpx
 
+from scripts.env_generation_common import (
+    ensure_directory_path as _ensure_directory_path_shared,
+    protected_output_paths_from_root as _protected_output_paths_from_root,
+    repo_root_for as _repo_root_for,
+    resolve_repo_relative_path_from_root as _resolve_repo_relative_path_from_root,
+)
 from scripts.finance_committee_packet_common import load_json, sanitize_label, write_csv
 from scripts.finance_committee_packet_engine import build_finance_outputs
 from scripts.verify_finance_guardrails_evidence import verify_evidence
@@ -21,41 +27,28 @@ from scripts.verify_finance_telemetry_snapshot import verify_snapshot
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
 
 
 def _protected_output_paths() -> set[Path]:
-    repo_root = _repo_root()
-    return {
-        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_TEMPLATE.json",
-        repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json",
-    }
+    return _protected_output_paths_from_root(
+        _repo_root(),
+        __file__,
+        "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
+        "docs/ops/evidence/finance_guardrails_2026-02-27.json",
+    )
 
 
 def _resolve_repo_relative_path(value: str, *, field_name: str) -> Path:
-    raw = Path(str(value)).expanduser()
-    if raw.is_absolute():
-        return raw.resolve()
-    resolved = (_repo_root() / raw).resolve()
-    try:
-        resolved.relative_to(_repo_root())
-    except ValueError as exc:
-        raise ValueError(f"{field_name} must stay within repo root when relative") from exc
-    return resolved
+    return _resolve_repo_relative_path_from_root(
+        _repo_root(),
+        value,
+        field_name=field_name,
+    )
 
 
 def _ensure_output_dir_parent(output_dir: Path) -> None:
-    current = output_dir
-    while True:
-        if current.exists():
-            if not current.is_dir():
-                raise ValueError(
-                    f"output_dir parent must be a directory path: {current.as_posix()}"
-                )
-            return
-        if current == current.parent:
-            return
-        current = current.parent
+    _ensure_directory_path_shared(output_dir, field_name="output_dir")
 
 
 def _send_alert_if_needed(
@@ -221,23 +214,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     write_csv(temp_tiers_csv_path, tier_rows)
     write_csv(temp_scenarios_csv_path, scenario_rows)
-    try:
-        verify_evidence(evidence_path=temp_guardrails_path, allow_failed_gates=True)
-        _send_alert_if_needed(
-            webhook_url=(str(args.alert_webhook_url).strip() if args.alert_webhook_url else None),
-            webhook_timeout_seconds=_parse_positive_float_arg(
-                float(args.alert_webhook_timeout_seconds),
-                field="alert_webhook_timeout_seconds",
-            ),
-            webhook_fail_on_error=bool(args.alert_webhook_fail_on_error),
-            packet_summary=committee_packet["summary"],
-            gate_results=committee_packet["gate_results"],
-        )
-    except Exception:
-        shutil.rmtree(staging_dir, ignore_errors=True)
-        raise
+    verify_evidence(evidence_path=temp_guardrails_path, allow_failed_gates=True)
+    _send_alert_if_needed(
+        webhook_url=(str(args.alert_webhook_url).strip() if args.alert_webhook_url else None),
+        webhook_timeout_seconds=_parse_positive_float_arg(
+            float(args.alert_webhook_timeout_seconds),
+            field="alert_webhook_timeout_seconds",
+        ),
+        webhook_fail_on_error=bool(args.alert_webhook_fail_on_error),
+        packet_summary=committee_packet["summary"],
+        gate_results=committee_packet["gate_results"],
+    )
     promoted_paths: list[Path] = []
     output_dir.mkdir(parents=True, exist_ok=True)
+    promotion_completed = False
     try:
         for staged_path, final_path in (
             (temp_guardrails_path, guardrails_path),
@@ -247,11 +237,11 @@ def main(argv: list[str] | None = None) -> int:
         ):
             staged_path.replace(final_path)
             promoted_paths.append(final_path)
-    except Exception:
-        for final_path in promoted_paths:
-            final_path.unlink(missing_ok=True)
-        raise
+        promotion_completed = True
     finally:
+        if not promotion_completed:
+            for final_path in promoted_paths:
+                final_path.unlink(missing_ok=True)
         shutil.rmtree(staging_dir, ignore_errors=True)
 
     print(f"Generated finance guardrails: {guardrails_path}")

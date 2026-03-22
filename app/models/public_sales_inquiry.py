@@ -41,6 +41,7 @@ class PublicSalesInquiry(Base):
         StringEncryptedType(String(120), get_encryption_key, AesEngine, "pkcs5"),
         nullable=True,
     )
+    buyer_region: Mapped[str | None] = mapped_column(String(32), nullable=True)
     deployment_scope: Mapped[str | None] = mapped_column(
         StringEncryptedType(String(200), get_encryption_key, AesEngine, "pkcs5"),
         nullable=True,

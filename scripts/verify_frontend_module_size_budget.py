@@ -5,6 +5,10 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 
 DEFAULT_MAX_LINES = 500
@@ -30,12 +34,28 @@ class FrontendModuleSizePreferredBreach:
     preferred_max_lines: int
 
 
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_root(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="root")
+
+
+def _validate_root(root: Path) -> None:
+    if not root.exists():
+        raise ValueError(f"root does not exist: {root}")
+    if not root.is_dir():
+        raise ValueError(f"root must be a directory: {root}")
+
+
 def _line_count(path: Path) -> int:
     with path.open("r", encoding="utf-8") as handle:
         return sum(1 for _ in handle)
 
 
 def _iter_frontend_modules(root: Path) -> tuple[Path, ...]:
+    _validate_root(root)
     frontend_root = root / FRONTEND_SOURCE_ROOT
     modules: list[Path] = []
     for source_path in sorted(frontend_root.rglob("*")):
@@ -95,7 +115,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--root",
-        default=str(Path(__file__).resolve().parents[1]),
+        default=str(_repo_root()),
         help="Repository root path.",
     )
     parser.add_argument(
@@ -118,15 +138,19 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    root = Path(args.root).resolve()
-    preferred_breaches = collect_frontend_module_size_preferred_breaches(
-        root,
-        preferred_max_lines=int(args.preferred_max_lines),
-    )
-    violations = collect_frontend_module_size_violations(
-        root,
-        default_max_lines=int(args.default_max_lines),
-    )
+    try:
+        root = _resolve_root(Path(str(args.root)))
+        preferred_breaches = collect_frontend_module_size_preferred_breaches(
+            root,
+            preferred_max_lines=int(args.preferred_max_lines),
+        )
+        violations = collect_frontend_module_size_violations(
+            root,
+            default_max_lines=int(args.default_max_lines),
+        )
+    except ValueError as exc:
+        print(f"[frontend-module-size-budget] failed: {exc}")
+        return 2
 
     if not violations:
         print(

@@ -6,9 +6,14 @@
 
 ## Context
 
-CloudSentinel serves a Nigeria-first and broader Africa-facing buyer set.
+CloudSentinel originally served a Nigeria-first and broader Africa-facing buyer set.
 Billing needs fast local card/bank support, predictable settlement in local rails,
 and low implementation overhead for launch velocity.
+
+The current public launch-market posture is documented separately in
+`docs/product/launch-market-positioning.md`. That document now controls the
+public-site market narrative. This ADR remains about billing-processor choice,
+not global public positioning.
 
 Stripe and Paystack were both evaluated for subscription billing, webhook
 operations, retries, and operational supportability.
@@ -46,4 +51,3 @@ Re-open this decision when either condition occurs:
 
 1. Expansion requires processor coverage materially outside Paystack’s target rails.
 2. Finance operations approve a dual-processor risk/cost model.
-

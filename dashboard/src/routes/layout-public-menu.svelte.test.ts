@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import type { Snippet } from 'svelte';
 import Layout from './+layout.svelte';
 
@@ -85,6 +85,10 @@ vi.mock('$lib/stores/jobs.svelte', () => ({
 describe('public layout mobile menu', () => {
 	const emptySnippet = (() => '') as unknown as Snippet;
 
+	afterEach(() => {
+		cleanup();
+	});
+
 	beforeEach(() => {
 		mocks.pageStore.set({ url: new URL('https://example.com/') });
 		mocks.jobStore.init.mockClear();
@@ -100,6 +104,7 @@ describe('public layout mobile menu', () => {
 				removeEventListener: vi.fn()
 			})
 		});
+		window.localStorage.clear();
 	});
 
 	function getMenuToggle(): HTMLButtonElement {
@@ -165,7 +170,7 @@ describe('public layout mobile menu', () => {
 
 		await waitFor(() => {
 			const active = document.activeElement as HTMLElement | null;
-			expect(active?.textContent?.trim()).toMatch(/enterprise path/i);
+			expect(active?.textContent?.trim()).toMatch(/dark mode|light mode|enterprise path/i);
 		});
 
 		await fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
@@ -177,7 +182,7 @@ describe('public layout mobile menu', () => {
 		await fireEvent.keyDown(window, { key: 'Tab' });
 		await waitFor(() => {
 			const active = document.activeElement as HTMLElement | null;
-			expect(active?.textContent?.trim()).toMatch(/enterprise path/i);
+			expect(active?.textContent?.trim()).toMatch(/dark mode|light mode|enterprise path/i);
 		});
 
 		await fireEvent.keyDown(window, { key: 'Escape' });
@@ -212,6 +217,43 @@ describe('public layout mobile menu', () => {
 
 		expect(screen.getAllByRole('link', { name: /^enterprise path$/i }).length).toBeGreaterThan(0);
 		expect(screen.getAllByRole('link', { name: /^start free$/i }).length).toBeGreaterThan(0);
+	});
+
+	it('persists the public theme toggle state', async () => {
+		const { container } = renderPublicLayout();
+		const shell = container.querySelector('.public-site-shell');
+		expect(shell?.getAttribute('data-public-theme')).toBe('light');
+
+		const toggle = screen.getAllByRole('button', { name: /switch to dark mode/i })[0];
+		await fireEvent.click(toggle);
+
+		await waitFor(() => {
+			expect(shell?.getAttribute('data-public-theme')).toBe('dark');
+		});
+		expect(window.localStorage.getItem('valdrics.public.theme.v1')).toBe('dark');
+		expect(screen.getAllByRole('button', { name: /switch to light mode/i }).length).toBeGreaterThan(
+			0
+		);
+	});
+
+	it('uses landing tone on the home page and default tone on other public routes', () => {
+		const { container, unmount } = renderPublicLayout();
+		const homeShell = container.querySelector('.public-site-shell');
+		expect(homeShell?.getAttribute('data-public-tone')).toBe('landing');
+
+		unmount();
+		mocks.pageStore.set({ url: new URL('https://example.com/pricing') });
+		const pricingRender = render(Layout, {
+			data: {
+				user: null,
+				session: null,
+				profile: null,
+				subscription: { tier: 'free', status: 'active' }
+			},
+			children: emptySnippet
+		});
+		const pricingShell = pricingRender.container.querySelector('.public-site-shell');
+		expect(pricingShell?.getAttribute('data-public-tone')).toBe('default');
 	});
 
 	it('surfaces concise conversion-safe contact channels in footer', () => {

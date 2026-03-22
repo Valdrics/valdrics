@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 </script>
 
@@ -115,9 +116,34 @@
 		<p class="text-sm text-ink-300">
 			For legal or commercial terms questions, contact <a
 				class="underline"
-				href="mailto:hello@valdrics.com">hello@valdrics.com</a
+				href="mailto:legal@valdrics.com">legal@valdrics.com</a
 			>. For billing questions, contact
 			<a class="underline" href="mailto:billing@valdrics.com">billing@valdrics.com</a>.
 		</p>
+	</section>
+
+	<section class="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-6">
+		<h2 class="text-xl font-semibold">12. Enterprise Contracting and Procurement Path</h2>
+		<p class="text-sm text-ink-300">
+			Public terms explain the baseline service posture, but enterprise evaluation usually needs a
+			more explicit commercial and legal path. Order-form review, governing-law questions, DPA
+			attachment, and procurement-specific requirements move into the enterprise lane rather than
+			being improvised over general support email.
+		</p>
+		<ul class="list-disc pl-5 text-sm text-ink-300 space-y-2">
+			<li>
+				Legal review and contracting requests route through the legal and enterprise contacts.
+			</li>
+			<li>Pricing-fit and commercial questions route through the sales and procurement path.</li>
+			<li>
+				Privacy, DPA, and deployment-specific questions stay connected to the privacy review lane.
+			</li>
+		</ul>
+		<div class="flex flex-wrap gap-3 pt-2">
+			<a class="btn btn-secondary" href={`${base}/enterprise`}> Open Enterprise Path </a>
+			<a class="btn btn-secondary" href={`${base}/pricing`}> View Pricing </a>
+			<a class="btn btn-secondary" href={`${base}/privacy`}> Privacy and DPA Path </a>
+			<a class="btn btn-secondary" href={`${base}/talk-to-sales`}> Talk to Sales </a>
+		</div>
 	</section>
 </article>

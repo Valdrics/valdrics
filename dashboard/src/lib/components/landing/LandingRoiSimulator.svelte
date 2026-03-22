@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
+	import type { LandingCurrencyCode } from '$lib/landing/currencyPreference';
+	import LandingCurrencyToggle from '$lib/components/landing/LandingCurrencyToggle.svelte';
 
 	let {
 		normalizedScenarioWasteWithoutPct,
@@ -22,7 +24,9 @@
 		onScenarioWindowChange,
 		onTrackPlannerCta,
 		plannerHref,
-		currencyCode
+		currencyCode,
+		localCurrencyCode,
+		onCurrencyCodeChange = () => {}
 	}: {
 		normalizedScenarioWasteWithoutPct: number;
 		normalizedScenarioWasteWithPct: number;
@@ -44,7 +48,9 @@
 		onScenarioWindowChange: (value: number) => void;
 		onTrackPlannerCta: () => void;
 		plannerHref: string;
-		currencyCode: string;
+		currencyCode: LandingCurrencyCode | string;
+		localCurrencyCode: LandingCurrencyCode;
+		onCurrencyCodeChange?: (value: LandingCurrencyCode) => void;
 	} = $props();
 
 	function updateWasteWithout(event: Event): void {
@@ -64,25 +70,30 @@
 		onScenarioWindowChange(value);
 		onTrackScenarioAdjust('decision_window');
 	}
+
+	function updateCurrencyCode(value: LandingCurrencyCode): void {
+		onCurrencyCodeChange(value);
+	}
 </script>
 
-<section
-	id="simulator"
-	class="container mx-auto px-6 pb-16 landing-section-lazy"
-	data-landing-section="simulator"
->
+<section id="simulator" class="container mx-auto px-6 py-12" data-landing-section="simulator">
 	<div class="landing-section-head">
 		<div>
-			<h2 class="landing-h2">Realtime spend scenario simulator</h2>
+			<h2 class="landing-h2">Model the savings case in minutes</h2>
 			<p class="landing-section-sub">
-				Compare reactive spend behavior versus owner-led execution and see the economic delta
-				instantly.
+				Adjust a few operating assumptions and show the gap between reactive cleanup and governed
+				execution.
 			</p>
 		</div>
+		<LandingCurrencyToggle
+			{currencyCode}
+			{localCurrencyCode}
+			onCurrencyCodeChange={updateCurrencyCode}
+		/>
 	</div>
 
 	<div class="landing-sim-grid">
-		<div class="glass-panel landing-sim-controls">
+		<div class="landing-public-surface landing-sim-controls">
 			<div class="landing-roi-control">
 				<label for="sim-waste-without" class="landing-roi-label">Reactive waste rate (%)</label>
 				<div class="landing-roi-meta">
@@ -130,7 +141,7 @@
 			</div>
 		</div>
 
-		<div class="glass-panel landing-sim-results">
+		<div class="landing-public-surface landing-sim-results">
 			<p class="landing-proof-k">Scenario Delta</p>
 			<div class="landing-sim-metrics">
 				<div class="landing-sim-metric is-highlight is-primary">
@@ -155,26 +166,32 @@
 			>
 				<div class="landing-sim-bar-row">
 					<div class="landing-sim-bar-label">Reactive spend</div>
-					<div class="landing-sim-bar-track">
-						<span class="landing-sim-bar is-reactive" style={`width:${scenarioWithoutBarPct}%;`}
-						></span>
-					</div>
+					<progress
+						class="landing-sim-bar-meter landing-sim-bar-meter--reactive"
+						max="100"
+						value={scenarioWithoutBarPct}
+					>
+						{scenarioWithoutBarPct}
+					</progress>
 					<div class="landing-sim-bar-value">
 						{formatUsd(scenarioWasteWithoutUsd, currencyCode)}
 					</div>
 				</div>
 				<div class="landing-sim-bar-row">
 					<div class="landing-sim-bar-label">Governed spend</div>
-					<div class="landing-sim-bar-track">
-						<span class="landing-sim-bar is-governed" style={`width:${scenarioWithBarPct}%;`}
-						></span>
-					</div>
+					<progress
+						class="landing-sim-bar-meter landing-sim-bar-meter--governed"
+						max="100"
+						value={scenarioWithBarPct}
+					>
+						{scenarioWithBarPct}
+					</progress>
 					<div class="landing-sim-bar-value">{formatUsd(scenarioWasteWithUsd, currencyCode)}</div>
 				</div>
 			</div>
 			<p class="landing-roi-note">
-				This simulator is directional and based on modeled waste-rate, decision-window, and rollout
-				assumptions for finance + engineering planning alignment.
+				This model is directional. Use it to align finance and engineering around waste rate,
+				decision timing, and rollout assumptions before building the full case.
 				<a href={`${base}/docs/technical-validation`} class="landing-cta-link">Review methodology</a
 				>
 				<a href={`${base}/resources/valdrics-roi-assumptions.csv`} class="landing-cta-link">
@@ -184,8 +201,8 @@
 			<div class="landing-roi-cta">
 				<p class="landing-proof-k">Need the full model?</p>
 				<p class="landing-roi-note">
-					Open the 12-month planner for rollout effort, implementation cost, and payback assumptions
-					using your own numbers.
+					Open the 12-month planner when you need rollout effort, implementation cost, and payback
+					assumptions using your own numbers.
 				</p>
 				<a href={plannerHref} class="btn btn-primary w-fit" onclick={onTrackPlannerCta}>
 					Open Full ROI Planner

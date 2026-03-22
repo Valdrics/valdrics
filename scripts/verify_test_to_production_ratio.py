@@ -10,11 +10,23 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 
 DEFAULT_PRODUCTION_ROOTS: tuple[Path, ...] = (Path("app"), Path("scripts"))
 DEFAULT_TESTS_ROOT = Path("tests")
 DEFAULT_MAX_TEST_TO_PRODUCTION_RATIO = 1.20
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_repo_path(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="path")
 
 
 @dataclass(frozen=True)
@@ -110,14 +122,19 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    production_roots = (
-        tuple(args.production_root)
-        if args.production_root
-        else DEFAULT_PRODUCTION_ROOTS
-    )
+    try:
+        production_roots = (
+            tuple(_resolve_repo_path(path) for path in args.production_root)
+            if args.production_root
+            else tuple(_resolve_repo_path(path) for path in DEFAULT_PRODUCTION_ROOTS)
+        )
+        tests_root = _resolve_repo_path(args.tests_root)
+    except ValueError as exc:
+        print(f"[test-prod-ratio] failed: {exc}")
+        return 2
     metrics, errors = validate_ratio(
         production_roots=production_roots,
-        tests_root=args.tests_root,
+        tests_root=tests_root,
         max_ratio=float(args.max_ratio),
     )
     roots_text = ",".join(root.as_posix() for root in production_roots)

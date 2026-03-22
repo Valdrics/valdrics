@@ -8,6 +8,21 @@ import shlex
 import shutil
 import subprocess  # nosec B404 - controlled local gate execution only
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_repo_relative_file(path: Path, *, field: str) -> Path:
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name=field)
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"{field} does not exist or is not a file: {resolved}")
+    return resolved
 
 
 def _assert_file(path: Path, *, field: str) -> Path:
@@ -220,6 +235,7 @@ def run_release_gate(
     stress_min_concurrent_users: int,
     stress_required_database_engine: str,
     dry_run: bool,
+    repo_root: Path | None = None,
     finance_telemetry_snapshot_path: Path | None = None,
     finance_telemetry_snapshot_required: bool = False,
     finance_telemetry_snapshot_max_age_hours: float = 744.0,
@@ -259,6 +275,7 @@ def run_release_gate(
         cmd,
         check=False,
         env=env,
+        cwd=repo_root or _repo_root(),
     )  # nosec B603 - trusted local release-gate command with validated inputs
     return int(completed.returncode)
 
@@ -407,36 +424,64 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    return run_release_gate(
-        stress_evidence_path=Path(str(args.stress_evidence_path)),
-        failure_evidence_path=Path(str(args.failure_evidence_path)),
-        finance_evidence_path=(
-            Path(str(args.finance_evidence_path))
+    try:
+        stress_evidence_path = _resolve_repo_relative_file(
+            Path(str(args.stress_evidence_path)),
+            field="stress_evidence_path",
+        )
+        failure_evidence_path = _resolve_repo_relative_file(
+            Path(str(args.failure_evidence_path)),
+            field="failure_evidence_path",
+        )
+        finance_evidence_path = (
+            _resolve_repo_relative_file(
+                Path(str(args.finance_evidence_path)),
+                field="finance_evidence_path",
+            )
             if args.finance_evidence_path
             else None
-        ),
-        finance_evidence_required=bool(args.finance_evidence_required),
-        finance_telemetry_snapshot_path=(
-            Path(str(args.finance_telemetry_snapshot_path))
+        )
+        finance_telemetry_snapshot_path = (
+            _resolve_repo_relative_file(
+                Path(str(args.finance_telemetry_snapshot_path)),
+                field="finance_telemetry_snapshot_path",
+            )
             if args.finance_telemetry_snapshot_path
             else None
-        ),
+        )
+        pricing_benchmark_register_path = (
+            _resolve_repo_relative_file(
+                Path(str(args.pricing_benchmark_register_path)),
+                field="pricing_benchmark_register_path",
+            )
+            if args.pricing_benchmark_register_path
+            else None
+        )
+        pkg_fin_policy_decisions_path = (
+            _resolve_repo_relative_file(
+                Path(str(args.pkg_fin_policy_decisions_path)),
+                field="pkg_fin_policy_decisions_path",
+            )
+            if args.pkg_fin_policy_decisions_path
+            else None
+        )
+    except ValueError as exc:
+        print(f"[enforcement-release-gate] failed: {exc}")
+        return 2
+    return run_release_gate(
+        stress_evidence_path=stress_evidence_path,
+        failure_evidence_path=failure_evidence_path,
+        finance_evidence_path=finance_evidence_path,
+        finance_evidence_required=bool(args.finance_evidence_required),
+        finance_telemetry_snapshot_path=finance_telemetry_snapshot_path,
         finance_telemetry_snapshot_required=bool(
             args.finance_telemetry_snapshot_required
         ),
-        pricing_benchmark_register_path=(
-            Path(str(args.pricing_benchmark_register_path))
-            if args.pricing_benchmark_register_path
-            else None
-        ),
+        pricing_benchmark_register_path=pricing_benchmark_register_path,
         pricing_benchmark_register_required=bool(
             args.pricing_benchmark_register_required
         ),
-        pkg_fin_policy_decisions_path=(
-            Path(str(args.pkg_fin_policy_decisions_path))
-            if args.pkg_fin_policy_decisions_path
-            else None
-        ),
+        pkg_fin_policy_decisions_path=pkg_fin_policy_decisions_path,
         pkg_fin_policy_decisions_required=bool(
             args.pkg_fin_policy_decisions_required
         ),
@@ -456,6 +501,7 @@ def main(argv: list[str] | None = None) -> int:
         stress_min_concurrent_users=int(args.stress_min_concurrent_users),
         stress_required_database_engine=str(args.stress_required_database_engine),
         dry_run=bool(args.dry_run),
+        repo_root=_repo_root(),
     )
 
 

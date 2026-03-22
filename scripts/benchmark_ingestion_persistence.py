@@ -24,6 +24,7 @@ import json
 import time
 from collections.abc import AsyncGenerator
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import os
@@ -35,9 +36,20 @@ from app.models.tenant import Tenant
 from app.modules.reporting.domain.persistence import CostPersistenceService
 from app.shared.core.evidence_capture import sanitize_bearer_token
 from app.shared.db.session import async_session_maker
+from scripts.env_generation_common import (
+    ensure_parent_dir,
+    promote_staged_file,
+    repo_root_for,
+    resolve_cli_path_from_root,
+    stage_json_file,
+)
 
 
-def _parse_args() -> argparse.Namespace:
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Benchmark the cost persistence write path."
     )
@@ -117,7 +129,24 @@ def _parse_args() -> argparse.Namespace:
         action="store_true",
         help="Publish the benchmark evidence to the tenant audit log (requires VALDRICS_TOKEN).",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def _resolve_output_path(value: str) -> Path:
+    resolved = resolve_cli_path_from_root(
+        _repo_root(),
+        Path(value),
+        field_name="out",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"out must be a file path: {resolved}")
+    ensure_parent_dir(resolved, field_name="out")
+    return resolved
+
+
+def _write_output(path: Path, payload: dict[str, object]) -> None:
+    staged_path = stage_json_file(path, payload, indent=2, sort_keys=True)
+    promote_staged_file(staged_path, path)
 
 
 async def _resolve_tenant_id(db) -> UUID:
@@ -186,8 +215,12 @@ async def _synthetic_records(
         }
 
 
-async def main() -> None:
-    args = _parse_args()
+async def main(argv: list[str] | None = None) -> None:
+    args = _parse_args(argv)
+    try:
+        output_path = _resolve_output_path(str(args.out)) if args.out else None
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
     cleanup = not bool(args.no_cleanup)
     backfill_runs = max(0, int(args.backfill_runs or 0))
 
@@ -311,9 +344,13 @@ async def main() -> None:
             "runs": runs if backfill_runs > 0 else None,
         }
 
-        if args.out:
-            with open(args.out, "w", encoding="utf-8") as f:
-                json.dump(payload, f, indent=2, sort_keys=True)
+        if output_path is not None:
+            try:
+                _write_output(output_path, payload)
+            except OSError as exc:
+                raise SystemExit(
+                    f"Failed to write ingestion persistence benchmark output: {exc}"
+                ) from exc
 
         if cleanup:
             await db.execute(

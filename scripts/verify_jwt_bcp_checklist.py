@@ -5,6 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 from typing import Any
 
 
@@ -37,12 +41,18 @@ CONTROL_EVIDENCE_PREFIXES["JWT-KEY-ROTATION-FALLBACK"] = (
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
+
+
+def _resolve_checklist_path(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="checklist_path")
 
 
 def load_checklist(checklist_path: Path) -> dict[str, Any]:
     if not checklist_path.exists():
         raise FileNotFoundError(f"JWT BCP checklist file not found: {checklist_path}")
+    if not checklist_path.is_file():
+        raise ValueError(f"JWT BCP checklist path must be a file: {checklist_path}")
     raw = checklist_path.read_text(encoding="utf-8")
     try:
         payload = json.loads(raw)
@@ -114,10 +124,20 @@ def validate_checklist(checklist: dict[str, Any], *, repo_root: Path) -> None:
                 raise ValueError(
                     f"Control {control_id} evidence path must be relative: {raw_path}"
                 )
-            full_path = repo_root / rel_path
+            full_path = (repo_root / rel_path).resolve()
+            try:
+                full_path.relative_to(repo_root.resolve())
+            except ValueError as exc:
+                raise ValueError(
+                    f"Control {control_id} evidence path must stay within repo root: {raw_path}"
+                ) from exc
             if not full_path.exists():
                 raise ValueError(
                     f"Control {control_id} evidence path does not exist: {raw_path}"
+                )
+            if not full_path.is_file():
+                raise ValueError(
+                    f"Control {control_id} evidence path must be a file: {raw_path}"
                 )
             normalized_evidence_paths.append(rel_path.as_posix())
 
@@ -161,7 +181,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    checklist_path = Path(str(args.checklist_path))
+    checklist_path = _resolve_checklist_path(Path(str(args.checklist_path)))
     return verify_checklist_file(checklist_path)
 
 

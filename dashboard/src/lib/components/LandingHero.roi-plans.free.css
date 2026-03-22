@@ -149,3 +149,11 @@
 .landing-free-tier-primary-cta {
 	min-width: 13rem;
 }
+
+/* Landing refresh 2026-03-21 */
+.landing-free-tier-strip {
+	border: 1px solid rgb(34 211 238 / 0.18);
+	background:
+		radial-gradient(circle at top right, rgb(34 211 238 / 0.1), transparent 36%),
+		linear-gradient(145deg, rgb(7 13 20 / 0.92), rgb(11 21 33 / 0.88));
+}

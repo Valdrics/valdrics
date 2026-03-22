@@ -17,7 +17,7 @@ describe('proof page', () => {
 		render(Page);
 
 		expect(
-			screen.getByRole('heading', { level: 1, name: /executive and technical proof/i })
+			screen.getByRole('heading', { level: 1, name: /proof surfaces for buyer diligence/i })
 		).toBeTruthy();
 		expect(
 			screen.getAllByRole('link', { name: /open enterprise path/i })[0]?.getAttribute('href') || ''
@@ -33,6 +33,9 @@ describe('proof page', () => {
 		expect(
 			screen.getAllByRole('link', { name: /Open Technical Validation/i })[0]?.getAttribute('href')
 		).toBe('/docs/technical-validation');
+		expect(
+			screen.getByRole('heading', { name: /use the proof pack in the same order buyers do/i })
+		).toBeTruthy();
 		expect(screen.getAllByRole('link', { name: /Documentation/i })[0]?.getAttribute('href')).toBe(
 			'/docs'
 		);

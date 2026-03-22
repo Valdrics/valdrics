@@ -9,6 +9,10 @@ import math
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 from typing import Any
 
 
@@ -17,6 +21,17 @@ class EvidenceArtifact:
     label: str
     path: Path
     captured_at: datetime
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_artifact_path(path: Path, *, field: str) -> Path:
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name=field)
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"{field} must be a file path: {resolved}")
+    return resolved
 
 
 def _parse_iso_utc(value: Any, *, field: str) -> datetime:
@@ -189,15 +204,28 @@ def main(argv: list[str] | None = None) -> int:
     as_of = (
         _parse_iso_utc(args.as_of, field="as_of") if args.as_of is not None else None
     )
-    return verify_monthly_refresh(
-        finance_guardrails_path=Path(str(args.finance_guardrails_path)),
-        finance_telemetry_snapshot_path=Path(str(args.finance_telemetry_snapshot_path)),
-        pkg_fin_policy_decisions_path=Path(str(args.pkg_fin_policy_decisions_path)),
-        max_age_days=float(args.max_age_days),
-        max_capture_spread_days=float(args.max_capture_spread_days),
-        max_future_skew_hours=float(args.max_future_skew_hours),
-        as_of=as_of,
-    )
+    try:
+        return verify_monthly_refresh(
+            finance_guardrails_path=_resolve_artifact_path(
+                Path(str(args.finance_guardrails_path)),
+                field="finance_guardrails_path",
+            ),
+            finance_telemetry_snapshot_path=_resolve_artifact_path(
+                Path(str(args.finance_telemetry_snapshot_path)),
+                field="finance_telemetry_snapshot_path",
+            ),
+            pkg_fin_policy_decisions_path=_resolve_artifact_path(
+                Path(str(args.pkg_fin_policy_decisions_path)),
+                field="pkg_fin_policy_decisions_path",
+            ),
+            max_age_days=float(args.max_age_days),
+            max_capture_spread_days=float(args.max_capture_spread_days),
+            max_future_skew_hours=float(args.max_future_skew_hours),
+            as_of=as_of,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[monthly-finance-evidence-refresh] failed: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

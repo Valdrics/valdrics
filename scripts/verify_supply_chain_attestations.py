@@ -12,6 +12,10 @@ import subprocess  # nosec B404 - controlled GitHub CLI invocation only
 import time
 from collections.abc import Sequence
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 MIN_GH_VERSION: tuple[int, int, int] = (2, 67, 0)
 DEFAULT_SIGNER_WORKFLOW = ".github/workflows/sbom.yml"
@@ -27,6 +31,10 @@ GITHUB_REMOTE_PATTERN = re.compile(
     r"(?:git@github\.com:|https://github\.com/|ssh://git@github\.com/)"
     r"(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+?)(?:\.git)?/?$"
 )
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
 
 
 def _format_command(cmd: Sequence[str]) -> str:
@@ -70,6 +78,7 @@ def _resolve_repo_from_git_remote() -> str:
         return ""
     completed = subprocess.run(
         [git_executable, "remote", "get-url", "origin"],
+        cwd=_repo_root(),
         check=False,
         capture_output=True,
         text=True,
@@ -92,10 +101,13 @@ def _resolve_repo_slug(value: str) -> str:
     raise ValueError("`repo` is required (OWNER/REPO).")
 
 
+def _resolve_artifact_path(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="artifact")
+
+
 def _resolve_artifact_paths(artifacts: Sequence[Path]) -> tuple[Path, ...]:
-    if artifacts:
-        return tuple(artifacts)
-    return DEFAULT_ARTIFACT_PATHS
+    selected = tuple(artifacts) if artifacts else DEFAULT_ARTIFACT_PATHS
+    return tuple(_resolve_artifact_path(path) for path in selected)
 
 
 def _run_gh_command(
@@ -104,6 +116,7 @@ def _run_gh_command(
     gh_executable = _resolve_gh_executable()
     return subprocess.run(
         [gh_executable, *args],
+        cwd=_repo_root(),
         check=False,
         capture_output=True,
         text=True,
@@ -264,6 +277,7 @@ def verify_attestations(
         for attempt in range(1, DEFAULT_VERIFY_MAX_ATTEMPTS + 1):
             completed = subprocess.run(
                 _materialize_gh_command(cmd),
+                cwd=_repo_root(),
                 check=False,
                 capture_output=True,
                 text=True,

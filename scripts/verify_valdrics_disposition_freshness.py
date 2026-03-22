@@ -9,6 +9,10 @@ import math
 import re
 from datetime import date, datetime, timezone
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 from typing import Any
 
 ALLOWED_DISPOSITION_STATUSES = {
@@ -37,6 +41,17 @@ REQUIRED_RUNTIME_PROBE_FIELDS = (
     "passed",
     "output_excerpt",
 )
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_register_path(path: Path) -> Path:
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name="register_path")
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"register_path must be a file path: {resolved}")
+    return resolved
 
 
 def _parse_iso_utc(value: Any, *, field: str) -> datetime:
@@ -331,16 +346,20 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = _parse_args(argv)
-    as_of = _parse_iso_utc(args.as_of, field="as_of") if args.as_of else None
-    required_ids = tuple(args.required_finding_id) or DEFAULT_REQUIRED_FINDING_IDS
-    return verify_disposition_register(
-        register_path=Path(str(args.register_path)),
-        max_artifact_age_days=float(args.max_artifact_age_days),
-        max_review_window_days=float(args.max_review_window_days),
-        required_finding_ids=required_ids,
-        as_of=as_of,
-    )
+    try:
+        args = _parse_args(argv)
+        as_of = _parse_iso_utc(args.as_of, field="as_of") if args.as_of else None
+        required_ids = tuple(args.required_finding_id) or DEFAULT_REQUIRED_FINDING_IDS
+        return verify_disposition_register(
+            register_path=_resolve_register_path(Path(str(args.register_path))),
+            max_artifact_age_days=float(args.max_artifact_age_days),
+            max_review_window_days=float(args.max_review_window_days),
+            required_finding_ids=required_ids,
+            as_of=as_of,
+        )
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"[valdrics-disposition-freshness] failed: {exc}")
+        return 2
 
 
 if __name__ == "__main__":

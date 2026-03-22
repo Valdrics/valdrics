@@ -5,6 +5,7 @@ from fastapi import APIRouter, FastAPI
 from scripts.verify_api_auth_coverage import (
     collect_auth_coverage_violations,
     load_app_for_audit,
+    main,
 )
 
 
@@ -58,3 +59,19 @@ def test_collect_auth_coverage_passes_current_application_routes() -> None:
     app = load_app_for_audit()
     violations = collect_auth_coverage_violations(app)
     assert violations == []
+
+
+def test_main_returns_two_when_app_load_fails(
+    monkeypatch,
+    capsys,
+) -> None:
+    monkeypatch.setattr(
+        "scripts.verify_api_auth_coverage.load_app_for_audit",
+        lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+
+    exit_code = main()
+
+    captured = capsys.readouterr().out
+    assert exit_code == 2
+    assert "failed to load app" in captured

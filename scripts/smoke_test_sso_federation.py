@@ -25,6 +25,12 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from ipaddress import IPv4Address
 from pathlib import Path
+from scripts.env_generation_common import (
+    promote_staged_file,
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+    stage_json_file,
+)
 from typing import Any, NoReturn
 from urllib.parse import urljoin, urlparse
 
@@ -41,6 +47,10 @@ SSO_SMOKE_RECOVERABLE_EXCEPTIONS = (
     ValueError,
 )
 _ALL_INTERFACES_HOST = IPv4Address(0).compressed
+
+
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
 
 
 def _utc_now() -> str:
@@ -76,8 +86,15 @@ def _require_valid_base_url(raw: str) -> str:
 
 
 def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
+    staged_path = stage_json_file(path, payload, indent=2, sort_keys=True)
+    promote_staged_file(staged_path, path)
+
+
+def _resolve_output_path(path: Path) -> Path:
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name="out")
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"out must be a file path: {resolved}")
+    return resolved
 
 
 @dataclass(frozen=True)
@@ -98,7 +115,7 @@ def _exit_with_connectivity_error(base_url: str, exc: httpx.RequestError) -> NoR
     )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Smoke test SSO federation discovery + validation."
     )
@@ -125,7 +142,7 @@ def main() -> int:
         default=30.0,
         help="HTTP timeout in seconds for each request (default: 30).",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     raw_url = str(args.url or "").strip()
     if not raw_url:
@@ -142,6 +159,10 @@ def main() -> int:
         raise SystemExit("--timeout must be > 0")
     if not email:
         raise SystemExit("--email is required")
+    try:
+        output_path = _resolve_output_path(Path(str(args.out))) if args.out else None
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
 
     if token:
         try:
@@ -316,8 +337,11 @@ def main() -> int:
             },
         }
 
-        if args.out:
-            _write_json(Path(str(args.out)), evidence_payload)
+        if output_path is not None:
+            try:
+                _write_json(output_path, evidence_payload)
+            except OSError as exc:
+                raise SystemExit(f"Failed to write evidence output: {exc}") from exc
 
         if args.publish:
             if not token:

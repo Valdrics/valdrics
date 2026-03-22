@@ -10,11 +10,26 @@ from pathlib import Path
 from typing import Any
 
 from app.shared.core.pricing import FeatureFlag, PricingTier, get_tier_config
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_repo_relative_path_from_root as _resolve_repo_relative_path_from_root,
+)
 from scripts.generate_feature_enforceability_matrix import collect_enforceability
 
 
 def _repo_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _repo_root_for(__file__)
+
+
+def _resolve_matrix_path(*, repo_root: Path, path: Path) -> Path:
+    resolved = _resolve_repo_relative_path_from_root(
+        repo_root.resolve(),
+        path,
+        field_name="matrix_path",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"matrix artifact must be a file: {resolved}")
+    return resolved
 
 
 def _assert(condition: bool, message: str) -> None:
@@ -51,6 +66,7 @@ def _validate_timestamp(value: Any) -> None:
 
 def verify_matrix(*, artifact_path: Path, repo_root: Path) -> None:
     _assert(artifact_path.exists(), f"matrix artifact does not exist: {artifact_path}")
+    _assert(artifact_path.is_file(), f"matrix artifact must be a file: {artifact_path}")
     raw = json.loads(artifact_path.read_text(encoding="utf-8"))
 
     _validate_timestamp(raw.get("captured_at"))
@@ -80,7 +96,14 @@ def verify_matrix(*, artifact_path: Path, repo_root: Path) -> None:
         for rel in evidence:
             _assert(isinstance(rel, str) and rel.strip(), f"{feature.value}: invalid evidence path entry")
             path = (repo_root / rel).resolve()
+            try:
+                path.relative_to(repo_root.resolve())
+            except ValueError as exc:
+                raise ValueError(
+                    f"{feature.value}: evidence path must stay within repo root: {rel}"
+                ) from exc
             _assert(path.exists(), f"{feature.value}: evidence file does not exist: {rel}")
+            _assert(path.is_file(), f"{feature.value}: evidence path must be a file: {rel}")
             text = path.read_text(encoding="utf-8")
             _assert(token in text, f"{feature.value}: evidence file missing token {token} in {rel}")
 
@@ -98,8 +121,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     repo_root = _repo_root()
-    matrix_path = (repo_root / str(args.matrix_path)).resolve()
-    verify_matrix(artifact_path=matrix_path, repo_root=repo_root)
+    try:
+        matrix_path = _resolve_matrix_path(repo_root=repo_root, path=Path(args.matrix_path))
+        verify_matrix(artifact_path=matrix_path, repo_root=repo_root)
+    except ValueError as exc:
+        print(f"[feature-matrix-verify] failed: {exc}")
+        return 2
     print(
         "Feature enforceability matrix verified: "
         f"path={matrix_path.relative_to(repo_root)}"

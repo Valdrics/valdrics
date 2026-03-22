@@ -5,6 +5,10 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
+from scripts.env_generation_common import (
+    repo_root_for as _repo_root_for,
+    resolve_cli_path_from_root,
+)
 
 
 DEFAULT_MAX_LINES = 700
@@ -40,6 +44,21 @@ class ModuleSizeClusterSignal:
     cluster_max_lines: int
 
 
+def _repo_root() -> Path:
+    return _repo_root_for(__file__)
+
+
+def _resolve_root(path: Path) -> Path:
+    return resolve_cli_path_from_root(_repo_root(), path, field_name="root")
+
+
+def _validate_root(root: Path) -> None:
+    if not root.exists():
+        raise ValueError(f"root does not exist: {root}")
+    if not root.is_dir():
+        raise ValueError(f"root must be a directory: {root}")
+
+
 def _line_count(path: Path) -> int:
     with path.open("r", encoding="utf-8") as handle:
         return sum(1 for _ in handle)
@@ -51,6 +70,7 @@ def collect_module_size_violations(
     default_max_lines: int = DEFAULT_MAX_LINES,
     overrides: dict[str, int] | None = None,
 ) -> tuple[ModuleSizeViolation, ...]:
+    _validate_root(root)
     normalized_overrides = overrides or MODULE_LINE_BUDGET_OVERRIDES
     app_root = root / "app"
     violations: list[ModuleSizeViolation] = []
@@ -71,6 +91,7 @@ def collect_module_size_preferred_breaches(
     *,
     preferred_max_lines: int = PREFERRED_MAX_LINES,
 ) -> tuple[ModuleSizePreferredBreach, ...]:
+    _validate_root(root)
     app_root = root / "app"
     breaches: list[ModuleSizePreferredBreach] = []
     for module_path in sorted(app_root.rglob("*.py")):
@@ -93,6 +114,7 @@ def collect_module_size_cluster_signals(
     cluster_min_lines: int = CLUSTER_MIN_LINES,
     cluster_max_lines: int = CLUSTER_MAX_LINES,
 ) -> tuple[ModuleSizeClusterSignal, ...]:
+    _validate_root(root)
     app_root = root / "app"
     signals: list[ModuleSizeClusterSignal] = []
     for module_path in sorted(app_root.rglob("*.py")):
@@ -120,7 +142,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--root",
-        default=str(Path(__file__).resolve().parents[1]),
+        default=str(_repo_root()),
         help="Repository root path.",
     )
     parser.add_argument(
@@ -188,24 +210,28 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    root = Path(args.root).resolve()
-    preferred_breaches: tuple[ModuleSizePreferredBreach, ...] = ()
-    if bool(args.emit_preferred_signals):
-        preferred_breaches = collect_module_size_preferred_breaches(
+    try:
+        root = _resolve_root(Path(str(args.root)))
+        preferred_breaches: tuple[ModuleSizePreferredBreach, ...] = ()
+        if bool(args.emit_preferred_signals):
+            preferred_breaches = collect_module_size_preferred_breaches(
+                root,
+                preferred_max_lines=int(args.preferred_max_lines),
+            )
+        violations = collect_module_size_violations(
             root,
-            preferred_max_lines=int(args.preferred_max_lines),
+            default_max_lines=int(args.default_max_lines),
         )
-    violations = collect_module_size_violations(
-        root,
-        default_max_lines=int(args.default_max_lines),
-    )
-    cluster_signals: tuple[ModuleSizeClusterSignal, ...] = ()
-    if bool(args.emit_cluster_signals):
-        cluster_signals = collect_module_size_cluster_signals(
-            root,
-            cluster_min_lines=int(args.cluster_min_lines),
-            cluster_max_lines=int(args.cluster_max_lines),
-        )
+        cluster_signals: tuple[ModuleSizeClusterSignal, ...] = ()
+        if bool(args.emit_cluster_signals):
+            cluster_signals = collect_module_size_cluster_signals(
+                root,
+                cluster_min_lines=int(args.cluster_min_lines),
+                cluster_max_lines=int(args.cluster_max_lines),
+            )
+    except ValueError as exc:
+        print(f"[python-module-size-budget] failed: {exc}")
+        return 2
     print(
         "[python-module-size-budget] "
         f"root={root} mode={args.enforcement_mode} "
