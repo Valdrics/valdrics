@@ -184,67 +184,422 @@
 		padding-bottom: 0.1rem;
 	}
 }
-.landing-story-band #signal-map .glass-panel,
-.landing-story-band #signal-map .glass-panel:hover {
+.landing-story-band #product .glass-panel,
+.landing-story-band #product .glass-panel:hover {
 	background: linear-gradient(160deg, rgb(7 13 20 / 0.96), rgb(11 21 33 / 0.92));
 	border: 1px solid rgb(255 255 255 / 0.08);
 	box-shadow: 0 24px 64px rgb(6 12 18 / 0.24);
 }
-.landing-story-band #signal-map .landing-demo-strip {
+.landing-story-band #product .landing-demo-strip {
 	border: 1px solid rgb(255 255 255 / 0.1);
 	background: linear-gradient(180deg, rgb(8 14 22 / 0.96), rgb(10 18 28 / 0.92));
 	box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.03);
 }
-.landing-story-band #signal-map .landing-demo-k,
-.landing-story-band #signal-map .signal-lane-detail-k {
+.landing-story-band #product .landing-demo-k,
+.landing-story-band #product .signal-lane-detail-k {
 	color: var(--color-accent-300);
 }
-.landing-story-band #signal-map .landing-demo-visual-meta p,
-.landing-story-band #signal-map .landing-demo-detail,
-.landing-story-band #signal-map .signal-summary-text,
-.landing-story-band #signal-map .signal-walkthrough-text {
+.landing-story-band #product .landing-demo-visual-meta p,
+.landing-story-band #product .landing-demo-detail,
+.landing-story-band #product .signal-summary-text,
+.landing-story-band #product .signal-walkthrough-text {
 	color: var(--color-ink-200);
 }
-.landing-story-band #signal-map .landing-demo-visual-track {
+.landing-story-band #product .landing-demo-visual-track {
 	background: rgb(255 255 255 / 0.08);
 }
-.landing-story-band #signal-map .landing-demo-visual-track > span {
+.landing-story-band #product .landing-demo-visual-track > span {
 	background: linear-gradient(90deg, rgb(18 158 192 / 0.92), rgb(45 212 191 / 0.8));
 }
-.landing-story-band #signal-map .landing-demo-step {
+.landing-story-band #product .landing-demo-step {
 	background: rgb(39 48 60 / 0.88);
 	border-color: rgb(255 255 255 / 0.12);
 	color: var(--color-ink-300);
 }
-.landing-story-band #signal-map .landing-demo-step:hover {
+.landing-story-band #product .landing-demo-step:hover {
 	border-color: rgb(18 158 192 / 0.28);
 	color: var(--color-ink-100);
 }
-.landing-story-band #signal-map .landing-demo-step.is-active {
+.landing-story-band #product .landing-demo-step.is-active {
 	background: rgb(18 158 192 / 0.16);
 	border-color: rgb(18 158 192 / 0.36);
 	color: var(--color-accent-300);
 }
-.landing-story-band #signal-map .landing-demo-visual-dot {
+.landing-story-band #product .landing-demo-visual-dot {
 	background: rgb(255 255 255 / 0.18);
 	border-color: rgb(255 255 255 / 0.16);
 }
-.landing-story-band #signal-map .landing-demo-visual-dot.is-active {
+.landing-story-band #product .landing-demo-visual-dot.is-active {
 	background: var(--color-accent-400);
 	border-color: var(--color-accent-300);
 }
-.landing-story-band #signal-map .landing-demo-visual-dot.is-complete {
+.landing-story-band #product .landing-demo-visual-dot.is-complete {
 	background: var(--color-success-400);
 	border-color: var(--color-success-300);
 }
-.landing-story-band #signal-map .signal-snapshot-btn,
-.landing-story-band #signal-map .signal-lane-btn {
+.landing-story-band #product .signal-snapshot-btn,
+.landing-story-band #product .signal-lane-btn {
 	background: rgb(24 32 40 / 0.76);
 	border-color: rgb(255 255 255 / 0.12);
 	color: var(--color-ink-300);
 }
-.landing-story-band #signal-map .signal-snapshot-btn:hover,
-.landing-story-band #signal-map .signal-lane-btn:hover {
+.landing-story-band #product .signal-snapshot-btn:hover,
+.landing-story-band #product .signal-lane-btn:hover {
 	border-color: rgb(255 255 255 / 0.24);
 	color: var(--color-ink-100);
+}
+
+/* Landing refresh 2026-03-21 */
+.landing-story-band {
+	padding-top: 1.35rem;
+	padding-bottom: 0.4rem;
+	background:
+		radial-gradient(860px 320px at 14% 0%, rgb(34 211 238 / 0.08), transparent 54%),
+		radial-gradient(860px 320px at 86% 12%, rgb(16 185 129 / 0.08), transparent 52%),
+		linear-gradient(180deg, rgb(7 17 24) 0%, rgb(8 17 25) 100%);
+}
+
+.landing-story-band::before {
+	background: linear-gradient(90deg, transparent, rgb(8 126 164 / 0.26), transparent);
+}
+
+.landing-story-band .glass-panel,
+.landing-story-band .glass-panel:hover {
+	background:
+		linear-gradient(160deg, rgb(7 13 20 / 0.96), rgb(11 21 33 / 0.9)),
+		radial-gradient(circle at top right, rgb(34 211 238 / 0.08), transparent 34%);
+	border: 1px solid rgb(255 255 255 / 0.08);
+	box-shadow: 0 24px 64px rgb(6 12 18 / 0.2);
+}
+
+.landing-story-band .landing-h2,
+.landing-story-band .landing-h3,
+.landing-story-band .landing-proof-k,
+.landing-story-band .landing-plan-price,
+.landing-story-band .landing-free-tier-price-v,
+.landing-story-band .landing-roi-metric strong,
+.landing-story-band .landing-sim-metric strong,
+.landing-story-band .landing-signal-surface-title,
+.landing-story-band .landing-plan-context__value,
+.landing-story-band .landing-product-summary-item strong,
+.landing-story-band .landing-outcome-metric strong,
+.landing-story-band .landing-free-tier-strip-price,
+.landing-story-band .landing-human-proof-card blockquote {
+	color: var(--color-ink-100);
+}
+
+.landing-story-band .landing-p,
+.landing-story-band .landing-section-sub,
+.landing-story-band .landing-proof-v,
+.landing-story-band .landing-free-tier-note,
+.landing-story-band .landing-plan-features li,
+.landing-story-band .landing-plan-price-note,
+.landing-story-band .landing-free-tier-limit,
+.landing-story-band .landing-onboard-steps,
+.landing-story-band .landing-roi-note,
+.landing-story-band .landing-roi-label,
+.landing-story-band .landing-sim-bar-label,
+.landing-story-band .landing-sim-metric p,
+.landing-story-band .landing-roi-metric p,
+.landing-story-band .landing-roi-snapshot-metric p,
+.landing-story-band .landing-roi-snapshot-row,
+.landing-story-band .landing-more-resources,
+.landing-story-band .landing-plan-context__label,
+.landing-story-band .landing-outcome-summary,
+.landing-story-band .landing-outcome-aha,
+.landing-story-band .landing-product-summary-item p,
+.landing-story-band .landing-human-proof-attribution,
+.landing-story-band .landing-proof-state-links,
+.landing-story-band .landing-proof-state-card .landing-p,
+.landing-story-band .landing-proof-footnote .landing-p {
+	color: var(--color-ink-300);
+}
+
+.landing-story-band .landing-cta-link {
+	color: #8be7ff;
+}
+
+.landing-story-band .landing-cta-link:hover {
+	color: #c7f5ff;
+}
+
+.landing-story-band .btn-secondary {
+	background: rgb(16 24 34 / 0.9);
+	color: var(--color-ink-100);
+	border: 1px solid rgb(255 255 255 / 0.14);
+}
+
+.landing-story-band .btn-secondary:hover:not(:disabled) {
+	background: rgb(20 31 43 / 0.96);
+	border-color: rgb(255 255 255 / 0.22);
+}
+
+.landing-story-band .landing-outcome-grid,
+.landing-story-band .landing-product-grid,
+.landing-story-band .landing-human-proof-grid {
+	display: grid;
+	gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+	.landing-story-band .landing-outcome-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.landing-story-band .landing-product-grid {
+		grid-template-columns: minmax(0, 1.28fr) minmax(18rem, 0.72fr);
+		align-items: start;
+	}
+
+	.landing-story-band .landing-human-proof-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+.landing-story-band .landing-outcome-card,
+.landing-story-band .landing-product-summary,
+.landing-story-band .landing-product-support-card,
+.landing-story-band .landing-human-proof-card,
+.landing-story-band .landing-human-proof-actions,
+.landing-story-band .landing-proof-footnote,
+.landing-story-band .landing-free-tier-strip,
+.landing-story-band .landing-rollout-section,
+.landing-story-band .landing-rollout-block,
+.landing-story-band .landing-plan-card,
+.landing-story-band .landing-roi-control,
+.landing-story-band .landing-roi-metric,
+.landing-story-band .landing-sim-metric,
+.landing-story-band .landing-roi-snapshot,
+.landing-story-band .landing-proof-state-card {
+	background: linear-gradient(180deg, rgb(8 14 22 / 0.95), rgb(11 20 31 / 0.92));
+	border-color: rgb(255 255 255 / 0.1);
+}
+
+.landing-story-band .landing-product-primary,
+.landing-story-band .landing-product-support {
+	display: grid;
+	gap: 1rem;
+}
+
+.landing-story-band .landing-product-summary {
+	display: grid;
+	gap: 0.75rem;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.landing-story-band .landing-product-summary-item {
+	padding: 0.88rem 0.92rem;
+	border-radius: var(--radius-lg);
+	border: 1px solid rgb(255 255 255 / 0.08);
+	background: rgb(7 13 20 / 0.56);
+}
+
+.landing-story-band .landing-product-summary-item p {
+	margin: 0;
+	font-size: 0.74rem;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.landing-story-band .landing-product-summary-item strong {
+	display: block;
+	margin-top: 0.28rem;
+	font-size: 1rem;
+}
+
+.landing-story-band .landing-outcome-card {
+	display: grid;
+	gap: 0.7rem;
+	text-align: left;
+}
+
+.landing-story-band .landing-outcome-card--reactive {
+	border-color: rgb(251 113 133 / 0.18);
+	background:
+		radial-gradient(circle at top left, rgb(251 113 133 / 0.08), transparent 34%),
+		linear-gradient(180deg, rgb(8 14 22 / 0.95), rgb(11 20 31 / 0.92));
+}
+
+.landing-story-band .landing-outcome-card--governed {
+	border-color: rgb(34 211 238 / 0.2);
+	background:
+		radial-gradient(circle at top right, rgb(34 211 238 / 0.1), transparent 34%),
+		linear-gradient(180deg, rgb(8 14 22 / 0.95), rgb(11 20 31 / 0.92));
+}
+
+.landing-story-band .landing-outcome-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 0.5rem;
+}
+
+.landing-story-band .landing-outcome-list li {
+	position: relative;
+	padding-left: 0.92rem;
+	color: var(--color-ink-200);
+	line-height: 1.45;
+}
+
+.landing-story-band .landing-outcome-list li::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0.46rem;
+	width: 0.38rem;
+	height: 0.38rem;
+	border-radius: 9999px;
+	background: var(--color-accent-400);
+	box-shadow: 0 0 0 4px rgb(6 182 212 / 0.14);
+}
+
+.landing-story-band .landing-outcome-metrics {
+	display: grid;
+	gap: 0.65rem;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.landing-story-band .landing-outcome-metric {
+	padding: 0.7rem 0.74rem;
+	border-radius: var(--radius-lg);
+	border: 1px solid rgb(255 255 255 / 0.08);
+	background: rgb(7 13 20 / 0.56);
+}
+
+.landing-story-band .landing-outcome-metric p {
+	margin: 0;
+	font-size: 0.72rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	font-weight: 800;
+	color: var(--color-ink-500);
+}
+
+.landing-story-band .landing-outcome-metric strong {
+	display: block;
+	margin-top: 0.24rem;
+	font-size: 0.92rem;
+}
+
+.landing-story-band .landing-plans-grid {
+	grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+	.landing-story-band .landing-plans-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+.landing-story-band .landing-plan-card {
+	display: grid;
+	gap: 0.7rem;
+	align-content: start;
+}
+
+.landing-story-band .landing-plan-card.is-featured,
+.landing-story-band .landing-plan-card.is-featured:hover {
+	background:
+		radial-gradient(circle at top right, rgb(34 211 238 / 0.14), transparent 32%),
+		linear-gradient(160deg, rgb(8 18 29 / 0.98), rgb(11 24 37 / 0.94));
+	border-color: rgb(34 211 238 / 0.24);
+	box-shadow:
+		0 0 0 1px rgb(34 211 238 / 0.08),
+		0 22px 56px rgb(4 11 17 / 0.24);
+}
+
+.landing-story-band .landing-free-tier-strip {
+	display: grid;
+	gap: 0.9rem;
+	padding: 1rem 1.05rem;
+}
+
+@media (min-width: 1024px) {
+	.landing-story-band .landing-free-tier-strip {
+		grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) auto;
+		align-items: center;
+	}
+}
+
+.landing-story-band .landing-free-tier-strip-copy {
+	display: grid;
+	gap: 0.48rem;
+}
+
+.landing-story-band .landing-free-tier-strip-actions {
+	display: grid;
+	gap: 0.42rem;
+	align-items: start;
+	justify-items: start;
+}
+
+.landing-story-band .landing-free-tier-strip-price {
+	margin: 0;
+	font-size: 1.15rem;
+	font-weight: 900;
+}
+
+.landing-story-band .landing-free-tier-primary-cta {
+	min-width: 12rem;
+}
+
+.landing-story-band .landing-proof-state-grid {
+	grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+	.landing-story-band .landing-proof-state-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+.landing-story-band .landing-proof-state-card,
+.landing-story-band .landing-proof-footnote {
+	display: grid;
+	gap: 0.7rem;
+	text-align: left;
+}
+
+.landing-story-band .landing-proof-state-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.55rem 0.9rem;
+	align-items: center;
+}
+
+.landing-story-band .landing-human-proof-card {
+	display: grid;
+	gap: 0.65rem;
+}
+
+.landing-story-band .landing-human-proof-card blockquote {
+	margin: 0;
+	font-size: 1rem;
+	line-height: 1.55;
+}
+
+.landing-story-band .landing-human-proof-actions {
+	margin-top: 1rem;
+	display: grid;
+	gap: 0.8rem;
+}
+
+@media (min-width: 900px) {
+	.landing-story-band .landing-human-proof-actions {
+		grid-template-columns: minmax(0, 1.2fr) auto;
+		align-items: center;
+	}
+}
+
+@media (max-width: 767px) {
+	.landing-story-band {
+		padding-top: 0.9rem;
+	}
+
+	.landing-story-band .landing-product-summary,
+	.landing-story-band .landing-outcome-metrics {
+		grid-template-columns: 1fr;
+	}
 }

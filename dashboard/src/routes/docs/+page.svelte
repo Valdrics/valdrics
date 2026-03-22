@@ -2,23 +2,59 @@
 	import { base } from '$app/paths';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
-	import { listPublicContent } from '$lib/content/publicContent';
+	import { listPublicContent, type PublicContentEntry } from '$lib/content/publicContent';
 
 	const docsEntries = listPublicContent('docs');
+	const docsBySlug = new Map(docsEntries.map((entry) => [entry.slug, entry] as const));
+
+	function mustGetDoc(slug: string): PublicContentEntry {
+		const entry = docsBySlug.get(slug);
+		if (!entry) {
+			throw new Error(`Unknown docs entry: ${slug}`);
+		}
+		return entry;
+	}
 
 	const heroHighlights = [
 		{
-			label: 'Setup',
-			value: 'Quick start, onboarding flow, and operating guidance'
+			label: 'Start fast',
+			value: 'Quick start and first-provider guidance without a long setup maze'
 		},
 		{
-			label: 'Validation',
-			value: 'Technical validation and public proof links for buyer diligence'
+			label: 'Validate safely',
+			value: 'Technical validation and proof surfaces for serious buyers'
 		},
 		{
-			label: 'Reference',
-			value: 'API docs, plan access, and legal commitments in one place'
+			label: 'Integrate cleanly',
+			value: 'API docs, decision-record guidance, and repository runbooks in one path'
 		}
+	] as const;
+
+	const docPaths = [
+		{
+			kicker: 'Start here',
+			title: 'Quick Start a Valdrics Workspace',
+			copy: 'The fastest path from an empty workspace to a first working Valdrics setup.',
+			href: `${base}/docs/quick-start-workspace`
+		},
+		{
+			kicker: 'Validate',
+			title: 'Technical Validation',
+			copy: 'Capability and architecture material for teams doing technical review.',
+			href: `${base}/docs/technical-validation`
+		},
+		{
+			kicker: 'Integrate',
+			title: 'API Reference',
+			copy: 'Endpoint groups and request examples for product and platform integrations.',
+			href: `${base}/docs/api`
+		}
+	] as const;
+
+	const operatingGuides = [
+		mustGetDoc('connect-first-provider'),
+		mustGetDoc('owner-routing-and-approval-path'),
+		mustGetDoc('decision-history-and-export-records')
 	] as const;
 </script>
 
@@ -32,8 +68,8 @@
 
 <PublicMarketingPage
 	kicker="Documentation"
-	title="Documentation"
-	subtitle="Use these guides to set up Valdrics quickly, align teams on spend ownership, and execute reliable cost decisions with confidence."
+	title="Documentation for setup, validation, and API review"
+	subtitle="Move from quick start to technical review without bouncing between marketing pages, docs, and repository notes."
 	heroVariant="narrow"
 >
 	{#snippet heroActions()}
@@ -54,63 +90,71 @@
 	{/snippet}
 
 	{#snippet children()}
+		<section class="public-page__section" aria-labelledby="docs-paths-title">
+			<div class="public-page__section-head">
+				<p class="public-page__eyebrow">Start paths</p>
+				<h2 id="docs-paths-title" class="public-page__section-title">
+					Pick the first documentation surface that matches the question
+				</h2>
+				<p class="public-page__section-subtitle">
+					Start with the most relevant guide instead of forcing every reader through the full docs
+					tree.
+				</p>
+			</div>
+
+			<div class="public-page__flow-grid public-page__flow-grid--3">
+				{#each docPaths as path (path.title)}
+					<article class="public-page__flow-card">
+						<p class="public-page__card-kicker">{path.kicker}</p>
+						<h2 class="public-page__card-title">{path.title}</h2>
+						<p class="public-page__card-copy">{path.copy}</p>
+						<a href={path.href} class="btn btn-secondary">
+							{path.kicker === 'Integrate' ? 'Open API Docs' : 'Open guide'}
+						</a>
+					</article>
+				{/each}
+			</div>
+		</section>
+
 		<section class="public-page__section" aria-labelledby="docs-sections-title">
 			<div class="public-page__section-head">
 				<p class="public-page__eyebrow">Core guides</p>
 				<h2 id="docs-sections-title" class="public-page__section-title">
-					Pick the documentation surface that matches the question
+					Use the core guides for the operating loop
 				</h2>
 				<p class="public-page__section-subtitle">
-					Move from quick start to APIs, validation, resources, and policies without leaving the
-					public documentation flow.
+					These are the guides most teams need after quick start: first connection, owner routing,
+					and decision record handling.
 				</p>
 			</div>
 
 			<div class="public-page__grid public-page__grid--2">
-				<article class="public-page__card public-page__card--dark">
-					<h2 class="public-page__card-title">API Reference</h2>
-					<p class="public-page__card-copy">
-						Review endpoint groups and request examples for product and platform integrations.
-					</p>
-					<a href={`${base}/docs/api`} class="btn btn-secondary">Open API Docs</a>
-				</article>
-
-				<article class="public-page__card public-page__card--featured">
-					<h2 class="public-page__card-title">Technical Validation</h2>
-					<p class="public-page__card-copy">
-						Review the buyer-safe capability-to-API validation summary used for technical diligence.
-					</p>
-					<a href={`${base}/docs/technical-validation`} class="btn btn-secondary">
-						Open Technical Validation
-					</a>
-				</article>
-
-				{#each docsEntries as entry (entry.slug)}
-					<article
-						class={`public-page__card ${
-							entry.slug === 'quick-start-workspace'
-								? 'public-page__card--accent public-page__card--featured'
-								: ''
-						}`}
-					>
+				{#each operatingGuides as entry (entry.slug)}
+					<article class="public-page__card">
 						<p class="public-page__card-kicker">{entry.kicker}</p>
 						<h2 class="public-page__card-title">{entry.title}</h2>
 						<p class="public-page__card-copy">{entry.summary}</p>
-						<div class="public-page__actions-row">
-							<a href={`${base}/docs/${entry.slug}`} class="btn btn-secondary">Open guide</a>
+						<div class="public-page__mini-list">
+							{#each entry.sections[0]?.bullets ?? [] as bullet (bullet)}
+								<div class="public-page__mini-link public-page__mini-link--static">
+									<span>{bullet}</span>
+								</div>
+							{/each}
 						</div>
+						<a href={`${base}/docs/${entry.slug}`} class="btn btn-secondary">Open guide</a>
 					</article>
 				{/each}
 			</div>
 		</section>
 
 		<section class="public-page__section">
-			<div class="public-page__band public-page__band--accent">
+			<div class="public-page__band">
 				<div class="public-page__band-copy">
 					<p class="public-page__eyebrow">Repository docs</p>
-					<h2 class="public-page__section-title">Repository Docs</h2>
+					<h2 class="public-page__section-title">Repository docs and adjacent surfaces</h2>
 					<p class="public-page__section-subtitle">
-						Deployment and runbook documentation is maintained in the project repository.
+						Use GitHub for full runbooks and implementation notes. Use `proof` and `resources` for
+						evaluation and rollout conversations.
 					</p>
 				</div>
 				<div class="public-page__actions-row">
@@ -122,6 +166,8 @@
 					>
 						Browse GitHub Docs
 					</a>
+					<a href={`${base}/proof`} class="btn btn-secondary">Open Proof Pack</a>
+					<a href={`${base}/resources`} class="btn btn-secondary">Open Resources</a>
 				</div>
 			</div>
 		</section>

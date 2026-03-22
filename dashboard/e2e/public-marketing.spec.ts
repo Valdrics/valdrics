@@ -1,6 +1,55 @@
 import { expect, test } from '@playwright/test';
+import { enableAuthenticatedSession } from './support/e2eAuth';
 
 const BASE_URL = process.env.DASHBOARD_URL || 'http://localhost:4173';
+
+async function attachSecurityGuards(page: Parameters<typeof test>[0]['page']) {
+	await page.addInitScript(() => {
+		(
+			window as Window & {
+				__valdricsSecurityPolicyViolations?: { directive: string; blockedURI: string }[];
+			}
+		).__valdricsSecurityPolicyViolations = [];
+		window.addEventListener('securitypolicyviolation', (event) => {
+			(
+				window as Window & {
+					__valdricsSecurityPolicyViolations?: { directive: string; blockedURI: string }[];
+				}
+			).__valdricsSecurityPolicyViolations?.push({
+				directive: event.violatedDirective,
+				blockedURI: event.blockedURI
+			});
+		});
+	});
+
+	const consoleErrors: string[] = [];
+	page.on('console', (message) => {
+		if (message.type() !== 'error') return;
+		if (
+			/content security policy|securitypolicyviolation|refused to apply inline/i.test(
+				message.text()
+			)
+		) {
+			consoleErrors.push(message.text());
+		}
+	});
+
+	return {
+		async assertClean() {
+			const securityPolicyViolations = await page.evaluate(() => {
+				return (
+					(
+						window as Window & {
+							__valdricsSecurityPolicyViolations?: { directive: string; blockedURI: string }[];
+						}
+					).__valdricsSecurityPolicyViolations ?? []
+				);
+			});
+			expect(securityPolicyViolations).toEqual([]);
+			expect(consoleErrors).toEqual([]);
+		}
+	};
+}
 
 async function assertPublicRoute(
 	page: Parameters<typeof test>[0]['page'],
@@ -80,6 +129,7 @@ async function openMobileMenu(page: Parameters<typeof test>[0]['page']) {
 
 test.describe('Public marketing smoke (desktop)', () => {
 	test('emits canonical and robots metadata for public and auth routes', async ({ page }) => {
+		const security = await attachSecurityGuards(page);
 		await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
 		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${BASE_URL}/`);
 		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow');
@@ -131,6 +181,8 @@ test.describe('Public marketing smoke (desktop)', () => {
 			);
 			await expect(page.locator('script[type="application/ld+json"]').first()).toBeAttached();
 		}
+
+		await security.assertClean();
 	});
 
 	test('covers landing, pricing, docs, api docs, and status navigation', async ({
@@ -148,7 +200,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 		const primaryCta = page
 			.getByRole('link', { name: /start free|book executive briefing/i })
 			.first();
-		await expect(primaryCta).toHaveAttribute('href', '/auth/login');
+		await expect(primaryCta).toHaveAttribute('href', /\/auth\/login(\?.*)?$/);
 
 		const footer = page.getByRole('contentinfo');
 		await footer.getByRole('link', { name: /documentation/i }).click();
@@ -169,7 +221,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await page.goto(`${BASE_URL}/pricing`);
 		await page.waitForLoadState('networkidle');
 		await expect(
-			page.getByRole('heading', { level: 1, name: /simple, transparent pricing/i })
+			page.getByRole('heading', { level: 1, name: /pricing that stays simple/i })
 		).toBeVisible();
 		const switchButton = page.getByRole('switch', { name: /toggle billing cycle/i });
 		await switchButton.scrollIntoViewIfNeeded();
@@ -182,9 +234,36 @@ test.describe('Public marketing smoke (desktop)', () => {
 		});
 	});
 
+	test('uses a local-vs-USD currency toggle and persists an explicit USD choice into the ROI planner', async ({
+		page,
+		context
+	}) => {
+		await goToLanding(page);
+
+		const simulatorCurrency = page
+			.locator('#simulator')
+			.getByRole('group', { name: /display currency/i });
+		await expect(simulatorCurrency).toBeVisible();
+		const usdButton = simulatorCurrency.getByRole('button', { name: /usd/i });
+		await expect(usdButton).toBeVisible();
+		await expect(page.locator('#hero')).toContainText(/first workflow typically live/i);
+
+		await usdButton.click();
+		await expect(usdButton).toHaveAttribute('aria-pressed', 'true');
+		await enableAuthenticatedSession(context);
+		await page.goto(`${BASE_URL}/roi-planner`, { waitUntil: 'domcontentloaded' });
+		await expect(
+			page.getByRole('heading', { level: 1, name: /roi planner workspace/i })
+		).toBeVisible();
+		await expect(
+			page.locator('#roi-planner').getByRole('button', { name: /usd/i })
+		).toHaveAttribute('aria-pressed', 'true');
+	});
+
 	test('keeps public header, resources, and hero CTAs on working destinations', async ({
 		page
 	}) => {
+		const security = await attachSecurityGuards(page);
 		await goToLanding(page);
 		const header = page.locator('header');
 
@@ -193,15 +272,11 @@ test.describe('Public marketing smoke (desktop)', () => {
 
 		await goToLanding(page);
 		await header.getByRole('link', { name: /^pricing$/i }).click();
-		await assertPublicRoute(page, '/pricing', /simple, transparent pricing/i);
+		await assertPublicRoute(page, '/pricing', /pricing that stays simple/i);
 
 		await goToLanding(page);
 		await header.getByRole('link', { name: /^enterprise$/i }).click();
-		await assertPublicRoute(
-			page,
-			'/enterprise',
-			/control cloud and software economics with procurement-grade confidence/i
-		);
+		await assertPublicRoute(page, '/enterprise', /enterprise review that stays clear/i);
 
 		await goToLanding(page);
 		await (await openResourcesMenu(page))
@@ -215,7 +290,11 @@ test.describe('Public marketing smoke (desktop)', () => {
 
 		await goToLanding(page);
 		await (await openResourcesMenu(page)).getByRole('menuitem', { name: /^proof pack$/i }).click();
-		await assertPublicRoute(page, '/proof', /executive and technical proof for buyer diligence/i);
+		await assertPublicRoute(page, '/proof', /proof surfaces for buyer diligence/i);
+
+		await goToLanding(page);
+		await (await openResourcesMenu(page)).getByRole('menuitem', { name: /^about$/i }).click();
+		await assertPublicRoute(page, '/about', /meet the team behind valdrics/i);
 
 		await goToLanding(page);
 		await (await openResourcesMenu(page)).getByRole('menuitem', { name: /^insights$/i }).click();
@@ -226,11 +305,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 			.locator('.public-nav-secondary')
 			.getByRole('link', { name: /^enterprise path$/i })
 			.click();
-		await assertPublicRoute(
-			page,
-			'/enterprise',
-			/control cloud and software economics with procurement-grade confidence/i
-		);
+		await assertPublicRoute(page, '/enterprise', /enterprise review that stays clear/i);
 
 		await goToLanding(page);
 		await header
@@ -242,7 +317,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await goToLanding(page);
 		const hero = page.locator('#hero');
 		await hero.getByRole('link', { name: /see pricing/i }).click();
-		await assertPublicRoute(page, '/pricing', /simple, transparent pricing/i);
+		await assertPublicRoute(page, '/pricing', /pricing that stays simple/i);
 
 		await goToLanding(page);
 		await hero.getByRole('link', { name: /start free|book executive briefing/i }).click();
@@ -257,6 +332,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 	});
 
 	test('keeps proof, pricing, trust, and footer CTAs on working destinations', async ({ page }) => {
+		const security = await attachSecurityGuards(page);
 		await goToLanding(page);
 		const simulator = page.locator('#simulator');
 		await simulator.getByRole('link', { name: /review methodology/i }).click();
@@ -277,46 +353,35 @@ test.describe('Public marketing smoke (desktop)', () => {
 
 		await goToLanding(page);
 		const plans = page.locator('#plans');
-		await plans.getByRole('link', { name: /start on free tier/i }).click();
+		await plans.getByRole('link', { name: /start free workspace/i }).click();
 		await expect(page).toHaveURL(/\/auth\/login(\?.*plan=free.*)?$/);
 
-		for (const label of [/^start with starter$/i, /^start with growth$/i, /^start with pro$/i]) {
-			await goToLanding(page);
-			await page.locator('#plans').getByRole('link', { name: label }).click();
-			await expect(page).toHaveURL(/\/auth\/login(\?.*plan=.*)?$/);
-		}
+		await goToLanding(page);
+		await page
+			.locator('#plans')
+			.getByRole('link', { name: /see growth on pricing/i })
+			.click();
+		await assertPublicRoute(page, '/pricing', /pricing that stays simple/i);
 
 		await goToLanding(page);
-		await plans.getByRole('link', { name: /view full pricing/i }).click();
-		await assertPublicRoute(page, '/pricing', /simple, transparent pricing/i);
+		await page
+			.locator('#plans')
+			.getByRole('link', { name: /review pro details/i })
+			.click();
+		await assertPublicRoute(page, '/pricing', /pricing that stays simple/i);
 
 		await goToLanding(page);
-		await plans.getByRole('link', { name: /^open enterprise path$/i }).click();
-		await assertPublicRoute(
-			page,
-			'/enterprise',
-			/control cloud and software economics with procurement-grade confidence/i
-		);
+		await plans.getByRole('link', { name: /see detailed pricing/i }).click();
+		await assertPublicRoute(page, '/pricing', /pricing that stays simple/i);
+
+		await goToLanding(page);
+		await plans.getByRole('link', { name: /enterprise review/i }).click();
+		await assertPublicRoute(page, '/enterprise', /enterprise review that stays clear/i);
 
 		await goToLanding(page);
 		const trust = page.locator('#trust');
-		const accessChecklistHref = await trust
-			.getByRole('link', {
-				name: /access control & compliance checklist|control and access checklist/i
-			})
-			.getAttribute('href');
-		expect(accessChecklistHref || '').toMatch(/resources\/global-finops-compliance-workbook\.md$/);
-		if (accessChecklistHref) {
-			await assertDownloadEndpoint(page, accessChecklistHref, /text\/markdown|text\/plain/i);
-		}
-
-		await goToLanding(page);
 		await trust.getByRole('link', { name: /^open enterprise path$/i }).click();
-		await assertPublicRoute(
-			page,
-			'/enterprise',
-			/control cloud and software economics with procurement-grade confidence/i
-		);
+		await assertPublicRoute(page, '/enterprise', /enterprise review that stays clear/i);
 
 		await goToLanding(page);
 		const onePagerHref = await trust
@@ -328,7 +393,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 		}
 
 		await goToLanding(page);
-		await trust.getByRole('link', { name: /book validation briefing/i }).click();
+		await trust.getByRole('link', { name: /request validation briefing/i }).click();
 		await expect(page).toHaveURL(/\/talk-to-sales(\?.*)?$/);
 		await expect(page).toHaveURL(/source=trust_validation/);
 		await expect(page).toHaveURL(/intent=request_validation_briefing/);
@@ -336,21 +401,18 @@ test.describe('Public marketing smoke (desktop)', () => {
 
 		const footerCases = [
 			{ label: /documentation/i, type: 'route', path: '/docs', heading: /documentation/i },
-			{ label: /api reference/i, type: 'route', path: '/docs/api', heading: /api reference/i },
-			{ label: /^resources$/i, type: 'route', path: '/resources', heading: /resources/i },
 			{
 				label: /^enterprise$/i,
 				type: 'route',
 				path: '/enterprise',
-				heading: /control cloud and software economics with procurement-grade confidence/i
+				heading: /enterprise review that stays clear/i
 			},
 			{
 				label: /^proof pack$/i,
 				type: 'route',
 				path: '/proof',
-				heading: /executive and technical proof for buyer diligence/i
+				heading: /proof surfaces for buyer diligence/i
 			},
-			{ label: /^insights$/i, type: 'route', path: '/insights', heading: /insights/i },
 			{
 				label: /^talk to sales$/i,
 				type: 'route',
@@ -361,7 +423,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 				label: /^pricing$/i,
 				type: 'route',
 				path: '/pricing',
-				heading: /simple, transparent pricing/i
+				heading: /pricing that stays simple/i
 			},
 			{ label: /^privacy$/i, type: 'route', path: '/privacy', heading: /privacy policy/i },
 			{ label: /^terms$/i, type: 'route', path: '/terms', heading: /terms of service/i },
@@ -391,6 +453,8 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await expect(
 			footer.getByRole('link', { name: /security contact security@valdrics.com/i })
 		).toHaveAttribute('href', /^mailto:security@valdrics\.com$/i);
+
+		await security.assertClean();
 	});
 
 	test('public content slug routes and enterprise intake destinations stay operational', async ({
@@ -408,6 +472,11 @@ test.describe('Public marketing smoke (desktop)', () => {
 			/from alert to approved action/i
 		);
 		await assertPublicRoute(page, '/proof/safe-access-model', /safe access model/i);
+		await assertPublicRoute(
+			page,
+			'/proof/deployment-and-data-residency',
+			/deployment and data residency review/i
+		);
 
 		await page.goto(`${BASE_URL}/enterprise`);
 		await page.getByRole('link', { name: /request enterprise briefing/i }).click();
@@ -436,6 +505,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await page.getByLabel(/work email/i).fill('buyer@example.com');
 		await page.getByLabel(/company/i).fill('Example Inc');
 		await page.getByLabel(/role/i).fill('VP Platform');
+		await page.getByLabel(/buyer region/i).selectOption('United States');
 		await page.getByLabel(/cloud and saas scope/i).fill('AWS and SaaS');
 		await page.getByRole('button', { name: /send inquiry/i }).click();
 
@@ -445,6 +515,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 			email: 'buyer@example.com',
 			company: 'Example Inc',
 			role: 'VP Platform',
+			buyerRegion: 'United States',
 			deploymentScope: 'AWS and SaaS',
 			utmSource: 'linkedin',
 			utmMedium: 'paid',
@@ -481,7 +552,7 @@ test.describe('Public marketing smoke (mobile)', () => {
 		await expect(landingHeading).toContainText(
 			/cloud|spend|governed action|owner-routed action|margin/i
 		);
-		await expect(page.locator('#capabilities')).toBeVisible();
+		await expect(page.locator('#product')).toBeVisible();
 		await expect(page.locator('#simulator')).toBeVisible();
 		await expect(page.locator('#plans')).toBeVisible();
 		await expect(page.locator('#trust')).toBeVisible();
@@ -498,11 +569,7 @@ test.describe('Public marketing smoke (mobile)', () => {
 	test('mobile menu links resolve key landing and route destinations', async ({ page }) => {
 		await goToLanding(page);
 		await (await openMobileMenu(page)).getByRole('link', { name: /^enterprise path$/i }).click();
-		await assertPublicRoute(
-			page,
-			'/enterprise',
-			/control cloud and software economics with procurement-grade confidence/i
-		);
+		await assertPublicRoute(page, '/enterprise', /enterprise review that stays clear/i);
 
 		await goToLanding(page);
 		await (await openMobileMenu(page)).getByRole('link', { name: /^start free$/i }).click();
@@ -514,15 +581,11 @@ test.describe('Public marketing smoke (mobile)', () => {
 
 		await goToLanding(page);
 		await (await openMobileMenu(page)).getByRole('link', { name: /^pricing$/i }).click();
-		await assertPublicRoute(page, '/pricing', /simple, transparent pricing/i);
+		await assertPublicRoute(page, '/pricing', /pricing that stays simple/i);
 
 		await goToLanding(page);
 		await (await openMobileMenu(page)).getByRole('link', { name: /^enterprise$/i }).click();
-		await assertPublicRoute(
-			page,
-			'/enterprise',
-			/control cloud and software economics with procurement-grade confidence/i
-		);
+		await assertPublicRoute(page, '/enterprise', /enterprise review that stays clear/i);
 
 		await goToLanding(page);
 		await (await openMobileMenu(page)).getByRole('link', { name: /^resources$/i }).click();

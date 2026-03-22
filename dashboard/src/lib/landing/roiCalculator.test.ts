@@ -4,6 +4,9 @@ import {
 	calculateLandingRoi,
 	normalizeLandingRoiInputs,
 	formatCurrencyAmount,
+	convertUsdAmount,
+	normalizeSupportedCurrencyCode,
+	getCurrencyMetadata,
 	detectLocalCurrency,
 	detectCurrencyFromCountryCode
 } from './roiCalculator';
@@ -58,6 +61,14 @@ describe('roiCalculator', () => {
 	});
 
 	describe('formatCurrencyAmount', () => {
+		it('converts USD-base amounts before formatting', () => {
+			expect(convertUsdAmount(1000, 'USD')).toBe(1000);
+			expect(convertUsdAmount(1000, 'EUR')).toBe(920);
+			expect(convertUsdAmount(1000, 'GBP')).toBe(790);
+			expect(convertUsdAmount(1000, 'NGN')).toBe(1580000);
+			expect(convertUsdAmount(1000, 'CNY')).toBe(7200);
+		});
+
 		it('formats USD correctly', () => {
 			expect(formatCurrencyAmount(1000, 'USD')).toMatch(/\$1,000/);
 			expect(formatCurrencyAmount(0, 'USD')).toMatch(/\$0/);
@@ -67,32 +78,44 @@ describe('roiCalculator', () => {
 		it('formats EUR correctly', () => {
 			const result = formatCurrencyAmount(1000, 'EUR');
 			expect(result).toContain('€');
-			expect(result).toMatch(/1,000/);
+			expect(result).toMatch(/920/);
 		});
 
 		it('formats GBP correctly', () => {
 			const result = formatCurrencyAmount(1000, 'GBP');
 			expect(result).toContain('£');
-			expect(result).toMatch(/1,000/);
+			expect(result).toMatch(/790/);
 		});
 
 		it('formats NGN correctly', () => {
 			const result = formatCurrencyAmount(1000, 'NGN');
-			// Some environments return '₦1,000', others return 'NGN 1,000'
-			expect(result).toMatch(/(₦|NGN).*1,000/);
+			expect(result).toMatch(/(₦|NGN)/);
+			expect(result.replace(/[^\d]/g, '')).toContain('1580000');
+		});
+
+		it('formats CNY correctly', () => {
+			const result = formatCurrencyAmount(1000, 'CNY');
+			expect(result).toMatch(/(¥|CN¥|CNY)/);
+			expect(result.replace(/[^\d]/g, '')).toContain('7200');
 		});
 
 		it('defaults to USD if no currency is provided', () => {
 			expect(formatCurrencyAmount(1000)).toMatch(/\$1,000/);
 		});
 
-		it('handles invalid currency codes by falling back to currency code display', () => {
-			// Intl.NumberFormat might throw or display code depending on environment
-			// Our implementation in roiCalculator.ts uses a try/catch block if needed?
-			// Let's check roiCalculator.ts implementation again.
+		it('handles invalid currency codes by falling back to USD', () => {
 			expect(() => formatCurrencyAmount(1000, 'INVALID')).not.toThrow();
 			const result = formatCurrencyAmount(1000, 'INVALID');
-			expect(result).toMatch(/INVALID/);
+			expect(result).toMatch(/\$1,000/);
+		});
+
+		it('normalizes supported currency metadata deterministically', () => {
+			expect(normalizeSupportedCurrencyCode('gbp')).toBe('GBP');
+			expect(normalizeSupportedCurrencyCode('invalid')).toBe('USD');
+			expect(getCurrencyMetadata('cny')).toMatchObject({
+				code: 'CNY',
+				symbol: '¥'
+			});
 		});
 	});
 
@@ -113,6 +136,10 @@ describe('roiCalculator', () => {
 			expect(detectLocalCurrency({ locales: ['en-GB'], timeZone: '' })).toBe('GBP');
 		});
 
+		it('detects CNY from China timezone hints', () => {
+			expect(detectLocalCurrency({ timeZone: 'Asia/Shanghai' })).toBe('CNY');
+		});
+
 		it('falls back to USD for unsupported locales and timezones', () => {
 			expect(detectLocalCurrency({ locales: ['en-ZA'], timeZone: 'Africa/Johannesburg' })).toBe(
 				'USD'
@@ -125,6 +152,7 @@ describe('roiCalculator', () => {
 			expect(detectCurrencyFromCountryCode('ng')).toBe('NGN');
 			expect(detectCurrencyFromCountryCode('GB')).toBe('GBP');
 			expect(detectCurrencyFromCountryCode('de')).toBe('EUR');
+			expect(detectCurrencyFromCountryCode('cn')).toBe('CNY');
 		});
 
 		it('returns null for unsupported or invalid country codes', () => {

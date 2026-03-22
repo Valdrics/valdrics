@@ -31,8 +31,25 @@ export const SUPPORTED_CURRENCIES = Object.freeze([
 	{ code: 'USD', label: 'USD ($)', symbol: '$' },
 	{ code: 'EUR', label: 'EUR (€)', symbol: '€' },
 	{ code: 'GBP', label: 'GBP (£)', symbol: '£' },
-	{ code: 'NGN', label: 'NGN (₦)', symbol: '₦' }
+	{ code: 'NGN', label: 'NGN (₦)', symbol: '₦' },
+	{ code: 'CNY', label: 'CNY (¥)', symbol: '¥' }
 ]);
+
+const CURRENCY_LOCALES: Record<string, string> = Object.freeze({
+	USD: 'en-US',
+	EUR: 'de-DE',
+	GBP: 'en-GB',
+	NGN: 'en-NG',
+	CNY: 'zh-CN'
+});
+
+const DISPLAY_FX_RATES_FROM_USD: Record<string, number> = Object.freeze({
+	USD: 1,
+	EUR: 0.92,
+	GBP: 0.79,
+	NGN: 1580,
+	CNY: 7.2
+});
 
 const EURO_REGION_CODES = new Set([
 	'AT',
@@ -75,6 +92,7 @@ function currencyFromRegion(region: string | null): string | null {
 	if (!region) return null;
 	if (region === 'NG') return 'NGN';
 	if (region === 'GB') return 'GBP';
+	if (region === 'CN') return 'CNY';
 	if (EURO_REGION_CODES.has(region)) return 'EUR';
 	return null;
 }
@@ -93,6 +111,7 @@ function currencyFromTimeZone(timeZone: string): string | null {
 	if (!normalized) return null;
 	if (normalized === 'Europe/London') return 'GBP';
 	if (normalized === 'Africa/Lagos') return 'NGN';
+	if (normalized === 'Asia/Shanghai') return 'CNY';
 	if (normalized.startsWith('Europe/')) return 'EUR';
 	return null;
 }
@@ -154,25 +173,47 @@ function roundCurrency(value: number): number {
 	return Math.round(value * 100) / 100;
 }
 
+export function normalizeSupportedCurrencyCode(currencyCode: string | null | undefined): string {
+	const normalized = String(currencyCode ?? '')
+		.trim()
+		.toUpperCase();
+	return SUPPORTED_CURRENCIES.some((currency) => currency.code === normalized) ? normalized : 'USD';
+}
+
+export function getCurrencyMetadata(currencyCode: string | null | undefined) {
+	const normalized = normalizeSupportedCurrencyCode(currencyCode);
+	return (
+		SUPPORTED_CURRENCIES.find((currency) => currency.code === normalized) ?? SUPPORTED_CURRENCIES[0]
+	);
+}
+
+export function convertUsdAmount(amountUsd: number, currencyCode: string = 'USD'): number {
+	const normalizedCurrencyCode = normalizeSupportedCurrencyCode(currencyCode);
+	const fxRate = DISPLAY_FX_RATES_FROM_USD[normalizedCurrencyCode] ?? 1;
+	return roundCurrency((Number.isFinite(amountUsd) ? amountUsd : 0) * fxRate);
+}
+
 /**
- * Deterministically formats currency values based on supported FX Engine locales.
- * Defaults to USD. Fallbacks properly if an unknown currency is passed.
+ * Deterministically formats USD-based model values into the selected display currency.
+ * Public ROI display uses indicative FX for comparison and can always be toggled back to USD.
  *
  * Supported currencies reflect the backend ExchangeRateService targets.
  */
-export function formatCurrencyAmount(amount: number, currencyCode: string = 'USD'): string {
-	const safeAmount = Number.isFinite(amount) ? amount : 0;
+export function formatCurrencyAmount(amountUsd: number, currencyCode: string = 'USD'): string {
+	const normalizedCurrencyCode = normalizeSupportedCurrencyCode(currencyCode);
+	const safeAmount = convertUsdAmount(amountUsd, normalizedCurrencyCode);
+	const locale = CURRENCY_LOCALES[normalizedCurrencyCode] ?? 'en-US';
 
 	try {
-		return new Intl.NumberFormat('en-US', {
+		return new Intl.NumberFormat(locale, {
 			style: 'currency',
-			currency: currencyCode,
+			currency: normalizedCurrencyCode,
 			maximumFractionDigits: 0,
 			minimumFractionDigits: 0
 		}).format(safeAmount);
 	} catch (e) {
 		// Fallback for unsupported currency codes, deterministic
-		return `${currencyCode} ${safeAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
+		return `${normalizedCurrencyCode} ${safeAmount.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 	}
 }
 

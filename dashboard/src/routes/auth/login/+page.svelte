@@ -381,7 +381,7 @@
 		</div>
 
 		<!-- Footer -->
-		<p class="text-center text-xs text-ink-200 mt-6 stagger-enter" style="animation-delay: 100ms;">
+		<p class="auth-login-footer text-center text-xs text-ink-200 mt-6 stagger-enter">
 			By continuing, you agree to our
 			<a href={`${base}/terms`} class="text-ink-100 underline hover:text-accent-400">Terms</a>
 			and
@@ -407,6 +407,9 @@
 	}
 	.bg-success-500\/10 {
 		background-color: rgb(16 185 129 / 0.1);
+	}
+	.auth-login-footer {
+		animation-delay: 100ms;
 	}
 	.border-danger-500\/30 {
 		border-color: rgb(244 63 94 / 0.3);

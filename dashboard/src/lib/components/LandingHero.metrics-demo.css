@@ -180,3 +180,24 @@
 	border-color: rgb(6 182 212 / 0.35);
 	color: var(--color-accent-400);
 }
+
+/* Landing refresh 2026-03-21 */
+.landing-demo-progress {
+	display: block;
+	height: 100%;
+	width: 0;
+	background: linear-gradient(90deg, var(--color-accent-400), var(--color-success-400));
+	transition: width var(--duration-fast) var(--ease-out);
+}
+
+.landing-demo-progress--pending {
+	width: 0;
+}
+
+.landing-demo-progress--active {
+	width: 62%;
+}
+
+.landing-demo-progress--complete {
+	width: 100%;
+}

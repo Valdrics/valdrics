@@ -28,11 +28,14 @@ test.describe('Landing visual snapshots', () => {
 
 		test('hero and core sections stay visually stable', async ({ page }) => {
 			await prepareStablePublicPage(page);
-			await expect(page.locator('.landing-hero')).toHaveScreenshot('landing-hero-desktop.png', {
-				animations: 'disabled',
-				caret: 'hide'
-			});
-			await expect(page.locator('#capabilities')).toHaveScreenshot('landing-hook-desktop.png', {
+			await expect(page.locator('.landing-public-hero')).toHaveScreenshot(
+				'landing-hero-desktop.png',
+				{
+					animations: 'disabled',
+					caret: 'hide'
+				}
+			);
+			await expect(page.locator('#product')).toHaveScreenshot('landing-product-desktop.png', {
 				animations: 'disabled',
 				caret: 'hide'
 			});
@@ -48,11 +51,14 @@ test.describe('Landing visual snapshots', () => {
 
 		test('hero and core sections stay visually stable', async ({ page }) => {
 			await prepareStablePublicPage(page);
-			await expect(page.locator('.landing-hero')).toHaveScreenshot('landing-hero-mobile.png', {
-				animations: 'disabled',
-				caret: 'hide'
-			});
-			await expect(page.locator('#capabilities')).toHaveScreenshot('landing-hook-mobile.png', {
+			await expect(page.locator('.landing-public-hero')).toHaveScreenshot(
+				'landing-hero-mobile.png',
+				{
+					animations: 'disabled',
+					caret: 'hide'
+				}
+			);
+			await expect(page.locator('#product')).toHaveScreenshot('landing-product-mobile.png', {
 				animations: 'disabled',
 				caret: 'hide'
 			});
@@ -101,7 +107,7 @@ if (runExpandedPublicVisuals) {
 				});
 
 				await prepareStablePublicPage(page, '/enterprise');
-				await expect(page.locator('.enterprise-shell')).toHaveScreenshot(
+				await expect(page.locator('.public-page')).toHaveScreenshot(
 					'public-enterprise-desktop.png',
 					{
 						animations: 'disabled',

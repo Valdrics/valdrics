@@ -41,4 +41,14 @@ describe('public content registry', () => {
 		);
 		expect(sitemapEntries.some((entry) => entry.path === '/docs/quick-start-workspace')).toBe(true);
 	});
+
+	it('keeps long-form public CTAs aligned to the live product section anchor', () => {
+		for (const entry of [
+			getPublicContentEntry('docs', 'owner-routing-and-approval-path'),
+			getPublicContentEntry('proof', 'identity-and-approval-controls'),
+			getPublicContentEntry('insights', 'from-alert-to-approved-action')
+		]) {
+			expect(entry?.primaryCta.href).toBe('/#product');
+		}
+	});
 });

@@ -12,12 +12,14 @@ const PUBLIC_ROUTES: readonly PublicRoute[] = [
 	{
 		path: '/',
 		mainHeading:
-			/govern spend without slowing delivery|one governed path from spend signal to action|turn spend signals into owner-routed action|one governed path from variance to action|approve spend-changing actions with evidence|one controlled path from anomaly to execution|protect margin with governed spend decisions|one governed path from variance to board-ready proof/i
+			/control cloud spend without slowing delivery|move from spend reports to accountable action|review spend-changing actions with context|protect margin with clearer spend decisions/i
 	},
 	{ path: '/docs', mainHeading: /documentation/i },
 	{ path: '/docs/quick-start-workspace', mainHeading: /quick start a valdrics workspace/i },
 	{ path: '/docs/technical-validation', mainHeading: /public capability validation summary/i },
+	{ path: '/about', mainHeading: /meet the team behind valdrics/i },
 	{ path: '/pricing' },
+	{ path: '/roi-planner' },
 	{ path: '/resources', mainHeading: /resources/i },
 	{ path: '/resources/executive-one-pager', mainHeading: /executive one-pager/i },
 	{ path: '/insights', mainHeading: /insights/i },
@@ -25,14 +27,19 @@ const PUBLIC_ROUTES: readonly PublicRoute[] = [
 		path: '/insights/from-alert-to-approved-action',
 		mainHeading: /from alert to approved action/i
 	},
-	{ path: '/proof', mainHeading: /executive and technical proof for buyer diligence/i },
+	{ path: '/proof', mainHeading: /proof surfaces for buyer diligence/i },
 	{ path: '/proof/safe-access-model', mainHeading: /safe access model/i },
 	{
+		path: '/proof/deployment-and-data-residency',
+		mainHeading: /deployment and data residency review/i
+	},
+	{
 		path: '/enterprise',
-		mainHeading: /control cloud and software economics with procurement-grade confidence/i
+		mainHeading: /enterprise review that stays clear/i
 	},
 	{ path: '/talk-to-sales', mainHeading: /talk to sales/i },
 	{ path: '/auth/login' },
+	{ path: '/status', mainHeading: /system status/i },
 	{ path: '/privacy' },
 	{ path: '/terms' }
 ] as const;

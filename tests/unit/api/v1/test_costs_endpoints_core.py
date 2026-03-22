@@ -1,3 +1,4 @@
+import inspect
 import uuid
 from datetime import date
 from decimal import Decimal
@@ -5,10 +6,63 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi.params import Depends
 from httpx import AsyncClient
 
-from app.shared.core.auth import CurrentUser, UserRole, get_current_user
+from app.modules.reporting.api.v1 import costs_core_endpoints, costs_http_routes_core
+from app.shared.core.auth import (
+    CurrentUser,
+    UserRole,
+    get_current_user,
+    get_current_user_with_db_context,
+    requires_role_with_db_context,
+)
 from app.shared.core.pricing import PricingTier
+
+
+def _override_reporting_auth(app: object, mock_user: CurrentUser) -> None:
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    app.dependency_overrides[get_current_user_with_db_context] = lambda: mock_user
+
+
+def _clear_reporting_auth_overrides(app: object) -> None:
+    app.dependency_overrides.pop(get_current_user, None)
+    app.dependency_overrides.pop(get_current_user_with_db_context, None)
+
+
+def _dependency_for(function: object, parameter_name: str) -> object:
+    default = inspect.signature(function).parameters[parameter_name].default
+    assert isinstance(default, Depends)
+    return default.dependency
+
+
+def test_cost_routes_bind_db_context_dependencies() -> None:
+    assert (
+        _dependency_for(costs_http_routes_core.get_costs, "current_user")
+        is get_current_user_with_db_context
+    )
+    assert (
+        _dependency_for(costs_http_routes_core.get_cost_breakdown, "current_user")
+        is get_current_user_with_db_context
+    )
+    assert (
+        _dependency_for(costs_http_routes_core.get_canonical_quality, "current_user")
+        is get_current_user_with_db_context
+    )
+    assert (
+        _dependency_for(costs_http_routes_core.get_cost_forecast, "current_user")
+        is get_current_user_with_db_context
+    )
+    assert (
+        _dependency_for(costs_http_routes_core.trigger_ingest, "current_user")
+        is requires_role_with_db_context("admin")
+    )
+    assert (
+        _dependency_for(costs_core_endpoints.get_costs, "current_user")
+        is get_current_user_with_db_context
+    )
+
+
 @pytest.mark.asyncio
 async def test_get_costs_and_breakdown(async_client: AsyncClient, app):
     tenant_id = uuid.uuid4()
@@ -21,7 +75,7 @@ async def test_get_costs_and_breakdown(async_client: AsyncClient, app):
         tier=PricingTier.STARTER,
     )
 
-    app.dependency_overrides[get_current_user] = lambda: mock_user
+    _override_reporting_auth(app, mock_user)
     try:
         with (
             patch(
@@ -50,7 +104,7 @@ async def test_get_costs_and_breakdown(async_client: AsyncClient, app):
             assert response.status_code == 200
             assert response.json()["services"] == []
     finally:
-        app.dependency_overrides.pop(get_current_user, None)
+        _clear_reporting_auth_overrides(app)
 
 
 @pytest.mark.asyncio
@@ -65,7 +119,7 @@ async def test_get_cost_attribution_summary(async_client: AsyncClient, app):
         tier=PricingTier.GROWTH,
     )
 
-    app.dependency_overrides[get_current_user] = lambda: mock_user
+    _override_reporting_auth(app, mock_user)
     try:
         with patch(
             "app.modules.reporting.domain.attribution_engine.AttributionEngine.get_allocation_summary",
@@ -88,7 +142,7 @@ async def test_get_cost_attribution_summary(async_client: AsyncClient, app):
             assert data["buckets"][0]["name"] == "Platform"
             assert mock_summary.await_count == 1
     finally:
-        app.dependency_overrides.pop(get_current_user, None)
+        _clear_reporting_auth_overrides(app)
 
 
 @pytest.mark.asyncio
@@ -103,7 +157,7 @@ async def test_get_cost_attribution_coverage(async_client: AsyncClient, app):
         tier=PricingTier.GROWTH,
     )
 
-    app.dependency_overrides[get_current_user] = lambda: mock_user
+    _override_reporting_auth(app, mock_user)
     try:
         with patch(
             "app.modules.reporting.domain.attribution_engine.AttributionEngine.get_allocation_coverage",
@@ -126,7 +180,7 @@ async def test_get_cost_attribution_coverage(async_client: AsyncClient, app):
             assert data["meets_target"] is True
             assert mock_coverage.await_count == 1
     finally:
-        app.dependency_overrides.pop(get_current_user, None)
+        _clear_reporting_auth_overrides(app)
 
 
 @pytest.mark.asyncio
@@ -141,7 +195,7 @@ async def test_get_canonical_quality_with_alert(async_client: AsyncClient, app):
         tier=PricingTier.STARTER,
     )
 
-    app.dependency_overrides[get_current_user] = lambda: mock_user
+    _override_reporting_auth(app, mock_user)
     try:
         with (
             patch(
@@ -176,7 +230,7 @@ async def test_get_canonical_quality_with_alert(async_client: AsyncClient, app):
             assert payload["alert_triggered"] is True
             assert mock_alert.await_count == 1
     finally:
-        app.dependency_overrides.pop(get_current_user, None)
+        _clear_reporting_auth_overrides(app)
 
 
 @pytest.mark.asyncio
@@ -193,7 +247,7 @@ async def test_get_canonical_quality_rejects_invalid_provider(
         tier=PricingTier.STARTER,
     )
 
-    app.dependency_overrides[get_current_user] = lambda: mock_user
+    _override_reporting_auth(app, mock_user)
     try:
         response = await async_client.get(
             "/api/v1/costs/canonical/quality",
@@ -206,7 +260,7 @@ async def test_get_canonical_quality_rejects_invalid_provider(
         assert response.status_code == 400
         assert "unsupported provider" in response.json()["error"].lower()
     finally:
-        app.dependency_overrides.pop(get_current_user, None)
+        _clear_reporting_auth_overrides(app)
 
 
 @pytest.mark.asyncio
@@ -221,7 +275,7 @@ async def test_get_cost_forecast_paths(async_client: AsyncClient, app):
         tier=PricingTier.STARTER,
     )
 
-    app.dependency_overrides[get_current_user] = lambda: mock_user
+    _override_reporting_auth(app, mock_user)
     try:
         # Insufficient records -> 400
         with patch(
@@ -254,7 +308,7 @@ async def test_get_cost_forecast_paths(async_client: AsyncClient, app):
             assert response.status_code == 200
             assert response.json()["forecast"] == [1, 2, 3]
     finally:
-        app.dependency_overrides.pop(get_current_user, None)
+        _clear_reporting_auth_overrides(app)
 
 
 @pytest.mark.asyncio
@@ -269,7 +323,7 @@ async def test_get_cost_anomalies_paths(async_client: AsyncClient, app):
         tier=PricingTier.GROWTH,
     )
 
-    app.dependency_overrides[get_current_user] = lambda: mock_user
+    _override_reporting_auth(app, mock_user)
     try:
         mock_item = MagicMock()
         mock_item.day = date(2026, 2, 12)
@@ -314,7 +368,7 @@ async def test_get_cost_anomalies_paths(async_client: AsyncClient, app):
         assert body["anomalies"][0]["severity"] == "high"
         assert mock_alert.await_count == 1
     finally:
-        app.dependency_overrides.pop(get_current_user, None)
+        _clear_reporting_auth_overrides(app)
 
 
 @pytest.mark.asyncio
@@ -327,7 +381,7 @@ async def test_get_cost_anomalies_requires_growth(async_client: AsyncClient, app
         tier=PricingTier.STARTER,
     )
 
-    app.dependency_overrides[get_current_user] = lambda: mock_user
+    _override_reporting_auth(app, mock_user)
     try:
         response = await async_client.get(
             "/api/v1/costs/anomalies",
@@ -336,7 +390,7 @@ async def test_get_cost_anomalies_requires_growth(async_client: AsyncClient, app
         assert response.status_code == 403
         assert "requires" in response.json()["error"].lower()
     finally:
-        app.dependency_overrides.pop(get_current_user, None)
+        _clear_reporting_auth_overrides(app)
 
 
 @pytest.mark.asyncio
@@ -351,7 +405,7 @@ async def test_analyze_costs_paths(async_client: AsyncClient, app):
         tier=PricingTier.PRO,
     )
 
-    app.dependency_overrides[get_current_user] = lambda: mock_user
+    _override_reporting_auth(app, mock_user)
     try:
         # No records -> fallback response
         with patch(
@@ -390,6 +444,5 @@ async def test_analyze_costs_paths(async_client: AsyncClient, app):
             assert mock_analyzer.analyze.await_args.kwargs["user_id"] == user_id
             assert "client_ip" in mock_analyzer.analyze.await_args.kwargs
     finally:
-        app.dependency_overrides.pop(get_current_user, None)
-
+        _clear_reporting_auth_overrides(app)
 

@@ -108,7 +108,7 @@ export const RAW_PUBLIC_CONTENT_DOCS = [
 		stage: 'validate',
 		readingMinutes: 6,
 		audiences: ['engineering', 'finance', 'platform'],
-		primaryCta: { label: 'See the Decision Loop', href: '/#signal-map' },
+		primaryCta: { label: 'See the Decision Loop', href: '/#product' },
 		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
 		sections: [
 			{

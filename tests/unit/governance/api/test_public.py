@@ -491,6 +491,7 @@ async def test_public_sales_inquiry_accepts_valid_payload(
                 "email": "buyer@example.com",
                 "company": "Example Inc",
                 "role": "FinOps lead",
+                "buyerRegion": "United States",
                 "teamSize": "21-50",
                 "deploymentScope": "AWS + Datadog",
                 "timeline": "this_quarter",
@@ -511,6 +512,7 @@ async def test_public_sales_inquiry_accepts_valid_payload(
     ).scalar_one()
     assert inquiry.email_hash == payload["emailHash"]
     assert inquiry.company == "Example Inc"
+    assert inquiry.buyer_region == "United States"
     assert inquiry.interest_area == "security_review"
     jobs = (
         await db.execute(
@@ -536,6 +538,7 @@ async def test_public_sales_inquiry_accepts_max_length_payload(
         "email": max_length_email,
         "company": "C" * 120,
         "role": "R" * 120,
+        "buyerRegion": "United Kingdom",
         "teamSize": "1000+",
         "deploymentScope": "D" * 200,
         "timeline": "evaluating",
@@ -565,6 +568,7 @@ async def test_public_sales_inquiry_accepts_max_length_payload(
     assert inquiry.email == payload["email"]
     assert inquiry.company == payload["company"]
     assert inquiry.role == payload["role"]
+    assert inquiry.buyer_region == payload["buyerRegion"]
     assert inquiry.team_size == payload["teamSize"]
     assert inquiry.deployment_scope == payload["deploymentScope"]
     assert inquiry.timeline == payload["timeline"]
@@ -680,6 +684,23 @@ async def test_public_sales_inquiry_honeypot_returns_accepted_without_persisting
     assert response.json()["accepted"] is True
     inquiries = (await db.execute(select(PublicSalesInquiry))).scalars().all()
     assert inquiries == []
+
+
+@pytest.mark.asyncio
+async def test_public_sales_inquiry_rejects_invalid_buyer_region(
+    async_client: AsyncClient,
+) -> None:
+    response = await async_client.post(
+        "/api/v1/public/marketing/talk-to-sales",
+        json={
+            "name": "Buyer One",
+            "email": "buyer@example.com",
+            "company": "Example Inc",
+            "buyerRegion": "Mars",
+        },
+    )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio

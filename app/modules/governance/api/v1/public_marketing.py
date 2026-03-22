@@ -64,6 +64,18 @@ class PublicSalesInquiryRequest(BaseModel):
     email: EmailStr
     company: str = Field(min_length=1, max_length=120)
     role: str | None = Field(default=None, max_length=120)
+    buyerRegion: (
+        Literal[
+            "United States",
+            "United Kingdom",
+            "Africa",
+            "Europe (non-UK)",
+            "Middle East",
+            "Asia-Pacific",
+            "Other",
+        ]
+        | None
+    ) = None
     teamSize: (
         Literal["1-5", "6-20", "21-50", "51-200", "201-1000", "1000+"] | None
     ) = None
@@ -164,6 +176,7 @@ def _normalized_public_sales_inquiry_payload(
         "email": str(payload.email).strip().lower(),
         "company": _normalize_optional_text(payload.company),
         "role": _normalize_optional_text(payload.role),
+        "buyerRegion": _normalize_optional_text(payload.buyerRegion),
         "teamSize": _normalize_optional_text(payload.teamSize),
         "deploymentScope": _normalize_optional_text(payload.deploymentScope),
         "timeline": _normalize_optional_text(payload.timeline),
@@ -187,6 +200,7 @@ def _build_public_sales_inquiry_fingerprint(
             "email",
             "company",
             "role",
+            "buyerRegion",
             "teamSize",
             "deploymentScope",
             "timeline",
@@ -328,6 +342,7 @@ async def public_sales_inquiry(
             email=email,
             company=normalized_payload["company"] or "",
             role=normalized_payload["role"],
+            buyer_region=normalized_payload["buyerRegion"],
             email_hash=email_hash,
             inquiry_fingerprint=fingerprint,
             team_size=normalized_payload["teamSize"],

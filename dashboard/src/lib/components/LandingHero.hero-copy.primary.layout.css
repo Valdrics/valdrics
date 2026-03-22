@@ -356,3 +356,193 @@
 		letter-spacing: 0.04em;
 	}
 }
+
+/* Public refresh 2026-03-21: lighter landing hero */
+.landing-copy--public {
+	max-width: none;
+	row-gap: 0.8rem;
+	justify-items: stretch;
+	text-align: left;
+}
+
+.landing-copy--public .landing-kicker {
+	justify-content: flex-start;
+	justify-self: start;
+	max-width: none;
+}
+
+.landing-copy--public .landing-kicker-text {
+	color: var(--color-ink-600);
+	text-shadow: none;
+}
+
+.landing-copy--public .landing-title {
+	max-width: 10.5ch;
+	margin: 0;
+	font-family: 'Space Grotesk', 'Sora', var(--font-sans);
+	font-size: clamp(2.4rem, 5vw, 4.6rem);
+	line-height: 0.94;
+	color: var(--color-ink-950);
+	text-shadow: none;
+}
+
+.landing-copy--public .landing-subtitle {
+	max-width: 34rem;
+	margin: 0;
+	font-size: clamp(1.02rem, 1.5vw, 1.2rem);
+	line-height: 1.62;
+	color: var(--color-ink-600);
+	text-shadow: none;
+}
+
+.landing-copy--public .landing-cta {
+	justify-content: flex-start;
+	justify-self: start;
+	margin-top: 0.2rem;
+}
+
+.landing-copy--public .landing-cta-primary {
+	box-shadow: 0 14px 28px rgb(8 126 164 / 0.18);
+}
+
+.landing-copy--public .landing-cta-secondary {
+	border-color: rgb(8 126 164 / 0.16);
+	background: rgb(255 255 255 / 0.9);
+	color: var(--color-ink-900);
+	box-shadow: none;
+}
+
+.landing-copy-points {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.85rem;
+	margin-top: 0.1rem;
+}
+
+.landing-copy-point {
+	padding: 0.95rem 1rem;
+	border-radius: 1rem;
+	border: 1px solid rgb(8 126 164 / 0.1);
+	background: rgb(255 255 255 / 0.88);
+}
+
+.landing-copy-point-title {
+	margin: 0;
+	font-size: 0.84rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: rgb(8 126 164);
+}
+
+.landing-copy-point-detail {
+	margin: 0.35rem 0 0;
+	font-size: 0.94rem;
+	line-height: 1.55;
+	color: var(--color-ink-600);
+}
+
+@media (max-width: 1023px) {
+	.landing-copy--public {
+		text-align: left;
+	}
+
+	.landing-copy-points {
+		grid-template-columns: 1fr;
+	}
+}
+
+@media (max-width: 640px) {
+	.landing-copy--public .landing-title {
+		max-width: 9.2ch;
+		font-size: clamp(2.1rem, 10vw, 3rem);
+	}
+
+	.landing-copy--public .landing-subtitle {
+		max-width: none;
+	}
+}
+
+/* Public refresh 2026-03-21b: calmer landing copy rhythm */
+.landing-copy--public {
+	row-gap: 0.75rem;
+}
+
+.landing-copy--public .landing-kicker {
+	gap: 0.65rem;
+}
+
+.landing-copy--public .landing-title {
+	max-width: 8.6ch;
+	font-size: clamp(2.7rem, 5vw, 4.9rem);
+	line-height: 0.9;
+	letter-spacing: -0.065em;
+}
+
+.landing-copy--public .landing-subtitle {
+	max-width: 32rem;
+	font-size: clamp(1rem, 1.35vw, 1.14rem);
+	line-height: 1.72;
+}
+
+.landing-copy-points {
+	gap: 0.7rem;
+}
+
+.landing-copy-point {
+	padding: 0.85rem 0.95rem;
+	border-radius: 0.95rem;
+	box-shadow: 0 12px 26px rgb(15 23 42 / 0.04);
+}
+
+.landing-copy-point-title {
+	font-size: 0.79rem;
+	letter-spacing: 0.1em;
+}
+
+.landing-copy-point-detail {
+	font-size: 0.9rem;
+	line-height: 1.48;
+}
+
+@media (max-width: 640px) {
+	.landing-copy--public .landing-title {
+		max-width: 8ch;
+		font-size: clamp(2.25rem, 10vw, 3.25rem);
+	}
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy--public .landing-kicker-text {
+	color: var(--color-ink-300);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy--public .landing-title {
+	color: var(--color-ink-50);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy--public .landing-subtitle {
+	color: var(--color-ink-300);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy--public .landing-cta-secondary {
+	border-color: rgb(255 255 255 / 0.14);
+	background: rgb(255 255 255 / 0.04);
+	color: var(--color-ink-50);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy--public .landing-cta-secondary:hover {
+	border-color: rgb(34 211 238 / 0.28);
+	background: rgb(34 211 238 / 0.14);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy-point {
+	border-color: rgb(255 255 255 / 0.08);
+	background:
+		radial-gradient(560px 200px at 18% 0%, rgb(18 158 192 / 0.16), transparent 54%),
+		linear-gradient(145deg, rgb(9 19 28 / 0.96), rgb(11 17 25 / 0.95));
+	box-shadow: 0 24px 56px rgb(4 11 17 / 0.22);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy-point-detail {
+	color: var(--color-ink-300);
+}

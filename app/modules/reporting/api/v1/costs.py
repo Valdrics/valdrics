@@ -88,7 +88,7 @@ from app.modules.reporting.domain.anomaly_detection import (
     dispatch_cost_anomaly_alerts,
 )
 from app.shared.analysis.forecaster import SymbolicForecaster
-from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.auth import CurrentUser, get_current_user_with_db_context
 from app.shared.core.config import get_settings
 from app.shared.core.notifications import NotificationDispatcher
 from app.shared.core.pricing import (
@@ -136,7 +136,7 @@ async def get_costs_root(
     end_date: date = Query(...),
     provider: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(get_current_user_with_db_context),
 ) -> Any:
     return await get_costs(
         response=response,

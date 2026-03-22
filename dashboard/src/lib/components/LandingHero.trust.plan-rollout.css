@@ -235,3 +235,9 @@
 	font-size: 0.93rem;
 	line-height: 1.45;
 }
+
+/* Landing refresh 2026-03-21 */
+.landing-plan-context__row--stacked {
+	grid-template-columns: 1fr;
+	gap: 0.28rem;
+}

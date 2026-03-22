@@ -48,6 +48,7 @@ describe('talk-to-sales proxy route', () => {
 						name: 'Buyer One',
 						email: 'buyer@example.com',
 						company: 'Example Inc',
+						buyerRegion: 'United States',
 						timeline: 'this_quarter',
 						interestArea: 'security_review'
 					},
@@ -67,6 +68,24 @@ describe('talk-to-sales proxy route', () => {
 			'content-type': 'application/json',
 			'x-turnstile-token': 'turnstile-token'
 		});
+	});
+
+	it('rejects invalid buyer-region values', async () => {
+		const response = await POST(
+			buildEvent({
+				request: buildRequest({
+					name: 'Buyer One',
+					email: 'buyer@example.com',
+					company: 'Example Inc',
+					buyerRegion: 'Mars'
+				})
+			})
+		);
+
+		expect(response.status).toBe(400);
+		const payload = await response.json();
+		expect(payload.ok).toBe(false);
+		expect(payload.error).toBe('invalid_payload');
 	});
 
 	it('rejects invalid inquiry payloads', async () => {

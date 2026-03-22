@@ -107,7 +107,7 @@ export const RAW_PUBLIC_CONTENT_INSIGHTS = [
 		stage: 'evaluate',
 		readingMinutes: 6,
 		audiences: ['engineering', 'finance', 'procurement'],
-		primaryCta: { label: 'See the Decision Loop', href: '/#signal-map' },
+		primaryCta: { label: 'See the Decision Loop', href: '/#product' },
 		secondaryCta: { label: 'Open Enterprise Path', href: '/enterprise' },
 		sections: [
 			{

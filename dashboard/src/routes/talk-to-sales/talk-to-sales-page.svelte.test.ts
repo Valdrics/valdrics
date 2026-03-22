@@ -57,6 +57,7 @@ describe('talk-to-sales page', () => {
 		expect(screen.getByLabelText(/name/i)).toBeTruthy();
 		expect(screen.getByLabelText(/work email/i)).toBeTruthy();
 		expect(screen.getByLabelText(/company/i)).toBeTruthy();
+		expect(screen.getByLabelText(/buyer region/i)).toBeTruthy();
 		expect(screen.getByRole('button', { name: /send inquiry/i })).toBeTruthy();
 		expect(
 			screen.getByRole('link', { name: /email instead/i }).getAttribute('href') || ''
@@ -81,6 +82,9 @@ describe('talk-to-sales page', () => {
 		await fireEvent.input(screen.getByLabelText(/company/i), {
 			target: { value: 'Example Inc' }
 		});
+		await fireEvent.change(screen.getByLabelText(/buyer region/i), {
+			target: { value: 'United States' }
+		});
 		await fireEvent.submit(document.getElementById('sales-inquiry-form') as HTMLFormElement);
 
 		await waitFor(() => {
@@ -88,6 +92,9 @@ describe('talk-to-sales page', () => {
 		});
 
 		const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+		expect(JSON.parse(String(init.body))).toMatchObject({
+			buyerRegion: 'United States'
+		});
 		expect(getTurnstileTokenMock).toHaveBeenCalledWith('public_sales_intake');
 		expect(init.headers).toMatchObject({
 			'content-type': 'application/json',
@@ -114,6 +121,9 @@ describe('talk-to-sales page', () => {
 		});
 		await fireEvent.input(screen.getByLabelText(/company/i), {
 			target: { value: 'Example Inc' }
+		});
+		await fireEvent.change(screen.getByLabelText(/buyer region/i), {
+			target: { value: 'United Kingdom' }
 		});
 		await fireEvent.submit(document.getElementById('sales-inquiry-form') as HTMLFormElement);
 

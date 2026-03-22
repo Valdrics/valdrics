@@ -4,6 +4,7 @@ import { readable } from 'svelte/store';
 import Page from './+page.svelte';
 
 vi.mock('$app/paths', () => ({
+	base: '',
 	assets: ''
 }));
 
@@ -26,5 +27,15 @@ describe('privacy page', () => {
 		expect(supportMailLink.getAttribute('href')).toBe('mailto:support@valdrics.com');
 		const securityMailLink = screen.getByRole('link', { name: /security@valdrics.com/i });
 		expect(securityMailLink.getAttribute('href')).toBe('mailto:security@valdrics.com');
+		expect(screen.getByRole('heading', { name: /enterprise privacy review path/i })).toBeTruthy();
+		expect(
+			screen.getByRole('link', { name: /deployment and residency proof/i }).getAttribute('href')
+		).toBe('/proof/deployment-and-data-residency');
+		expect(screen.getByRole('link', { name: /enterprise review path/i }).getAttribute('href')).toBe(
+			'/enterprise'
+		);
+		expect(screen.getByRole('link', { name: /talk to sales/i }).getAttribute('href')).toBe(
+			'/talk-to-sales'
+		);
 	});
 });

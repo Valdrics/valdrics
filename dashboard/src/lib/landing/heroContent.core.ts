@@ -10,31 +10,31 @@ export const HERO_ROLE_CONTEXT: Record<
 	}
 > = Object.freeze({
 	cto: {
-		controlTitle: 'Govern spend without slowing delivery.',
-		metricsTitle: 'One governed path from spend signal to action.',
+		controlTitle: 'Control cloud spend without slowing delivery.',
+		metricsTitle: 'A cleaner path from spend signal to action.',
 		subtitle:
-			'Valdrics routes cloud, SaaS, and software spend signals to owners, approvals, workflow execution, and exportable proof.',
+			'Valdrics gives finance and engineering one workflow for triage, approval, execution, and savings proof.',
 		primaryIntent: 'engineering_control'
 	},
 	finops: {
-		controlTitle: 'Turn spend signals into owner-routed action.',
-		metricsTitle: 'One governed path from variance to action.',
+		controlTitle: 'Move from spend reports to accountable action.',
+		metricsTitle: 'One shared path from variance to action.',
 		subtitle:
-			'Valdrics connects anomalies, chargeback, remediation, and savings proof so finance and engineering work from one governed decision path.',
+			'Valdrics connects anomalies, ownership, remediation, and proof so finance and engineering act from the same record.',
 		primaryIntent: 'finops_governance'
 	},
 	security: {
-		controlTitle: 'Approve spend-changing actions with evidence.',
+		controlTitle: 'Review spend-changing actions with context.',
 		metricsTitle: 'One controlled path from anomaly to execution.',
 		subtitle:
-			'Valdrics keeps policy checks, approval lineage, and decision evidence attached before spend-changing actions move.',
+			'Valdrics keeps policy checks, approval lineage, and decision evidence attached before cost-changing actions move.',
 		primaryIntent: 'security_governance'
 	},
 	cfo: {
-		controlTitle: 'Protect margin with governed spend decisions.',
+		controlTitle: 'Protect margin with clearer spend decisions.',
 		metricsTitle: 'One governed path from variance to board-ready proof.',
 		subtitle:
-			'Valdrics ties spend movement to accountable owners, approvals, and measurable proof before variance turns into board-level noise.',
+			'Valdrics ties spend movement to accountable owners, approvals, and measurable proof before variance turns into leadership noise.',
 		primaryIntent: 'executive_briefing'
 	}
 });
@@ -71,17 +71,18 @@ export const HERO_OUTCOME_CHIPS = Object.freeze([
 
 export const ABOVE_FOLD_TRUST_RAIL = Object.freeze([
 	{
-		title: 'Cloud + SaaS + software in one control layer',
-		detail: 'Cost, usage, policy, and remediation records stay in one governed operating path.'
+		title: 'Cloud, SaaS, and software in one place',
+		detail: 'Teams work from one operating record instead of reconciling separate tools.'
 	},
 	{
 		title: 'Read-only onboarding where supported',
 		detail:
-			'Read-only cloud roles are used where supported. Connector secrets stay encrypted at rest.'
+			'Read-only roles are used where supported, and connector secrets stay encrypted at rest.'
 	},
 	{
-		title: 'Approval trail and exportable proof',
-		detail: 'Decision history and export-ready records support finance, security, and buyer review.'
+		title: 'Proof ready for finance and procurement',
+		detail:
+			'Decision history and export-ready records stay available for review when buyers ask for them.'
 	}
 ]);
 

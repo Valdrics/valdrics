@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 from uuid import uuid4
 
 import pytest
@@ -156,15 +156,14 @@ async def test_get_prompt_returns_cached_prompt_without_reloading() -> None:
 @pytest.mark.asyncio
 async def test_load_system_prompt_falls_back_when_system_prompt_blank() -> None:
     analyzer = FinOpsAnalyzer(MagicMock())
-    loop = SimpleNamespace(
-        run_in_executor=AsyncMock(
-            return_value={"finops_analysis": {"system": "   "}}
-        )
-    )
 
     with (
         patch("os.path.exists", return_value=True),
-        patch("asyncio.get_running_loop", return_value=loop),
+        patch("builtins.open", mock_open(read_data="finops_analysis: {}")),
+        patch(
+            "app.shared.llm.analyzer.yaml.safe_load",
+            return_value={"finops_analysis": {"system": "   "}},
+        ),
     ):
         prompt = await analyzer._load_system_prompt_async()
 
@@ -174,20 +173,19 @@ async def test_load_system_prompt_falls_back_when_system_prompt_blank() -> None:
 @pytest.mark.asyncio
 async def test_load_system_prompt_sets_prompt_version_from_registry() -> None:
     analyzer = FinOpsAnalyzer(MagicMock())
-    loop = SimpleNamespace(
-        run_in_executor=AsyncMock(
+
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("builtins.open", mock_open(read_data="finops_analysis: {}")),
+        patch(
+            "app.shared.llm.analyzer.yaml.safe_load",
             return_value={
                 "finops_analysis": {
                     "version": "valdrics.finops.prompt.v1",
                     "system": "Use strict json output",
                 }
-            }
-        )
-    )
-
-    with (
-        patch("os.path.exists", return_value=True),
-        patch("asyncio.get_running_loop", return_value=loop),
+            },
+        ),
     ):
         prompt = await analyzer._load_system_prompt_async()
 
@@ -198,11 +196,14 @@ async def test_load_system_prompt_sets_prompt_version_from_registry() -> None:
 @pytest.mark.asyncio
 async def test_load_system_prompt_falls_back_when_executor_raises() -> None:
     analyzer = FinOpsAnalyzer(MagicMock())
-    loop = SimpleNamespace(run_in_executor=AsyncMock(side_effect=RuntimeError("boom")))
 
     with (
         patch("os.path.exists", return_value=True),
-        patch("asyncio.get_running_loop", return_value=loop),
+        patch("builtins.open", mock_open(read_data="finops_analysis: {}")),
+        patch(
+            "app.shared.llm.analyzer.yaml.safe_load",
+            side_effect=RuntimeError("boom"),
+        ),
     ):
         prompt = await analyzer._load_system_prompt_async()
 
@@ -212,11 +213,14 @@ async def test_load_system_prompt_falls_back_when_executor_raises() -> None:
 @pytest.mark.asyncio
 async def test_load_system_prompt_falls_back_when_registry_missing_finops_key() -> None:
     analyzer = FinOpsAnalyzer(MagicMock())
-    loop = SimpleNamespace(run_in_executor=AsyncMock(return_value={"other_prompt": {}}))
 
     with (
         patch("os.path.exists", return_value=True),
-        patch("asyncio.get_running_loop", return_value=loop),
+        patch("builtins.open", mock_open(read_data="other_prompt: {}")),
+        patch(
+            "app.shared.llm.analyzer.yaml.safe_load",
+            return_value={"other_prompt": {}},
+        ),
     ):
         prompt = await analyzer._load_system_prompt_async()
 

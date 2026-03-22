@@ -19,6 +19,7 @@ export const PUBLIC_PRIMARY_LINKS: readonly PublicNavLink[] = Object.freeze([
 
 export const PUBLIC_RESOURCES_DROPDOWN_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/resources', label: 'Resource Hub' },
+	{ href: '/about', label: 'About' },
 	{ href: '/docs', label: 'Docs' },
 	{ href: '/proof', label: 'Proof Pack' },
 	{ href: '/insights', label: 'Insights' }
@@ -39,14 +40,11 @@ export const PUBLIC_MOBILE_LINKS: readonly PublicNavLink[] = Object.freeze([
 
 export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/about', label: 'About' },
-	{ href: '/docs', label: 'Documentation' },
-	{ href: '/docs/api', label: 'API Reference' },
-	{ href: '/resources', label: 'Resources' },
-	{ href: '/enterprise', label: 'Enterprise' },
-	{ href: '/insights', label: 'Insights' },
-	{ href: '/proof', label: 'Proof Pack' },
-	{ href: '/talk-to-sales', label: 'Talk to Sales' },
 	{ href: '/pricing', label: 'Pricing' },
+	{ href: '/enterprise', label: 'Enterprise' },
+	{ href: '/proof', label: 'Proof Pack' },
+	{ href: '/docs', label: 'Documentation' },
+	{ href: '/talk-to-sales', label: 'Talk to Sales' },
 	{ href: '/privacy', label: 'Privacy' },
 	{ href: '/terms', label: 'Terms' },
 	{ href: '/status', label: 'Status' }
@@ -59,17 +57,17 @@ export const PUBLIC_SIGNAL_STRIP: readonly string[] = Object.freeze([
 ]);
 
 export const PUBLIC_FOOTER_BADGES: readonly string[] = Object.freeze([
-	'Cloud + SaaS + software',
-	'Owner-routed actions',
-	'Approval-ready workflows',
-	'Exportable decision proof'
+	'Spend governance',
+	'Owner routing',
+	'Approval trail',
+	'Review-ready exports'
 ]);
 
 export const PUBLIC_FOOTER_SUBTITLE =
-	'The governed operating layer for cloud, SaaS, and software spend. Valdrics turns signals into approved action and exportable proof.';
+	'Valdrics gives finance and engineering one operating layer for spend review, owner routing, approvals, and proof.';
 
 export const PUBLIC_FOOTER_CAPTION =
-	'Built for finance, engineering, and platform teams that need one system for ownership, approvals, remediation, and savings proof.';
+	'Designed for teams that want clearer spend decisions, cleaner rollout paths, and buyer-safe review surfaces.';
 
 export const PUBLIC_CONTACT_CHANNELS: readonly PublicContactChannel[] = Object.freeze([
 	{ label: 'Sales', email: 'sales@valdrics.com', href: 'mailto:sales@valdrics.com' },

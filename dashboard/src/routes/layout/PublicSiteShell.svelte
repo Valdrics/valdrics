@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { base } from '$app/paths';
-	import { page } from '$app/stores';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
+	import type { PublicTheme } from '$lib/public/publicTheme';
 	import {
 		PUBLIC_CONTACT_CHANNELS,
 		PUBLIC_FOOTER_BADGES,
@@ -15,9 +15,13 @@
 	} from '$lib/landing/publicNav';
 	import './layoutPublicNav.css';
 
+	type PublicTone = 'default' | 'landing';
+
 	interface Props {
 		currentYear: number;
 		toAppPath: (path: string) => string;
+		publicTheme: PublicTheme;
+		publicTone: PublicTone;
 		publicMenuOpen: boolean;
 		publicMenuPanel: HTMLDivElement | null;
 		publicMenuButton: HTMLButtonElement | null;
@@ -26,6 +30,7 @@
 		publicResourcesButton: HTMLButtonElement | null;
 		togglePublicMenu: () => void;
 		closePublicMenu: () => void;
+		togglePublicTheme: () => void;
 		togglePublicResourcesMenu: () => void;
 		closePublicResourcesMenu: () => void;
 		children: Snippet;
@@ -34,6 +39,8 @@
 	let {
 		currentYear,
 		toAppPath,
+		publicTheme,
+		publicTone,
 		publicMenuOpen = $bindable(),
 		publicMenuPanel = $bindable(),
 		publicMenuButton = $bindable(),
@@ -42,16 +49,18 @@
 		publicResourcesButton = $bindable(),
 		togglePublicMenu,
 		closePublicMenu,
+		togglePublicTheme,
 		togglePublicResourcesMenu,
 		closePublicResourcesMenu,
 		children
 	}: Props = $props();
 
-	const landingPath = `${base || ''}/`;
-	let publicTone = $derived($page.url.pathname === landingPath ? 'landing' : 'default');
+	const themeToggleLabel = (theme: PublicTheme) =>
+		theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
+	const themeToggleCopy = (theme: PublicTheme) => (theme === 'dark' ? 'Light mode' : 'Dark mode');
 </script>
 
-<div class="public-site-shell" data-public-tone={publicTone}>
+<div class="public-site-shell" data-public-tone={publicTone} data-public-theme={publicTheme}>
 	<header class="public-site-header">
 		<nav class="container public-top-nav mx-auto flex items-center justify-between gap-4 px-6 py-4">
 			<a
@@ -140,6 +149,55 @@
 			</div>
 
 			<div class="public-nav-secondary items-center gap-2">
+				<button
+					type="button"
+					class="public-theme-toggle"
+					aria-label={themeToggleLabel(publicTheme)}
+					aria-pressed={publicTheme === 'dark'}
+					title={themeToggleLabel(publicTheme)}
+					onclick={togglePublicTheme}
+				>
+					<span class="public-theme-toggle__icon" aria-hidden="true">
+						{#if publicTheme === 'dark'}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<circle cx="12" cy="12" r="4"></circle>
+								<path d="M12 2v2"></path>
+								<path d="M12 20v2"></path>
+								<path d="m4.93 4.93 1.41 1.41"></path>
+								<path d="m17.66 17.66 1.41 1.41"></path>
+								<path d="M2 12h2"></path>
+								<path d="M20 12h2"></path>
+								<path d="m6.34 17.66-1.41 1.41"></path>
+								<path d="m19.07 4.93-1.41 1.41"></path>
+							</svg>
+						{:else}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+							</svg>
+						{/if}
+					</span>
+					<span>{themeToggleCopy(publicTheme)}</span>
+				</button>
 				<a
 					href={toAppPath('/enterprise')}
 					class="btn btn-secondary text-sm px-4 py-2"
@@ -159,6 +217,55 @@
 			</div>
 
 			<div class="public-nav-mobile flex items-center gap-2">
+				<button
+					type="button"
+					class="public-theme-toggle public-theme-toggle--icon-only"
+					aria-label={themeToggleLabel(publicTheme)}
+					aria-pressed={publicTheme === 'dark'}
+					title={themeToggleLabel(publicTheme)}
+					onclick={togglePublicTheme}
+				>
+					<span class="public-theme-toggle__icon" aria-hidden="true">
+						{#if publicTheme === 'dark'}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<circle cx="12" cy="12" r="4"></circle>
+								<path d="M12 2v2"></path>
+								<path d="M12 20v2"></path>
+								<path d="m4.93 4.93 1.41 1.41"></path>
+								<path d="m17.66 17.66 1.41 1.41"></path>
+								<path d="M2 12h2"></path>
+								<path d="M20 12h2"></path>
+								<path d="m6.34 17.66-1.41 1.41"></path>
+								<path d="m19.07 4.93-1.41 1.41"></path>
+							</svg>
+						{:else}
+							<svg
+								xmlns="http://www.w3.org/2000/svg"
+								width="16"
+								height="16"
+								viewBox="0 0 24 24"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+								stroke-linecap="round"
+								stroke-linejoin="round"
+							>
+								<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+							</svg>
+						{/if}
+					</span>
+					<span class="sr-only">{themeToggleCopy(publicTheme)}</span>
+				</button>
 				<a
 					href={toAppPath('/auth/login')}
 					class="btn btn-primary public-nav-mobile-cta"
@@ -236,6 +343,54 @@
 							Start in a workspace, review pricing, or use the enterprise path when formal security
 							and procurement review is required.
 						</p>
+						<button
+							type="button"
+							class="public-theme-toggle public-theme-toggle--menu"
+							aria-label={themeToggleLabel(publicTheme)}
+							aria-pressed={publicTheme === 'dark'}
+							onclick={togglePublicTheme}
+						>
+							<span class="public-theme-toggle__icon" aria-hidden="true">
+								{#if publicTheme === 'dark'}
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<circle cx="12" cy="12" r="4"></circle>
+										<path d="M12 2v2"></path>
+										<path d="M12 20v2"></path>
+										<path d="m4.93 4.93 1.41 1.41"></path>
+										<path d="m17.66 17.66 1.41 1.41"></path>
+										<path d="M2 12h2"></path>
+										<path d="M20 12h2"></path>
+										<path d="m6.34 17.66-1.41 1.41"></path>
+										<path d="m19.07 4.93-1.41 1.41"></path>
+									</svg>
+								{:else}
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="16"
+										height="16"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="2"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+									>
+										<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"></path>
+									</svg>
+								{/if}
+							</span>
+							<span>{themeToggleCopy(publicTheme)}</span>
+						</button>
 					</div>
 					<div class="grid gap-2 text-sm text-ink-200 public-mobile-menu-links">
 						<a

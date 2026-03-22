@@ -1,6 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render } from '@testing-library/svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render } from '@testing-library/svelte';
 import LandingHeroView from './LandingHeroView.svelte';
+import type { LandingCurrencyCode } from '$lib/landing/currencyPreference';
 import { CLOUD_HOOK_STATES } from '$lib/landing/heroContent.core';
 import { REALTIME_SIGNAL_SNAPSHOTS } from '$lib/landing/realtimeSignalMap';
 
@@ -9,7 +10,11 @@ vi.mock('$app/paths', () => ({
 	base: ''
 }));
 
-function buildProps(sectionOrderVariant: 'problem_first' | 'workflow_first') {
+afterEach(() => {
+	cleanup();
+});
+
+function buildProps() {
 	const activeSnapshot = REALTIME_SIGNAL_SNAPSHOTS[0];
 	const activeSignalLane = activeSnapshot?.lanes[0];
 	if (!activeSnapshot || !activeSignalLane) {
@@ -28,12 +33,7 @@ function buildProps(sectionOrderVariant: 'problem_first' | 'workflow_first') {
 		secondaryCtaHref: '/pricing?source=hero_secondary',
 		primaryCtaHref: '/auth/login?intent=engineering_control',
 		secondaryCtaTelemetryValue: 'see_pricing',
-		ctaVariant: 'start_free' as const,
-		sectionOrderVariant,
 		cloudHookStates: CLOUD_HOOK_STATES,
-		activeHookState: CLOUD_HOOK_STATES[0],
-		hookStateIndex: 0,
-		onSelectHookState: vi.fn(),
 		activeSnapshot,
 		activeSignalLane,
 		signalMapInView: true,
@@ -57,7 +57,9 @@ function buildProps(sectionOrderVariant: 'problem_first' | 'workflow_first') {
 		scenarioWasteWithPct: 7,
 		scenarioWindowMonths: 12,
 		formatUsd: (amount: number) => `$${amount.toFixed(0)}`,
-		currencyCode: 'USD',
+		localCurrencyCode: 'USD' as LandingCurrencyCode,
+		currencyCode: 'USD' as LandingCurrencyCode,
+		onCurrencyCodeChange: vi.fn(),
 		onTrackScenarioAdjust: vi.fn(),
 		onScenarioWasteWithoutChange: vi.fn(),
 		onScenarioWasteWithChange: vi.fn(),
@@ -65,11 +67,11 @@ function buildProps(sectionOrderVariant: 'problem_first' | 'workflow_first') {
 		roiPlannerHref: '/auth/login?intent=roi_assessment',
 		freeTierCtaHref: '/pricing?plan=free',
 		buildPlanCtaHref: (planId: string) => `/pricing?plan=${planId}`,
-		plansEnterpriseHref: '/enterprise?source=plans_enterprise',
 		trustEnterpriseHref: '/enterprise?source=trust_enterprise',
 		aboutHref: '/about?source=trust_about',
 		docsHref: '/docs?source=trust_docs',
 		statusHref: '/status?source=trust_status',
+		proofHref: '/proof?source=trust_proof',
 		requestValidationBriefingHref:
 			'/talk-to-sales?source=trust_validation&intent=request_validation_briefing',
 		onePagerHref: '/resources/one-pager.md',
@@ -84,43 +86,31 @@ function buildProps(sectionOrderVariant: 'problem_first' | 'workflow_first') {
 	};
 }
 
-function storyBandOrder(container: HTMLElement): string[] {
-	const storyBand = container.querySelector('.landing-story-band');
-	if (!(storyBand instanceof HTMLElement)) {
-		throw new Error('missing story band');
-	}
-	return Array.from(storyBand.children).map(
-		(element) =>
-			element.id || element.getAttribute('data-landing-section') || element.tagName.toLowerCase()
-	);
-}
-
 describe('LandingHeroView', () => {
-	it('renders product narrative before workflow map for problem-first experiments', () => {
+	it('renders the fixed landing narrative order', () => {
 		const view = render(LandingHeroView, {
-			props: buildProps('problem_first')
+			props: buildProps()
 		});
 
-		expect(storyBandOrder(view.container)).toEqual([
-			'product',
-			'signal-map',
-			'simulator',
-			'plans',
-			'trust'
-		]);
+		const sectionIds = Array.from(view.container.querySelectorAll('section[id]')).map(
+			(element) => element.id
+		);
+		expect(sectionIds).toEqual(['hero', 'product', 'simulator', 'plans', 'trust']);
 	});
 
-	it('renders workflow map before product narrative for workflow-first experiments', () => {
+	it('renders the trust section with proof and human-proof links wired', () => {
 		const view = render(LandingHeroView, {
-			props: buildProps('workflow_first')
+			props: buildProps()
 		});
 
-		expect(storyBandOrder(view.container)).toEqual([
-			'signal-map',
-			'product',
-			'simulator',
-			'plans',
-			'trust'
-		]);
+		const trustSection = view.container.querySelector('#trust');
+		expect(trustSection).toBeTruthy();
+		expect(trustSection?.textContent || '').toContain('Review the company before you talk to us');
+		expect(
+			(trustSection?.querySelector('a[href*="/proof"]') as HTMLAnchorElement | null)?.href || ''
+		).toContain('/proof');
+		expect(
+			(trustSection?.querySelector('a[href*="/about"]') as HTMLAnchorElement | null)?.href || ''
+		).toContain('/about');
 	});
 });

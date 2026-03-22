@@ -116,3 +116,26 @@
 .landing-trust-benchmark .landing-p {
 	color: var(--color-ink-100);
 }
+
+/* Landing refresh 2026-03-21 */
+.landing-trust-badges {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+	gap: 0.55rem;
+	align-items: stretch;
+}
+
+.landing-trust-badge {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 3rem;
+	padding: 0.5rem 0.72rem;
+	text-align: center;
+	white-space: normal;
+	line-height: 1.35;
+}
+
+.landing-proof-footnote {
+	margin-top: 1rem;
+}

@@ -16,7 +16,10 @@ describe('docs page', () => {
 	it('renders core documentation sections and links', () => {
 		render(Page);
 
-		const heading = screen.getByRole('heading', { level: 1, name: /documentation/i });
+		const heading = screen.getByRole('heading', {
+			level: 1,
+			name: /documentation for setup, validation, and api review/i
+		});
 		expect(heading).toBeTruthy();
 
 		const apiLinks = screen.getAllByRole('link', { name: /open api docs/i });
@@ -29,6 +32,9 @@ describe('docs page', () => {
 		expect(screen.getAllByRole('link', { name: /open guide/i })[0]?.getAttribute('href')).toBe(
 			'/docs/quick-start-workspace'
 		);
+		expect(
+			screen.getByRole('heading', { name: /use the core guides for the operating loop/i })
+		).toBeTruthy();
 
 		const repoLink = screen.getByRole('link', { name: /browse github docs/i });
 		expect(repoLink.getAttribute('href')).toBe(

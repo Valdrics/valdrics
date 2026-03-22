@@ -95,6 +95,7 @@ class NotificationHandler(BaseJobHandler):
                 email=inquiry.email,
                 company=inquiry.company,
                 role=inquiry.role,
+                buyer_region=inquiry.buyer_region,
                 team_size=inquiry.team_size,
                 deployment_scope=inquiry.deployment_scope,
                 timeline=inquiry.timeline,

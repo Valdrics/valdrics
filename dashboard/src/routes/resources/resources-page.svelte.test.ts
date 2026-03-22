@@ -17,15 +17,23 @@ describe('resources page contact directory', () => {
 		render(Page);
 
 		expect(
+			screen.getByRole('heading', {
+				level: 1,
+				name: /resources for rollout, review, and diligence/i
+			})
+		).toBeTruthy();
+		expect(
 			screen.getByRole('link', { name: /start free workspace/i }).getAttribute('href') || ''
 		).toContain('/auth/login?');
 		expect(
 			screen.getByRole('link', { name: /see enterprise path/i }).getAttribute('href') || ''
 		).toContain('/enterprise?');
 		expect(screen.getByRole('heading', { name: /contact directory/i })).toBeTruthy();
-		expect(screen.getAllByRole('link', { name: /open resource/i })[0]?.getAttribute('href')).toBe(
-			'/resources/enterprise-governance-overview'
-		);
+		expect(
+			screen
+				.getAllByRole('link', { name: /enterprise governance overview/i })
+				.some((link) => link.getAttribute('href') === '/resources/enterprise-governance-overview')
+		).toBe(true);
 		expect(screen.getByRole('link', { name: /enterprise@valdrics\.com/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /sales@valdrics\.com/i })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /support@valdrics\.com/i })).toBeTruthy();

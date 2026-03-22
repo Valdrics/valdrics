@@ -166,3 +166,261 @@
 	color: var(--color-ink-100);
 	text-align: right;
 }
+
+/* Landing refresh 2026-03-21 */
+.landing-section-head {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	align-items: end;
+	gap: 0.9rem 1rem;
+}
+
+.landing-currency-select {
+	display: grid;
+	gap: 0.28rem;
+	justify-items: start;
+	text-align: left;
+}
+
+.landing-currency-select span {
+	font-size: 0.74rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--color-ink-400);
+}
+
+.landing-currency-select select {
+	min-width: 11.5rem;
+	padding: 0.6rem 0.75rem;
+	border-radius: var(--radius-md);
+	border: 1px solid rgb(255 255 255 / 0.12);
+	background: rgb(9 14 21 / 0.9);
+	color: var(--color-ink-100);
+}
+
+.landing-currency-toggle {
+	display: grid;
+	gap: 0.35rem;
+	justify-items: start;
+	text-align: left;
+}
+
+.landing-currency-toggle__label {
+	font-size: 0.74rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--color-ink-400);
+}
+
+.landing-currency-toggle__controls {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 0.45rem;
+	padding: 0.22rem;
+	border-radius: 999px;
+	border: 1px solid rgb(255 255 255 / 0.12);
+	background: rgb(9 14 21 / 0.76);
+}
+
+.landing-currency-toggle__controls button {
+	min-height: 2.25rem;
+	padding: 0.52rem 0.8rem;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-ink-200);
+	font-size: 0.86rem;
+	font-weight: 700;
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out),
+		box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.landing-currency-toggle__controls button.active {
+	background: linear-gradient(135deg, var(--color-brand-600) 0%, var(--color-brand-700) 100%);
+	color: var(--color-ink-50);
+	box-shadow: 0 10px 20px rgb(16 159 210 / 0.22);
+}
+
+.landing-currency-toggle__controls button:focus-visible {
+	outline: 2px solid var(--color-accent-500);
+	outline-offset: 2px;
+}
+
+.landing-currency-toggle__note {
+	margin: 0;
+	max-width: 22rem;
+	font-size: 0.82rem;
+	line-height: 1.45;
+	color: var(--color-ink-400);
+}
+
+.landing-sim-bar-meter,
+.landing-roi-snapshot-meter {
+	width: 100%;
+	height: 0.72rem;
+	border: none;
+	border-radius: 9999px;
+	overflow: hidden;
+	background: rgb(255 255 255 / 0.08);
+}
+
+.landing-roi-snapshot-meter {
+	height: 0.42rem;
+}
+
+.landing-sim-bar-meter::-webkit-progress-bar,
+.landing-roi-snapshot-meter::-webkit-progress-bar {
+	background: rgb(255 255 255 / 0.08);
+	border-radius: 9999px;
+}
+
+.landing-sim-bar-meter::-webkit-progress-value,
+.landing-roi-snapshot-meter::-webkit-progress-value {
+	border-radius: 9999px;
+}
+
+.landing-sim-bar-meter::-moz-progress-bar,
+.landing-roi-snapshot-meter::-moz-progress-bar {
+	border-radius: 9999px;
+}
+
+.landing-sim-bar-meter--reactive::-webkit-progress-value,
+.landing-roi-snapshot-meter--reactive::-webkit-progress-value {
+	background: linear-gradient(90deg, rgb(244 63 94 / 0.85), rgb(251 113 133 / 0.9));
+}
+
+.landing-sim-bar-meter--governed::-webkit-progress-value,
+.landing-roi-snapshot-meter--governed::-webkit-progress-value {
+	background: linear-gradient(90deg, rgb(6 182 212 / 0.82), rgb(16 185 129 / 0.88));
+}
+
+.landing-sim-bar-meter--reactive::-moz-progress-bar,
+.landing-roi-snapshot-meter--reactive::-moz-progress-bar {
+	background: linear-gradient(90deg, rgb(244 63 94 / 0.85), rgb(251 113 133 / 0.9));
+}
+
+.landing-sim-bar-meter--governed::-moz-progress-bar,
+.landing-roi-snapshot-meter--governed::-moz-progress-bar {
+	background: linear-gradient(90deg, rgb(6 182 212 / 0.82), rgb(16 185 129 / 0.88));
+}
+
+@media (max-width: 767px) {
+	.landing-section-head {
+		align-items: start;
+	}
+
+	.landing-currency-select {
+		width: 100%;
+	}
+
+	.landing-currency-select select {
+		width: 100%;
+	}
+
+	.landing-currency-toggle {
+		width: 100%;
+	}
+
+	.landing-currency-toggle__controls {
+		width: 100%;
+	}
+
+	.landing-currency-toggle__controls button {
+		flex: 1 1 auto;
+		justify-content: center;
+	}
+}
+
+/* Public refresh 2026-03-21: lighter simulator surfaces */
+.landing-public-surface.landing-sim-controls,
+.landing-public-surface.landing-sim-results {
+	padding: 1.25rem;
+	border: 1px solid rgb(8 126 164 / 0.12);
+	border-radius: 1.25rem;
+	background: linear-gradient(180deg, rgb(255 255 255 / 0.97), rgb(248 250 252 / 0.98));
+	box-shadow: 0 20px 44px rgb(15 23 42 / 0.06);
+}
+
+.landing-public-surface.landing-sim-results {
+	gap: 1.05rem;
+}
+
+.landing-public-surface .landing-roi-label,
+.landing-public-surface .landing-proof-k,
+.landing-public-surface .landing-sim-bar-label,
+.landing-public-surface .landing-currency-select span,
+.landing-public-surface .landing-currency-toggle__label {
+	color: rgb(8 126 164);
+}
+
+.landing-public-surface .landing-sim-metric,
+.landing-public-surface .landing-sim-metric.is-highlight,
+.landing-public-surface .landing-sim-metric.is-context {
+	border-color: rgb(8 126 164 / 0.08);
+	background: rgb(243 248 250 / 0.92);
+	box-shadow: none;
+}
+
+.landing-public-surface .landing-sim-metric p,
+.landing-public-surface .landing-roi-note,
+.landing-public-surface .landing-sim-metric span,
+.landing-public-surface .landing-sim-bar-value {
+	color: var(--color-ink-600);
+}
+
+.landing-public-surface .landing-sim-metric strong,
+.landing-public-surface .landing-sim-bar-value {
+	color: var(--color-ink-950);
+}
+
+.landing-public-surface .landing-sim-metric.is-primary strong {
+	color: rgb(8 126 164);
+}
+
+.landing-public-surface .landing-currency-select select {
+	border-color: rgb(8 126 164 / 0.16);
+	background: rgb(255 255 255 / 0.92);
+	color: var(--color-ink-900);
+}
+
+.landing-public-surface .landing-currency-toggle__controls {
+	border-color: rgb(8 126 164 / 0.14);
+	background: rgb(255 255 255 / 0.92);
+}
+
+.landing-public-surface .landing-currency-toggle__controls button {
+	color: var(--color-ink-700);
+}
+
+.landing-public-surface .landing-currency-toggle__controls button.active {
+	color: var(--color-ink-50);
+}
+
+.landing-public-surface .landing-currency-toggle__note {
+	color: var(--color-ink-500);
+}
+
+.public-site-shell[data-public-theme='dark']
+	.landing-public-surface
+	.landing-currency-toggle__controls {
+	border-color: rgb(255 255 255 / 0.12);
+	background: rgb(255 255 255 / 0.04);
+}
+
+.public-site-shell[data-public-theme='dark']
+	.landing-public-surface
+	.landing-currency-toggle__controls
+	button {
+	color: var(--color-ink-300);
+}
+
+.public-site-shell[data-public-theme='dark']
+	.landing-public-surface
+	.landing-currency-toggle__note {
+	color: var(--color-ink-400);
+}

@@ -1,14 +1,13 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { page } from '$app/stores';
-	import CloudLogo from '$lib/components/CloudLogo.svelte';
+	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import {
 		appendPublicAttribution,
 		buildPublicSalesHref,
 		buildPublicSignupHref
 	} from '$lib/public/publicBuyingMotion';
-	import './enterprise-page.css';
 
 	let enterpriseIntakeHref = $derived(
 		buildPublicSalesHref(base, $page.url, {
@@ -29,166 +28,195 @@
 			source: 'enterprise_pricing'
 		})
 	);
+	let enterpriseProofHref = $derived(
+		appendPublicAttribution(`${base}/proof`, $page.url, {
+			entry: 'enterprise',
+			source: 'enterprise_proof'
+		})
+	);
+	let enterprisePrivacyHref = $derived(
+		appendPublicAttribution(`${base}/privacy`, $page.url, {
+			entry: 'enterprise',
+			source: 'enterprise_privacy'
+		})
+	);
+	let enterpriseTermsHref = $derived(
+		appendPublicAttribution(`${base}/terms`, $page.url, {
+			entry: 'enterprise',
+			source: 'enterprise_terms'
+		})
+	);
+	let enterpriseStatusHref = $derived(
+		appendPublicAttribution(`${base}/status`, $page.url, {
+			entry: 'enterprise',
+			source: 'enterprise_status'
+		})
+	);
+
 	const enterpriseMailHref =
 		'mailto:enterprise@valdrics.com?cc=sales@valdrics.com&subject=Valdrics%20Enterprise%20Evaluation&body=Organization%20name%3A%0AStakeholders%3A%0ACloud%2FSaaS%20scope%3A%0ATarget%20timeline%3A';
 
-	const governancePillars = [
+	const heroHighlights = [
+		{ label: 'Best fit', value: 'Teams with formal security, privacy, or procurement review' },
 		{
-			title: 'Control Architecture',
-			detail:
-				'Map policy intent to owner-routed remediation, approval gates, and deterministic evidence exports.'
+			label: 'Review path',
+			value: 'Pricing, proof, and enterprise contact are available in one place'
 		},
 		{
-			title: 'Security Posture',
-			detail:
-				'Validate SCIM, deployment controls, role boundaries, audit trails, and evidence handling against internal security review criteria.'
-		},
-		{
-			title: 'Commercial Readiness',
-			detail:
-				'Align procurement, legal, and finance stakeholders around rollout scope, responsibilities, and support model.'
-		},
-		{
-			title: 'Operational Reliability',
-			detail:
-				'Confirm observability, rollback readiness, and failure-mode controls before production governance cutover.'
+			label: 'Public materials',
+			value: 'Proof pack, privacy, terms, and live status available upfront'
 		}
 	] as const;
+
+	let reviewCards = $derived([
+		{
+			title: 'Security and access review',
+			detail:
+				'Open the control, access, and validation materials security reviewers usually ask for first.',
+			ctaLabel: 'Open Proof Pack',
+			href: enterpriseProofHref
+		},
+		{
+			title: 'Privacy and deployment review',
+			detail:
+				'Keep privacy, DPA, and deployment questions on one clear path instead of scattered follow-up threads.',
+			ctaLabel: 'Review Privacy Posture',
+			href: enterprisePrivacyHref
+		},
+		{
+			title: 'Commercial and legal review',
+			detail:
+				'Give buyers a direct route to pricing context, legal terms, and commercial follow-up when they need it.',
+			ctaLabel: 'Review Terms',
+			href: enterpriseTermsHref
+		}
+	]);
+
+	let buyingPaths = $derived([
+		{
+			kicker: 'Start quickly',
+			title: 'Start with pricing and workspace access',
+			detail:
+				'Use this path when the team can evaluate the product directly without a separate review track.',
+			ctaLabel: 'View Pricing',
+			href: enterprisePricingHref
+		},
+		{
+			kicker: 'Need a formal review',
+			title: 'Request an enterprise briefing',
+			detail:
+				'Use this path when procurement, privacy, deployment, or legal requirements need a dedicated review process.',
+			ctaLabel: 'Request Enterprise Briefing',
+			href: enterpriseIntakeHref
+		}
+	]);
+
+	let diligenceLinks = $derived([
+		{ label: 'Executive One-Pager', href: `${base}/resources/valdrics-enterprise-one-pager.md` },
+		{
+			label: 'Compliance Checklist',
+			href: `${base}/resources/global-finops-compliance-workbook.md`
+		},
+		{ label: 'Technical Validation', href: `${base}/docs/technical-validation` },
+		{ label: 'System Status', href: enterpriseStatusHref }
+	]);
 </script>
 
 <PublicPageMeta
 	title="Enterprise Governance"
-	description="Evaluate Valdrics enterprise governance readiness for cloud and software spend control, including security review, procurement diligence, and rollout operating model."
+	description="Evaluate Valdrics for enterprise rollout with clear paths for security review, privacy questions, procurement, and commercial follow-up."
 	pageType="WebPage"
 	pageSection="Enterprise Governance"
-	keywords={['enterprise', 'procurement', 'security review', 'governance', 'scim']}
+	keywords={['enterprise', 'procurement', 'security review', 'privacy', 'governance']}
 />
 
-<div class="enterprise-shell">
-	<div class="enterprise-bg-glow enterprise-bg-glow-a" aria-hidden="true"></div>
-	<div class="enterprise-bg-glow enterprise-bg-glow-b" aria-hidden="true"></div>
-	<div class="enterprise-bg-grid" aria-hidden="true"></div>
-	<div class="enterprise-bg-aurora" aria-hidden="true"></div>
-	<div class="enterprise-signal-field" aria-hidden="true">
-		<div class="enterprise-signal-core">
-			<CloudLogo provider="valdrics" size={176} />
-		</div>
-		<span class="enterprise-signal-ring enterprise-signal-ring-a"></span>
-		<span class="enterprise-signal-ring enterprise-signal-ring-b"></span>
-		<span class="enterprise-signal-ring enterprise-signal-ring-c"></span>
-		<span class="enterprise-signal-line enterprise-signal-line-a"></span>
-		<span class="enterprise-signal-line enterprise-signal-line-b"></span>
-		<span class="enterprise-signal-line enterprise-signal-line-c"></span>
-		<span class="enterprise-signal-node enterprise-signal-node-a"></span>
-		<span class="enterprise-signal-node enterprise-signal-node-b"></span>
-		<span class="enterprise-signal-node enterprise-signal-node-c"></span>
-		<span class="enterprise-signal-node enterprise-signal-node-d"></span>
-		<span class="enterprise-signal-node enterprise-signal-node-e"></span>
-	</div>
-	<div class="enterprise-logo-orbit enterprise-logo-orbit-a" aria-hidden="true">
-		<CloudLogo provider="valdrics" size={104} />
-	</div>
-	<div class="enterprise-logo-orbit enterprise-logo-orbit-b" aria-hidden="true">
-		<CloudLogo provider="valdrics" size={92} />
-	</div>
-	<div class="enterprise-logo-orbit enterprise-logo-orbit-c" aria-hidden="true">
-		<CloudLogo provider="valdrics" size={80} />
-	</div>
+<PublicMarketingPage
+	kicker="Enterprise"
+	title="Enterprise review that stays clear"
+	subtitle="Valdrics keeps enterprise review simple: open the right materials quickly, let teams start directly when they can, and offer a formal briefing when rollout requirements expand."
+	heroVariant="narrow"
+>
+	{#snippet heroActions()}
+		<a href={enterpriseIntakeHref} class="btn btn-primary">Request Enterprise Briefing</a>
+		<a href={enterpriseStartFreeHref} class="btn btn-secondary">Start Free Workspace</a>
+		<a href={enterprisePricingHref} class="btn btn-secondary">View Pricing</a>
+	{/snippet}
 
-	<section class="enterprise-hero glass-panel">
-		<p class="enterprise-kicker">Enterprise Governance Lane</p>
-		<h1>Control cloud and software economics with procurement-grade confidence</h1>
-		<p class="enterprise-hero-sub">
-			Valdrics supports two buying paths: rapid self-serve activation for Starter, Growth, and Pro,
-			and a formal enterprise diligence lane for security, risk, procurement, and executive review.
-		</p>
-		<div class="enterprise-hero-cta">
-			<a href={enterpriseIntakeHref} class="btn btn-primary pulse-glow"
-				>Request Enterprise Briefing</a
-			>
-			<a href={enterpriseStartFreeHref} class="btn btn-secondary">Start Free Workspace</a>
-			<a href={enterprisePricingHref} class="btn btn-secondary">View Pricing</a>
-		</div>
-		<p class="enterprise-cta-note">
-			Validation briefing is ungated. No login required. Prefer direct email?
-			<a href={enterpriseMailHref}>enterprise@valdrics.com</a>
-		</p>
-		<div class="enterprise-metric-grid" aria-label="Enterprise readiness highlights">
-			<article class="enterprise-metric-card">
-				<p class="enterprise-metric-k">Validation Scope</p>
-				<p class="enterprise-metric-v">Security + Finance + Platform</p>
+	{#snippet heroMeta()}
+		{#each heroHighlights as item (item.label)}
+			<article class="public-page__meta-item">
+				<strong>{item.label}</strong>
+				<span>{item.value}</span>
 			</article>
-			<article class="enterprise-metric-card">
-				<p class="enterprise-metric-k">Operating Model</p>
-				<p class="enterprise-metric-v">Owner-routed controls with approvals</p>
-			</article>
-			<article class="enterprise-metric-card">
-				<p class="enterprise-metric-k">Evidence Surface</p>
-				<p class="enterprise-metric-v">Audit-ready exports and control traces</p>
-			</article>
-		</div>
-	</section>
+		{/each}
+	{/snippet}
 
-	<section class="enterprise-section">
-		<div class="enterprise-section-head">
-			<p class="enterprise-kicker">Control Stack</p>
-			<h2>Enterprise-critical control pillars</h2>
-		</div>
-		<div class="enterprise-pillar-grid">
-			{#each governancePillars as pillar (pillar.title)}
-				<article class="enterprise-pillar-card glass-panel">
-					<h3>{pillar.title}</h3>
-					<p>{pillar.detail}</p>
-				</article>
-			{/each}
-		</div>
-	</section>
+	{#snippet children()}
+		<section class="public-page__section" aria-labelledby="enterprise-review-title">
+			<div class="public-page__section-head">
+				<p class="public-page__eyebrow">Review essentials</p>
+				<h2 id="enterprise-review-title" class="public-page__section-title">
+					Give legal, security, and procurement teams a coherent next step
+				</h2>
+				<p class="public-page__section-subtitle">
+					Open the right review surface quickly instead of sending buyers through scattered pages
+					and follow-up emails.
+				</p>
+			</div>
+			<div class="public-page__grid public-page__grid--3">
+				{#each reviewCards as track (track.title)}
+					<article class="public-page__card">
+						<h3 class="public-page__card-title">{track.title}</h3>
+						<p class="public-page__card-copy">{track.detail}</p>
+						<a href={track.href} class="btn btn-secondary">{track.ctaLabel}</a>
+					</article>
+				{/each}
+			</div>
+		</section>
 
-	<section class="enterprise-section enterprise-track-grid">
-		<article class="glass-panel enterprise-track-card">
-			<p class="enterprise-kicker">Self-Serve Track</p>
-			<h3>Starter, Growth, and Pro teams</h3>
-			<ul>
-				<li>Launch quickly with plan-based controls and guided onboarding.</li>
-				<li>Run ROI and remediation loops directly in your workspace.</li>
-				<li>Expand governance depth as teams and spend surface grow.</li>
-			</ul>
-			<a href={enterprisePricingHref} class="btn btn-secondary">View Plans</a>
-		</article>
-		<article class="glass-panel enterprise-track-card enterprise-track-card-featured">
-			<p class="enterprise-kicker">Enterprise Track</p>
-			<h3>Formal diligence and procurement workflows</h3>
-			<ul>
-				<li>Coordinate security, legal, procurement, and finance sign-off.</li>
-				<li>
-					Review governance artifacts, SCIM, and deployment controls before full production
-					activation.
-				</li>
-				<li>Operate a staged rollout with explicit control checkpoints.</li>
-			</ul>
-			<a href={enterpriseIntakeHref} class="btn btn-primary">Open Enterprise Intake</a>
-		</article>
-	</section>
+		<section class="public-page__section" aria-labelledby="enterprise-paths-title">
+			<div class="public-page__band public-page__band--accent">
+				<div class="public-page__band-copy">
+					<p class="public-page__eyebrow">Choose the right path</p>
+					<h2 id="enterprise-paths-title" class="public-page__section-title">
+						Choose the path that matches the buying process
+					</h2>
+					<p class="public-page__section-subtitle">
+						Some teams can start with pricing and product access. Others need a formal review before
+						rollout.
+					</p>
+				</div>
+				<div class="public-page__grid public-page__grid--2">
+					{#each buyingPaths as path (path.title)}
+						<article class="public-page__card">
+							<p class="public-page__card-kicker">{path.kicker}</p>
+							<h3 class="public-page__card-title">{path.title}</h3>
+							<p class="public-page__card-copy">{path.detail}</p>
+							<a href={path.href} class="btn btn-secondary">{path.ctaLabel}</a>
+						</article>
+					{/each}
+				</div>
+			</div>
+		</section>
 
-	<section class="enterprise-section glass-panel enterprise-proof-card">
-		<div class="enterprise-proof-copy">
-			<p class="enterprise-kicker">Procurement Readiness Pack</p>
-			<h2>Use externally framed diligence artifacts</h2>
-			<p>
-				Package your internal review quickly with buyer-facing artifacts covering governance
-				controls, access posture, rollout risk, and commercial readiness assumptions.
+		<section class="public-page__section" aria-labelledby="enterprise-assets-title">
+			<div class="public-page__section-head">
+				<p class="public-page__eyebrow">Diligence materials</p>
+				<h2 id="enterprise-assets-title" class="public-page__section-title">
+					Open the first materials buyers usually ask for
+				</h2>
+			</div>
+			<div class="public-page__grid public-page__grid--2">
+				{#each diligenceLinks as item (item.label)}
+					<a class="public-page__card public-page__card--featured" href={item.href}>
+						<h3 class="public-page__card-title">{item.label}</h3>
+						<p class="public-page__card-copy">Open the relevant review artifact directly.</p>
+					</a>
+				{/each}
+			</div>
+			<p class="public-page__inline-note">
+				Prefer direct email? <a href={enterpriseMailHref}>enterprise@valdrics.com</a>
 			</p>
-		</div>
-		<div class="enterprise-proof-actions">
-			<a href={`${base}/resources/valdrics-enterprise-one-pager.md`} class="btn btn-secondary">
-				Download Executive One-Pager
-			</a>
-			<a href={`${base}/resources/global-finops-compliance-workbook.md`} class="btn btn-secondary">
-				Download Compliance Checklist
-			</a>
-			<a href={`${base}/docs/technical-validation`} class="btn btn-secondary">
-				Open Technical Validation
-			</a>
-		</div>
-	</section>
-</div>
+		</section>
+	{/snippet}
+</PublicMarketingPage>

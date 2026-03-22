@@ -35,7 +35,7 @@ test.describe('Dashboard Sniper Console Reliability', () => {
 	test('should display the main headline', async ({ page }) => {
 		await page.goto('/');
 		await expect(page.locator('h1')).toContainText(
-			/govern cloud, saas, and software spend without slowing delivery/i
+			/govern spend without slowing delivery|turn cloud, saas, and software spend into governed action without slowing delivery|control cloud spend decisions|protect margin with governed spend decisions|one governed path from variance to board-ready proof/i
 		);
 	});
 

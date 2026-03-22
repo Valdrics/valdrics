@@ -262,3 +262,52 @@
 		0 0 0 7px rgb(18 158 192 / 0.12),
 		0 0 20px rgb(18 158 192 / 0.3);
 }
+
+/* Landing refresh 2026-03-21 */
+.approval-chain-step-1 {
+	left: 4%;
+}
+
+.approval-chain-step-2 {
+	left: 34.66%;
+}
+
+.approval-chain-step-3 {
+	left: 65.34%;
+}
+
+.approval-chain-step-4 {
+	left: 96%;
+}
+
+.approval-chain-progress-0 .approval-chain-rail-progress {
+	width: 8%;
+}
+
+.approval-chain-progress-1 .approval-chain-rail-progress {
+	width: 36.22%;
+}
+
+.approval-chain-progress-2 .approval-chain-rail-progress {
+	width: 64.44%;
+}
+
+.approval-chain-progress-3 .approval-chain-rail-progress {
+	width: 92%;
+}
+
+.approval-chain-progress-0 .approval-chain-packet {
+	left: 4%;
+}
+
+.approval-chain-progress-1 .approval-chain-packet {
+	left: 34.66%;
+}
+
+.approval-chain-progress-2 .approval-chain-packet {
+	left: 65.34%;
+}
+
+.approval-chain-progress-3 .approval-chain-packet {
+	left: 96%;
+}

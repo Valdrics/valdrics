@@ -5,6 +5,7 @@
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
 	import { getTurnstileToken } from '$lib/security/turnstile';
 	import {
+		buyerRegionOptions,
 		createInitialSalesInquiryForm,
 		heroHighlights,
 		interestAreaOptions,
@@ -42,6 +43,7 @@
 				email: form.email.trim().toLowerCase(),
 				company: form.company.trim(),
 				role: normalizeOptionalField(form.role),
+				buyerRegion: normalizeOptionalField(form.buyerRegion),
 				teamSize: normalizeOptionalField(form.teamSize),
 				deploymentScope: normalizeOptionalField(form.deploymentScope),
 				timeline: normalizeOptionalField(form.timeline),
@@ -202,6 +204,14 @@
 									placeholder="FinOps lead, platform engineering, procurement"
 									bind:value={form.role}
 								/>
+							</label>
+							<label class="sales-page__field">
+								<span>Buyer region</span>
+								<select name="buyerRegion" bind:value={form.buyerRegion}>
+									{#each buyerRegionOptions as option (option.value)}
+										<option value={option.value}>{option.label}</option>
+									{/each}
+								</select>
 							</label>
 							<label class="sales-page__field">
 								<span>Team size</span>

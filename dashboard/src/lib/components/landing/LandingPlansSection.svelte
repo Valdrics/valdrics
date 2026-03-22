@@ -52,20 +52,16 @@
 					<p class="landing-plan-price-note">{plan.priceNote}</p>
 					<p class="landing-p">{plan.summary}</p>
 					<ul class="landing-plan-features">
-						{#each plan.features as feature (feature)}
+						{#each plan.features.slice(0, 3) as feature (feature)}
 							<li>{feature}</li>
 						{/each}
 					</ul>
-					<dl class="landing-plan-context" aria-label={`${plan.name} plan fit and upgrade path`}>
-						<div class="landing-plan-context__row">
+					<div class="landing-plan-context" aria-label={`${plan.name} plan fit`}>
+						<dl class="landing-plan-context__row landing-plan-context__row--stacked">
 							<dt class="landing-plan-context__label">Best for</dt>
 							<dd class="landing-plan-context__value">{plan.bestFor}</dd>
-						</div>
-						<div class="landing-plan-context__row">
-							<dt class="landing-plan-context__label">Why teams upgrade</dt>
-							<dd class="landing-plan-context__value">{plan.whyUpgrade}</dd>
-						</div>
-					</dl>
+						</dl>
+					</div>
 					<a
 						href={buildPlanCtaHref(plan.id)}
 						class={`btn ${plan.popular ? 'btn-primary landing-plan-primary-cta' : 'btn-secondary landing-plan-secondary-cta'}`}
@@ -77,49 +73,34 @@
 			{/each}
 		</div>
 
-		<div class="landing-free-tier-card glass-panel">
-			<div class="landing-free-tier-head">
+		<div class="landing-free-tier-strip glass-panel">
+			<div class="landing-free-tier-strip-copy">
+				<p class="landing-free-tier-badge">{freePlanStory.badge}</p>
 				<div>
-					<p class="landing-free-tier-badge">{freePlanStory.badge}</p>
-					<p class="landing-proof-k">Self-serve path</p>
+					<p class="landing-proof-k">Free workspace strip</p>
 					<h3 class="landing-h3">{freePlanStory.headline}</h3>
-					<p class="landing-p">{freePlanStory.summary}</p>
-				</div>
-				<div class="landing-free-tier-price">
-					<p class="landing-free-tier-price-k">Entry Price</p>
-					<p class="landing-free-tier-price-v">$0</p>
+					<p class="landing-p">{FREE_TIER_LIMIT_NOTE}</p>
 				</div>
 			</div>
 			<ul class="landing-plan-features">
-				{#each FREE_TIER_HIGHLIGHTS as feature (feature)}
+				{#each FREE_TIER_HIGHLIGHTS.slice(0, 3) as feature (feature)}
 					<li>{feature}</li>
 				{/each}
 			</ul>
-			<dl class="landing-plan-context" aria-label="Free plan fit and upgrade path">
-				<div class="landing-plan-context__row">
-					<dt class="landing-plan-context__label">Best for</dt>
-					<dd class="landing-plan-context__value">{freePlanStory.bestFor}</dd>
-				</div>
-				<div class="landing-plan-context__row">
-					<dt class="landing-plan-context__label">Why teams upgrade</dt>
-					<dd class="landing-plan-context__value">{freePlanStory.whyUpgrade}</dd>
-				</div>
-			</dl>
-			<p class="landing-free-tier-limit">{FREE_TIER_LIMIT_NOTE}</p>
-			<div class="landing-free-tier-cta">
+			<div class="landing-free-tier-strip-actions">
+				<p class="landing-free-tier-strip-price">$0 / month</p>
+				<p class="landing-free-tier-note">Published list prices shown in USD.</p>
 				<a
 					href={buildFreeTierCtaHref()}
-					class="btn btn-primary landing-free-tier-primary-cta"
+					class="btn btn-secondary landing-free-tier-primary-cta"
 					onclick={() => onTrackCta('cta_click', 'plans', 'start_plan_free')}
 				>
 					Start on Free Tier
 				</a>
-				<span class="landing-free-tier-note"
-					>Upgrade when team rollout or deeper governance becomes necessary.</span
-				>
 			</div>
 		</div>
 	</div>
+
 	<section class="landing-rollout-section glass-panel" aria-labelledby="rollout-tco-title">
 		<p class="landing-proof-k">Rollout and buying path</p>
 		<h3 id="rollout-tco-title" class="landing-h3">
@@ -143,7 +124,7 @@
 			<article class="landing-rollout-block">
 				<p class="landing-proof-k">Implementation facts</p>
 				<ul class="landing-plan-features">
-					{#each IMPLEMENTATION_COST_FACTS as detail (detail)}
+					{#each IMPLEMENTATION_COST_FACTS.slice(0, 3) as detail (detail)}
 						<li>{detail}</li>
 					{/each}
 				</ul>
