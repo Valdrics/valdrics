@@ -248,7 +248,7 @@
 							src={dashboardStillSrc}
 							alt="Real Valdrics dashboard showing savings metrics, active findings, and owner-routed actions."
 							width="1440"
-							height="960"
+							height="961"
 							loading="eager"
 							decoding="async"
 							fetchpriority="high"

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
-import httpx
+import json
+from pathlib import Path
 
+import httpx
+import pytest
+
+import scripts.smoke_test_scim_helpers as scim_helpers
 from scripts.smoke_test_scim_helpers import (
     Check,
     build_group_add_member_patch,
@@ -65,3 +70,26 @@ def test_build_group_add_member_patch_uses_patchop_schema() -> None:
     operations = payload["Operations"]
     assert isinstance(operations, list)
     assert operations[0]["path"] == "members"
+
+
+def test_write_out_stages_before_promotion(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    output_path = tmp_path / "scim-smoke.json"
+    staged_path = tmp_path / ".scim-smoke.json.tmp"
+
+    def _fake_stage(path: Path, payload: object, **_: object) -> Path:
+        assert path == output_path
+        staged_path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+        return staged_path
+
+    def _fake_promote(staged: Path, output: Path) -> None:
+        staged.replace(output)
+
+    monkeypatch.setattr(scim_helpers, "stage_json_file", _fake_stage)
+    monkeypatch.setattr(scim_helpers, "promote_staged_file", _fake_promote)
+
+    scim_helpers.write_out(str(output_path), {"passed": True})
+
+    assert json.loads(output_path.read_text(encoding="utf-8"))["passed"] is True

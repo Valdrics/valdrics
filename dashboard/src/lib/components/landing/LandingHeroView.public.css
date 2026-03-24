@@ -1334,13 +1334,13 @@
 	.landing-public-pillar-card,
 	.landing-public-plan-card,
 	.landing-public-trust-card,
-		.landing-public-band,
-		.landing-public-hero::before,
-		.landing-public-hero::after,
-		.landing-public-hero-orb,
-		.landing-public-hero-ring,
-		.landing-public-mockup::after,
-		.landing-public-product-still::after {
+	.landing-public-band,
+	.landing-public-hero::before,
+	.landing-public-hero::after,
+	.landing-public-hero-orb,
+	.landing-public-hero-ring,
+	.landing-public-mockup::after,
+	.landing-public-product-still::after {
 		animation: none !important;
 		opacity: 1;
 		transform: none;

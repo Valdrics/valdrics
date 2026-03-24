@@ -21,6 +21,7 @@ import json
 import os
 import time
 from dataclasses import asdict
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 from urllib.parse import urljoin
@@ -28,6 +29,11 @@ from urllib.parse import urljoin
 import httpx
 
 from app.shared.core.evidence_capture import sanitize_bearer_token
+from scripts.env_generation_common import (
+    ensure_parent_dir,
+    repo_root_for,
+    resolve_cli_path_from_root,
+)
 from scripts.smoke_test_scim_helpers import (
     Check as _Check,
     SCIM_SMOKE_RECOVERABLE_EXCEPTIONS,
@@ -45,7 +51,11 @@ from scripts.smoke_test_scim_helpers import (
 )
 
 
-def _parse_args() -> argparse.Namespace:
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run a SCIM IdP smoke test against Valdrics."
     )
@@ -104,11 +114,27 @@ def _parse_args() -> argparse.Namespace:
         default=os.getenv("VALDRICS_API_URL", "http://127.0.0.1:8000").strip(),
         help="API base URL used for --publish (defaults to VALDRICS_API_URL)",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = _parse_args()
+def _resolve_output_path(value: str) -> Path:
+    resolved = resolve_cli_path_from_root(
+        _repo_root(),
+        Path(value),
+        field_name="out",
+    )
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"out must be a file path: {resolved}")
+    ensure_parent_dir(resolved, field_name="out")
+    return resolved
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    try:
+        output_path = _resolve_output_path(str(args.out)) if args.out else None
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from None
 
     started_at = _now_iso()
     start_time = time.time()
@@ -380,7 +406,10 @@ def main() -> int:
     }
 
     print(json.dumps(evidence_payload, indent=2, sort_keys=True))
-    _write_out(str(args.out or ""), evidence_payload)
+    try:
+        _write_out(str(output_path or ""), evidence_payload)
+    except OSError as exc:
+        raise SystemExit(f"Failed to write SCIM smoke output: {exc}") from exc
 
     if args.publish:
         api_url = _ensure_url(

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { base } from '$app/paths';
 	import type { Snippet } from 'svelte';
 	import { uiState } from '$lib/stores/ui.svelte';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
@@ -49,6 +50,10 @@
 
 	let activeJobsCount = $derived(jobStore?.activeJobsCount ?? 0);
 </script>
+
+<svelte:head>
+	<link rel="stylesheet" href={`${base}/authenticated-shell.css`} />
+</svelte:head>
 
 <aside id="sidebar" class="sidebar" class:sidebar-collapsed={!uiState.isSidebarOpen}>
 	<div class="flex items-center gap-3 px-5 py-5 border-b border-ink-800">

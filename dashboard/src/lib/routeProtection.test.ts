@@ -36,6 +36,7 @@ describe('isPublicPath', () => {
 	it('treats docs and status routes as public', () => {
 		expect(isPublicPath('/docs')).toBe(true);
 		expect(isPublicPath('/docs/api')).toBe(true);
+		expect(isPublicPath('/__capture/dashboard-hero')).toBe(true);
 		expect(isPublicPath('/status')).toBe(true);
 		expect(isPublicPath('/.well-known/security.txt')).toBe(true);
 		expect(isPublicPath('/resources')).toBe(true);

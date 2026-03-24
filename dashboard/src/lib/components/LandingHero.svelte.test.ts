@@ -87,34 +87,17 @@ describe('LandingHero', () => {
 		expect(window.localStorage.getItem('valdrics.cookie_consent.v1')).toBe('rejected');
 	});
 
-	it('renders the simplified workflow preview labels for public buyers', () => {
+	it('renders a real dashboard still with concise proof notes', () => {
 		render(LandingHero);
 
-		expect(screen.getAllByText(/what the first workflow looks like/i).length).toBeGreaterThan(0);
-		expect(screen.getAllByText(/^signal captured$/i).length).toBeGreaterThan(0);
-		expect(screen.getAllByText(/^checks applied$/i).length).toBeGreaterThan(0);
-		expect(screen.getAllByText(/^approval routed$/i).length).toBeGreaterThan(0);
-		expect(screen.getAllByText(/^outcome recorded$/i).length).toBeGreaterThan(0);
-	});
-
-	it('lets buyers inspect individual workflow stages in the preview', async () => {
-		render(LandingHero);
-
-		const inspectButtons = screen.getAllByRole('button', { name: /inspect /i });
-		const initiallyPressed = inspectButtons.find(
-			(button) => button.getAttribute('aria-pressed') === 'true'
-		);
-		const targetButton =
-			inspectButtons.find((button) => button.getAttribute('aria-pressed') !== 'true') ??
-			inspectButtons[0];
-
-		expect(targetButton).toBeTruthy();
-		await fireEvent.click(targetButton!);
-
-		expect(targetButton?.getAttribute('aria-pressed')).toBe('true');
-		if (initiallyPressed && initiallyPressed !== targetButton) {
-			expect(initiallyPressed.getAttribute('aria-pressed')).toBe('false');
-		}
+		expect(screen.getByRole('img', { name: /real valdrics dashboard/i })).toBeTruthy();
+		const productStill = within(screen.getByLabelText(/real product dashboard screenshot/i));
+		expect(
+			productStill.getByText(/real workspace still from the signed-in dashboard/i)
+		).toBeTruthy();
+		expect(productStill.getByText(/^decision record$/i)).toBeTruthy();
+		expect(productStill.getByText(/^current stage$/i)).toBeTruthy();
+		expect(productStill.getByText(/^linked proof$/i)).toBeTruthy();
 	});
 
 	it('disables auto-rotation when reduced motion is preferred', () => {

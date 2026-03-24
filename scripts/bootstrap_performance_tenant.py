@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from datetime import timedelta
+from ipaddress import IPv4Address
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
@@ -17,8 +18,10 @@ from app.shared.core.pricing_types import PricingTier
 from app.shared.db.session import async_session_maker, mark_session_system_context
 from app.models.tenant import Tenant, User
 
+_ALL_INTERFACES_HOST = IPv4Address(0).compressed
 
-def _parse_args() -> argparse.Namespace:
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Create a signed bearer token and onboard a tenant for load-test runs."
     )
@@ -45,7 +48,29 @@ def _parse_args() -> argparse.Namespace:
         default=PricingTier.FREE.value,
         help="Local tenant tier to assign after onboarding.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def _normalize_base_url(raw: str) -> str:
+    value = str(raw or "").strip()
+    if not value:
+        return ""
+    lowered = value.lower()
+    if lowered.startswith(("http://", "https://")):
+        return value
+    if lowered.startswith(("localhost", "127.0.0.1", _ALL_INTERFACES_HOST)):
+        return f"http://{value}"
+    return f"https://{value}"
+
+
+def _require_valid_base_url(raw: str) -> str:
+    normalized = _normalize_base_url(raw)
+    parsed = urlparse(normalized)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise SystemExit(
+            f"Invalid --url '{raw}'. Provide a full http(s) URL like 'http://127.0.0.1:8000'."
+        )
+    return normalized
 
 
 def _is_local_target(base_url: str) -> bool:
@@ -91,22 +116,26 @@ async def _onboard_tenant(*, base_url: str, token: str, tenant_name: str, email:
     )
 
 
-async def main() -> None:
-    args = _parse_args()
+async def main(argv: list[str] | None = None) -> None:
+    args = _parse_args(argv)
+    base_url = _require_valid_base_url(str(args.url))
+    hours = float(args.hours)
+    if hours <= 0:
+        raise SystemExit("--hours must be > 0")
     user_id = uuid4()
     token = create_access_token(
         {"sub": str(user_id), "email": str(args.email).strip()},
-        timedelta(hours=float(args.hours)),
+        timedelta(hours=hours),
     )
     await _onboard_tenant(
-        base_url=str(args.url),
+        base_url=base_url,
         token=token,
         tenant_name=str(args.tenant_name).strip(),
         email=str(args.email).strip(),
     )
     requested_tier = PricingTier(str(args.tier).strip().lower())
     if requested_tier != PricingTier.FREE:
-        if not _is_local_target(str(args.url)):
+        if not _is_local_target(base_url):
             raise SystemExit("Tier promotion is only supported for local performance targets")
         await _apply_local_tenant_tier(user_id=user_id, tier=requested_tier)
     print(token)

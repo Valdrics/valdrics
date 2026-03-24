@@ -6,10 +6,12 @@ import json
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
 
 import httpx
+from scripts.env_generation_common import promote_staged_file, stage_json_file
 
 
 SCIM_SMOKE_RECOVERABLE_EXCEPTIONS = (
@@ -134,5 +136,6 @@ def build_group_add_member_patch(user_id: str) -> dict[str, Any]:
 def write_out(path: str, payload: dict[str, Any]) -> None:
     if not path:
         return
-    with open(path, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2, sort_keys=True)
+    output_path = Path(path)
+    staged_path = stage_json_file(output_path, payload, indent=2, sort_keys=True)
+    promote_staged_file(staged_path, output_path)
