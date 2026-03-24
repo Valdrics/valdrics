@@ -106,6 +106,31 @@ def test_is_local_target_only_allows_loopback_hosts() -> None:
     assert not bootstrap_performance_tenant._is_local_target("https://staging.valdrics.ai")
 
 
+def test_require_valid_base_url_accepts_localhost_without_scheme() -> None:
+    assert (
+        bootstrap_performance_tenant._require_valid_base_url("127.0.0.1:8000")
+        == "http://127.0.0.1:8000"
+    )
+
+
+@pytest.mark.asyncio
+async def test_main_rejects_non_positive_hours(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        bootstrap_performance_tenant,
+        "_parse_args",
+        lambda _argv=None: SimpleNamespace(
+            url="http://127.0.0.1:8000",
+            tenant_name="Performance Validation Tenant",
+            email="performance.owner@valdrics.ai",
+            hours=0.0,
+            tier=PricingTier.FREE.value,
+        ),
+    )
+
+    with pytest.raises(SystemExit, match="--hours must be > 0"):
+        await bootstrap_performance_tenant.main()
+
+
 @pytest.mark.asyncio
 async def test_apply_local_tenant_tier_updates_plan(monkeypatch: pytest.MonkeyPatch) -> None:
     tenant = SimpleNamespace(plan=PricingTier.FREE.value)

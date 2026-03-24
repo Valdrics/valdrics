@@ -13,7 +13,6 @@
 		PUBLIC_PRIMARY_LINKS,
 		PUBLIC_RESOURCES_DROPDOWN_LINKS
 	} from '$lib/landing/publicNav';
-	import './layoutPublicNav.css';
 
 	type PublicTone = 'default' | 'landing';
 
@@ -59,6 +58,10 @@
 		theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
 	const themeToggleCopy = (theme: PublicTheme) => (theme === 'dark' ? 'Light mode' : 'Dark mode');
 </script>
+
+<svelte:head>
+	<link rel="stylesheet" href={`${base}/public-site-shell.css`} />
+</svelte:head>
 
 <div class="public-site-shell" data-public-tone={publicTone} data-public-theme={publicTheme}>
 	<header class="public-site-header">

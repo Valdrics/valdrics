@@ -18,6 +18,7 @@ const PUBLIC_EXACT_PATHS = new Set<string>([
 // Segment-safe prefixes: only match "/prefix" or "/prefix/...".
 const PUBLIC_SEGMENT_PREFIXES = [
 	'/auth',
+	'/__capture',
 	'/pricing',
 	'/docs',
 	'/insights',

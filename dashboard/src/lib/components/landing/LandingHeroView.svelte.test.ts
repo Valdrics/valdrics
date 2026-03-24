@@ -113,4 +113,19 @@ describe('LandingHeroView', () => {
 			(trustSection?.querySelector('a[href*="/about"]') as HTMLAnchorElement | null)?.href || ''
 		).toContain('/about');
 	});
+
+	it('renders the hero with a real dashboard still instead of the old synthetic mockup', () => {
+		const view = render(LandingHeroView, {
+			props: buildProps()
+		});
+
+		const heroScreenshot = view.container.querySelector(
+			'img[src*="landing-dashboard-still.jpg"]'
+		) as HTMLImageElement | null;
+		expect(heroScreenshot).toBeTruthy();
+		expect(heroScreenshot?.alt || '').toContain('Real Valdrics dashboard');
+		expect(view.container.textContent || '').toContain(
+			'Real workspace still from the signed-in dashboard.'
+		);
+	});
 });

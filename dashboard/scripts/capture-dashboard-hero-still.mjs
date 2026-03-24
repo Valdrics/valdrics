@@ -3,14 +3,13 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
-import { BASE_URL, enableAuthenticatedSession } from '../e2e/support/e2eAuth';
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const outputPath = resolve(
 	process.env.HERO_STILL_OUTPUT_PATH || resolve(__dirname, '../static/landing-dashboard-still.jpg')
 );
-const routePath = process.env.HERO_STILL_ROUTE || '/dashboard';
+const pageUrl =
+	process.env.HERO_STILL_SOURCE_URL || 'http://127.0.0.1:5174/__capture/dashboard-hero';
 const viewportWidth = Number(process.env.HERO_STILL_VIEWPORT_WIDTH || '1440');
 const viewportHeight = Number(process.env.HERO_STILL_VIEWPORT_HEIGHT || '960');
 
@@ -23,12 +22,10 @@ try {
 		viewport: { width: viewportWidth, height: viewportHeight },
 		deviceScaleFactor: 1
 	});
-
-	await enableAuthenticatedSession(context);
-
 	const page = await context.newPage();
+
 	await page.emulateMedia({ reducedMotion: 'reduce' });
-	await page.goto(new URL(routePath, BASE_URL).toString(), {
+	await page.goto(pageUrl, {
 		waitUntil: 'domcontentloaded'
 	});
 	await page.waitForLoadState('networkidle');
@@ -36,14 +33,19 @@ try {
 		state: 'visible',
 		timeout: 30_000
 	});
-	await page.waitForTimeout(400);
+	await page.waitForTimeout(450);
+
+	const captureTarget = page.locator('[data-dashboard-hero-capture]');
+	await captureTarget.waitFor({
+		state: 'visible',
+		timeout: 30_000
+	});
 
 	await mkdir(dirname(outputPath), { recursive: true });
-	await page.screenshot({
+	await captureTarget.screenshot({
 		path: outputPath,
 		type: 'jpeg',
-		quality: 84,
-		fullPage: false,
+		quality: 88,
 		animations: 'disabled',
 		caret: 'hide'
 	});
