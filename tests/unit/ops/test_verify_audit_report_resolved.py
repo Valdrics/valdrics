@@ -191,6 +191,26 @@ def test_main_resolves_relative_report_path_from_repo_root_when_run_outside_repo
         report_path.unlink(missing_ok=True)
 
 
+def test_main_resolves_default_report_path_from_repo_root_when_run_outside_repo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    report_path = repo_root / "audit_report.md.resolved"
+    _write(report_path, "### C-01: Example finding\n")
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(audit_report_verifier, "_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        audit_report_verifier,
+        "run_checks",
+        lambda *, repo_root, finding_ids: ((), ("ok",)),
+    )
+
+    assert main(["--repo-root", ".", "--finding", "C-01"]) == 0
+
+
 def test_main_rejects_relative_repo_root_repo_escape() -> None:
     assert main(["--repo-root", os.path.join("..", ".."), "--skip-report-check"]) == 2
 

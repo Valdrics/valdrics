@@ -15,6 +15,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from unittest.mock import patch
 from scripts.env_generation_common import (
     repo_root_for as _repo_root_for,
     resolve_cli_path_from_root,
@@ -42,19 +43,33 @@ def _read_text(path: Path) -> str:
 
 def parse_backend_paths(repo_root: Path) -> set[str]:
     # Force deterministic, audit-safe settings regardless of operator shell state.
-    os.environ["TESTING"] = "true"
-    os.environ["DEBUG"] = "false"
-    os.environ.setdefault("CSRF_SECRET_KEY", "abcdefghijklmnopqrstuvwxyz123456")
-    os.environ.setdefault("ENCRYPTION_KEY", "abcdefghijklmnopqrstuvwxyz123456")
-    os.environ.setdefault("SUPABASE_JWT_SECRET", "abcdefghijklmnopqrstuvwxyz123456")
-    os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "abcdefghijklmnopqrstuvwxyz123456")
-    os.environ.setdefault("SUPABASE_ANON_KEY", "abcdefghijklmnopqrstuvwxyz123456")
-    os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")
-    os.environ.setdefault("KDF_SALT", "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=")
-    os.environ.setdefault("CORS_ORIGINS", "[\"http://localhost:4173\"]")
+    env_overrides = {
+        "TESTING": "true",
+        "DEBUG": "false",
+        "CSRF_SECRET_KEY": os.environ.get("CSRF_SECRET_KEY", "abcdefghijklmnopqrstuvwxyz123456"),
+        "ENCRYPTION_KEY": os.environ.get("ENCRYPTION_KEY", "abcdefghijklmnopqrstuvwxyz123456"),
+        "SUPABASE_JWT_SECRET": os.environ.get("SUPABASE_JWT_SECRET", "abcdefghijklmnopqrstuvwxyz123456"),
+        "SUPABASE_SERVICE_ROLE_KEY": os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "abcdefghijklmnopqrstuvwxyz123456"),
+        "SUPABASE_ANON_KEY": os.environ.get("SUPABASE_ANON_KEY", "abcdefghijklmnopqrstuvwxyz123456"),
+        "SUPABASE_URL": os.environ.get("SUPABASE_URL", "https://example.supabase.co"),
+        "KDF_SALT": os.environ.get("KDF_SALT", "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="),
+        "CORS_ORIGINS": os.environ.get("CORS_ORIGINS", "[\"http://localhost:4173\"]"),
+    }
 
-    sys.path.insert(0, str(repo_root))
-    from app.main import app  # pylint: disable=import-outside-toplevel
+    inserted_repo_root = False
+    repo_root_str = str(repo_root)
+    if repo_root_str not in sys.path:
+        sys.path.insert(0, repo_root_str)
+        inserted_repo_root = True
+    try:
+        with patch.dict(os.environ, env_overrides, clear=False):
+            from app.main import app  # pylint: disable=import-outside-toplevel
+    finally:
+        if inserted_repo_root:
+            try:
+                sys.path.remove(repo_root_str)
+            except ValueError:
+                pass
 
     backend_paths: set[str] = set()
     for route in app.routes:

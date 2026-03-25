@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
+import sys
 from fastapi import APIRouter, FastAPI
+from types import SimpleNamespace
 
 from scripts.verify_api_auth_coverage import (
     collect_auth_coverage_violations,
@@ -75,3 +78,19 @@ def test_main_returns_two_when_app_load_fails(
     captured = capsys.readouterr().out
     assert exit_code == 2
     assert "failed to load app" in captured
+
+
+def test_load_app_for_audit_restores_environment(monkeypatch) -> None:
+    monkeypatch.setenv("TESTING", "original-testing")
+    monkeypatch.setenv("DEBUG", "original-debug")
+    monkeypatch.setitem(
+        sys.modules,
+        "app.main",
+        SimpleNamespace(app=FastAPI()),
+    )
+
+    app = load_app_for_audit()
+
+    assert isinstance(app, FastAPI)
+    assert os.environ["TESTING"] == "original-testing"
+    assert os.environ["DEBUG"] == "original-debug"

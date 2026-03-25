@@ -96,3 +96,42 @@ def test_validate_migration_env_rejects_placeholder_database_url(
 
     assert result == 1
     assert "DATABASE_URL contains unresolved placeholder values." in capsys.readouterr().err
+
+
+def test_validate_migration_env_rejects_directory_env_file(
+    tmp_path: Path, capsys
+) -> None:
+    env_dir = tmp_path / "envdir"
+    env_dir.mkdir()
+
+    result = validate_migration_env.main(["--env-file", str(env_dir)])
+
+    assert result == 1
+    assert "env-file must be a file path" in capsys.readouterr().err
+
+
+def test_validate_migration_env_restores_environment_after_validation(
+    tmp_path: Path, capsys
+) -> None:
+    env_file = tmp_path / "production.migrate.env"
+    env_file.write_text(
+        "\n".join(
+            [
+                "DATABASE_URL=postgresql+asyncpg://postgres:postgres@db.example.com:5432/postgres",
+                "DB_SSL_MODE=require",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    original_environment = {
+        "DATABASE_URL": "postgresql+asyncpg://preexisting",
+        "DB_SSL_MODE": "disable",
+    }
+    with patch.dict(os.environ, original_environment, clear=True):
+        result = validate_migration_env.main(["--env-file", str(env_file)])
+
+        assert result == 0
+        assert os.environ == original_environment
+
+    assert "migration_env_validation_passed db_ssl_mode=require" in capsys.readouterr().out

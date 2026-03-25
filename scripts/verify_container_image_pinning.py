@@ -6,7 +6,7 @@ import argparse
 import os
 import re
 from pathlib import Path
-from scripts.env_generation_common import resolve_cli_path_from_root
+from scripts.env_generation_common import repo_root_for, resolve_cli_path_from_root
 from typing import Any, Mapping
 
 import yaml
@@ -24,8 +24,12 @@ INTERPOLATION_RE = re.compile(r"\$\{([^}]+)\}")
 VARIABLE_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
+
+
 def _resolve_repo_root(path: Path) -> Path:
-    resolved = Path(path).expanduser().resolve()
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name="repo_root")
     if not resolved.exists():
         raise ValueError(f"repo_root does not exist: {resolved}")
     if not resolved.is_dir():

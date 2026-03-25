@@ -6,7 +6,7 @@ import argparse
 import re
 import tomllib
 from pathlib import Path
-from scripts.env_generation_common import resolve_cli_path_from_root
+from scripts.env_generation_common import repo_root_for, resolve_cli_path_from_root
 
 DEFAULT_REPO_ROOT = Path(".")
 DEFAULT_PYPROJECT_PATH = Path("pyproject.toml")
@@ -27,8 +27,12 @@ SETUP_UV_VERSION_PIN_RE = re.compile(
 )
 
 
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
+
+
 def _resolve_repo_root(path: Path) -> Path:
-    resolved = Path(path).expanduser().resolve()
+    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name="repo_root")
     if not resolved.exists():
         raise ValueError(f"repo_root does not exist: {resolved}")
     if not resolved.is_dir():

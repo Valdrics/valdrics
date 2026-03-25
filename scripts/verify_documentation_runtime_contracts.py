@@ -3,9 +3,11 @@
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from pathlib import Path
-from scripts.env_generation_common import repo_root_for
+
+from scripts.env_generation_common import repo_root_for, resolve_cli_path_from_root
 
 
 @dataclass(frozen=True)
@@ -271,8 +273,32 @@ def verify_contracts(*, root: Path) -> list[str]:
     return errors
 
 
-def main() -> int:
-    errors = verify_contracts(root=DEFAULT_ROOT)
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Verify runtime and architecture docs against checked-in contracts."
+    )
+    parser.add_argument(
+        "--root",
+        type=Path,
+        default=DEFAULT_ROOT,
+        help="Repository root to verify. Relative paths are resolved from the repo root.",
+    )
+    return parser
+
+
+def _resolve_root(path: Path) -> Path:
+    return resolve_cli_path_from_root(DEFAULT_ROOT, path, field_name="root")
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    try:
+        root = _resolve_root(Path(str(args.root)))
+    except ValueError as exc:
+        print(str(exc))
+        return 2
+
+    errors = verify_contracts(root=root)
     if errors:
         print("Documentation runtime contract violations detected:")
         for error in errors:

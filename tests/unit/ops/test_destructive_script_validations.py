@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
 import pytest
 
 from scripts import database_wipe, force_wipe_app
@@ -67,3 +69,29 @@ def test_wipe_validation_rejects_protected_env_without_bypass(
             confirm_environment="production",
             no_prompt=True,
         )
+
+
+def test_database_wipe_main_returns_failure_on_asyncpg_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(database_wipe, "_validate_wipe_request", lambda **_: None)
+    monkeypatch.setattr(
+        database_wipe,
+        "wipe_database",
+        AsyncMock(side_effect=database_wipe.asyncpg.PostgresError("boom")),
+    )
+
+    assert database_wipe.main([]) == 1
+
+
+def test_force_wipe_app_main_returns_failure_on_sqlalchemy_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(force_wipe_app, "_validate_wipe_request", lambda **_: None)
+    monkeypatch.setattr(
+        force_wipe_app,
+        "force_wipe",
+        AsyncMock(side_effect=force_wipe_app.SQLAlchemyError("boom")),
+    )
+
+    assert force_wipe_app.main([]) == 1

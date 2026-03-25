@@ -1,3 +1,5 @@
+import type { PublicContentEntryInput } from './publicContent.types';
+
 export const RAW_PUBLIC_CONTENT_INSIGHTS = [
 	{
 		kind: 'insights',
@@ -136,4 +138,4 @@ export const RAW_PUBLIC_CONTENT_INSIGHTS = [
 			{ kind: 'proof', slug: 'identity-and-approval-controls' }
 		]
 	}
-] as const;
+] as const satisfies readonly PublicContentEntryInput[];

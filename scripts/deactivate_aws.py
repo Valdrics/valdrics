@@ -129,7 +129,7 @@ async def deactivate_all_connections(
     return affected
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Dry-run by default. Use explicit break-glass confirmation to deactivate all AWS connections."
     )
@@ -167,7 +167,7 @@ def main() -> int:
             f"{NONINTERACTIVE_BYPASS_ENV}=true."
         ),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         if args.execute:

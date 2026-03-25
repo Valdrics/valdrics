@@ -99,7 +99,20 @@ async def update_pricing(
         await db.commit()
 
 
-def main():
+def _validate_update_args(args: argparse.Namespace) -> None:
+    if args.command != "update":
+        return
+    if not str(args.provider or "").strip():
+        raise SystemExit("--provider is required")
+    if not str(args.model or "").strip():
+        raise SystemExit("--model is required")
+    if float(args.input) < 0 or float(args.output) < 0:
+        raise SystemExit("--input and --output must be >= 0")
+    if int(args.free) < 0:
+        raise SystemExit("--free must be >= 0")
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Update LLM Provider Pricing")
     subparsers = parser.add_subparsers(dest="command")
 
@@ -120,19 +133,24 @@ def main():
     )
     update_parser.add_argument("--free", type=int, default=0, help="Free tier tokens")
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
+    if not args.command:
+        parser.print_help()
+        return 2
+    _validate_update_args(args)
 
     if args.command == "seed":
         asyncio.run(seed_from_static_data())
+        return 0
     elif args.command == "update":
         asyncio.run(
             update_pricing(
                 args.provider, args.model, args.input, args.output, args.free
             )
         )
-    else:
-        parser.print_help()
+        return 0
+    return 2
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

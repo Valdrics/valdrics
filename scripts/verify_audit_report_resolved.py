@@ -17,10 +17,7 @@ from scripts.audit_report_controls_registry import (
 )
 from scripts.audit_report_controls_core import read_text
 
-DEFAULT_REPORT_PATH = Path(
-    "/home/daretechie/.gemini/antigravity/brain/"
-    "dba19da4-0271-4686-88fd-9bc5a2b3dbfe/audit_report.md.resolved"
-)
+DEFAULT_REPORT_PATH = Path("audit_report.md.resolved")
 REPORT_FINDING_PATTERN = re.compile(r"^###\s+([CHML]-\d{2}):", re.MULTILINE)
 REPORT_GENERIC_FINDING_PATTERN = re.compile(r"^###\s+([A-Z]+-\d{2}):", re.MULTILINE)
 

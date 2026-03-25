@@ -45,7 +45,7 @@ let cachedTenantId: string | null = null;
 let cachedTenantIdExpiresAt = 0;
 
 async function getSupabaseBrowserClient() {
-	const { createSupabaseBrowserClient } = await import('./supabase');
+	const { createSupabaseBrowserClient } = await import('./supabase.browser');
 	return createSupabaseBrowserClient();
 }
 

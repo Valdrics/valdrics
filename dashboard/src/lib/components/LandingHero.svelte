@@ -3,7 +3,7 @@
 	import { assets, base } from '$app/paths';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
-	import { REALTIME_SIGNAL_SNAPSHOTS, nextSnapshotIndex } from '$lib/landing/realtimeSignalMap';
+	import { LANDING_SIGNAL_SNAPSHOTS } from '$lib/landing/landingSignalSnapshots';
 	import {
 		resolveLandingExperiments,
 		shouldIncludeExperimentQueryParams,
@@ -27,7 +27,6 @@
 		buildLandingHeroSalesPath,
 		buildLandingHeroSignupPath
 	} from '$lib/landing/landingHeroActions';
-	import { mountLandingHeroBrowserRuntime } from '$lib/landing/landingHeroBrowserRuntime';
 	import { createLandingHeroTelemetryBridge } from '$lib/landing/landingHeroTelemetryBridge';
 	import { appendPublicAttribution } from '$lib/public/publicBuyingMotion';
 	import {
@@ -39,16 +38,17 @@
 		normalizeLandingRoiInputs
 	} from '$lib/landing/roiCalculator';
 	import { getReducedMotionPreference } from '$lib/landing/reducedMotion';
+	import { nextSnapshotIndex } from '$lib/landing/signalRotation';
 	import { BUYER_ROLE_VIEWS, HERO_ROLE_CONTEXT } from '$lib/landing/heroContent';
 	import LandingHeroView from '$lib/components/landing/LandingHeroView.svelte';
-	const DEFAULT_SIGNAL_SNAPSHOT = REALTIME_SIGNAL_SNAPSHOTS[0];
+	const DEFAULT_SIGNAL_SNAPSHOT = LANDING_SIGNAL_SNAPSHOTS[0];
 	const ONE_PAGER_HREF = `${base}/resources/valdrics-enterprise-one-pager.md`,
 		RESOURCES_PATH = `${base}/resources`;
 	const SUBSCRIBE_API_PATH = `${base}/api/marketing/subscribe`,
 		TALK_TO_SALES_PATH = `${base}/talk-to-sales`,
 		ENTERPRISE_PATH = `${base}/enterprise`;
 	if (!DEFAULT_SIGNAL_SNAPSHOT)
-		throw new Error('Realtime signal map requires at least one snapshot.');
+		throw new Error('Landing signal snapshots require at least one snapshot.');
 	let signalMapElement: HTMLDivElement | null = null;
 	let signalMapInView = $state(true),
 		documentVisible = $state(true),
@@ -81,9 +81,7 @@
 		cookieBannerVisible = $state(false),
 		localCurrencyCode = $state<LandingCurrencyCode>(resolveDetectedLandingCurrency()),
 		roiCurrencyCode = $state<LandingCurrencyCode>(resolveInitialLandingCurrency());
-	let activeSnapshot = $derived(
-		REALTIME_SIGNAL_SNAPSHOTS[snapshotIndex] ?? DEFAULT_SIGNAL_SNAPSHOT
-	);
+	let activeSnapshot = $derived(LANDING_SIGNAL_SNAPSHOTS[snapshotIndex] ?? DEFAULT_SIGNAL_SNAPSHOT);
 	let activeBuyerRole = $derived(BUYER_ROLE_VIEWS[buyerRoleIndex] ?? BUYER_ROLE_VIEWS[0]);
 	let activeSignalLane = $derived(
 		activeSnapshot.lanes.find(
@@ -142,7 +140,7 @@
 			!prefersReducedMotion &&
 			documentVisible &&
 			signalMapInView &&
-			REALTIME_SIGNAL_SNAPSHOTS.length > 1
+			LANDING_SIGNAL_SNAPSHOTS.length > 1
 	);
 	let roiInputs = $derived(
 		normalizeLandingRoiInputs({
@@ -173,31 +171,44 @@
 	$effect(() => {
 		if (!shouldRotateSnapshots) return;
 		const interval = setInterval(() => {
-			snapshotIndex = nextSnapshotIndex(snapshotIndex, REALTIME_SIGNAL_SNAPSHOTS.length);
+			snapshotIndex = nextSnapshotIndex(snapshotIndex, LANDING_SIGNAL_SNAPSHOTS.length);
 		}, SNAPSHOT_ROTATION_MS);
 		return () => clearInterval(interval);
 	});
-	onMount(() =>
-		mountLandingHeroBrowserRuntime({
-			browserEnabled: browser,
-			windowRef: window,
-			documentRef: document,
-			signalMapElement,
-			consentStorageKey: LANDING_CONSENT_KEY,
-			scrollMilestones: LANDING_SCROLL_MILESTONES,
-			initializeTelemetry: initialize,
-			markEngaged,
-			buildTelemetryContext,
-			emitLandingTelemetrySafe,
-			setPrefersReducedMotion: (value) => (prefersReducedMotion = value),
-			setPageReferrer: (value) => (pageReferrer = value),
-			setTelemetryEnabled: (value) => (telemetryEnabled = value),
-			setCookieBannerVisible: (value) => (cookieBannerVisible = value),
-			setDocumentVisible: (value) => (documentVisible = value),
-			setSignalMapInView: (value) => (signalMapInView = value),
-			setLandingScrollProgressPct: (value) => (landingScrollProgressPct = value)
-		})
-	);
+	onMount(() => {
+		let cancelled = false;
+		let teardown: (() => void) | void;
+
+		void import('$lib/landing/landingHeroBrowserRuntime').then(
+			({ mountLandingHeroBrowserRuntime }) => {
+				if (cancelled) return;
+				teardown = mountLandingHeroBrowserRuntime({
+					browserEnabled: browser,
+					windowRef: window,
+					documentRef: document,
+					signalMapElement,
+					consentStorageKey: LANDING_CONSENT_KEY,
+					scrollMilestones: LANDING_SCROLL_MILESTONES,
+					initializeTelemetry: initialize,
+					markEngaged,
+					buildTelemetryContext,
+					emitLandingTelemetrySafe,
+					setPrefersReducedMotion: (value) => (prefersReducedMotion = value),
+					setPageReferrer: (value) => (pageReferrer = value),
+					setTelemetryEnabled: (value) => (telemetryEnabled = value),
+					setCookieBannerVisible: (value) => (cookieBannerVisible = value),
+					setDocumentVisible: (value) => (documentVisible = value),
+					setSignalMapInView: (value) => (signalMapInView = value),
+					setLandingScrollProgressPct: (value) => (landingScrollProgressPct = value)
+				});
+			}
+		);
+
+		return () => {
+			cancelled = true;
+			teardown?.();
+		};
+	});
 	const telemetry = createLandingHeroTelemetryBridge({
 		getTelemetryEnabled: () => telemetryEnabled,
 		setTelemetryEnabled: (value) => (telemetryEnabled = value),

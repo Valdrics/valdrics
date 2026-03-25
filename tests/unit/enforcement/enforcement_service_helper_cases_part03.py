@@ -69,6 +69,65 @@ async def test_acquire_gate_evaluation_lock_timeout_raises_lock_reason(monkeypat
 
 
 
+@pytest.mark.asyncio
+async def test_acquire_gate_evaluation_lock_sqlite_bypasses_app_timeout(
+    monkeypatch,
+) -> None:
+    class _SqliteDb:
+        def __init__(self) -> None:
+            self.rollback_calls = 0
+            self.bind = SimpleNamespace(dialect=SimpleNamespace(name="sqlite"))
+
+        async def execute(self, _stmt):
+            await asyncio.sleep(0.05)
+            return SimpleNamespace(rowcount=1)
+
+        async def rollback(self) -> None:
+            self.rollback_calls += 1
+
+    db = _SqliteDb()
+    service = EnforcementService(db=db)
+    policy = EnforcementPolicy(tenant_id=uuid4())
+    policy.id = uuid4()
+    lock_events = _FakeCounter()
+    lock_wait = _FakeHistogram()
+    perf_values = iter([500.0, 500.05])
+
+    monkeypatch.setattr(
+        enforcement_service_module,
+        "ENFORCEMENT_GATE_LOCK_EVENTS_TOTAL",
+        lock_events,
+    )
+    monkeypatch.setattr(
+        enforcement_service_module,
+        "ENFORCEMENT_GATE_LOCK_WAIT_SECONDS",
+        lock_wait,
+    )
+    monkeypatch.setattr(
+        enforcement_service_module,
+        "_gate_lock_timeout_seconds",
+        lambda: 0.01,
+    )
+    monkeypatch.setattr(
+        enforcement_service_module.time,
+        "perf_counter",
+        lambda: next(perf_values),
+    )
+
+    await service._acquire_gate_evaluation_lock(
+        policy=policy,
+        source=EnforcementSource.K8S_ADMISSION,
+    )
+
+    assert db.rollback_calls == 0
+    assert any(
+        call[0]["event"] == "acquired" and call[0]["source"] == "k8s_admission"
+        for call in lock_events.calls
+    )
+    assert len(lock_wait.calls) == 1
+    assert lock_wait.calls[0][0]["outcome"] == "acquired"
+
+
 def test_policy_document_hash_and_gate_timeout_helper_branches(monkeypatch) -> None:
     assert enforcement_service_module._parse_iso_datetime("   ") is None
 

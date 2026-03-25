@@ -2,6 +2,7 @@ import argparse
 import asyncio
 import os
 import sys
+from pathlib import Path
 
 import asyncpg
 from dotenv import load_dotenv
@@ -13,12 +14,16 @@ from scripts.safety_guardrails import (
     ensure_interactive_confirmation,
     ensure_protected_environment_bypass,
 )
+from scripts.env_generation_common import repo_root_for
 
-load_dotenv()
 
 CONFIRM_PHRASE = "WIPE_VALDRICS_DATA"
 PROD_WIPE_BYPASS = "I_UNDERSTAND_THIS_WILL_DESTROY_DATA"
 NONINTERACTIVE_BYPASS_ENV = "VALDRICS_ALLOW_NONINTERACTIVE_WIPE"
+
+
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
 
 
 def _validate_wipe_request(
@@ -114,7 +119,8 @@ async def wipe_database() -> None:
         await conn.close()
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    load_dotenv(_repo_root() / ".env")
     parser = argparse.ArgumentParser(
         description="Dangerous: wipe database objects in public schema."
     )
@@ -141,7 +147,7 @@ def main() -> int:
             f"{NONINTERACTIVE_BYPASS_ENV}=true."
         ),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         _validate_wipe_request(
@@ -154,6 +160,9 @@ def main() -> int:
     except RuntimeError as exc:
         print(f"❌ {exc}", file=sys.stderr)
         return 2
+    except (asyncpg.PostgresError, OSError, TypeError, ValueError) as exc:
+        print(f"❌ Error: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

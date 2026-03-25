@@ -527,10 +527,8 @@ class TestFinOpsAnalyzerLLMInvocation:
             patch("app.shared.llm.analyzer.LLMFactory.create"),
             patch("app.shared.llm.analyzer.get_settings") as mock_settings,
         ):
-            # Mock the prompt and chain logic to avoid LangChain complexity
             analyzer.prompt = MagicMock()
-            mock_chain = MagicMock()
-            analyzer.prompt.__or__.return_value = mock_chain
+            analyzer.prompt.format_messages.return_value = ["formatted-message"]
 
             mock_response = MagicMock()
             mock_response.content = '{"result": "success"}'
@@ -538,7 +536,7 @@ class TestFinOpsAnalyzerLLMInvocation:
                 "token_usage": {"prompt_tokens": 100, "completion_tokens": 50}
             }
 
-            mock_chain.ainvoke = AsyncMock(return_value=mock_response)
+            analyzer.llm.ainvoke = AsyncMock(return_value=mock_response)
 
             mock_settings_obj = MagicMock()
             mock_settings_obj.LLM_PROVIDER = "groq"
@@ -558,24 +556,22 @@ class TestFinOpsAnalyzerLLMInvocation:
     async def test_invoke_llm_fallback_on_failure(self, analyzer):
         """Test LLM fallback when primary provider fails."""
         with (
-            patch("app.shared.llm.analyzer.LLMFactory.create"),
+            patch("app.shared.llm.analyzer.LLMFactory.create") as mock_factory,
             patch("app.shared.llm.analyzer.get_settings") as mock_settings,
         ):
-            # Mock the prompt and chain logic
             analyzer.prompt = MagicMock()
-            mock_chain = MagicMock()
-            analyzer.prompt.__or__.return_value = mock_chain
+            analyzer.prompt.format_messages.return_value = ["formatted-message"]
 
-            # First call fails (Primary), Second call succeeds (Fallback)
             mock_response = MagicMock()
             mock_response.content = '{"fallback": "success"}'
             mock_response.response_metadata = {
                 "token_usage": {"prompt_tokens": 200, "completion_tokens": 100}
             }
 
-            mock_chain.ainvoke = AsyncMock(
-                side_effect=[RuntimeError("Primary failed"), mock_response]
-            )
+            analyzer.llm.ainvoke = AsyncMock(side_effect=RuntimeError("Primary failed"))
+            fallback_llm = MagicMock()
+            fallback_llm.ainvoke = AsyncMock(return_value=mock_response)
+            mock_factory.return_value = fallback_llm
 
             mock_settings_obj = MagicMock()
             mock_settings_obj.LLM_PROVIDER = "groq"
@@ -595,16 +591,16 @@ class TestFinOpsAnalyzerLLMInvocation:
     async def test_invoke_llm_all_failures(self, analyzer):
         """Test LLM invocation when all providers fail."""
         with (
-            patch("app.shared.llm.analyzer.LLMFactory.create"),
+            patch("app.shared.llm.analyzer.LLMFactory.create") as mock_factory,
             patch("app.shared.llm.analyzer.get_settings") as mock_settings,
         ):
-            # Mock the prompt and chain logic
             analyzer.prompt = MagicMock()
-            mock_chain = MagicMock()
-            analyzer.prompt.__or__.return_value = mock_chain
+            analyzer.prompt.format_messages.return_value = ["formatted-message"]
 
-            # All calls fail
-            mock_chain.ainvoke = AsyncMock(side_effect=RuntimeError("Provider failed"))
+            analyzer.llm.ainvoke = AsyncMock(side_effect=RuntimeError("Provider failed"))
+            fallback_llm = MagicMock()
+            fallback_llm.ainvoke = AsyncMock(side_effect=RuntimeError("Provider failed"))
+            mock_factory.return_value = fallback_llm
 
             mock_settings_obj = MagicMock()
             mock_settings_obj.LLM_PROVIDER = "groq"

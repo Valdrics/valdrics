@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import os
-import sys
 from typing import Any
 
 import httpx
@@ -230,4 +229,4 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        sys.exit(130)
+        raise SystemExit(130)

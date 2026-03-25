@@ -7,6 +7,7 @@ import argparse
 import os
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 from pydantic import ValidationError
 
@@ -30,15 +31,26 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
-    args = _build_parser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
 
+    env_overrides: dict[str, str] = {}
     if args.env_file is not None:
-        for key, value in parse_env_file(args.env_file).items():
-            os.environ[key] = value
+        if args.env_file.exists() and not args.env_file.is_file():
+            print(
+                f"migration_env_validation_failed: env-file must be a file path: {args.env_file}",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            env_overrides.update(parse_env_file(args.env_file))
+        except OSError as exc:
+            print(f"migration_env_validation_failed: {exc}", file=sys.stderr)
+            return 1
 
     try:
-        settings = MigrationSettings(_env_file=None)
+        with patch.dict(os.environ, env_overrides, clear=False):
+            settings = MigrationSettings(_env_file=None)
     except (ValidationError, OSError, RuntimeError, TypeError, ValueError) as exc:
         print(f"migration_env_validation_failed: {exc}", file=sys.stderr)
         return 1

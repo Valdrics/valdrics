@@ -1,6 +1,7 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { onMount } from 'svelte';
+	import { createLazyComponent } from '$lib/lazyComponent';
 	import {
 		buildCloudPlusCreateFields,
 		createAndVerifyCloudPlusConnection,
@@ -18,10 +19,12 @@
 		type DiscoveredAccount,
 		syncAwsOrg as syncAwsOrgApi
 	} from './connectionsDataApi';
-	import ConnectionsPageViewBody from './ConnectionsPageViewBody.svelte';
 	import './ConnectionsPageViewContent.css';
 
 	let { data } = $props();
+	const loadConnectionsPageViewBody = createLazyComponent(
+		() => import('./ConnectionsPageViewBody.svelte')
+	);
 	let loadingAWS = $state(true),
 		loadingAzure = $state(true),
 		loadingGCP = $state(true);
@@ -358,67 +361,90 @@
 </svelte:head>
 
 <div class="space-y-8">
-	<ConnectionsPageViewBody
-		{...{
-			data,
-			loadingAWS,
-			loadingAzure,
-			loadingGCP,
-			loadingSaaS,
-			loadingLicense,
-			loadingPlatform,
-			loadingHybrid,
-			awsConnection,
-			awsConnections,
-			azureConnections,
-			gcpConnections,
-			saasConnections,
-			licenseConnections,
-			platformConnections,
-			hybridConnections,
-			discoveredAccounts,
-			loadingDiscovered,
-			syncingOrg,
-			linkingAccount,
-			error,
-			success,
-			verifyingCloudPlus,
-			creatingSaaS,
-			creatingLicense,
-			creatingPlatform,
-			creatingHybrid,
-			canUseCloudPlusFeatures,
-			createCloudPlusConnection,
-			verifyCloudPlusConnection,
-			syncAWSOrg,
-			deleteConnection,
-			linkDiscoveredAccount
-		}}
-		bind:saasName
-		bind:saasVendor
-		bind:saasAuthMethod
-		bind:saasApiKey
-		bind:saasConnectorConfig
-		bind:saasFeedInput
-		bind:licenseName
-		bind:licenseVendor
-		bind:licenseAuthMethod
-		bind:licenseApiKey
-		bind:licenseConnectorConfig
-		bind:licenseFeedInput
-		bind:platformName
-		bind:platformVendor
-		bind:platformAuthMethod
-		bind:platformApiKey
-		bind:platformApiSecret
-		bind:platformConnectorConfig
-		bind:platformFeedInput
-		bind:hybridName
-		bind:hybridVendor
-		bind:hybridAuthMethod
-		bind:hybridApiKey
-		bind:hybridApiSecret
-		bind:hybridConnectorConfig
-		bind:hybridFeedInput
-	/>
+	{#await loadConnectionsPageViewBody()}
+		<div class="space-y-6">
+			<div class="card">
+				<div class="skeleton h-10 w-56 mb-4"></div>
+				<div class="skeleton h-4 w-3/4"></div>
+			</div>
+			<div class="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-4">
+				<div class="skeleton h-72 rounded-3xl"></div>
+				<div class="skeleton h-72 rounded-3xl"></div>
+				<div class="skeleton h-72 rounded-3xl"></div>
+				<div class="skeleton h-72 rounded-3xl"></div>
+			</div>
+		</div>
+	{:then module}
+		{@const ConnectionsPageViewBody = module.default}
+		<ConnectionsPageViewBody
+			{...{
+				data,
+				loadingAWS,
+				loadingAzure,
+				loadingGCP,
+				loadingSaaS,
+				loadingLicense,
+				loadingPlatform,
+				loadingHybrid,
+				awsConnection,
+				awsConnections,
+				azureConnections,
+				gcpConnections,
+				saasConnections,
+				licenseConnections,
+				platformConnections,
+				hybridConnections,
+				discoveredAccounts,
+				loadingDiscovered,
+				syncingOrg,
+				linkingAccount,
+				error,
+				success,
+				verifyingCloudPlus,
+				creatingSaaS,
+				creatingLicense,
+				creatingPlatform,
+				creatingHybrid,
+				canUseCloudPlusFeatures,
+				createCloudPlusConnection,
+				verifyCloudPlusConnection,
+				syncAWSOrg,
+				deleteConnection,
+				linkDiscoveredAccount
+			}}
+			bind:saasName
+			bind:saasVendor
+			bind:saasAuthMethod
+			bind:saasApiKey
+			bind:saasConnectorConfig
+			bind:saasFeedInput
+			bind:licenseName
+			bind:licenseVendor
+			bind:licenseAuthMethod
+			bind:licenseApiKey
+			bind:licenseConnectorConfig
+			bind:licenseFeedInput
+			bind:platformName
+			bind:platformVendor
+			bind:platformAuthMethod
+			bind:platformApiKey
+			bind:platformApiSecret
+			bind:platformConnectorConfig
+			bind:platformFeedInput
+			bind:hybridName
+			bind:hybridVendor
+			bind:hybridAuthMethod
+			bind:hybridApiKey
+			bind:hybridApiSecret
+			bind:hybridConnectorConfig
+			bind:hybridFeedInput
+		/>
+	{:catch}
+		<div class="space-y-6">
+			<div class="card">
+				<div class="skeleton h-10 w-56 mb-4"></div>
+				<div class="skeleton h-4 w-3/4"></div>
+			</div>
+		</div>
+	{/await}
 </div>

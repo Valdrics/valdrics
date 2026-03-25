@@ -157,6 +157,97 @@ def test_reload_settings_from_environment_logs_warning_when_cache_refresh_fails(
     logger.warning.assert_called_once()
 
 
+def test_reload_settings_from_environment_refreshes_loaded_celery_config() -> None:
+    current = types.SimpleNamespace(APP_NAME="old-name", REDIS_URL="redis://old")
+    refreshed = MagicMock()
+    refreshed.APP_NAME = "new-name"
+    refreshed.REDIS_URL = "redis://new"
+    refreshed.model_dump.return_value = {
+        "APP_NAME": refreshed.APP_NAME,
+        "REDIS_URL": refreshed.REDIS_URL,
+    }
+    logger = MagicMock()
+
+    fake_security_module = types.ModuleType("app.shared.core.security")
+    fake_encryption_module = types.ModuleType("app.models._encryption")
+    fake_celery_module = types.ModuleType("app.shared.core.celery_app")
+
+    class _KeyManager:
+        clear_key_caches = MagicMock()
+
+    clear_encryption_key_cache = MagicMock()
+    refresh_celery_app_config = MagicMock()
+
+    fake_security_module.EncryptionKeyManager = _KeyManager
+    fake_encryption_module.clear_encryption_key_cache = clear_encryption_key_cache
+    fake_celery_module.refresh_celery_app_config = refresh_celery_app_config
+
+    with (
+        patch("app.shared.core.config.get_settings", return_value=current),
+        patch("app.shared.core.config.Settings", return_value=refreshed),
+        patch("app.shared.core.config.structlog.get_logger", return_value=logger),
+        patch.dict(
+            "sys.modules",
+            {
+                "app.shared.core.security": fake_security_module,
+                "app.models._encryption": fake_encryption_module,
+                "app.shared.core.celery_app": fake_celery_module,
+            },
+        ),
+    ):
+        result = reload_settings_from_environment()
+
+    assert result is current
+    assert current.REDIS_URL == "redis://new"
+    refresh_celery_app_config.assert_called_once_with(current)
+
+
+def test_reload_settings_from_environment_refreshes_loaded_fastapi_metadata() -> None:
+    current = types.SimpleNamespace(APP_NAME="old-name", VERSION="0.1.0")
+    refreshed = MagicMock()
+    refreshed.APP_NAME = "new-name"
+    refreshed.VERSION = "0.2.0"
+    refreshed.model_dump.return_value = {
+        "APP_NAME": refreshed.APP_NAME,
+        "VERSION": refreshed.VERSION,
+    }
+    logger = MagicMock()
+
+    fake_security_module = types.ModuleType("app.shared.core.security")
+    fake_encryption_module = types.ModuleType("app.models._encryption")
+    fake_app_main_module = types.ModuleType("app.main")
+
+    class _KeyManager:
+        clear_key_caches = MagicMock()
+
+    clear_encryption_key_cache = MagicMock()
+    refresh_fastapi_app_metadata = MagicMock()
+
+    fake_security_module.EncryptionKeyManager = _KeyManager
+    fake_encryption_module.clear_encryption_key_cache = clear_encryption_key_cache
+    fake_app_main_module.refresh_fastapi_app_metadata = refresh_fastapi_app_metadata
+
+    with (
+        patch("app.shared.core.config.get_settings", return_value=current),
+        patch("app.shared.core.config.Settings", return_value=refreshed),
+        patch("app.shared.core.config.structlog.get_logger", return_value=logger),
+        patch.dict(
+            "sys.modules",
+            {
+                "app.shared.core.security": fake_security_module,
+                "app.models._encryption": fake_encryption_module,
+                "app.main": fake_app_main_module,
+            },
+        ),
+    ):
+        result = reload_settings_from_environment()
+
+    assert result is current
+    assert current.APP_NAME == "new-name"
+    assert current.VERSION == "0.2.0"
+    refresh_fastapi_app_metadata.assert_called_once_with(current)
+
+
 def test_environment_validator_normalizes_and_rejects_invalid_values() -> None:
     assert Settings._normalize_environment("Production") == "production"
 

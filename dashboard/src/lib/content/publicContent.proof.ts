@@ -1,3 +1,5 @@
+import type { PublicContentEntryInput } from './publicContent.types';
+
 export const RAW_PUBLIC_CONTENT_PROOF = [
 	{
 		kind: 'proof',
@@ -236,4 +238,4 @@ export const RAW_PUBLIC_CONTENT_PROOF = [
 			{ kind: 'resources', slug: 'global-finops-compliance-workbook' }
 		]
 	}
-] as const;
+] as const satisfies readonly PublicContentEntryInput[];

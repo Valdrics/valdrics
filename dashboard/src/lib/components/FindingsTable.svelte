@@ -39,6 +39,22 @@
 		resources.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
 	);
 
+	function providerTone(provider: ZombieFinding['provider']): string {
+		return `findings-table__provider-pill findings-table__provider-pill--${provider}`;
+	}
+
+	function confidenceTone(confidence: ZombieFinding['confidence']): string {
+		if (confidence === 'high') return 'findings-table__confidence-dot--high';
+		if (confidence === 'medium') return 'findings-table__confidence-dot--medium';
+		return 'findings-table__confidence-dot--low';
+	}
+
+	function riskTone(risk: ZombieFinding['risk_if_deleted']): string {
+		if (risk === 'high') return 'findings-table__risk--high';
+		if (risk === 'medium') return 'findings-table__risk--medium';
+		return 'findings-table__risk--low';
+	}
+
 	function generateSniperCommand(finding: ZombieFinding): string {
 		const id = finding.resource_id;
 		const type = finding.resource_type?.toLowerCase() || '';
@@ -83,66 +99,46 @@
 	}
 </script>
 
-<div class="card stagger-enter" style="animation-delay: 250ms;">
-	<!-- Table Header -->
-	<div class="flex items-center justify-between mb-4">
-		<h3 class="text-lg font-semibold">
-			🧟 Zombie Resources ({resources.length})
-		</h3>
-		<div class="flex items-center gap-2 text-xs text-ink-400">
+<div class="card stagger-enter findings-table">
+	<div class="findings-table__header">
+		<h3 class="findings-table__title">🧟 Zombie Resources ({resources.length})</h3>
+		<div class="findings-table__meta">
 			<span>Page {currentPage + 1} of {totalPages}</span>
 		</div>
 	</div>
 
-	<!-- Responsive Table -->
-	<div class="overflow-x-auto">
-		<table class="w-full text-sm">
+	<div class="findings-table__scroller">
+		<table class="findings-table__table">
 			<thead>
-				<tr class="border-b border-ink-700 text-left text-xs text-ink-400 uppercase tracking-wider">
-					<th class="pb-3 pr-4">Provider</th>
-					<th class="pb-3 pr-4">Resource</th>
-					<th class="pb-3 pr-4">Type</th>
-					<th class="pb-3 pr-4">Cost</th>
-					<th class="pb-3 pr-4">Confidence</th>
-					<th class="pb-3 pr-4">Owner</th>
-					<th class="pb-3 pr-4">Risk</th>
-					<th class="pb-3 text-right">Action</th>
+				<tr class="findings-table__row findings-table__row--head">
+					<th class="findings-table__cell findings-table__cell--head">Provider</th>
+					<th class="findings-table__cell findings-table__cell--head">Resource</th>
+					<th class="findings-table__cell findings-table__cell--head">Type</th>
+					<th class="findings-table__cell findings-table__cell--head">Cost</th>
+					<th class="findings-table__cell findings-table__cell--head">Confidence</th>
+					<th class="findings-table__cell findings-table__cell--head">Owner</th>
+					<th class="findings-table__cell findings-table__cell--head">Risk</th>
+					<th class="findings-table__cell findings-table__cell--head findings-table__cell--actions">
+						Action
+					</th>
 				</tr>
 			</thead>
 			<tbody>
 				{#each paginatedResources as finding (finding.resource_id)}
-					<tr class="border-b border-ink-800 hover:bg-ink-800/50 transition-colors">
-						<!-- Provider -->
-						<td class="py-3 pr-4">
-							<div
-								class="inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-bold uppercase tracking-tighter
-                {finding.provider === 'aws'
-									? 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
-									: finding.provider === 'azure'
-										? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-										: 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'}"
-							>
+					<tr class="findings-table__row">
+						<td class="findings-table__cell">
+							<div class={providerTone(finding.provider)}>
 								<CloudLogo provider={finding.provider} size={10} />
-								<span
-									>{finding.provider === 'aws'
-										? 'AWS'
-										: finding.provider === 'azure'
-											? 'Azure'
-											: 'GCP'}</span
-								>
+								<span>{finding.provider === 'aws' ? 'AWS' : finding.provider === 'azure' ? 'Azure' : 'GCP'}</span>
 							</div>
 						</td>
-						<!-- Resource ID -->
-						<td class="py-3 pr-4">
-							<div class="font-mono text-xs truncate max-w-[150px]" title={finding.resource_id}>
+						<td class="findings-table__cell">
+							<div class="findings-table__resource-id" title={finding.resource_id}>
 								{finding.resource_id}
 							</div>
-							<!-- Expandable explanation -->
-							<details class="mt-1">
-								<summary class="text-xs text-ink-500 cursor-pointer hover:text-accent-400">
-									View details
-								</summary>
-								<p class="text-xs text-ink-400 mt-1 max-w-xs">
+							<details class="findings-table__details">
+								<summary class="findings-table__summary">View details</summary>
+								<p class="findings-table__explanation">
 									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 									{@html DOMPurify.sanitize(finding.explanation, {
 										ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'br', 'p', 'ul', 'li', 'code'],
@@ -150,102 +146,71 @@
 									})}
 								</p>
 								{#if finding.confidence_reason}
-									<p class="text-xs text-ink-500 mt-1 italic">
-										{finding.confidence_reason}
-									</p>
+									<p class="findings-table__confidence-reason">{finding.confidence_reason}</p>
 								{/if}
 							</details>
 						</td>
-
-						<!-- Type Badge -->
-						<td class="py-3 pr-4">
-							<span class="badge badge-default text-xs">
+						<td class="findings-table__cell">
+							<span class="badge badge-default findings-table__type-pill">
 								{finding.resource_type || 'Resource'}
 							</span>
 							{#if finding.is_gpu}
-								<span
-									class="badge badge-error py-0.5 px-1.5 text-xs uppercase font-bold animate-pulse"
-									>GPU</span
-								>
+								<span class="findings-table__gpu-pill">GPU</span>
 							{/if}
 						</td>
-
-						<!-- Monthly Cost -->
-						<td class="py-3 pr-4 font-semibold text-success-400">
+						<td class="findings-table__cell findings-table__cost">
 							{finding.monthly_cost || '$0'}
 						</td>
-
-						<!-- Confidence -->
-						<td class="py-3 pr-4">
+						<td class="findings-table__cell">
 							{#if finding.confidence}
-								<span class="inline-flex items-center gap-1">
-									<span
-										class="w-2 h-2 rounded-full {finding.confidence === 'high'
-											? 'bg-danger-400'
-											: finding.confidence === 'medium'
-												? 'bg-warning-400'
-												: 'bg-success-400'}"
-									></span>
-									<span class="text-xs capitalize">{finding.confidence}</span>
+								<span class="findings-table__confidence">
+									<span class={`findings-table__confidence-dot ${confidenceTone(finding.confidence)}`}></span>
+									<span class="findings-table__confidence-label">{finding.confidence}</span>
 								</span>
 							{:else}
-								<span class="text-xs text-ink-500 italic">N/A</span>
+								<span class="findings-table__muted">N/A</span>
 							{/if}
 						</td>
-
-						<td class="py-3 pr-4">
-							<div class="flex flex-col">
+						<td class="findings-table__cell">
+							<div class="findings-table__owner">
 								{#if finding.owner === 'Growth Plan Required'}
 									<span
-										class="text-xs font-bold text-warning-400 flex items-center gap-1"
+										class="findings-table__owner-locked"
 										title="Owner Attribution requires Growth tier"
 									>
-										<span class="w-1 h-1 rounded-full bg-warning-400 animate-ping"></span>
+										<span class="findings-table__owner-locked-dot"></span>
 										LOCKED
 									</span>
 								{:else}
-									<span
-										class="text-xs text-ink-300 truncate max-w-[120px]"
-										title={finding.owner || 'unknown'}
-									>
+									<span class="findings-table__owner-value" title={finding.owner || 'unknown'}>
 										{finding.owner || 'unknown'}
 									</span>
 								{/if}
 							</div>
 						</td>
-
-						<!-- Risk -->
-						<td class="py-3 pr-4">
-							<span
-								class="text-xs {finding.risk_if_deleted === 'high'
-									? 'text-danger-400'
-									: finding.risk_if_deleted === 'medium'
-										? 'text-warning-400'
-										: 'text-ink-400'}"
-							>
+						<td class="findings-table__cell">
+							<span class={`findings-table__risk ${riskTone(finding.risk_if_deleted)}`}>
 								{finding.risk_if_deleted || 'low'}
 							</span>
 						</td>
-
-						<!-- Action Button -->
-						<td class="py-3 text-right">
-							<div class="flex items-center justify-end gap-2">
+						<td class="findings-table__cell findings-table__cell--actions">
+							<div class="findings-table__actions">
 								<button
 									type="button"
-									class="btn btn-ghost btn-xs text-ink-400 hover:text-accent-400"
+									class="btn btn-ghost findings-table__icon-button"
 									onclick={() =>
 										copyToClipboard(generateSniperCommand(finding), finding.resource_id)}
 									title="Copy Sniper Command"
 								>
 									{#if copiedId === finding.resource_id}
-										<Check size={14} class="text-success-400" />
+										<Check size={14} class="findings-table__copy-success" />
 									{:else}
 										<Terminal size={14} />
 									{/if}
 								</button>
 								<button
 									type="button"
-									class="btn btn-ghost text-xs hover:bg-accent-500/20 hover:text-accent-400"
+									class="btn btn-ghost findings-table__action-button"
 									onclick={() => onRemediate(finding)}
 									disabled={remediating === finding.resource_id || !finding.finding_id}
 									title={!finding.finding_id
@@ -253,7 +218,7 @@
 										: undefined}
 								>
 									{#if remediating === finding.resource_id}
-										<span class="animate-pulse">...</span>
+										<span class="findings-table__action-pending">...</span>
 									{:else}
 										{finding.finding_id ? finding.recommended_action || 'Review' : 'Unavailable'}
 									{/if}
@@ -266,19 +231,18 @@
 		</table>
 	</div>
 
-	<!-- Pagination -->
 	{#if totalPages > 1}
-		<div class="flex items-center justify-between mt-4 pt-4 border-t border-ink-800">
+		<div class="findings-table__pagination">
 			<button
 				type="button"
-				class="btn btn-ghost text-xs"
+				class="btn btn-ghost findings-table__pagination-button"
 				disabled={currentPage === 0}
 				onclick={() => (currentPage = Math.max(0, currentPage - 1))}
 			>
 				← Previous
 			</button>
 
-			<div class="flex items-center gap-1">
+			<div class="findings-table__pagination-pages">
 				<!-- eslint-disable-next-line @typescript-eslint/no-unused-vars -->
 				{#each Array(Math.min(totalPages, 5)) as _, p (p)}
 					{@const pageNum =
@@ -291,9 +255,8 @@
 									: currentPage - 2 + p}
 					<button
 						type="button"
-						class="w-8 h-8 rounded text-xs {currentPage === pageNum
-							? 'bg-accent-500 text-white'
-							: 'hover:bg-ink-700'}"
+						class="findings-table__page-button"
+						class:findings-table__page-button--active={currentPage === pageNum}
 						onclick={() => (currentPage = pageNum)}
 					>
 						{pageNum + 1}
@@ -303,7 +266,7 @@
 
 			<button
 				type="button"
-				class="btn btn-ghost text-xs"
+				class="btn btn-ghost findings-table__pagination-button"
 				disabled={currentPage >= totalPages - 1}
 				onclick={() => (currentPage = Math.min(totalPages - 1, currentPage + 1))}
 			>
@@ -312,3 +275,358 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.findings-table {
+		animation-delay: 250ms;
+	}
+
+	.findings-table__header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-4);
+		margin-bottom: var(--space-4);
+	}
+
+	.findings-table__title {
+		margin: 0;
+		font-size: var(--text-lg);
+		font-weight: 600;
+	}
+
+	.findings-table__meta {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--space-2);
+		font-size: var(--text-xs);
+		color: var(--color-ink-400);
+	}
+
+	.findings-table__scroller {
+		overflow-x: auto;
+	}
+
+	.findings-table__table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: var(--text-sm);
+	}
+
+	.findings-table__row {
+		border-bottom: 1px solid var(--color-ink-800);
+		transition: background var(--duration-fast) var(--ease-out);
+	}
+
+	.findings-table__row:hover {
+		background: rgb(33 47 68 / 0.5);
+	}
+
+	.findings-table__row--head {
+		border-bottom-color: var(--color-ink-700);
+		text-align: left;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--color-ink-400);
+	}
+
+	.findings-table__cell {
+		padding: 0.75rem 1rem 0.75rem 0;
+		vertical-align: top;
+	}
+
+	.findings-table__cell--head {
+		padding-bottom: 0.75rem;
+		font-size: var(--text-xs);
+		font-weight: 600;
+	}
+
+	.findings-table__cell--actions {
+		text-align: right;
+	}
+
+	.findings-table__provider-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		padding: 0.25rem 0.5rem;
+		border-radius: var(--radius-full);
+		border: 1px solid transparent;
+		font-size: var(--text-xs);
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: -0.02em;
+	}
+
+	.findings-table__provider-pill--aws {
+		border-color: rgb(249 115 22 / 0.2);
+		background: rgb(249 115 22 / 0.1);
+		color: #fb923c;
+	}
+
+	.findings-table__provider-pill--azure {
+		border-color: rgb(59 130 246 / 0.2);
+		background: rgb(59 130 246 / 0.1);
+		color: #60a5fa;
+	}
+
+	.findings-table__provider-pill--gcp {
+		border-color: rgb(234 179 8 / 0.2);
+		background: rgb(234 179 8 / 0.1);
+		color: #facc15;
+	}
+
+	.findings-table__resource-id {
+		max-width: 9.375rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--text-xs);
+		font-family: var(--font-mono);
+	}
+
+	.findings-table__details {
+		margin-top: 0.25rem;
+	}
+
+	.findings-table__summary {
+		cursor: pointer;
+		font-size: var(--text-xs);
+		color: var(--color-ink-500);
+	}
+
+	.findings-table__summary:hover {
+		color: var(--color-accent-400);
+	}
+
+	.findings-table__explanation {
+		max-width: 20rem;
+		margin: 0.25rem 0 0;
+		font-size: var(--text-xs);
+		color: var(--color-ink-400);
+	}
+
+	.findings-table__confidence-reason {
+		margin: 0.25rem 0 0;
+		font-size: var(--text-xs);
+		font-style: italic;
+		color: var(--color-ink-500);
+	}
+
+	.findings-table__type-pill {
+		font-size: var(--text-xs);
+	}
+
+	.findings-table__gpu-pill {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.125rem 0.375rem;
+		border-radius: var(--radius-full);
+		background: rgb(239 68 68 / 0.16);
+		color: var(--color-danger-400);
+		font-size: var(--text-xs);
+		font-weight: 700;
+		text-transform: uppercase;
+		animation: findings-table-pulse 1.4s ease-in-out infinite;
+	}
+
+	.findings-table__cost {
+		font-weight: 600;
+		color: var(--color-success-400);
+	}
+
+	.findings-table__confidence {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.findings-table__confidence-dot {
+		width: 0.5rem;
+		height: 0.5rem;
+		border-radius: 999px;
+	}
+
+	.findings-table__confidence-dot--high {
+		background: var(--color-danger-400);
+	}
+
+	.findings-table__confidence-dot--medium {
+		background: var(--color-warning-400);
+	}
+
+	.findings-table__confidence-dot--low {
+		background: var(--color-success-400);
+	}
+
+	.findings-table__confidence-label {
+		font-size: var(--text-xs);
+		text-transform: capitalize;
+	}
+
+	.findings-table__muted {
+		font-size: var(--text-xs);
+		font-style: italic;
+		color: var(--color-ink-500);
+	}
+
+	.findings-table__owner {
+		display: flex;
+		flex-direction: column;
+	}
+
+	.findings-table__owner-locked {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		font-size: var(--text-xs);
+		font-weight: 700;
+		color: var(--color-warning-400);
+	}
+
+	.findings-table__owner-locked-dot {
+		width: 0.25rem;
+		height: 0.25rem;
+		border-radius: 999px;
+		background: var(--color-warning-400);
+		animation: findings-table-ping 1.2s ease-in-out infinite;
+	}
+
+	.findings-table__owner-value {
+		max-width: 7.5rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: var(--text-xs);
+		color: var(--color-ink-300);
+	}
+
+	.findings-table__risk {
+		font-size: var(--text-xs);
+	}
+
+	.findings-table__risk--high {
+		color: var(--color-danger-400);
+	}
+
+	.findings-table__risk--medium {
+		color: var(--color-warning-400);
+	}
+
+	.findings-table__risk--low {
+		color: var(--color-ink-400);
+	}
+
+	.findings-table__actions {
+		display: inline-flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.5rem;
+	}
+
+	.findings-table__icon-button {
+		padding: 0.25rem 0.5rem;
+		color: var(--color-ink-400);
+	}
+
+	.findings-table__icon-button:hover:not(:disabled) {
+		color: var(--color-accent-400);
+	}
+
+	.findings-table__action-button {
+		padding: 0.375rem 0.625rem;
+		font-size: var(--text-xs);
+	}
+
+	.findings-table__action-button:hover:not(:disabled) {
+		background: rgb(6 182 212 / 0.2);
+		color: var(--color-accent-400);
+	}
+
+	.findings-table__copy-success {
+		color: var(--color-success-400);
+	}
+
+	.findings-table__action-pending {
+		animation: findings-table-pulse 1.2s ease-in-out infinite;
+	}
+
+	.findings-table__pagination {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+		margin-top: var(--space-4);
+		padding-top: var(--space-4);
+		border-top: 1px solid var(--color-ink-800);
+	}
+
+	.findings-table__pagination-button {
+		font-size: var(--text-xs);
+	}
+
+	.findings-table__pagination-pages {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
+	.findings-table__page-button {
+		width: 2rem;
+		height: 2rem;
+		border: none;
+		border-radius: var(--radius-md);
+		background: transparent;
+		color: var(--color-ink-300);
+		font-size: var(--text-xs);
+		cursor: pointer;
+	}
+
+	.findings-table__page-button:hover {
+		background: var(--color-ink-700);
+	}
+
+	.findings-table__page-button--active {
+		background: var(--color-accent-500);
+		color: white;
+	}
+
+	@media (max-width: 900px) {
+		.findings-table__header,
+		.findings-table__pagination {
+			flex-direction: column;
+			align-items: flex-start;
+		}
+
+		.findings-table__cell {
+			min-width: 7rem;
+		}
+
+		.findings-table__cell--actions {
+			min-width: 10rem;
+		}
+	}
+
+	@keyframes findings-table-pulse {
+		0%,
+		100% {
+			opacity: 1;
+		}
+
+		50% {
+			opacity: 0.5;
+		}
+	}
+
+	@keyframes findings-table-ping {
+		0% {
+			transform: scale(1);
+			opacity: 1;
+		}
+
+		100% {
+			transform: scale(1.8);
+			opacity: 0;
+		}
+	}
+</style>

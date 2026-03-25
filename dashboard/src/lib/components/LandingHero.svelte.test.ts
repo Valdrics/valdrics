@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import LandingHero from './LandingHero.svelte';
 
@@ -72,7 +72,9 @@ describe('LandingHero', () => {
 		await fireEvent.click(
 			screen.getAllByRole('link', { name: /start free workspace|book executive briefing/i })[0]!
 		);
-		expect(dataLayer.length).toBeGreaterThan(0);
+		await waitFor(() => {
+			expect(dataLayer.length).toBeGreaterThan(0);
+		});
 		const payload = dataLayer[dataLayer.length - 1] as Record<string, unknown>;
 		expect(payload.event).toBe('valdrics_landing_event');
 	});
@@ -81,7 +83,7 @@ describe('LandingHero', () => {
 		window.localStorage.removeItem('valdrics.cookie_consent.v1');
 		render(LandingHero);
 
-		expect(screen.getByRole('dialog', { name: /cookie preferences/i })).toBeTruthy();
+		expect(await screen.findByRole('dialog', { name: /cookie preferences/i })).toBeTruthy();
 		const declineButton = screen.getByRole('button', { name: /decline analytics/i });
 		await fireEvent.click(declineButton);
 		expect(window.localStorage.getItem('valdrics.cookie_consent.v1')).toBe('rejected');

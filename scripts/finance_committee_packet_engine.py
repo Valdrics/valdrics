@@ -88,17 +88,29 @@ def build_tier_unit_economics(
             active_subscriptions * support_cogs_per_subscription_by_tier[tier]
             + dunning_events * support_cogs_per_dunning_event_usd
         )
-        total_cogs = llm_cogs_usd + infra_cogs_usd + support_cogs_usd
-        gross_margin_percent = safe_margin_percent(effective_mrr_usd, total_cogs)
+        rounded_gross_mrr_usd = round(gross_mrr_usd, 2)
+        rounded_effective_mrr_usd = round(effective_mrr_usd, 2)
+        rounded_llm_cogs_usd = round(llm_cogs_usd, 2)
+        rounded_infra_cogs_usd = round(infra_cogs_usd, 2)
+        rounded_support_cogs_usd = round(support_cogs_usd, 2)
+        rounded_total_cogs = (
+            rounded_llm_cogs_usd
+            + rounded_infra_cogs_usd
+            + rounded_support_cogs_usd
+        )
+        gross_margin_percent = safe_margin_percent(
+            rounded_effective_mrr_usd,
+            rounded_total_cogs,
+        )
 
         unit_rows.append(
             {
                 "tier": tier,
-                "mrr_usd": round(gross_mrr_usd, 2),
-                "effective_mrr_usd": round(effective_mrr_usd, 2),
-                "llm_cogs_usd": round(llm_cogs_usd, 2),
-                "infra_cogs_usd": round(infra_cogs_usd, 2),
-                "support_cogs_usd": round(support_cogs_usd, 2),
+                "mrr_usd": rounded_gross_mrr_usd,
+                "effective_mrr_usd": rounded_effective_mrr_usd,
+                "llm_cogs_usd": rounded_llm_cogs_usd,
+                "infra_cogs_usd": rounded_infra_cogs_usd,
+                "support_cogs_usd": rounded_support_cogs_usd,
                 "gross_margin_percent": round(gross_margin_percent, 2),
                 "active_subscriptions": active_subscriptions,
                 "dunning_events": dunning_events,

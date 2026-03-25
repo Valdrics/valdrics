@@ -497,18 +497,18 @@ async def test_setup_client_and_usage_keeps_safe_byok_custom_model() -> None:
 async def test_invoke_llm_builds_factory_llm_when_bind_unavailable() -> None:
     analyzer = FinOpsAnalyzer(MagicMock())
 
-    class _Chain:
-        async def ainvoke(self, _payload: dict[str, str]) -> object:
+    class _LLM:
+        async def ainvoke(self, _payload: object) -> object:
             return SimpleNamespace(content="{}", response_metadata={})
 
     class _Prompt:
-        def __or__(self, _other: object) -> _Chain:
-            return _Chain()
+        def format_messages(self, **_kwargs: object) -> list[str]:
+            return ["formatted-message"]
 
     with (
         patch.object(analyzer, "_get_prompt", new=AsyncMock(return_value=_Prompt())),
         patch.object(analyzer, "_bind_output_token_ceiling", return_value=None),
-        patch("app.shared.llm.analyzer.LLMFactory.create", return_value=MagicMock()) as factory,
+        patch("app.shared.llm.analyzer.LLMFactory.create", return_value=_LLM()) as factory,
         patch("app.shared.llm.analyzer.get_settings") as mock_settings,
     ):
         mock_settings.return_value.LLM_PROVIDER = "groq"
@@ -535,18 +535,15 @@ async def test_invoke_llm_uses_factory_for_non_default_provider_with_byok_and_ce
     analyzer = FinOpsAnalyzer(MagicMock())
 
     class _LLM:
-        pass
-
-    class _Chain:
-        async def ainvoke(self, _payload: dict[str, str]) -> object:
+        async def ainvoke(self, _payload: object) -> object:
             return SimpleNamespace(
                 content={"ok": True},
                 response_metadata="not-a-dict",
             )
 
     class _Prompt:
-        def __or__(self, _other: object) -> _Chain:
-            return _Chain()
+        def format_messages(self, **_kwargs: object) -> list[str]:
+            return ["formatted-message"]
 
     with (
         patch.object(analyzer, "_get_prompt", new=AsyncMock(return_value=_Prompt())),
@@ -577,19 +574,20 @@ async def test_invoke_llm_uses_factory_for_non_default_provider_with_byok_and_ce
 async def test_invoke_llm_enterprise_tier_branch_uses_enterprise_fallback_policy() -> None:
     analyzer = FinOpsAnalyzer(MagicMock())
 
-    class _Chain:
-        async def ainvoke(self, _payload: dict[str, str]) -> object:
+    class _LLM:
+        async def ainvoke(self, _payload: object) -> object:
             return SimpleNamespace(content="{}", response_metadata={})
 
     class _Prompt:
-        def __or__(self, _other: object) -> _Chain:
-            return _Chain()
+        def format_messages(self, **_kwargs: object) -> list[str]:
+            return ["formatted-message"]
 
     with (
         patch.object(analyzer, "_get_prompt", new=AsyncMock(return_value=_Prompt())),
         patch("app.shared.llm.analyzer.get_settings") as mock_settings,
     ):
         mock_settings.return_value.LLM_PROVIDER = "groq"
+        analyzer.llm = _LLM()
         content, metadata = await analyzer._invoke_llm(
             formatted_data="{}",
             provider="groq",

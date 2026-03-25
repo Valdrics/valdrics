@@ -1,3 +1,7 @@
+import { buildSnapshotTrace } from './signalTrace';
+export { nextSnapshotIndex } from './signalRotation';
+export { buildSnapshotTrace } from './signalTrace';
+
 export type SignalLaneId =
 	| 'economic_visibility'
 	| 'deterministic_enforcement'
@@ -304,20 +308,6 @@ const RAW_SIGNAL_SNAPSHOTS: readonly SignalSnapshotInput[] = [
 	}
 ] as const;
 
-export function nextSnapshotIndex(currentIndex: number, totalSnapshots: number): number {
-	if (!Number.isFinite(totalSnapshots) || totalSnapshots <= 0) {
-		return 0;
-	}
-	if (!Number.isFinite(currentIndex)) {
-		return 0;
-	}
-
-	const normalizedTotal = Math.floor(totalSnapshots);
-	const normalizedCurrent = Math.trunc(currentIndex);
-	const safeCurrent = ((normalizedCurrent % normalizedTotal) + normalizedTotal) % normalizedTotal;
-	return (safeCurrent + 1) % normalizedTotal;
-}
-
 export function laneSeverityClass(severity: SignalLaneSeverity): string {
 	switch (severity) {
 		case 'healthy':
@@ -343,22 +333,6 @@ export function lanePositionPercent(lane: Pick<SignalLaneDefinition, 'x' | 'y'>)
 		Math.min(100, Number(((lane.y / SIGNAL_MAP_VIEWBOX.height) * 100).toFixed(3)))
 	);
 	return { leftPct, topPct };
-}
-
-export function buildSnapshotTrace(
-	snapshotId: string,
-	capturedAt: string,
-	summary: string
-): string {
-	const value = `${snapshotId}|${capturedAt}|${summary}`;
-	let hash = 0x811c9dc5;
-
-	for (let index = 0; index < value.length; index += 1) {
-		hash ^= value.charCodeAt(index);
-		hash = Math.imul(hash, 0x01000193);
-	}
-
-	return `TRC-${(hash >>> 0).toString(16).toUpperCase().padStart(8, '0')}`;
 }
 
 function hydrateSnapshot(input: SignalSnapshotInput): SignalSnapshot {

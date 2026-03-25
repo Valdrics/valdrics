@@ -1,4 +1,5 @@
 <script lang="ts">
+	import './audit.app.css';
 	import { onMount } from 'svelte';
 	import { api } from '$lib/api';
 	import { buildCompliancePackPath } from '$lib/compliancePack';

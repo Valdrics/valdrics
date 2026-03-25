@@ -159,19 +159,19 @@
 		<div class="card space-y-4">
 			<h2 class="text-lg font-semibold">Tenant Activity</h2>
 			<div class="grid grid-cols-2 gap-3 text-sm">
-				<div class="frosted-glass rounded-lg p-3">
+				<div class="health-frosted-card rounded-lg p-3">
 					<p class="text-ink-400 text-xs uppercase">Total</p>
 					<p class="text-xl font-bold">{dashboard.tenants.total_tenants}</p>
 				</div>
-				<div class="frosted-glass rounded-lg p-3">
+				<div class="health-frosted-card rounded-lg p-3">
 					<p class="text-ink-400 text-xs uppercase">Paid</p>
 					<p class="text-xl font-bold text-success-400">{dashboard.tenants.paid_tenants}</p>
 				</div>
-				<div class="frosted-glass rounded-lg p-3">
+				<div class="health-frosted-card rounded-lg p-3">
 					<p class="text-ink-400 text-xs uppercase">Active 24h</p>
 					<p class="text-xl font-bold">{dashboard.tenants.active_last_24h}</p>
 				</div>
-				<div class="frosted-glass rounded-lg p-3">
+				<div class="health-frosted-card rounded-lg p-3">
 					<p class="text-ink-400 text-xs uppercase">Churn Risk</p>
 					<p class="text-xl font-bold text-warning-400">{dashboard.tenants.churn_risk}</p>
 				</div>
@@ -212,21 +212,21 @@
 	<div class="card space-y-4">
 		<h2 class="text-lg font-semibold">License Governance (24h)</h2>
 		<div class="grid grid-cols-2 gap-3 text-sm">
-			<div class="frosted-glass rounded-lg p-3">
+			<div class="health-frosted-card rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">Active Connections</p>
 				<p class="text-xl font-bold">{dashboard.license_governance.active_license_connections}</p>
 			</div>
-			<div class="frosted-glass rounded-lg p-3">
+			<div class="health-frosted-card rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">Requests Created</p>
 				<p class="text-xl font-bold">{dashboard.license_governance.requests_created_24h}</p>
 			</div>
-			<div class="frosted-glass rounded-lg p-3">
+			<div class="health-frosted-card rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">Completed</p>
 				<p class="text-xl font-bold text-success-400">
 					{dashboard.license_governance.requests_completed_24h}
 				</p>
 			</div>
-			<div class="frosted-glass rounded-lg p-3">
+			<div class="health-frosted-card rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">Failed</p>
 				<p class="text-xl font-bold text-danger-400">
 					{dashboard.license_governance.requests_failed_24h}
@@ -284,7 +284,7 @@
 	<div class="card">
 		<h2 class="text-lg font-semibold mb-3">Landing Funnel Health</h2>
 		<div class="grid gap-4 lg:grid-cols-4">
-			<div class="frosted-glass rounded-lg p-3">
+			<div class="health-frosted-card rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">7d signup → connection</p>
 				<p class="text-xl font-bold">
 					{formatPercent(dashboard.landing_funnel.weekly_current.signup_to_connection_rate)}
@@ -293,7 +293,7 @@
 					{formatRateDelta(dashboard.landing_funnel.weekly_delta.signup_to_connection_rate)}
 				</p>
 			</div>
-			<div class="frosted-glass rounded-lg p-3">
+			<div class="health-frosted-card rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">7d connection → first value</p>
 				<p class="text-xl font-bold">
 					{formatPercent(dashboard.landing_funnel.weekly_current.connection_to_first_value_rate)}
@@ -302,7 +302,7 @@
 					{formatRateDelta(dashboard.landing_funnel.weekly_delta.connection_to_first_value_rate)}
 				</p>
 			</div>
-			<div class="frosted-glass rounded-lg p-3">
+			<div class="health-frosted-card rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">7d PQL</p>
 				<p class="text-xl font-bold">{dashboard.landing_funnel.weekly_current.pql_tenants}</p>
 				<p class="text-xs text-ink-500 mt-1">
@@ -310,7 +310,7 @@
 						.landing_funnel.weekly_delta.pql_tenants}
 				</p>
 			</div>
-			<div class="frosted-glass rounded-lg p-3">
+			<div class="health-frosted-card rounded-lg p-3">
 				<p class="text-ink-400 text-xs uppercase">7d paid activations</p>
 				<p class="text-xl font-bold">{dashboard.landing_funnel.weekly_current.paid_tenants}</p>
 				<p class="text-xs text-ink-500 mt-1">
@@ -321,7 +321,7 @@
 		</div>
 		<div class="grid gap-3 mt-4 lg:grid-cols-2">
 			{#each dashboard.landing_funnel.alerts as alert (alert.key)}
-				<div class="frosted-glass rounded-lg p-3">
+				<div class="health-frosted-card rounded-lg p-3">
 					<div class="flex items-start justify-between gap-3">
 						<div>
 							<p class="text-ink-400 text-xs uppercase">{alert.label}</p>
@@ -396,3 +396,34 @@
 		{/if}
 	</div>
 </div>
+
+<style>
+	.page-enter {
+		animation: healthDashboardEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	}
+
+	.health-frosted-card {
+		background: rgba(15, 19, 24, 0.6);
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+		border: 1px solid rgba(255, 255, 255, 0.05);
+	}
+
+	@keyframes healthDashboardEnter {
+		from {
+			opacity: 0;
+			transform: translateY(8px);
+		}
+
+		to {
+			opacity: 1;
+			transform: translateY(0);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.page-enter {
+			animation: none !important;
+		}
+	}
+</style>

@@ -8,9 +8,9 @@ Tests:
 """
 
 from fastapi import FastAPI
-from fastapi.testclient import TestClient
 
 from app.shared.core.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
+from tests.shared.asgi_client import SyncASGIClient
 
 
 class TestRequestIDMiddleware:
@@ -29,7 +29,7 @@ class TestRequestIDMiddleware:
         async def test_route():
             return {"status": "ok"}
 
-        client = TestClient(app)
+        client = SyncASGIClient(app)
         response = client.get("/test")
 
         # Should have request ID header
@@ -52,7 +52,7 @@ class TestSecurityHeadersMiddleware:
         async def test_route():
             return {"status": "ok"}
 
-        client = TestClient(app)
+        client = SyncASGIClient(app)
         response = client.get("/test")
 
         # Check for common security headers
@@ -80,7 +80,7 @@ class TestTimeoutMiddleware:
         async def test_route():
             return {"status": "ok"}
 
-        client = TestClient(app)
+        client = SyncASGIClient(app)
         response = client.get("/test")
         assert response.status_code == 200
 

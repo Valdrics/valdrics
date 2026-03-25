@@ -1,17 +1,30 @@
 <script lang="ts">
+	import { browser } from '$app/environment';
 	import { base } from '$app/paths';
-	import type {
-		SignalLaneId,
-		SignalLaneSnapshot,
-		SignalSnapshot
-	} from '$lib/landing/realtimeSignalMap';
+	import { onMount } from 'svelte';
+	import type { SignalLaneId } from '$lib/landing/realtimeSignalMap';
 	import type { LandingCurrencyCode } from '$lib/landing/currencyPreference';
+	import type {
+		LandingSignalLaneSnapshot,
+		LandingSignalSnapshot
+	} from '$lib/landing/landingSignalSnapshots';
+	import { createLazyComponent } from '$lib/lazyComponent';
 	import LandingHeroCopy from '$lib/components/landing/LandingHeroCopy.svelte';
 	import LandingRoiSimulator from '$lib/components/landing/LandingRoiSimulator.svelte';
 	import LandingCookieConsent from '$lib/components/landing/LandingCookieConsent.svelte';
-	import LandingExitIntentPrompt from '$lib/components/landing/LandingExitIntentPrompt.svelte';
 	import './LandingMarketingShared.css';
 	import './LandingHeroView.public.css';
+
+	type LandingExitIntentPromptProps = {
+		selfServeHref: string;
+		resourcesHref: string;
+		subscribeApiPath: string;
+		onTrackCta: (action: string, section: string, value: string) => void;
+	};
+
+	const loadLandingExitIntentPrompt = createLazyComponent<LandingExitIntentPromptProps>(
+		() => import('$lib/components/landing/LandingExitIntentPrompt.svelte')
+	);
 
 	const productPillars = [
 		{
@@ -75,6 +88,7 @@
 	}
 
 	const dashboardStillSrc = `${base}/landing-dashboard-still.jpg`;
+	let exitPromptReady = $state(false);
 
 	let {
 		motionProfile,
@@ -138,8 +152,8 @@
 		secondaryCtaHref: string;
 		primaryCtaHref: string;
 		secondaryCtaTelemetryValue: string;
-		activeSnapshot: SignalSnapshot;
-		activeSignalLane: SignalLaneSnapshot;
+		activeSnapshot: LandingSignalSnapshot;
+		activeSignalLane: LandingSignalLaneSnapshot;
 		normalizedScenarioWasteWithoutPct: number;
 		normalizedScenarioWasteWithPct: number;
 		normalizedScenarioWindowMonths: number;
@@ -187,6 +201,27 @@
 	);
 	let highlightedActionLabel = $derived(activeSignalLane.actionLabel ?? 'Assign owner');
 	let laneSeverityTone = $derived(activeSignalLane.severity ?? 'healthy');
+
+	onMount(() => {
+		if (import.meta.env.MODE === 'test') {
+			exitPromptReady = true;
+			return;
+		}
+
+		if (!browser) return;
+
+		const activate = () => {
+			exitPromptReady = true;
+		};
+
+		if (typeof window.requestIdleCallback === 'function') {
+			const idleId = window.requestIdleCallback(activate, { timeout: 1500 });
+			return () => window.cancelIdleCallback(idleId);
+		}
+
+		const timeoutId = window.setTimeout(activate, 800);
+		return () => window.clearTimeout(timeoutId);
+	});
 </script>
 
 <div
@@ -266,7 +301,7 @@
 						</article>
 						<article class="landing-public-still-note">
 							<span>Current stage</span>
-							<strong>{publicLaneTitles[activeSignalLane.id] ?? activeSignalLane.title}</strong>
+							<strong>{publicLaneTitles[activeSignalLane.id] ?? activeSignalLane.id}</strong>
 							<small>{highlightedActionLabel}</small>
 						</article>
 						<article class="landing-public-still-note">
@@ -325,7 +360,7 @@
 				<div class="landing-public-impact-grid">
 					<div>
 						<span>Current stage</span>
-						<strong>{publicLaneTitles[activeSignalLane.id] ?? activeSignalLane.title}</strong>
+						<strong>{publicLaneTitles[activeSignalLane.id] ?? activeSignalLane.id}</strong>
 					</div>
 					<div>
 						<span>Action path</span>
@@ -520,10 +555,14 @@
 		</button>
 	{/if}
 
-	<LandingExitIntentPrompt
-		selfServeHref={freeTierCtaHref}
-		{resourcesHref}
-		{subscribeApiPath}
-		{onTrackCta}
-	/>
+	{#if exitPromptReady}
+		{#await loadLandingExitIntentPrompt() then { default: LandingExitIntentPrompt }}
+			<LandingExitIntentPrompt
+				selfServeHref={freeTierCtaHref}
+				{resourcesHref}
+				{subscribeApiPath}
+				{onTrackCta}
+			/>
+		{/await}
+	{/if}
 </div>

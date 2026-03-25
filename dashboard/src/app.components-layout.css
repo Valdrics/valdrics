@@ -60,15 +60,6 @@
 	color: var(--color-ink-100);
 }
 
-.btn-danger {
-	background: var(--color-danger-500);
-	color: white;
-}
-
-.btn-danger:hover:not(:disabled) {
-	background: var(--color-danger-400);
-}
-
 /* ===== COMPONENT: Cards ===== */
 .card {
 	background: var(--color-ink-900);
@@ -103,7 +94,7 @@
 	opacity: 1;
 }
 
-/* ===== COMPONENT: Glassmorphism & Bento ===== */
+/* ===== COMPONENT: Glassmorphism ===== */
 .glass-panel {
 	background: rgba(15, 19, 24, 0.7); /* ink-900 with opacity */
 	backdrop-filter: blur(12px);
@@ -119,40 +110,6 @@
 	border-color: rgba(255, 255, 255, 0.15);
 	transform: translateY(-2px);
 	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-}
-
-.bento-grid {
-	display: grid;
-	grid-template-columns: repeat(1, 1fr);
-	gap: var(--space-4);
-	grid-auto-flow: dense;
-}
-
-@media (min-width: 768px) {
-	.bento-grid {
-		grid-template-columns: repeat(2, 1fr);
-	}
-}
-
-@media (min-width: 1024px) {
-	.bento-grid {
-		grid-template-columns: repeat(4, 1fr);
-		grid-template-rows: auto auto;
-	}
-
-	/* Bento Spans */
-	.col-span-2 {
-		grid-column: span 2;
-	}
-	.col-span-3 {
-		grid-column: span 3;
-	}
-	.col-span-4 {
-		grid-column: span 4;
-	}
-	.row-span-2 {
-		grid-row: span 2;
-	}
 }
 
 /* ===== COMPONENT: Inputs ===== */
@@ -216,11 +173,6 @@
 .badge-warning {
 	background: rgb(245 158 11 / 0.15);
 	color: var(--color-warning-400);
-}
-
-.badge-danger {
-	background: rgb(244 63 94 / 0.15);
-	color: var(--color-danger-400);
 }
 
 .badge-accent {

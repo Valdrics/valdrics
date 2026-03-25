@@ -1,0 +1,19 @@
+@import 'tailwindcss' source(none);
+@import '../../app.theme.css';
+
+@source not './**/*.test.ts';
+@source not './**/*.spec.ts';
+@source not './**/*.test.js';
+@source not './**/*.spec.js';
+@source '.';
+@source '../../lib/components/AllocationBreakdown.svelte';
+@source '../../lib/components/CloudDistributionMatrix.svelte';
+@source '../../lib/components/FindingsTable.svelte';
+@source '../../lib/components/GreenOpsWidget.svelte';
+@source '../../lib/components/ProviderSelector.svelte';
+@source '../../lib/components/RemediationModal.svelte';
+@source '../../lib/components/ROAChart.svelte';
+@source '../../lib/components/SavingsHero.svelte';
+@source '../../lib/components/StatsGrid.svelte';
+@source '../../lib/components/UnitEconomicsCards.svelte';
+@source '../../lib/components/ZombieTable.svelte';

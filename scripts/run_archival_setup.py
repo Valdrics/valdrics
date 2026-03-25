@@ -10,7 +10,7 @@ from app.shared.core.maintenance import PartitionMaintenanceService
 from app.shared.db.session import async_session_maker
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Execute partition archival using the same maintenance service used by the scheduler."
     )
@@ -26,11 +26,15 @@ def _parse_args() -> argparse.Namespace:
         default=3,
         help="Create future partitions this many months ahead before archiving.",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-async def main() -> None:
-    args = _parse_args()
+async def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    if int(args.months_old) <= 0:
+        raise SystemExit("--months-old must be > 0")
+    if int(args.months_ahead) < 0:
+        raise SystemExit("--months-ahead must be >= 0")
     async with async_session_maker() as session:
         service = PartitionMaintenanceService(session)
         created = await service.create_future_partitions(months_ahead=int(args.months_ahead))
@@ -39,8 +43,8 @@ async def main() -> None:
     print(
         f"Partition maintenance complete: created={created} archived={archived} months_old={int(args.months_old)}"
     )
+    return 0
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-

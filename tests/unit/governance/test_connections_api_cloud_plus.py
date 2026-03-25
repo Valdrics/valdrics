@@ -17,9 +17,6 @@ pytest_plugins = ("tests.unit.governance.connections_api_fixtures",)
 async def test_create_saas_connection_denied_on_growth(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     payload = {
@@ -37,9 +34,6 @@ async def test_create_saas_connection_denied_on_growth(
 
 @pytest.mark.asyncio
 async def test_create_saas_connection_success_on_pro(ac, db, override_auth, auth_user):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.PRO.value
-    await db.commit()
     auth_user.tier = PricingTier.PRO
 
     payload = {
@@ -57,9 +51,6 @@ async def test_create_saas_connection_success_on_pro(ac, db, override_auth, auth
 
 @pytest.mark.asyncio
 async def test_create_saas_connection_requires_admin(ac, db, override_auth, auth_user):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.PRO.value
-    await db.commit()
     auth_user.tier = PricingTier.PRO
     auth_user.role = UserRole.MEMBER
 
@@ -75,9 +66,6 @@ async def test_create_saas_connection_requires_admin(ac, db, override_auth, auth
 
 @pytest.mark.asyncio
 async def test_verify_saas_connection(ac, db, override_auth, auth_user):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.PRO.value
-    await db.commit()
     auth_user.tier = PricingTier.PRO
 
     conn = SaaSConnection(
@@ -102,9 +90,6 @@ async def test_verify_saas_connection(ac, db, override_auth, auth_user):
 async def test_create_license_connection_success_on_pro(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.PRO.value
-    await db.commit()
     auth_user.tier = PricingTier.PRO
 
     payload = {
@@ -124,9 +109,6 @@ async def test_create_license_connection_success_on_pro(
 async def test_list_license_connections_tenant_isolation(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.PRO.value
-    await db.commit()
     auth_user.tier = PricingTier.PRO
 
     other_tenant = Tenant(id=uuid4(), name="Other", plan=PricingTier.PRO.value)
@@ -164,9 +146,6 @@ async def test_list_license_connections_tenant_isolation(
 async def test_create_platform_connection_success_on_pro(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.PRO.value
-    await db.commit()
     auth_user.tier = PricingTier.PRO
 
     payload = {
@@ -184,9 +163,6 @@ async def test_create_platform_connection_success_on_pro(
 
 @pytest.mark.asyncio
 async def test_verify_platform_connection(ac, db, override_auth, auth_user):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.PRO.value
-    await db.commit()
     auth_user.tier = PricingTier.PRO
 
     conn = PlatformConnection(
@@ -211,9 +187,6 @@ async def test_verify_platform_connection(ac, db, override_auth, auth_user):
 async def test_create_hybrid_connection_success_on_pro(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.PRO.value
-    await db.commit()
     auth_user.tier = PricingTier.PRO
 
     payload = {
@@ -233,9 +206,6 @@ async def test_create_hybrid_connection_success_on_pro(
 async def test_list_hybrid_connections_tenant_isolation(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.PRO.value
-    await db.commit()
     auth_user.tier = PricingTier.PRO
 
     other_tenant = Tenant(id=uuid4(), name="Other-Hybrid", plan=PricingTier.PRO.value)

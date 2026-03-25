@@ -13,19 +13,22 @@ from app.shared.db.session import async_session_maker
 
 logger = structlog.get_logger()
 
-# In production, use a secure secret for API_KEY
-EXCHANGE_RATE_API_KEY = os.environ.get("EXCHANGE_RATE_API_KEY")
-EXCHANGE_RATE_API_URL = (
-    f"https://v6.exchangerate-api.com/v6/{EXCHANGE_RATE_API_KEY}/latest/USD"
-    if EXCHANGE_RATE_API_KEY
-    else "https://open.er-api.com/v6/latest/USD"
-)
-PROVIDER = "exchangerate-api" if EXCHANGE_RATE_API_KEY else "open.er-api"
-
 # Standardized BE-FIN-01: Automated Exchange Rate Management.
 settings = get_settings()
 
-DEFAULT_CURRENCIES = set(settings.SUPPORTED_CURRENCIES)
+
+def _default_currencies() -> set[str]:
+    return set(get_settings().SUPPORTED_CURRENCIES)
+
+
+def _exchange_rate_api_config() -> tuple[str, str]:
+    api_key = str(os.environ.get("EXCHANGE_RATE_API_KEY") or "").strip()
+    if api_key:
+        return (
+            f"https://v6.exchangerate-api.com/v6/{api_key}/latest/USD",
+            "exchangerate-api",
+        )
+    return ("https://open.er-api.com/v6/latest/USD", "open.er-api")
 
 
 async def update_exchange_rates():
@@ -36,9 +39,10 @@ async def update_exchange_rates():
     logger.info("exchange_rate_update_starting")
 
     try:
+        api_url, provider = _exchange_rate_api_config()
         timeout = aiohttp.ClientTimeout(total=10)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(EXCHANGE_RATE_API_URL) as response:
+            async with session.get(api_url) as response:
                 if response.status != 200:
                     raise RuntimeError(f"Exchange rate API error: {response.status}")
                 data = await response.json()
@@ -55,7 +59,7 @@ async def update_exchange_rates():
             result = await session.execute(select(ExchangeRate))
             existing_rates = result.scalars().all()
             existing_map = {r.to_currency: r for r in existing_rates}
-            target_currencies = set(existing_map.keys()) or DEFAULT_CURRENCIES
+            target_currencies = set(existing_map.keys()) or _default_currencies()
 
             for currency in target_currencies:
                 rate_val = rates.get(currency)
@@ -74,7 +78,7 @@ async def update_exchange_rates():
                 if db_rate:
                     logger.info("updating_existing_rate", currency=currency, rate=rate)
                     db_rate.rate = rate
-                    db_rate.provider = PROVIDER
+                    db_rate.provider = provider
                     db_rate.last_updated = datetime.now(timezone.utc)
                 else:
                     logger.info("creating_new_rate", currency=currency, rate=rate)
@@ -82,7 +86,7 @@ async def update_exchange_rates():
                         from_currency="USD",
                         to_currency=currency,
                         rate=rate,
-                        provider=PROVIDER,
+                        provider=provider,
                     )
                     session.add(new_rate)
 
@@ -101,7 +105,8 @@ async def update_exchange_rates():
         raise RuntimeError("exchange_rate_update_failed") from exc
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    del argv
     try:
         asyncio.run(update_exchange_rates())
     except RuntimeError:

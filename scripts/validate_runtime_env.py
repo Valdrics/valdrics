@@ -14,6 +14,7 @@ import argparse
 import os
 from pathlib import Path
 import sys
+from unittest.mock import patch
 
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -47,23 +48,34 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
+    env_overrides: dict[str, str] = {}
     if args.env_file is not None:
-        for key, value in parse_env_file(args.env_file).items():
-            os.environ[key] = value
+        if args.env_file.exists() and not args.env_file.is_file():
+            print(
+                f"runtime_env_validation_failed: env-file must be a file path: {args.env_file}",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            env_overrides.update(parse_env_file(args.env_file))
+        except OSError as exc:
+            print(f"runtime_env_validation_failed: {exc}", file=sys.stderr)
+            return 1
 
     if args.environment:
-        os.environ["ENVIRONMENT"] = args.environment
+        env_overrides["ENVIRONMENT"] = args.environment
     if not args.allow_testing:
-        os.environ["TESTING"] = "false"
+        env_overrides["TESTING"] = "false"
 
     try:
-        # Hermetic validation: never read repository-local `.env` during CI/runtime preflight.
-        settings = Settings(_env_file=None)
-        validate_runtime_dependencies(settings)
+        with patch.dict(os.environ, env_overrides, clear=False):
+            # Hermetic validation: never read repository-local `.env` during CI/runtime preflight.
+            settings = Settings(_env_file=None)
+            validate_runtime_dependencies(settings)
     except (ImportError, OSError, RuntimeError, TypeError, ValueError) as exc:
         print(f"runtime_env_validation_failed: {exc}", file=sys.stderr)
         return 1

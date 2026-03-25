@@ -63,7 +63,7 @@ vi.mock('$lib/security/turnstile', () => ({
 	getTurnstileToken: vi.fn().mockResolvedValue(null)
 }));
 
-vi.mock('$lib/supabase', () => ({
+vi.mock('$lib/supabase.browser', () => ({
 	createSupabaseBrowserClient: () => ({
 		auth: {
 			signInWithPassword: mocks.signInWithPassword,

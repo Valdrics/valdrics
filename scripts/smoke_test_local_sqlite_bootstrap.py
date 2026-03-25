@@ -11,6 +11,11 @@ from typing import Any
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from scripts.env_generation_common import ensure_parent_dir, repo_root_for
+
+
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
 
 
 def _build_local_env(database_path: Path) -> dict[str, str]:
@@ -45,12 +50,26 @@ class _STSClient:
         return _STSResponse()
 
 
+def _resolve_database_path(database_path: Path | None) -> Path:
+    if database_path is None:
+        resolved = Path(tempfile.gettempdir()) / "valdrics_local_smoke.sqlite3"
+    else:
+        resolved = Path(database_path).expanduser()
+        if not resolved.is_absolute():
+            resolved = (_repo_root() / resolved).resolve()
+        else:
+            resolved = resolved.resolve()
+
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"database_path must be a file path: {resolved.as_posix()}")
+    ensure_parent_dir(resolved, field_name="database_path")
+    return resolved
+
+
 def run_local_sqlite_bootstrap_smoke(
     *, database_path: Path | None = None
 ) -> dict[str, Any]:
-    if database_path is None:
-        database_path = Path(tempfile.gettempdir()) / "valdrics_local_smoke.sqlite3"
-    database_path = database_path.resolve()
+    database_path = _resolve_database_path(database_path)
     environment = _build_local_env(database_path)
 
     with patch.dict(os.environ, environment, clear=False):
@@ -107,7 +126,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    result = run_local_sqlite_bootstrap_smoke(database_path=args.database_path)
+    try:
+        result = run_local_sqlite_bootstrap_smoke(database_path=args.database_path)
+    except ValueError as exc:
+        print(f"[local-sqlite-smoke] invalid input: {exc}")
+        return 2
+    except (OSError, RuntimeError, TypeError) as exc:
+        print(f"[local-sqlite-smoke] failed: {exc}")
+        return 1
     print(
         "[local-sqlite-smoke] ok "
         f"status={result['status']} "

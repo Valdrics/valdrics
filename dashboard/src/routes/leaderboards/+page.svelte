@@ -9,6 +9,7 @@
 
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
+	import './leaderboards.app.css';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import AuthGate from '$lib/components/AuthGate.svelte';

@@ -50,7 +50,8 @@ async def verify_precision() -> int:
         return 1
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    del argv
     return asyncio.run(verify_precision())
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 import re
+import sys
 import tempfile
 from threading import Lock
 from typing import Optional
@@ -67,6 +68,20 @@ def reload_settings_from_environment() -> "Settings":
             from app.models._encryption import clear_encryption_key_cache
 
             clear_encryption_key_cache()
+            celery_module = sys.modules.get("app.shared.core.celery_app")
+            if celery_module is not None:
+                refresh_celery = getattr(celery_module, "refresh_celery_app_config", None)
+                if callable(refresh_celery):
+                    refresh_celery(current)
+            app_main_module = sys.modules.get("app.main")
+            if app_main_module is not None:
+                refresh_app_metadata = getattr(
+                    app_main_module,
+                    "refresh_fastapi_app_metadata",
+                    None,
+                )
+                if callable(refresh_app_metadata):
+                    refresh_app_metadata(current)
         except SETTINGS_RELOAD_CACHE_REFRESH_RECOVERABLE_EXCEPTIONS as cache_exc:  # pragma: no cover - defensive path
             logger.warning("settings_reload_cache_refresh_failed", error=str(cache_exc))
         logger.debug("settings_reload_completed")

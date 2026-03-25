@@ -1,19 +1,11 @@
 /**
- * Valdrics Design System - 2026 Premium SaaS
- * 
- * Design Principles:
- * - Utility-first UX
- * - Progressive disclosure
- * - Calm sophistication
- * - Motion with meaning
+ * Shared design tokens and global base rules.
+ *
+ * This file stays Tailwind-free so the root layout can load it without
+ * pulling every utility class into the critical path.
  */
 
-/* ===== CSS CUSTOM PROPERTIES (Design Tokens) ===== */
-@import 'tailwindcss';
-
-@theme {
-	/* === Color Palette === */
-
+:root {
 	/* Base Neutrals - Refined ink tones */
 	--color-ink-950: #0a0d12;
 	--color-ink-900: #0f1318;
@@ -30,8 +22,8 @@
 	/* Primary Accent - Teal/Cyan for trust */
 	--color-accent-200: #a5f3fc;
 	--color-accent-300: #67e8f9;
-	--color-accent-500: #087ea4;
 	--color-accent-400: #22d3ee;
+	--color-accent-500: #087ea4;
 	--color-accent-600: #0b7285;
 	--color-accent-700: #0e6679;
 	--color-accent-500-rgb: 8 126 164;
@@ -42,8 +34,8 @@
 
 	/* Success - Emerald */
 	--color-success-300: #6ee7b7;
-	--color-success-500: #10b981;
 	--color-success-400: #34d399;
+	--color-success-500: #10b981;
 	--color-success-500-rgb: 16 185 129;
 
 	/* Surface tones for elevated cards */
@@ -52,14 +44,14 @@
 	--color-surface-300: #374657;
 
 	/* Warning - Amber */
-	--color-warning-500: #f59e0b;
 	--color-warning-400: #fbbf24;
+	--color-warning-500: #f59e0b;
 
 	/* Danger - Rose */
-	--color-danger-500: #f43f5e;
 	--color-danger-400: #fb7185;
+	--color-danger-500: #f43f5e;
 
-	/* === Typography Scale === */
+	/* Typography */
 	--font-sans:
 		-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 	--font-mono:
@@ -74,7 +66,7 @@
 	--text-2xl: 1.5rem;
 	--text-3xl: 2rem;
 
-	/* === Spacing Scale === */
+	/* Spacing */
 	--space-1: 0.25rem;
 	--space-2: 0.5rem;
 	--space-3: 0.75rem;
@@ -86,32 +78,29 @@
 	--space-12: 3rem;
 	--space-16: 4rem;
 
-	/* === Radii === */
+	/* Radii */
 	--radius-sm: 0.25rem;
 	--radius-md: 0.5rem;
 	--radius-lg: 0.75rem;
 	--radius-xl: 1rem;
 	--radius-full: 9999px;
 
-	/* === Shadows === */
+	/* Shadows */
 	--shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 	--shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
 	--shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 	--shadow-glow: 0 0 20px rgb(6 182 212 / 0.15);
 
-	/* === Animation Durations (Motion System) === */
+	/* Motion */
 	--duration-instant: 100ms;
 	--duration-fast: 150ms;
 	--duration-normal: 200ms;
 	--duration-slow: 300ms;
 	--duration-slower: 400ms;
-
-	/* === Easings === */
 	--ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 	--ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
 }
 
-/* ===== BASE STYLES ===== */
 html {
 	font-family: var(--font-sans);
 	-webkit-font-smoothing: antialiased;
@@ -134,14 +123,11 @@ body {
 	display: contents;
 }
 
-/* Accessible focus ring for plain links (buttons/nav items define their own). */
 a:focus-visible {
 	outline: 2px solid var(--color-accent-500);
 	outline-offset: 2px;
 }
 
-/* ===== MOTION SYSTEM ===== */
-/* Respect reduced motion preference */
 @media (prefers-reduced-motion: reduce) {
 	*,
 	*::before,
@@ -152,23 +138,6 @@ a:focus-visible {
 	}
 }
 
-/* Page transition animation */
-.page-enter {
-	animation: pageEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes pageEnter {
-	from {
-		opacity: 0;
-		transform: translateY(8px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
-
-/* Staggered list entrance - IMPORTANT: uses animation-delay via inline style */
 .stagger-enter {
 	opacity: 0;
 	animation: staggerEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -182,52 +151,5 @@ a:focus-visible {
 	to {
 		opacity: 1;
 		transform: translateY(0);
-	}
-}
-
-/* Hero icon floating animation */
-.hero-icon {
-	animation: heroFloat 3s ease-in-out infinite;
-}
-
-@keyframes heroFloat {
-	0%,
-	100% {
-		transform: translateY(0);
-	}
-	50% {
-		transform: translateY(-8px);
-	}
-}
-
-/* Fade in up animation */
-.fade-in-up {
-	opacity: 0;
-	animation: fadeInUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-@keyframes fadeInUp {
-	from {
-		opacity: 0;
-		transform: translateY(24px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
-
-/* Pulse glow animation */
-.pulse-glow {
-	animation: pulseGlow 2s ease-in-out infinite;
-}
-
-@keyframes pulseGlow {
-	0%,
-	100% {
-		box-shadow: 0 0 20px rgb(6 182 212 / 0.2);
-	}
-	50% {
-		box-shadow: 0 0 40px rgb(6 182 212 / 0.4);
 	}
 }

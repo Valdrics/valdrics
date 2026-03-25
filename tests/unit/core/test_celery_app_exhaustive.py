@@ -49,6 +49,34 @@ def test_celery_default_redis():
         assert celery_app.celery_app.conf.broker_url == "redis://localhost:6379/0"
 
 
+def test_reload_settings_refreshes_celery_broker_without_module_reload():
+    get_settings.cache_clear()
+    with patch.dict(
+        "os.environ",
+        {
+            "TESTING": "False",
+            "REDIS_URL": "redis://localhost:6379/0",
+            "UPSTASH_REDIS_URL": "",
+        },
+    ):
+        importlib.reload(celery_app)
+        assert celery_app.celery_app.conf.broker_url == "redis://localhost:6379/0"
+
+    with patch.dict(
+        "os.environ",
+        {
+            "TESTING": "False",
+            "REDIS_URL": "redis://redis.internal:6380/0",
+            "UPSTASH_REDIS_URL": "",
+        },
+    ):
+        from app.shared.core.config import reload_settings_from_environment
+
+        reload_settings_from_environment()
+        assert celery_app.celery_app.conf.broker_url == "redis://redis.internal:6380/0"
+        assert celery_app.celery_app.conf.result_backend == "redis://redis.internal:6380/0"
+
+
 def test_cleanup():
     """Ensure we leave the module in testing state for other tests."""
     get_settings.cache_clear()

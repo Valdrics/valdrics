@@ -1,8 +1,16 @@
 <script lang="ts">
+	import '../../public.app.css';
+	import { browser } from '$app/environment';
+	import { page } from '$app/stores';
 	import type { Snippet } from 'svelte';
+	import { tick } from 'svelte';
 	import { base } from '$app/paths';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
-	import type { PublicTheme } from '$lib/public/publicTheme';
+	import {
+		getFocusableElements,
+		lockBodyScroll,
+		resolveNextFocusTarget
+	} from '$lib/landing/publicMenuA11y';
 	import {
 		PUBLIC_CONTACT_CHANNELS,
 		PUBLIC_FOOTER_BADGES,
@@ -13,50 +21,159 @@
 		PUBLIC_PRIMARY_LINKS,
 		PUBLIC_RESOURCES_DROPDOWN_LINKS
 	} from '$lib/landing/publicNav';
+	import {
+		persistPublicTheme,
+		resolveInitialPublicTheme,
+		togglePublicTheme as nextPublicTheme,
+		type PublicTheme
+	} from '$lib/public/publicTheme';
 
 	type PublicTone = 'default' | 'landing';
 
 	interface Props {
 		currentYear: number;
 		toAppPath: (path: string) => string;
-		publicTheme: PublicTheme;
 		publicTone: PublicTone;
-		publicMenuOpen: boolean;
-		publicMenuPanel: HTMLDivElement | null;
-		publicMenuButton: HTMLButtonElement | null;
-		publicResourcesMenuOpen: boolean;
-		publicResourcesPanel: HTMLDivElement | null;
-		publicResourcesButton: HTMLButtonElement | null;
-		togglePublicMenu: () => void;
-		closePublicMenu: () => void;
-		togglePublicTheme: () => void;
-		togglePublicResourcesMenu: () => void;
-		closePublicResourcesMenu: () => void;
 		children: Snippet;
 	}
 
-	let {
-		currentYear,
-		toAppPath,
-		publicTheme,
-		publicTone,
-		publicMenuOpen = $bindable(),
-		publicMenuPanel = $bindable(),
-		publicMenuButton = $bindable(),
-		publicResourcesMenuOpen = $bindable(),
-		publicResourcesPanel = $bindable(),
-		publicResourcesButton = $bindable(),
-		togglePublicMenu,
-		closePublicMenu,
-		togglePublicTheme,
-		togglePublicResourcesMenu,
-		closePublicResourcesMenu,
-		children
-	}: Props = $props();
+	let { currentYear, toAppPath, publicTone, children }: Props = $props();
+
+	let publicMenuOpen = $state(false);
+	let publicMenuPanel = $state<HTMLDivElement | null>(null);
+	let publicMenuButton = $state<HTMLButtonElement | null>(null);
+	let publicMenuRestoreFocus = $state<HTMLElement | null>(null);
+	let publicResourcesMenuOpen = $state(false);
+	let publicResourcesPanel = $state<HTMLDivElement | null>(null);
+	let publicResourcesButton = $state<HTMLButtonElement | null>(null);
+	let publicTheme = $state<PublicTheme>('light');
+	let publicThemeLoaded = $state(false);
 
 	const themeToggleLabel = (theme: PublicTheme) =>
 		theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
 	const themeToggleCopy = (theme: PublicTheme) => (theme === 'dark' ? 'Light mode' : 'Dark mode');
+
+	$effect(() => {
+		if (!browser || publicThemeLoaded) return;
+		publicTheme = resolveInitialPublicTheme({
+			storage: window.localStorage,
+			matchMedia:
+				typeof window.matchMedia === 'function' ? window.matchMedia.bind(window) : undefined
+		});
+		publicThemeLoaded = true;
+	});
+
+	$effect(() => {
+		if (!browser || !publicThemeLoaded) return;
+		persistPublicTheme(window.localStorage, publicTheme);
+		document.documentElement.dataset.publicTheme = publicTheme;
+		document.documentElement.style.colorScheme = publicTheme;
+		return () => {
+			delete document.documentElement.dataset.publicTheme;
+			document.documentElement.style.removeProperty('color-scheme');
+		};
+	});
+
+	$effect(() => {
+		$page.url.pathname;
+		publicMenuOpen = false;
+		publicResourcesMenuOpen = false;
+	});
+
+	$effect(() => {
+		if (!browser || !publicMenuOpen) return;
+
+		publicMenuRestoreFocus =
+			document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		const unlockBodyScroll = lockBodyScroll(document);
+
+		void tick().then(() => {
+			const firstFocusable = getFocusableElements(publicMenuPanel)[0];
+			firstFocusable?.focus();
+		});
+
+		const handleKeydown = (event: KeyboardEvent) => {
+			if (event.key === 'Escape') {
+				event.preventDefault();
+				publicMenuOpen = false;
+				return;
+			}
+			if (event.key !== 'Tab') return;
+			const direction = event.shiftKey ? 'backward' : 'forward';
+			const activeElement =
+				document.activeElement instanceof HTMLElement ? document.activeElement : null;
+			const nextTarget = resolveNextFocusTarget(publicMenuPanel, activeElement, direction);
+			if (!nextTarget) return;
+			event.preventDefault();
+			nextTarget.focus();
+		};
+		const initialScrollY = window.scrollY;
+		const handleScroll = () => {
+			if (Math.abs(window.scrollY - initialScrollY) > 48) {
+				publicMenuOpen = false;
+			}
+		};
+		window.addEventListener('keydown', handleKeydown);
+		window.addEventListener('scroll', handleScroll, { passive: true });
+
+		return () => {
+			window.removeEventListener('keydown', handleKeydown);
+			window.removeEventListener('scroll', handleScroll);
+			unlockBodyScroll();
+			if (publicMenuRestoreFocus) {
+				publicMenuRestoreFocus.focus();
+			} else {
+				publicMenuButton?.focus();
+			}
+			publicMenuRestoreFocus = null;
+		};
+	});
+
+	$effect(() => {
+		if (!browser || !publicResourcesMenuOpen) return;
+
+		const handlePointerDown = (event: PointerEvent) => {
+			const target = event.target;
+			if (!(target instanceof Node)) return;
+			if (publicResourcesPanel?.contains(target)) return;
+			if (publicResourcesButton?.contains(target)) return;
+			publicResourcesMenuOpen = false;
+		};
+
+		const handleKeydown = (event: KeyboardEvent) => {
+			if (event.key !== 'Escape') return;
+			event.preventDefault();
+			publicResourcesMenuOpen = false;
+			publicResourcesButton?.focus();
+		};
+
+		document.addEventListener('pointerdown', handlePointerDown);
+		window.addEventListener('keydown', handleKeydown);
+		return () => {
+			document.removeEventListener('pointerdown', handlePointerDown);
+			window.removeEventListener('keydown', handleKeydown);
+		};
+	});
+
+	function togglePublicMenu(): void {
+		publicMenuOpen = !publicMenuOpen;
+	}
+
+	function closePublicMenu(): void {
+		publicMenuOpen = false;
+	}
+
+	function togglePublicResourcesMenu(): void {
+		publicResourcesMenuOpen = !publicResourcesMenuOpen;
+	}
+
+	function closePublicResourcesMenu(): void {
+		publicResourcesMenuOpen = false;
+	}
+
+	function togglePublicTheme(): void {
+		publicTheme = nextPublicTheme(publicTheme);
+	}
 </script>
 
 <svelte:head>

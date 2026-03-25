@@ -4,7 +4,7 @@
 
 	type AsyncAction = () => void | Promise<void>;
 
-	interface Props {
+	interface Props extends Record<string, unknown> {
 		data: {
 			subscription?: {
 				tier?: string;

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import scripts.verify_documentation_runtime_contracts as documentation_runtime_contracts
 from scripts.verify_documentation_runtime_contracts import (
     DocumentationContract,
+    main,
     verify_contracts,
 )
 
@@ -226,3 +228,21 @@ def test_verify_contracts_rejects_directory_target(tmp_path: Path) -> None:
     target_dir.mkdir(parents=True, exist_ok=True)
     errors = verify_contracts(root=tmp_path)
     assert "docs/architecture/overview.md: target must be a file" in errors
+
+
+def test_main_accepts_root_override(monkeypatch) -> None:
+    seen: list[Path] = []
+
+    def _fake_verify_contracts(*, root: Path) -> list[str]:
+        seen.append(root)
+        return []
+
+    monkeypatch.setattr(documentation_runtime_contracts, "verify_contracts", _fake_verify_contracts)
+
+    assert main(["--root", "docs"]) == 0
+    assert seen == [documentation_runtime_contracts.DEFAULT_ROOT / "docs"]
+
+
+def test_main_rejects_relative_root_escape(capsys) -> None:
+    assert main(["--root", "../outside"]) == 2
+    assert "must stay within repo root when relative" in capsys.readouterr().out

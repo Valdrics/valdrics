@@ -1,5 +1,6 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
+	import './dashboard.app.css';
 	import { base } from '$app/paths';
 	import { AlertTriangle, Clock } from '@lucide/svelte';
 	import { goto } from '$app/navigation';

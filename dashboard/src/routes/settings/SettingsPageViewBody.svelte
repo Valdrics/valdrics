@@ -1,9 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import AuthGate from '$lib/components/AuthGate.svelte';
-	import EnforcementOpsCard from '$lib/components/EnforcementOpsCard.svelte';
-	import EnforcementSettingsCard from '$lib/components/EnforcementSettingsCard.svelte';
-	import IdentitySettingsCard from '$lib/components/IdentitySettingsCard.svelte';
+	import { createLazyComponent } from '$lib/lazyComponent';
 	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 	import SettingsActiveOpsCard from './SettingsActiveOpsCard.svelte';
 	import SettingsAiStrategyCard from './SettingsAiStrategyCard.svelte';
@@ -14,7 +12,6 @@
 		INITIAL_NOTIFICATION_SETTINGS,
 		INITIAL_PROVIDER_MODELS
 	} from './settingsPageInitialState';
-	import SettingsNotificationControls from './SettingsNotificationControls.svelte';
 	import type { PolicyDiagnostics, SafetyStatus } from './settingsPageSchemas';
 	import SettingsSafetyControlsCard from './SettingsSafetyControlsCard.svelte';
 
@@ -24,6 +21,32 @@
 	type LlmSettingsState = typeof INITIAL_LLM_SETTINGS;
 	type ActiveOpsSettingsState = typeof INITIAL_ACTIVEOPS_SETTINGS;
 	type ProviderModelsState = typeof INITIAL_PROVIDER_MODELS;
+	type TieredSettingsCardProps = {
+		accessToken?: string;
+		tier?: string;
+	};
+	type SettingsNotificationControlsProps = {
+		data: {
+			user?: unknown;
+			session?: { access_token?: string };
+			subscription?: { tier?: string };
+			profile?: { persona?: string };
+		};
+		settings: NotificationSettingsState;
+		testing: boolean;
+		testingJira: boolean;
+		testingTeams: boolean;
+		testingWorkflow: boolean;
+		diagnosticsLoading: boolean;
+		policyDiagnostics: PolicyDiagnostics | null;
+		testSlack: AsyncAction;
+		testJira: AsyncAction;
+		testTeams: AsyncAction;
+		testWorkflowDispatch: AsyncAction;
+		runPolicyDiagnostics: AsyncAction;
+		saveSettings: AsyncAction;
+		saving: boolean;
+	};
 
 	let {
 		data,
@@ -120,6 +143,18 @@
 		['growth', 'pro', 'enterprise'].includes(data.subscription?.tier ?? '')
 	);
 	const carbonUpgradePrompt = getUpgradePrompt('growth', 'GreenOps controls');
+	const loadIdentitySettingsCard = createLazyComponent<TieredSettingsCardProps>(
+		() => import('$lib/components/IdentitySettingsCard.svelte')
+	);
+	const loadEnforcementSettingsCard = createLazyComponent<TieredSettingsCardProps>(
+		() => import('$lib/components/EnforcementSettingsCard.svelte')
+	);
+	const loadEnforcementOpsCard = createLazyComponent<TieredSettingsCardProps>(
+		() => import('$lib/components/EnforcementOpsCard.svelte')
+	);
+	const loadSettingsNotificationControls = createLazyComponent<SettingsNotificationControlsProps>(
+		() => import('./SettingsNotificationControls.svelte')
+	);
 </script>
 
 <div class="space-y-8">
@@ -310,15 +345,65 @@
 				{/if}
 			</div>
 
-			<IdentitySettingsCard
-				accessToken={data.session?.access_token}
-				tier={data.subscription?.tier}
-			/>
-			<EnforcementSettingsCard
-				accessToken={data.session?.access_token}
-				tier={data.subscription?.tier}
-			/>
-			<EnforcementOpsCard accessToken={data.session?.access_token} tier={data.subscription?.tier} />
+			{#await loadIdentitySettingsCard()}
+				<div class="card">
+					<div class="skeleton h-6 w-40 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-3/4"></div>
+				</div>
+			{:then module}
+				{@const IdentitySettingsCard = module.default}
+				<IdentitySettingsCard
+					accessToken={data.session?.access_token}
+					tier={data.subscription?.tier}
+				/>
+			{:catch}
+				<div class="card">
+					<div class="skeleton h-6 w-40 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-3/4"></div>
+				</div>
+			{/await}
+
+			{#await loadEnforcementSettingsCard()}
+				<div class="card">
+					<div class="skeleton h-6 w-48 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-2/3"></div>
+				</div>
+			{:then module}
+				{@const EnforcementSettingsCard = module.default}
+				<EnforcementSettingsCard
+					accessToken={data.session?.access_token}
+					tier={data.subscription?.tier}
+				/>
+			{:catch}
+				<div class="card">
+					<div class="skeleton h-6 w-48 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-2/3"></div>
+				</div>
+			{/await}
+
+			{#await loadEnforcementOpsCard()}
+				<div class="card">
+					<div class="skeleton h-6 w-48 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-2/3"></div>
+				</div>
+			{:then module}
+				{@const EnforcementOpsCard = module.default}
+				<EnforcementOpsCard
+					accessToken={data.session?.access_token}
+					tier={data.subscription?.tier}
+				/>
+			{:catch}
+				<div class="card">
+					<div class="skeleton h-6 w-48 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-2/3"></div>
+				</div>
+			{/await}
 
 			<SettingsAiStrategyCard
 				{loadingLLM}
@@ -346,23 +431,38 @@
 				{safetyStatus}
 			/>
 
-			<SettingsNotificationControls
-				{data}
-				bind:settings
-				{testing}
-				{testingJira}
-				{testingTeams}
-				{testingWorkflow}
-				{diagnosticsLoading}
-				{policyDiagnostics}
-				{testSlack}
-				{testJira}
-				{testTeams}
-				{testWorkflowDispatch}
-				{runPolicyDiagnostics}
-				{saveSettings}
-				{saving}
-			/>
+			{#await loadSettingsNotificationControls()}
+				<div class="card">
+					<div class="skeleton h-6 w-52 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-3/4"></div>
+				</div>
+			{:then module}
+				{@const SettingsNotificationControls = module.default}
+				<SettingsNotificationControls
+					{data}
+					bind:settings
+					{testing}
+					{testingJira}
+					{testingTeams}
+					{testingWorkflow}
+					{diagnosticsLoading}
+					{policyDiagnostics}
+					{testSlack}
+					{testJira}
+					{testTeams}
+					{testWorkflowDispatch}
+					{runPolicyDiagnostics}
+					{saveSettings}
+					{saving}
+				/>
+			{:catch}
+				<div class="card">
+					<div class="skeleton h-6 w-52 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-3/4"></div>
+				</div>
+			{/await}
 		{/if}
 	</AuthGate>
 </div>

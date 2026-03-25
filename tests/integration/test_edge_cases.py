@@ -73,11 +73,17 @@ class TestZombieServiceEdgeCases:
                 "app.modules.optimization.domain.service.ZombieDetectorFactory"
             ) as mock_factory,
             patch(
+                "app.modules.optimization.adapters.aws.region_discovery.RegionDiscovery"
+            ) as mock_region_discovery,
+            patch(
                 "app.shared.core.pricing.get_tenant_tier",
                 new=AsyncMock(return_value=PricingTier.FREE),
             ),
             patch.object(zombie_service, "_send_notifications", new=AsyncMock()),
         ):
+            mock_region_discovery.return_value.get_enabled_regions = AsyncMock(
+                return_value=["us-east-1"]
+            )
             mock_detector = AsyncMock()
             # Mock scan_all to raise exception
             mock_detector.scan_all.side_effect = RuntimeError("AWS API failure")

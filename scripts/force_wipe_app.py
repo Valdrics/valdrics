@@ -61,7 +61,7 @@ async def force_wipe() -> None:
             raise
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Dangerous: wipe the entire public schema.")
     parser.add_argument(
         "--force",
@@ -86,7 +86,7 @@ def main() -> int:
             f"{NONINTERACTIVE_BYPASS_ENV}=true."
         ),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         _validate_wipe_request(
             force=bool(args.force),
@@ -94,10 +94,13 @@ def main() -> int:
             confirm_environment=str(args.confirm_environment),
             no_prompt=bool(args.no_prompt),
         )
+        asyncio.run(force_wipe())
     except RuntimeError as exc:
         print(f"❌ {exc}", file=sys.stderr)
         return 2
-    asyncio.run(force_wipe())
+    except (OSError, TypeError, ValueError, SQLAlchemyError) as exc:
+        print(f"❌ Error: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

@@ -164,6 +164,10 @@
 	min-width: 0;
 }
 
+.page-enter {
+	animation: publicPageEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 .public-site-header,
 .public-site-main,
 .public-site-footer {
@@ -704,9 +708,25 @@
 	}
 }
 
+@keyframes publicPageEnter {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
 @media (prefers-reduced-motion: reduce) {
 	.public-site-shell::before,
 	.public-site-shell::after {
+		animation: none !important;
+	}
+
+	.page-enter {
 		animation: none !important;
 	}
 }

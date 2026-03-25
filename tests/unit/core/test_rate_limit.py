@@ -1,7 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+import pytest
 from fastapi import FastAPI, Request
-from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
 from starlette.datastructures import Headers
 from app.shared.core.rate_limit import (
     context_aware_key,
@@ -11,8 +12,6 @@ from app.shared.core.rate_limit import (
     setup_rate_limiting,
     get_redis_client,
 )
-
-
 def mock_request(headers=None, state_attrs=None):
     req = MagicMock()
     req.headers = Headers(headers or {})
@@ -95,7 +94,8 @@ def test_global_limit_key_is_stable_across_requests() -> None:
     assert key_func(req_b) == "global:enforcement_gate"
 
 
-def test_global_rate_limit_throttles_cross_tenant_requests() -> None:
+@pytest.mark.asyncio
+async def test_global_rate_limit_throttles_cross_tenant_requests() -> None:
     settings = SimpleNamespace(
         REDIS_URL=None,
         ENVIRONMENT="development",
@@ -114,10 +114,23 @@ def test_global_rate_limit_throttles_cross_tenant_requests() -> None:
                 request.state.tenant_id = request.headers.get("x-tenant-id")
                 return {"ok": True}
 
-            client = TestClient(app)
-            first = client.get("/global-limit", headers={"x-tenant-id": "tenant-a"})
-            second = client.get("/global-limit", headers={"x-tenant-id": "tenant-b"})
-            third = client.get("/global-limit", headers={"x-tenant-id": "tenant-c"})
+            transport = ASGITransport(app=app)
+            async with AsyncClient(
+                transport=transport,
+                base_url="http://test",
+            ) as client:
+                first = await client.get(
+                    "/global-limit",
+                    headers={"x-tenant-id": "tenant-a"},
+                )
+                second = await client.get(
+                    "/global-limit",
+                    headers={"x-tenant-id": "tenant-b"},
+                )
+                third = await client.get(
+                    "/global-limit",
+                    headers={"x-tenant-id": "tenant-c"},
+                )
 
             assert first.status_code == 200
             assert second.status_code == 200

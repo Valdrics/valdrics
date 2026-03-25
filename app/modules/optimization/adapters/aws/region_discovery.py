@@ -12,7 +12,13 @@ This replaces hardcoded region lists and optimizes API calls.
 import aioboto3
 from typing import Dict, List, TYPE_CHECKING
 import structlog
-from botocore.exceptions import ClientError
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+)
 from botocore.session import get_session
 from app.shared.core.exceptions import ExternalAPIError
 
@@ -23,6 +29,10 @@ logger = structlog.get_logger()
 
 AWS_REGION_DISCOVERY_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     ExternalAPIError,
+    BotoCoreError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
     RuntimeError,
     OSError,
     TimeoutError,
@@ -31,7 +41,11 @@ AWS_REGION_DISCOVERY_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     AttributeError,
 )
 AWS_REGION_FALLBACK_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
+    BotoCoreError,
     ClientError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
     RuntimeError,
     OSError,
     TimeoutError,

@@ -8,6 +8,7 @@
 -->
 
 <script lang="ts">
+	import './llm.app.css';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';

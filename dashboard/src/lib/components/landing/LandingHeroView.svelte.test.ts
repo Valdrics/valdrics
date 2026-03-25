@@ -3,7 +3,7 @@ import { cleanup, render } from '@testing-library/svelte';
 import LandingHeroView from './LandingHeroView.svelte';
 import type { LandingCurrencyCode } from '$lib/landing/currencyPreference';
 import { CLOUD_HOOK_STATES } from '$lib/landing/heroContent.core';
-import { REALTIME_SIGNAL_SNAPSHOTS } from '$lib/landing/realtimeSignalMap';
+import { LANDING_SIGNAL_SNAPSHOTS } from '$lib/landing/landingSignalSnapshots';
 
 vi.mock('$app/paths', () => ({
 	assets: '',
@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 function buildProps() {
-	const activeSnapshot = REALTIME_SIGNAL_SNAPSHOTS[0];
+	const activeSnapshot = LANDING_SIGNAL_SNAPSHOTS[0];
 	const activeSignalLane = activeSnapshot?.lanes[0];
 	if (!activeSnapshot || !activeSignalLane) {
 		throw new Error('expected realtime signal snapshot fixture');

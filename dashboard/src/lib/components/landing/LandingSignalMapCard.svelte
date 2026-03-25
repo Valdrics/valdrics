@@ -270,7 +270,7 @@
 
 				<div class="landing-metrics" aria-live="polite">
 					{#each SIGNAL_VALUE_CARDS as card (card.label)}
-						<div class="landing-metric glass-card">
+						<div class="landing-metric">
 							<p class="landing-metric-k">{card.label}</p>
 							<p class="landing-metric-v">{card.value}</p>
 							<p class="landing-metric-h">{card.hint}</p>

@@ -12,10 +12,12 @@ Provides:
 pytest_plugins = ("tests.unit.shared.adapters.aws_cur_test_helpers",)
 
 import asyncio
+import asyncio.runners as asyncio_runners
 import inspect
 import os
 import sys
 import threading
+import warnings
 from contextlib import suppress
 from pathlib import Path
 from unittest.mock import MagicMock, AsyncMock, patch
@@ -68,6 +70,7 @@ from uuid import uuid4
 from decimal import Decimal
 import pytest
 import pytest_asyncio
+import pytest_asyncio.plugin as pytest_asyncio_plugin
 import tenacity
 from typing import AsyncGenerator, Generator, Optional
 from datetime import datetime, timezone
@@ -91,35 +94,7 @@ if TYPE_CHECKING:
 # Import all models to register them in SQLAlchemy mapper globally for all tests
 
 
-_ORIGINAL_ASYNCIO_RUNNER_CLOSE = asyncio.Runner.close
 _REAL_ASYNCIO_SLEEP = asyncio.sleep
-
-
-def _close_runner_with_wake_thread(runner: asyncio.Runner) -> None:
-    state_initialized = getattr(asyncio.runners, "_State").INITIALIZED
-    state_closed = getattr(asyncio.runners, "_State").CLOSED
-    if getattr(runner, "_state", None) is not state_initialized:
-        return
-    try:
-        loop = runner._loop
-        asyncio.runners._cancel_all_tasks(loop)
-        loop.run_until_complete(_await_with_asyncio_heartbeat(loop.shutdown_asyncgens()))
-        loop.run_until_complete(
-            _await_with_asyncio_heartbeat(
-                loop.shutdown_default_executor(
-                    asyncio.runners.constants.THREAD_JOIN_TIMEOUT
-                )
-            )
-        )
-    finally:
-        if getattr(runner, "_set_event_loop", False):
-            asyncio.events.set_event_loop(None)
-        loop.close()
-        runner._loop = None
-        runner._state = state_closed
-
-
-asyncio.Runner.close = _close_runner_with_wake_thread
 
 
 async def _heartbeat_loop(stop: asyncio.Event) -> None:
@@ -149,8 +124,130 @@ async def _await_with_asyncio_heartbeat(awaitable):
         return await awaitable
 
 
-def _run_async_with_heartbeat(awaitable) -> None:
-    asyncio.run(_await_with_asyncio_heartbeat(awaitable))
+def _run_async_with_heartbeat(awaitable):
+    return asyncio.run(_await_with_asyncio_heartbeat(awaitable))
+
+
+def _start_loop_waker(loop: asyncio.AbstractEventLoop) -> tuple[threading.Event, threading.Thread]:
+    stop = threading.Event()
+
+    def _wake_loop() -> None:
+        while not stop.wait(0.01):
+            try:
+                loop.call_soon_threadsafe(lambda: None)
+            except RuntimeError:
+                break
+
+    wake_thread = threading.Thread(
+        target=_wake_loop,
+        name="pytest-event-loop-waker",
+        daemon=True,
+    )
+    wake_thread.start()
+    return stop, wake_thread
+
+
+_BASE_PYTEST_ASYNCIO_RUNNER = pytest_asyncio_plugin.Runner
+
+
+class _WakefulPytestAsyncioRunner(_BASE_PYTEST_ASYNCIO_RUNNER):
+    _shutdown_timeout_seconds = 5.0
+
+    def _warn_on_shutdown_timeout(
+        self,
+        *,
+        step: str,
+        loop: asyncio.AbstractEventLoop,
+    ) -> None:
+        pending = [
+            repr(task)
+            for task in asyncio.all_tasks(loop)
+            if not task.done()
+        ]
+        warnings.warn(
+            (
+                f"pytest-asyncio runner teardown timed out during {step}; "
+                f"pending tasks: {pending}"
+            ),
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
+    def _cancel_all_tasks_with_timeout(
+        self,
+        loop: asyncio.AbstractEventLoop,
+    ) -> None:
+        to_cancel = asyncio.all_tasks(loop)
+        if not to_cancel:
+            return
+
+        for task in to_cancel:
+            task.cancel()
+
+        try:
+            loop.run_until_complete(
+                asyncio.wait_for(
+                    asyncio.gather(*to_cancel, return_exceptions=True),
+                    timeout=self._shutdown_timeout_seconds,
+                )
+            )
+        except TimeoutError:
+            self._warn_on_shutdown_timeout(step="cancel_all_tasks", loop=loop)
+
+    def _run_shutdown_step_with_timeout(
+        self,
+        loop: asyncio.AbstractEventLoop,
+        *,
+        step: str,
+        awaitable,
+    ) -> None:
+        try:
+            loop.run_until_complete(
+                asyncio.wait_for(
+                    awaitable,
+                    timeout=self._shutdown_timeout_seconds,
+                )
+            )
+        except TimeoutError:
+            self._warn_on_shutdown_timeout(step=step, loop=loop)
+
+    def close(self) -> None:
+        loop = getattr(self, "_loop", None)
+        if loop is None or loop.is_closed():
+            super().close()
+            return
+
+        stop, wake_thread = _start_loop_waker(loop)
+        try:
+            if self._state is not asyncio_runners._State.INITIALIZED:
+                return
+            try:
+                self._cancel_all_tasks_with_timeout(loop)
+                self._run_shutdown_step_with_timeout(
+                    loop,
+                    step="shutdown_asyncgens",
+                    awaitable=loop.shutdown_asyncgens(),
+                )
+                self._run_shutdown_step_with_timeout(
+                    loop,
+                    step="shutdown_default_executor",
+                    awaitable=loop.shutdown_default_executor(
+                        asyncio_runners.constants.THREAD_JOIN_TIMEOUT
+                    ),
+                )
+            finally:
+                if self._set_event_loop:
+                    asyncio_runners.events.set_event_loop(None)
+                loop.close()
+                self._loop = None
+                self._state = asyncio_runners._State.CLOSED
+        finally:
+            stop.set()
+            wake_thread.join(timeout=1)
+
+
+if pytest_asyncio_plugin.Runner is not _WakefulPytestAsyncioRunner:
+    pytest_asyncio_plugin.Runner = _WakefulPytestAsyncioRunner
 
 
 async def _dispose_async_engine(engine) -> None:
@@ -278,7 +375,7 @@ def async_engine(tmp_path_factory):
 
     engine = create_async_engine(db_url, echo=False)
     yield engine
-    asyncio.run(_dispose_async_engine(engine))
+    _run_async_with_heartbeat(_dispose_async_engine(engine))
 
     for suffix in ("", "-journal", "-shm", "-wal"):
         Path(f"{db_path}{suffix}").unlink(missing_ok=True)
@@ -361,7 +458,7 @@ def client(app, db_session, async_engine) -> Generator["TestClient", None, None]
                 ) as async_client:
                     return await async_client.request(method, *args, **kwargs)
 
-            return asyncio.run(_send())
+            return _run_async_with_heartbeat(_send())
 
         def get(self, *args, **kwargs):
             return self.request("GET", *args, **kwargs)
@@ -744,21 +841,7 @@ def event_loop():
         previous_loop = None
 
     asyncio.set_event_loop(loop)
-    stop = threading.Event()
-
-    def _wake_loop() -> None:
-        while not stop.wait(0.01):
-            try:
-                loop.call_soon_threadsafe(lambda: None)
-            except RuntimeError:
-                break
-
-    wake_thread = threading.Thread(
-        target=_wake_loop,
-        name="pytest-event-loop-waker",
-        daemon=True,
-    )
-    wake_thread.start()
+    stop, wake_thread = _start_loop_waker(loop)
     try:
         yield loop
     finally:
@@ -813,11 +896,11 @@ def reset_shared_http_clients():
     """Reset shared HTTP client singletons between tests to avoid loop/state bleed."""
     from app.shared.core.http import close_http_client
 
-    asyncio.run(close_http_client())
+    _run_async_with_heartbeat(close_http_client())
     try:
         yield
     finally:
-        asyncio.run(close_http_client())
+        _run_async_with_heartbeat(close_http_client())
 
 
 @pytest.fixture(autouse=True)

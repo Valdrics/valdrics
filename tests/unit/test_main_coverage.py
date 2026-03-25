@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
-from fastapi.testclient import TestClient
 
 from scripts.in_process_runtime_env import build_isolated_test_environment_values
+from tests.shared.asgi_client import SyncASGIClient
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -19,7 +19,7 @@ STATIC_DIR = REPO_ROOT / "app" / "static"
 def client():
     from app.main import app
 
-    with TestClient(app, raise_server_exceptions=False) as test_client:
+    with SyncASGIClient(app, raise_app_exceptions=False) as test_client:
         yield test_client
 
 
@@ -115,7 +115,7 @@ def test_liveness_endpoint(client):
 
 
 @pytest.mark.asyncio
-async def test_health_check_healthy(client):
+async def test_health_check_healthy(ac_no_db):
     mock_health = {
         "status": "healthy",
         "database": {"status": "up"},
@@ -126,7 +126,7 @@ async def test_health_check_healthy(client):
         "app.shared.core.health.HealthService.check_all", new_callable=AsyncMock
     ) as mock_check:
         mock_check.return_value = mock_health
-        response = client.get("/health")
+        response = await ac_no_db.get("/health")
         assert response.status_code == 200
         assert response.json()["status"] == "healthy"
 
@@ -200,7 +200,8 @@ def test_docs_static_assets_exist() -> None:
         assert asset_path.stat().st_size >= minimum_size_bytes, asset_name
 
 
-def test_docs_endpoints_render_with_real_static_assets(client):
+@pytest.mark.asyncio
+async def test_docs_endpoints_render_with_real_static_assets(ac_no_db):
     from app.main import settings as live_settings
 
     original_environment = live_settings.ENVIRONMENT
@@ -208,9 +209,9 @@ def test_docs_endpoints_render_with_real_static_assets(client):
     live_settings.ENVIRONMENT = "development"
     live_settings.EXPOSE_API_DOCUMENTATION_PUBLICLY = False
     try:
-        docs_response = client.get("/docs")
-        redoc_response = client.get("/redoc")
-        static_response = client.get("/static/redoc.standalone.js")
+        docs_response = await ac_no_db.get("/docs")
+        redoc_response = await ac_no_db.get("/redoc")
+        static_response = await ac_no_db.get("/static/redoc.standalone.js")
 
         assert docs_response.status_code == 200
         assert redoc_response.status_code == 200

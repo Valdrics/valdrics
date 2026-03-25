@@ -10,7 +10,11 @@ import tempfile
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
+from contextlib import suppress
+from unittest.mock import patch
 from uuid import UUID, uuid4
+from collections.abc import Awaitable
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -34,17 +38,33 @@ from scripts.verify_finance_telemetry_snapshot import verify_snapshot
 
 
 TRACKED_TIERS: tuple[str, ...] = ("free", "starter", "growth", "pro", "enterprise")
-DEFAULT_DATABASE_PATH = str(
-    Path(tempfile.gettempdir()) / "valdrics_finance_telemetry.sqlite"
-)
 TIER_MATRIX: dict[str, tuple[int, int, Decimal]] = {
     # tier: (tenant_count, active_subscriptions, per_usage_cost_usd)
-    "free": (120, 0, Decimal("0.0200")),
-    "starter": (42, 38, Decimal("0.1200")),
-    "growth": (21, 19, Decimal("0.2400")),
-    "pro": (9, 8, Decimal("0.6000")),
+    "free": (12, 0, Decimal("0.0200")),
+    "starter": (8, 6, Decimal("0.1200")),
+    "growth": (6, 5, Decimal("0.2400")),
+    "pro": (4, 3, Decimal("0.6000")),
     "enterprise": (3, 3, Decimal("1.2000")),
 }
+
+
+async def _heartbeat_loop(stop: asyncio.Event) -> None:
+    while not stop.is_set():
+        await asyncio.sleep(0.01)
+
+
+async def _await_with_heartbeat(awaitable: Awaitable[Any]) -> Any:
+    stop = asyncio.Event()
+    heartbeat = asyncio.create_task(_heartbeat_loop(stop))
+    try:
+        return await awaitable
+    finally:
+        stop.set()
+        await heartbeat
+
+
+def _run_async(awaitable: Awaitable[Any]) -> Any:
+    return asyncio.run(_await_with_heartbeat(awaitable))
 
 
 def _repo_root() -> Path:
@@ -93,6 +113,18 @@ def _resolve_database_path(value: str) -> Path:
     )
 
 
+def _build_default_database_path() -> Path:
+    database_root = Path(tempfile.mkdtemp(prefix="valdrics_finance_telemetry_"))
+    return database_root / "telemetry.sqlite3"
+
+
+def _cleanup_temporary_database(database_path: Path) -> None:
+    for suffix in ("", "-journal", "-shm", "-wal"):
+        Path(f"{database_path}{suffix}").unlink(missing_ok=True)
+    with suppress(OSError):
+        database_path.parent.rmdir()
+
+
 def _ensure_output_parent_dir(output_path: Path) -> None:
     current = output_path.parent
     while True:
@@ -128,8 +160,8 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output", required=True, help="Output snapshot JSON path.")
     parser.add_argument(
         "--database-path",
-        default=DEFAULT_DATABASE_PATH,
-        help="SQLite database path used for live telemetry generation.",
+        default=None,
+        help="Optional SQLite database path used for live telemetry generation.",
     )
     parser.add_argument(
         "--start-date",
@@ -149,32 +181,29 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _ensure_runtime_env(database_path: Path) -> None:
-    os.environ["TESTING"] = "true"
-    os.environ["DB_SSL_MODE"] = "disable"
-    os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{database_path}"
-    os.environ.setdefault("SUPABASE_JWT_SECRET", "test-jwt-secret-for-testing-at-least-32-bytes")
-    os.environ.setdefault("ENCRYPTION_KEY", "32-byte-long-test-encryption-key")
-    os.environ.setdefault("CSRF_SECRET_KEY", "test-csrf-secret-key-at-least-32-bytes")
-    os.environ.setdefault("KDF_SALT", "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=")
+def _runtime_env_overrides(database_path: Path) -> dict[str, str]:
+    overrides = {
+        "TESTING": "true",
+        "DB_SSL_MODE": "disable",
+        "DATABASE_URL": f"sqlite+aiosqlite:///{database_path}",
+    }
+    defaults = {
+        "SUPABASE_JWT_SECRET": "test-jwt-secret-for-testing-at-least-32-bytes",
+        "ENCRYPTION_KEY": "32-byte-long-test-encryption-key",
+        "CSRF_SECRET_KEY": "test-csrf-secret-key-at-least-32-bytes",
+        "KDF_SALT": "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s=",
+    }
+    for key, value in defaults.items():
+        if key not in os.environ:
+            overrides[key] = value
+    return overrides
 
 
 def _register_models() -> None:
-    # Register all relationship targets before metadata creation.
-    import app.models.aws_connection  # noqa: F401
-    import app.models.background_job  # noqa: F401
-    import app.models.cloud  # noqa: F401
-    import app.models.discovery_candidate  # noqa: F401
-    import app.models.hybrid_connection  # noqa: F401
-    import app.models.license_connection  # noqa: F401
+    # Register only the ORM models required by this snapshot's seed/query path.
     import app.models.llm  # noqa: F401
-    import app.models.notification_settings  # noqa: F401
-    import app.models.platform_connection  # noqa: F401
     import app.models.pricing  # noqa: F401
-    import app.models.remediation_settings  # noqa: F401
-    import app.models.saas_connection  # noqa: F401
     import app.models.tenant  # noqa: F401
-    import app.models.tenant_identity_settings  # noqa: F401
 
 
 def _usage_created_at(
@@ -196,14 +225,32 @@ async def _seed_runtime_data(
 ) -> None:
     from app.models.llm import LLMUsage
     from app.models.pricing import TenantSubscription
-    from app.models.tenant import Tenant
-    from app.shared.db.base import Base
+    from app.models.tenant import Tenant, User
     from app.shared.db.session import get_engine
 
     engine = get_engine()
+    seed_tables = (
+        Tenant.__table__,
+        User.__table__,
+        TenantSubscription.__table__,
+        LLMUsage.__table__,
+    )
+    metadata = Tenant.__table__.metadata
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(
+            lambda sync_conn: metadata.drop_all(
+                sync_conn,
+                tables=seed_tables,
+                checkfirst=True,
+            )
+        )
+        await conn.run_sync(
+            lambda sync_conn: metadata.create_all(
+                sync_conn,
+                tables=seed_tables,
+                checkfirst=True,
+            )
+        )
 
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as db:
@@ -268,24 +315,31 @@ async def _generate_snapshot(
     end_date: datetime.date,
     label: str,
 ) -> dict[str, object]:
-    _ensure_runtime_env(database_path)
-    _register_models()
-
     from app.shared.core.config import reload_settings_from_environment
     from app.shared.db.session import dispose_db_runtime
 
-    reload_settings_from_environment()
-    await dispose_db_runtime()
-    window_start, window_end_exclusive = _window_bounds(start_date, end_date)
-    await _seed_runtime_data(
-        window_start=window_start,
-        window_end_exclusive=window_end_exclusive,
-    )
-    payload = await collect_snapshot(
-        window_start=window_start,
-        window_end_exclusive=window_end_exclusive,
-        label=label,
-    )
+    try:
+        with patch.dict(os.environ, _runtime_env_overrides(database_path), clear=False):
+            _register_models()
+
+            await dispose_db_runtime()
+            reload_settings_from_environment()
+            try:
+                window_start, window_end_exclusive = _window_bounds(start_date, end_date)
+                await _seed_runtime_data(
+                    window_start=window_start,
+                    window_end_exclusive=window_end_exclusive,
+                )
+                payload = await collect_snapshot(
+                    window_start=window_start,
+                    window_end_exclusive=window_end_exclusive,
+                    label=label,
+                )
+            finally:
+                await dispose_db_runtime()
+    finally:
+        reload_settings_from_environment()
+
     runtime = payload.get("runtime")
     if isinstance(runtime, dict):
         runtime["collector"] = "scripts/generate_finance_telemetry_snapshot.py"
@@ -295,42 +349,50 @@ async def _generate_snapshot(
 
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
-    database_path = _resolve_database_path(str(args.database_path))
-    output_path = _resolve_output_path(str(args.output))
-    _ensure_output_parent_dir(output_path)
-    if database_path.exists() and not database_path.is_file():
-        raise ValueError(f"database_path must be a file path: {database_path}")
-    _ensure_parent_dir(database_path, field_name="database_path")
-    if output_path.resolve() == database_path.resolve():
-        raise ValueError("output and database_path must be different files")
-
-    if args.start_date and args.end_date:
-        start_date = _parse_date(str(args.start_date), field="start_date")
-        end_date = _parse_date(str(args.end_date), field="end_date")
-    elif args.start_date or args.end_date:
-        raise ValueError("start_date and end_date must be provided together")
-    else:
-        start_date, end_date = _default_window()
-    if args.label is not None:
-        label = str(args.label).strip()
-        if not label:
-            raise ValueError("label must be a non-empty string")
-    else:
-        label = f"{start_date}_{end_date}"
-
-    database_path.parent.mkdir(parents=True, exist_ok=True)
-    payload = asyncio.run(
-        _generate_snapshot(
-            database_path=database_path,
-            start_date=start_date,
-            end_date=end_date,
-            label=label,
-        )
+    auto_database_path = not args.database_path
+    database_path = (
+        _build_default_database_path()
+        if auto_database_path
+        else _resolve_database_path(str(args.database_path))
     )
+    output_path = _resolve_output_path(str(args.output))
+    try:
+        _ensure_output_parent_dir(output_path)
+        if database_path.exists() and not database_path.is_file():
+            raise ValueError(f"database_path must be a file path: {database_path}")
+        _ensure_parent_dir(database_path, field_name="database_path")
+        if output_path.resolve() == database_path.resolve():
+            raise ValueError("output and database_path must be different files")
 
-    _write_verified_snapshot(output_path=output_path, payload=payload)
-    print(f"Generated finance telemetry snapshot: {output_path}")
-    return 0
+        if args.start_date and args.end_date:
+            start_date = _parse_date(str(args.start_date), field="start_date")
+            end_date = _parse_date(str(args.end_date), field="end_date")
+        elif args.start_date or args.end_date:
+            raise ValueError("start_date and end_date must be provided together")
+        else:
+            start_date, end_date = _default_window()
+        if args.label is not None:
+            label = str(args.label).strip()
+            if not label:
+                raise ValueError("label must be a non-empty string")
+        else:
+            label = f"{start_date}_{end_date}"
+
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = _run_async(
+            _generate_snapshot(
+                database_path=database_path,
+                start_date=start_date,
+                end_date=end_date,
+                label=label,
+            )
+        )
+        _write_verified_snapshot(output_path=output_path, payload=payload)
+        print(f"Generated finance telemetry snapshot: {output_path}")
+        return 0
+    finally:
+        if auto_database_path:
+            _cleanup_temporary_database(database_path)
 
 
 if __name__ == "__main__":

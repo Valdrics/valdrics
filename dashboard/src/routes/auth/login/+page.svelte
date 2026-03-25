@@ -1,6 +1,5 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
-	import { createSupabaseBrowserClient } from '$lib/supabase';
 	import { getTurnstileToken } from '$lib/security/turnstile';
 	import { goto, invalidateAll } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -28,8 +27,9 @@
 	let intentLabel = $derived<string | null>(describePublicIntent(authContext.intent));
 	let personaLabel = $derived<string | null>(describePublicPersona(authContext.persona));
 
-	function getSupabaseClient() {
+	async function getSupabaseClient() {
 		try {
+			const { createSupabaseBrowserClient } = await import('$lib/supabase.browser');
 			return createSupabaseBrowserClient();
 		} catch {
 			throw new Error(
@@ -90,7 +90,7 @@
 		success = '';
 
 		try {
-			const supabase = getSupabaseClient();
+			const supabase = await getSupabaseClient();
 			if (mode === 'login') {
 				emitAuthEvent('auth_password_submit', 'login');
 				const { error: authError } = await supabase.auth.signInWithPassword({
@@ -129,7 +129,7 @@
 		error = '';
 		success = '';
 		try {
-			const supabase = getSupabaseClient();
+			const supabase = await getSupabaseClient();
 			const normalizedEmail = email.trim().toLowerCase();
 			if (!normalizedEmail) {
 				throw new Error('Enter your work email to continue.');
@@ -157,7 +157,7 @@
 		error = '';
 		success = '';
 		try {
-			const supabase = getSupabaseClient();
+			const supabase = await getSupabaseClient();
 			if (!email.trim()) {
 				throw new Error('Enter your work email to continue with SSO.');
 			}

@@ -52,8 +52,11 @@ PAYSTACK_STORED_PAYLOAD_PARSE_RECOVERABLE_EXCEPTIONS = (
 
 # Webhook configuration
 WEBHOOK_MAX_ATTEMPTS = 5  # More retries for revenue-critical
-# L5: Now configurable via settings
-WEBHOOK_IDEMPOTENCY_TTL_HOURS = get_settings().WEBHOOK_IDEMPOTENCY_TTL_HOURS
+
+
+def _webhook_idempotency_ttl_hours() -> int:
+    """Resolve idempotency TTL from the current settings snapshot."""
+    return get_settings().WEBHOOK_IDEMPOTENCY_TTL_HOURS
 
 
 class WebhookRetryableError(JobExecutionError):
@@ -139,7 +142,9 @@ class WebhookRetryService:
 
     async def is_duplicate(self, idempotency_key: str) -> bool:
         """Check if webhook was already processed successfully."""
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=WEBHOOK_IDEMPOTENCY_TTL_HOURS)
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            hours=_webhook_idempotency_ttl_hours()
+        )
         result = await self.db.execute(
             select(BackgroundJob).where(
                 BackgroundJob.job_type == JobType.WEBHOOK_RETRY,
@@ -160,7 +165,7 @@ class WebhookRetryService:
         )
         if terminal_time is None:
             return False
-        cutoff = now - timedelta(hours=WEBHOOK_IDEMPOTENCY_TTL_HOURS)
+        cutoff = now - timedelta(hours=_webhook_idempotency_ttl_hours())
         return terminal_time >= cutoff
 
     def _is_stale_running(self, job: BackgroundJob, *, now: datetime) -> bool:

@@ -7,6 +7,7 @@ import json
 import math
 import re
 from pathlib import Path
+import tempfile
 from typing import Any
 
 TRACKED_TIERS: tuple[str, ...] = ("starter", "growth", "pro", "enterprise")
@@ -182,13 +183,25 @@ def parse_close_history(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    if not rows:
-        path.write_text("", encoding="utf-8")
-        return
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        encoding="utf-8",
+        newline="",
+        dir=path.parent,
+        prefix=f".{path.stem}.",
+        suffix=f"{path.suffix or '.csv'}.tmp",
+        delete=False,
+    ) as handle:
+        staged_path = Path(handle.name)
+        if rows:
+            fieldnames = list(rows[0].keys())
+            writer = csv.DictWriter(handle, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(row)
 
-    fieldnames = list(rows[0].keys())
-    with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
-        writer.writeheader()
-        for row in rows:
-            writer.writerow(row)
+    try:
+        staged_path.replace(path)
+    except OSError:
+        staged_path.unlink(missing_ok=True)
+        raise

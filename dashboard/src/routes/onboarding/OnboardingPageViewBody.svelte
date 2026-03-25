@@ -1,9 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import AuthGate from '$lib/components/AuthGate.svelte';
-	import OnboardingStepConfigurationSection from './OnboardingStepConfigurationSection.svelte';
-	import OnboardingStepSelectProviderSection from './OnboardingStepSelectProviderSection.svelte';
-	import OnboardingVerifySuccessSection from './OnboardingVerifySuccessSection.svelte';
+	import { createLazyComponent } from '$lib/lazyComponent';
 	import type {
 		CloudPlusAuthMethod,
 		DiscoveryCandidate,
@@ -170,6 +168,15 @@
 	const growthTier = $derived(
 		['growth', 'pro', 'enterprise'].includes(data?.subscription?.tier ?? '')
 	);
+	const loadSelectProviderSection = createLazyComponent(
+		() => import('./OnboardingStepSelectProviderSection.svelte')
+	);
+	const loadConfigurationSection = createLazyComponent(
+		() => import('./OnboardingStepConfigurationSection.svelte')
+	);
+	const loadVerifySuccessSection = createLazyComponent(
+		() => import('./OnboardingVerifySuccessSection.svelte')
+	);
 </script>
 
 <AuthGate authenticated={!!data.user} action="connect providers">
@@ -201,93 +208,147 @@
 		{/if}
 
 		{#if currentStep === 0}
-			<OnboardingStepSelectProviderSection
-				{data}
-				bind:selectedProvider
-				bind:discoveryEmail
-				{discoveryDomain}
-				bind:discoveryIdpProvider
-				{discoveryCandidates}
-				{discoveryWarnings}
-				{discoveryLoadingStageA}
-				{discoveryLoadingStageB}
-				{discoveryActionCandidateId}
-				{discoveryError}
-				{discoveryInfo}
-				{isLoading}
-				{canUseMultiCloudFeatures}
-				{canUseCloudPlusFeatures}
-				{canUseIdpDeepScan}
-				{getDiscoveryCategoryLabel}
-				{formatDiscoveryConfidence}
-				{runDiscoveryStageA}
-				{runDiscoveryStageB}
-				{connectDiscoveryCandidate}
-				{ignoreDiscoveryCandidate}
-				{markDiscoveryCandidateConnected}
-				{handleContinueToSetup}
-			/>
+			{#await loadSelectProviderSection()}
+				<div class="card">
+					<div class="skeleton h-8 w-56 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-3/4 mb-6"></div>
+					<div class="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+						<div class="skeleton h-28 rounded-2xl"></div>
+						<div class="skeleton h-28 rounded-2xl"></div>
+						<div class="skeleton h-28 rounded-2xl"></div>
+					</div>
+				</div>
+			{:then module}
+				{@const OnboardingStepSelectProviderSection = module.default}
+				<OnboardingStepSelectProviderSection
+					{data}
+					bind:selectedProvider
+					bind:discoveryEmail
+					{discoveryDomain}
+					bind:discoveryIdpProvider
+					{discoveryCandidates}
+					{discoveryWarnings}
+					{discoveryLoadingStageA}
+					{discoveryLoadingStageB}
+					{discoveryActionCandidateId}
+					{discoveryError}
+					{discoveryInfo}
+					{isLoading}
+					{canUseMultiCloudFeatures}
+					{canUseCloudPlusFeatures}
+					{canUseIdpDeepScan}
+					{getDiscoveryCategoryLabel}
+					{formatDiscoveryConfidence}
+					{runDiscoveryStageA}
+					{runDiscoveryStageB}
+					{connectDiscoveryCandidate}
+					{ignoreDiscoveryCandidate}
+					{markDiscoveryCandidateConnected}
+					{handleContinueToSetup}
+				/>
+			{:catch}
+				<div class="card">
+					<div class="skeleton h-8 w-56 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-3/4 mb-6"></div>
+				</div>
+			{/await}
 		{/if}
 
 		{#if currentStep === 1}
-			<OnboardingStepConfigurationSection
-				{selectedProvider}
-				bind:selectedTab
-				{copied}
-				{isVerifying}
-				{magicLink}
-				{cloudformationYaml}
-				{terraformHcl}
-				bind:roleArn
-				bind:awsAccountId
-				bind:isManagementAccount
-				bind:organizationId
-				bind:azureSubscriptionId
-				bind:azureTenantId
-				bind:azureClientId
-				bind:gcpProjectId
-				bind:gcpBillingProjectId
-				bind:gcpBillingDataset
-				bind:gcpBillingTable
-				{cloudShellSnippet}
-				{cloudPlusSampleFeed}
-				bind:cloudPlusName
-				bind:cloudPlusVendor
-				bind:cloudPlusAuthMethod
-				bind:cloudPlusApiKey
-				bind:cloudPlusFeedInput
-				bind:cloudPlusConnectorConfigInput
-				{cloudPlusNativeConnectors}
-				{cloudPlusManualFeedSchema}
-				{growthTier}
-				onBack={() => (currentStep = 0)}
-				{copyTemplate}
-				{downloadTemplate}
-				{handleCloudPlusVendorInputChanged}
-				{chooseNativeCloudPlusVendor}
-				{handleCloudPlusAuthMethodChanged}
-				{getAvailableCloudPlusAuthMethods}
-				{isCloudPlusNativeAuthMethod}
-				{setRequiredConfigField}
-				{getRequiredConfigFieldValue}
-				{getSelectedNativeConnector}
-				{proceedToVerify}
-				{verifyConnection}
-			/>
+			{#await loadConfigurationSection()}
+				<div class="card">
+					<div class="skeleton h-8 w-64 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-2/3 mb-6"></div>
+					<div class="skeleton h-64 rounded-2xl"></div>
+				</div>
+			{:then module}
+				{@const OnboardingStepConfigurationSection = module.default}
+				<OnboardingStepConfigurationSection
+					{selectedProvider}
+					bind:selectedTab
+					{copied}
+					{isVerifying}
+					{magicLink}
+					{cloudformationYaml}
+					{terraformHcl}
+					bind:roleArn
+					bind:awsAccountId
+					bind:isManagementAccount
+					bind:organizationId
+					bind:azureSubscriptionId
+					bind:azureTenantId
+					bind:azureClientId
+					bind:gcpProjectId
+					bind:gcpBillingProjectId
+					bind:gcpBillingDataset
+					bind:gcpBillingTable
+					{cloudShellSnippet}
+					{cloudPlusSampleFeed}
+					bind:cloudPlusName
+					bind:cloudPlusVendor
+					bind:cloudPlusAuthMethod
+					bind:cloudPlusApiKey
+					bind:cloudPlusFeedInput
+					bind:cloudPlusConnectorConfigInput
+					{cloudPlusNativeConnectors}
+					{cloudPlusManualFeedSchema}
+					{growthTier}
+					onBack={() => (currentStep = 0)}
+					{copyTemplate}
+					{downloadTemplate}
+					{handleCloudPlusVendorInputChanged}
+					{chooseNativeCloudPlusVendor}
+					{handleCloudPlusAuthMethodChanged}
+					{getAvailableCloudPlusAuthMethods}
+					{isCloudPlusNativeAuthMethod}
+					{setRequiredConfigField}
+					{getRequiredConfigFieldValue}
+					{getSelectedNativeConnector}
+					{proceedToVerify}
+					{verifyConnection}
+				/>
+			{:catch}
+				<div class="card">
+					<div class="skeleton h-8 w-64 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-2/3 mb-6"></div>
+				</div>
+			{/await}
 		{/if}
 
-		<OnboardingVerifySuccessSection
-			{data}
-			{success}
-			{selectedProvider}
-			{isVerifying}
-			{verifyConnection}
-			{getProviderLabel}
-			bind:currentStep
-			bind:awsAccountId
-			bind:roleArn
-			bind:isManagementAccount
-			bind:organizationId
-		/>
+		{#if currentStep >= 2}
+			{#await loadVerifySuccessSection()}
+				<div class="card">
+					<div class="skeleton h-8 w-48 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-2/3 mb-6"></div>
+					<div class="skeleton h-12 w-full rounded-xl"></div>
+				</div>
+			{:then module}
+				{@const OnboardingVerifySuccessSection = module.default}
+				<OnboardingVerifySuccessSection
+					{data}
+					{success}
+					{selectedProvider}
+					{isVerifying}
+					{verifyConnection}
+					{getProviderLabel}
+					bind:currentStep
+					bind:awsAccountId
+					bind:roleArn
+					bind:isManagementAccount
+					bind:organizationId
+				/>
+			{:catch}
+				<div class="card">
+					<div class="skeleton h-8 w-48 mb-4"></div>
+					<div class="skeleton h-4 w-full mb-2"></div>
+					<div class="skeleton h-4 w-2/3"></div>
+				</div>
+			{/await}
+		{/if}
 	</div>
 </AuthGate>

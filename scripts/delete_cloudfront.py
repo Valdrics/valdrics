@@ -30,6 +30,7 @@ PROD_BYPASS = (
 )
 NONINTERACTIVE_BYPASS_ENV = "VALDRICS_ALLOW_NONINTERACTIVE_CLOUDFRONT_DELETE"
 MIN_REASON_LENGTH = 16
+DEFAULT_MAX_WAIT_SECONDS = 1800
 
 
 def _validate_request(
@@ -66,18 +67,32 @@ def _validate_request(
     )
 
 
-def delete_cloudfront(*, distribution_id: str, dry_run: bool) -> bool:
+def delete_cloudfront(
+    *,
+    distribution_id: str,
+    dry_run: bool,
+    max_wait_seconds: int = DEFAULT_MAX_WAIT_SECONDS,
+    monotonic_fn: object = time.monotonic,
+    sleep_fn: object = time.sleep,
+) -> bool:
     distribution = str(distribution_id or "").strip()
     if not distribution:
         raise RuntimeError("distribution_id is required")
+    if int(max_wait_seconds) <= 0:
+        raise RuntimeError("max_wait_seconds must be > 0")
     if dry_run:
         print(f"Dry-run: would delete CloudFront distribution {distribution}.")
         return True
 
     client = boto3.client("cloudfront")
     print(f"Waiting for distribution {distribution} to be fully disabled...")
+    deadline = monotonic_fn() + int(max_wait_seconds)  # type: ignore[operator]
 
     while True:
+        if monotonic_fn() > deadline:  # type: ignore[operator]
+            raise RuntimeError(
+                f"Timed out waiting to delete distribution {distribution} after {int(max_wait_seconds)}s"
+            )
         try:
             response = client.get_distribution_config(Id=distribution)
             config = response["DistributionConfig"]
@@ -94,12 +109,12 @@ def delete_cloudfront(*, distribution_id: str, dry_run: bool) -> bool:
                     IfMatch=etag,
                     DistributionConfig=config,
                 )
-                time.sleep(5)
+                sleep_fn(5)  # type: ignore[misc]
                 continue
 
             if status != "Deployed":
                 print(f"Distribution status is '{status}'. Waiting for 'Deployed'...")
-                time.sleep(15)
+                sleep_fn(15)  # type: ignore[misc]
                 continue
 
             print("Distribution is disabled and deployed. Attempting deletion...")
@@ -111,7 +126,7 @@ def delete_cloudfront(*, distribution_id: str, dry_run: bool) -> bool:
             error_code = str(exc.response.get("Error", {}).get("Code") or "").strip()
             if error_code == "DistributionNotDisabled":
                 print("AWS reports distribution not disabled yet. Retrying...")
-                time.sleep(10)
+                sleep_fn(10)  # type: ignore[misc]
                 continue
             if error_code == "InvalidIfMatchVersion":
                 print("ETag mismatch, retrying...")
@@ -147,6 +162,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--confirm-phrase", default="")
     parser.add_argument("--confirm-environment", default="")
     parser.add_argument("--no-prompt", action="store_true")
+    parser.add_argument(
+        "--max-wait-seconds",
+        type=int,
+        default=DEFAULT_MAX_WAIT_SECONDS,
+        help="Maximum time to wait for disable/deploy/delete progression before failing.",
+    )
     args = parser.parse_args(argv)
 
     try:
@@ -162,6 +183,7 @@ def main(argv: list[str] | None = None) -> int:
         success = delete_cloudfront(
             distribution_id=str(args.distribution_id),
             dry_run=not bool(args.execute),
+            max_wait_seconds=int(args.max_wait_seconds),
         )
     except RuntimeError as exc:
         print(f"❌ {exc}", file=sys.stderr)

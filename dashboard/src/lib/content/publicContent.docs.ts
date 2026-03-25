@@ -1,3 +1,5 @@
+import type { PublicContentEntryInput } from './publicContent.types';
+
 export const RAW_PUBLIC_CONTENT_DOCS = [
 	{
 		kind: 'docs',
@@ -191,4 +193,4 @@ export const RAW_PUBLIC_CONTENT_DOCS = [
 			{ kind: 'resources', slug: 'executive-one-pager' }
 		]
 	}
-] as const;
+] as const satisfies readonly PublicContentEntryInput[];

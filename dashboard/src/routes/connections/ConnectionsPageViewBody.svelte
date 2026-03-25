@@ -1,10 +1,7 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import AuthGate from '$lib/components/AuthGate.svelte';
-	import ConnectionsOrgDiscoverySection from './ConnectionsOrgDiscoverySection.svelte';
-	import ConnectionsPlatformHybridCards from './ConnectionsPlatformHybridCards.svelte';
-	import ConnectionsPublicCloudCards from './ConnectionsPublicCloudCards.svelte';
-	import ConnectionsSaasLicenseCards from './ConnectionsSaasLicenseCards.svelte';
+	import { createLazyComponent } from '$lib/lazyComponent';
 
 	let {
 		data,
@@ -67,108 +64,171 @@
 		deleteConnection,
 		linkDiscoveredAccount
 	} = $props();
+
+	const loadPublicCloudCards = createLazyComponent(
+		() => import('./ConnectionsPublicCloudCards.svelte')
+	);
+	const loadSaasLicenseCards = createLazyComponent(
+		() => import('./ConnectionsSaasLicenseCards.svelte')
+	);
+	const loadPlatformHybridCards = createLazyComponent(
+		() => import('./ConnectionsPlatformHybridCards.svelte')
+	);
+	const loadOrgDiscoverySection = createLazyComponent(
+		() => import('./ConnectionsOrgDiscoverySection.svelte')
+	);
 </script>
 
 <AuthGate authenticated={!!data.user} action="manage cloud accounts">
-	<div class="flex items-center justify-between">
-		<div>
-			<h1 class="text-3xl font-bold mb-2">Cloud Accounts</h1>
-			<p class="text-ink-400">
-				Manage your multi-cloud connectivity and enterprise organization discovery.
-			</p>
+	<div class="connections-page">
+		<div class="connections-page__header">
+			<div>
+				<h1 class="connections-page__title">Cloud Accounts</h1>
+				<p class="connections-page__subtitle">
+					Manage your multi-cloud connectivity and enterprise organization discovery.
+				</p>
+			</div>
+			<a href={`${base}/onboarding`} class="btn btn-primary connections-page__cta">
+				<span>➕</span> Connect New Provider
+			</a>
 		</div>
-		<a href={`${base}/onboarding`} class="btn btn-primary !w-auto">
-			<span>➕</span> Connect New Provider
-		</a>
+
+		{#if error}
+			<div class="connections-page__notice connections-page__notice--error">
+				<p>{error}</p>
+			</div>
+		{/if}
+
+		{#if success}
+			<div class="connections-page__notice connections-page__notice--success">
+				<p>{success}</p>
+			</div>
+		{/if}
+
+		<div class="connections-page__grid">
+			{#await loadPublicCloudCards()}
+				<div class="card connections-page__placeholder">
+					<div class="skeleton h-8 w-40 mb-4"></div>
+					<div class="skeleton h-56 rounded-2xl"></div>
+				</div>
+			{:then module}
+				{@const ConnectionsPublicCloudCards = module.default}
+				<ConnectionsPublicCloudCards
+					{data}
+					{loadingAWS}
+					{loadingAzure}
+					{loadingGCP}
+					{awsConnections}
+					{azureConnections}
+					{gcpConnections}
+					{deleteConnection}
+				/>
+			{:catch}
+				<div class="card connections-page__placeholder">
+					<div class="skeleton h-8 w-40 mb-4"></div>
+				</div>
+			{/await}
+
+			{#await loadSaasLicenseCards()}
+				<div class="card connections-page__placeholder">
+					<div class="skeleton h-8 w-48 mb-4"></div>
+					<div class="skeleton h-56 rounded-2xl"></div>
+				</div>
+			{:then module}
+				{@const ConnectionsSaasLicenseCards = module.default}
+				<ConnectionsSaasLicenseCards
+					{loadingSaaS}
+					{loadingLicense}
+					{saasConnections}
+					{licenseConnections}
+					{verifyingCloudPlus}
+					{creatingSaaS}
+					{creatingLicense}
+					{canUseCloudPlusFeatures}
+					{createCloudPlusConnection}
+					{verifyCloudPlusConnection}
+					{deleteConnection}
+					bind:saasName
+					bind:saasVendor
+					bind:saasAuthMethod
+					bind:saasApiKey
+					bind:saasConnectorConfig
+					bind:saasFeedInput
+					bind:licenseName
+					bind:licenseVendor
+					bind:licenseAuthMethod
+					bind:licenseApiKey
+					bind:licenseConnectorConfig
+					bind:licenseFeedInput
+				/>
+			{:catch}
+				<div class="card connections-page__placeholder">
+					<div class="skeleton h-8 w-48 mb-4"></div>
+				</div>
+			{/await}
+
+			{#await loadPlatformHybridCards()}
+				<div class="card connections-page__placeholder">
+					<div class="skeleton h-8 w-48 mb-4"></div>
+					<div class="skeleton h-56 rounded-2xl"></div>
+				</div>
+			{:then module}
+				{@const ConnectionsPlatformHybridCards = module.default}
+				<ConnectionsPlatformHybridCards
+					{loadingPlatform}
+					{loadingHybrid}
+					{platformConnections}
+					{hybridConnections}
+					{verifyingCloudPlus}
+					{creatingPlatform}
+					{creatingHybrid}
+					{canUseCloudPlusFeatures}
+					{createCloudPlusConnection}
+					{verifyCloudPlusConnection}
+					{deleteConnection}
+					bind:platformName
+					bind:platformVendor
+					bind:platformAuthMethod
+					bind:platformApiKey
+					bind:platformApiSecret
+					bind:platformConnectorConfig
+					bind:platformFeedInput
+					bind:hybridName
+					bind:hybridVendor
+					bind:hybridAuthMethod
+					bind:hybridApiKey
+					bind:hybridApiSecret
+					bind:hybridConnectorConfig
+					bind:hybridFeedInput
+				/>
+			{:catch}
+				<div class="card connections-page__placeholder">
+					<div class="skeleton h-8 w-48 mb-4"></div>
+				</div>
+			{/await}
+		</div>
+
+		{#await loadOrgDiscoverySection()}
+			<div class="card connections-page__org-placeholder">
+				<div class="skeleton h-8 w-56 mb-4"></div>
+				<div class="skeleton h-32 rounded-2xl"></div>
+			</div>
+		{:then module}
+			{@const ConnectionsOrgDiscoverySection = module.default}
+			<ConnectionsOrgDiscoverySection
+				{data}
+				{awsConnection}
+				{syncingOrg}
+				{discoveredAccounts}
+				{loadingDiscovered}
+				{linkingAccount}
+				{syncAWSOrg}
+				{linkDiscoveredAccount}
+			/>
+		{:catch}
+			<div class="card connections-page__org-placeholder">
+				<div class="skeleton h-8 w-56 mb-4"></div>
+			</div>
+		{/await}
 	</div>
-
-	{#if error}
-		<div class="card border-danger-500/50 bg-danger-500/10">
-			<p class="text-danger-400">{error}</p>
-		</div>
-	{/if}
-
-	{#if success}
-		<div class="card border-success-500/50 bg-success-500/10">
-			<p class="text-success-400">{success}</p>
-		</div>
-	{/if}
-
-	<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-		<ConnectionsPublicCloudCards
-			{data}
-			{loadingAWS}
-			{loadingAzure}
-			{loadingGCP}
-			{awsConnections}
-			{azureConnections}
-			{gcpConnections}
-			{deleteConnection}
-		/>
-
-		<ConnectionsSaasLicenseCards
-			{loadingSaaS}
-			{loadingLicense}
-			{saasConnections}
-			{licenseConnections}
-			{verifyingCloudPlus}
-			{creatingSaaS}
-			{creatingLicense}
-			{canUseCloudPlusFeatures}
-			{createCloudPlusConnection}
-			{verifyCloudPlusConnection}
-			{deleteConnection}
-			bind:saasName
-			bind:saasVendor
-			bind:saasAuthMethod
-			bind:saasApiKey
-			bind:saasConnectorConfig
-			bind:saasFeedInput
-			bind:licenseName
-			bind:licenseVendor
-			bind:licenseAuthMethod
-			bind:licenseApiKey
-			bind:licenseConnectorConfig
-			bind:licenseFeedInput
-		/>
-
-		<ConnectionsPlatformHybridCards
-			{loadingPlatform}
-			{loadingHybrid}
-			{platformConnections}
-			{hybridConnections}
-			{verifyingCloudPlus}
-			{creatingPlatform}
-			{creatingHybrid}
-			{canUseCloudPlusFeatures}
-			{createCloudPlusConnection}
-			{verifyCloudPlusConnection}
-			{deleteConnection}
-			bind:platformName
-			bind:platformVendor
-			bind:platformAuthMethod
-			bind:platformApiKey
-			bind:platformApiSecret
-			bind:platformConnectorConfig
-			bind:platformFeedInput
-			bind:hybridName
-			bind:hybridVendor
-			bind:hybridAuthMethod
-			bind:hybridApiKey
-			bind:hybridApiSecret
-			bind:hybridConnectorConfig
-			bind:hybridFeedInput
-		/>
-	</div>
-
-	<ConnectionsOrgDiscoverySection
-		{data}
-		{awsConnection}
-		{syncingOrg}
-		{discoveredAccounts}
-		{loadingDiscovered}
-		{linkingAccount}
-		{syncAWSOrg}
-		{linkDiscoveredAccount}
-	/>
 </AuthGate>

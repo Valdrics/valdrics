@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
+from unittest.mock import patch
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -22,37 +23,38 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 async def _run(database_url_override: str | None) -> int:
+    env_overrides = {"LOCAL_SQLITE_BOOTSTRAP": "true"}
     if database_url_override:
-        os.environ["DATABASE_URL"] = database_url_override
-    os.environ["LOCAL_SQLITE_BOOTSTRAP"] = "true"
+        env_overrides["DATABASE_URL"] = database_url_override
 
-    from app.shared.core.config import reload_settings_from_environment
-    from app.shared.db.local_sqlite_bootstrap import bootstrap_local_sqlite_schema
-    from app.shared.db.session import get_engine, reset_db_runtime
+    with patch.dict(os.environ, env_overrides, clear=False):
+        from app.shared.core.config import reload_settings_from_environment
+        from app.shared.db.local_sqlite_bootstrap import bootstrap_local_sqlite_schema
+        from app.shared.db.session import get_engine, reset_db_runtime
 
-    settings = reload_settings_from_environment()
-    database_url = str(getattr(settings, "DATABASE_URL", "") or "").strip()
+        settings = reload_settings_from_environment()
+        database_url = str(getattr(settings, "DATABASE_URL", "") or "").strip()
 
-    if bool(getattr(settings, "TESTING", False)):
-        raise SystemExit(
-            "LOCAL_SQLITE_BOOTSTRAP requires TESTING=false. "
-            "Use a local runtime env, not the test harness."
-        )
-    if "sqlite" not in database_url.lower():
-        raise SystemExit(
-            "bootstrap_local_sqlite_schema.py requires DATABASE_URL to use sqlite."
-        )
+        if bool(getattr(settings, "TESTING", False)):
+            raise SystemExit(
+                "LOCAL_SQLITE_BOOTSTRAP requires TESTING=false. "
+                "Use a local runtime env, not the test harness."
+            )
+        if "sqlite" not in database_url.lower():
+            raise SystemExit(
+                "bootstrap_local_sqlite_schema.py requires DATABASE_URL to use sqlite."
+            )
 
-    reset_db_runtime()
-    engine = get_engine()
-    try:
-        result = await bootstrap_local_sqlite_schema(
-            engine=engine,
-            effective_url=database_url,
-            settings_obj=settings,
-        )
-    finally:
-        await engine.dispose()
+        reset_db_runtime()
+        engine = get_engine()
+        try:
+            result = await bootstrap_local_sqlite_schema(
+                engine=engine,
+                effective_url=database_url,
+                settings_obj=settings,
+            )
+        finally:
+            await engine.dispose()
 
     print(
         "[local-sqlite-bootstrap] ok "
@@ -70,4 +72,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

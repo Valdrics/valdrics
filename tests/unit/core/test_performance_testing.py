@@ -405,11 +405,32 @@ def test_load_baselines_file_not_found(tmp_path):
 def test_save_baselines_error():
     detector = PerformanceRegressionDetector(baseline_file="/nonexistent/path.json")
     with (
-        patch("app.shared.core.performance_testing.open", side_effect=OSError("nope")),
+        patch(
+            "app.shared.core.performance_testing.tempfile.NamedTemporaryFile",
+            side_effect=OSError("nope"),
+        ),
         patch("app.shared.core.performance_testing.logger") as mock_logger,
     ):
         detector.save_baselines({"results": []})
         mock_logger.error.assert_called_once()
+
+
+def test_save_baselines_does_not_clobber_existing_file_when_replace_fails(
+    tmp_path,
+):
+    baseline_file = tmp_path / "baseline.json"
+    baseline_file.write_text('{"original": true}\n', encoding="utf-8")
+    detector = PerformanceRegressionDetector(baseline_file=str(baseline_file))
+
+    with (
+        patch("app.shared.core.performance_testing.Path.replace", side_effect=OSError("replace failed")),
+        patch("app.shared.core.performance_testing.logger") as mock_logger,
+    ):
+        detector.save_baselines({"results": []})
+
+    assert baseline_file.read_text(encoding="utf-8") == '{"original": true}\n'
+    assert [path.name for path in tmp_path.iterdir()] == ["baseline.json"]
+    mock_logger.error.assert_called_once()
 
 
 def test_generate_k6_script_includes_endpoints():

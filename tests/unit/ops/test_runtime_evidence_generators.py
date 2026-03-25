@@ -1,14 +1,19 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import math
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 import scripts.generate_valdrics_disposition_register as valdrics_generator
 import scripts.generate_pricing_benchmark_register as pricing_generator
 from scripts.generate_finance_telemetry_snapshot import (
+    _generate_snapshot as generate_finance_telemetry_snapshot,
+    _parse_date as parse_finance_telemetry_date,
     main as generate_finance_telemetry_snapshot_main,
 )
 from scripts.generate_finance_committee_packet import (
@@ -93,6 +98,110 @@ def test_generate_finance_telemetry_snapshot_does_not_leave_output_when_verifica
     assert all(path != output for path in verify_calls)
 
 
+def test_generate_finance_telemetry_snapshot_uses_unique_temp_database_by_default(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen_database_paths: list[Path] = []
+
+    async def _fake_generate_snapshot(**kwargs: object) -> dict[str, object]:
+        database_path = kwargs["database_path"]
+        assert isinstance(database_path, Path)
+        seen_database_paths.append(database_path)
+        database_path.write_text("seed", encoding="utf-8")
+        return {
+            "captured_at": "2026-03-01T00:00:00+00:00",
+            "window": {
+                "start": "2026-02-01T00:00:00+00:00",
+                "end": "2026-02-28T23:59:59+00:00",
+                "label": "2026-02",
+            },
+            "pricing_reference": {
+                tier: {
+                    "monthly_price_usd": 0.0,
+                    "annual_price_usd": 0.0,
+                    "annual_monthly_factor": 0.0,
+                }
+                for tier in ("free", "starter", "growth", "pro", "enterprise")
+            },
+            "tier_subscription_snapshot": [
+                {
+                    "tier": tier,
+                    "total_tenants": 1,
+                    "active_subscriptions": 0,
+                    "dunning_events": 0,
+                }
+                for tier in ("free", "starter", "growth", "pro", "enterprise")
+            ],
+            "tier_revenue_inputs": [
+                {
+                    "tier": tier,
+                    "monthly_price_usd": 0.0,
+                    "active_subscriptions": 0,
+                    "gross_mrr_usd": 0.0,
+                }
+                for tier in ("free", "starter", "growth", "pro", "enterprise")
+            ],
+            "tier_llm_usage": [
+                {
+                    "tier": tier,
+                    "total_cost_usd": 0.0,
+                    "tenant_monthly_cost_percentiles_usd": {"p50": 0.0, "p95": 0.0, "p99": 0.0},
+                }
+                for tier in ("free", "starter", "growth", "pro", "enterprise")
+            ],
+            "free_tier_compute_guardrails": {
+                "tier": "free",
+                "reference_tier": "starter",
+                "limits": [
+                    {
+                        "limit_name": "llm_analyses_per_day",
+                        "free_limit": 0,
+                        "starter_limit": 0,
+                        "free_le_starter": True,
+                    }
+                ],
+                "bounded_against_starter": True,
+            },
+            "free_tier_margin_watch": {
+                "free_total_tenants": 1,
+                "free_active_subscriptions": 0,
+                "free_total_llm_cost_usd": 0.0,
+                "free_p95_tenant_monthly_cost_usd": 0.0,
+                "starter_gross_mrr_usd": 0.0,
+                "free_llm_cost_pct_of_starter_gross_mrr": 0.0,
+                "max_allowed_pct_of_starter_gross_mrr": 100.0,
+            },
+            "gate_results": {
+                "telemetry_gate_required_tiers_present": True,
+                "telemetry_gate_window_valid": True,
+                "telemetry_gate_percentiles_valid": True,
+                "telemetry_gate_artifact_fresh": True,
+                "telemetry_gate_free_tier_guardrails_bounded": True,
+                "telemetry_gate_free_tier_margin_guarded": True,
+            },
+        }
+
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._generate_snapshot",
+        _fake_generate_snapshot,
+    )
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot.verify_snapshot",
+        lambda **_: 0,
+    )
+
+    first_output = tmp_path / "finance_telemetry_snapshot_first.json"
+    second_output = tmp_path / "finance_telemetry_snapshot_second.json"
+
+    assert generate_finance_telemetry_snapshot_main(["--output", str(first_output)]) == 0
+    assert generate_finance_telemetry_snapshot_main(["--output", str(second_output)]) == 0
+
+    assert len(seen_database_paths) == 2
+    assert seen_database_paths[0] != seen_database_paths[1]
+    assert all(not path.exists() for path in seen_database_paths)
+
+
 def test_generate_finance_telemetry_snapshot_rejects_database_output_collision(
     tmp_path: Path,
 ) -> None:
@@ -107,6 +216,71 @@ def test_generate_finance_telemetry_snapshot_rejects_database_output_collision(
                 str(output),
             ]
         )
+
+
+def test_generate_finance_telemetry_snapshot_restores_environment_after_generation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_environment = {
+        "DATABASE_URL": "postgresql+asyncpg://prod.example/app",
+        "DB_SSL_MODE": "require",
+        "TESTING": "false",
+        "SUPABASE_JWT_SECRET": "original-supabase-jwt-secret-value",
+    }
+
+    async def _fake_seed_runtime_data(**_: object) -> None:
+        return None
+
+    async def _fake_collect_snapshot(**_: object) -> dict[str, object]:
+        return {"runtime": {}}
+
+    dispose_calls = 0
+
+    async def _fake_dispose_db_runtime() -> None:
+        nonlocal dispose_calls
+        dispose_calls += 1
+        return None
+
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._register_models",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot._seed_runtime_data",
+        _fake_seed_runtime_data,
+    )
+    monkeypatch.setattr(
+        "scripts.generate_finance_telemetry_snapshot.collect_snapshot",
+        _fake_collect_snapshot,
+    )
+    monkeypatch.setattr(
+        "app.shared.core.config.reload_settings_from_environment",
+        lambda: None,
+    )
+    monkeypatch.setattr(
+        "app.shared.db.session.dispose_db_runtime",
+        _fake_dispose_db_runtime,
+    )
+
+    with patch.dict(os.environ, original_environment, clear=True):
+        payload = asyncio.run(
+            generate_finance_telemetry_snapshot(
+                database_path=Path("/tmp/finance-telemetry.sqlite"),
+                start_date=parse_finance_telemetry_date("2026-02-01", field="start_date"),
+                end_date=parse_finance_telemetry_date("2026-02-28", field="end_date"),
+                label="2026-02",
+            )
+        )
+
+        assert payload["runtime"] == {
+            "collector": "scripts/generate_finance_telemetry_snapshot.py",
+            "database_seed_mode": "orm_seed_live_query",
+        }
+        assert dict(os.environ) == original_environment
+        assert "ENCRYPTION_KEY" not in os.environ
+        assert "CSRF_SECRET_KEY" not in os.environ
+        assert "KDF_SALT" not in os.environ
+        assert dispose_calls == 2
 
 
 def test_generate_finance_telemetry_snapshot_rejects_blank_label_before_generation(

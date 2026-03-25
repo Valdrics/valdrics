@@ -4,7 +4,7 @@
 	type ClickAction = () => void | Promise<void>;
 	type SubmitAction = (event?: SubmitEvent) => void | Promise<void>;
 
-	interface Props {
+	interface Props extends Record<string, unknown> {
 		closeStartDate: string;
 		closeEndDate: string;
 		closeProvider: string;

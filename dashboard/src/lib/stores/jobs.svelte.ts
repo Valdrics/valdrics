@@ -1,5 +1,4 @@
 import { uiState } from './ui.svelte';
-import { createSupabaseBrowserClient } from '../supabase';
 import { edgeApiPath } from '../edgeProxy';
 
 const INITIAL_RECONNECT_DELAY_MS = 1000;
@@ -42,14 +41,8 @@ class JobStore {
 		this.#shouldReconnect = true;
 		if (this.#eventSource || this.#reconnectTimer) return;
 
-		const supabase = createSupabaseBrowserClient();
-		const {
-			data: { session }
-		} = await supabase.auth.getSession();
-
-		if (!session?.access_token) return;
-
 		// EventSource cannot send custom Authorization headers; always go through edge proxy.
+		// The edge proxy attaches the access token from the server-side cookie session.
 		if (!JOB_STREAM_EDGE_PATH.startsWith('/api/edge')) {
 			uiState.addToast('Live job updates are unavailable: invalid stream path.', 'error', 7000);
 			return;

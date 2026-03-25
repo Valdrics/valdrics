@@ -4,6 +4,8 @@ Partition Maintenance CLI (Postgres)
 Wrapper around PartitionMaintenanceService.
 """
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import json
@@ -51,7 +53,7 @@ async def validate_partitions(months_ahead: int):
         
         print(json.dumps(report, indent=2))
 
-def main():
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage Postgres partitions")
     subparsers = parser.add_subparsers(dest="command")
     
@@ -60,15 +62,29 @@ def main():
     
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("--months-ahead", type=int, default=3)
-    
-    args = parser.parse_args()
-    
+
+    return parser
+
+
+def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    return _build_parser().parse_args(argv)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parse_args(argv)
+    if not args.command:
+        _build_parser().print_help()
+        return 2
+    if int(args.months_ahead) < 0:
+        raise SystemExit("--months-ahead must be >= 0")
+
     if args.command == "create":
         asyncio.run(create_partitions(args.months_ahead))
+        return 0
     elif args.command == "validate":
         asyncio.run(validate_partitions(args.months_ahead))
-    else:
-        parser.print_help()
+        return 0
+    return 2
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

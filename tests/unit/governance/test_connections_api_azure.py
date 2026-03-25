@@ -15,9 +15,6 @@ pytest_plugins = ("tests.unit.governance.connections_api_fixtures",)
 async def test_create_azure_connection_success_on_starter(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.STARTER.value
-    await db.commit()
     auth_user.tier = PricingTier.STARTER
 
     payload = {
@@ -36,9 +33,6 @@ async def test_create_azure_connection_success_on_starter(
 async def test_create_azure_connection_requires_admin(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.STARTER.value
-    await db.commit()
     auth_user.tier = PricingTier.STARTER
     auth_user.role = UserRole.MEMBER
 
@@ -57,10 +51,6 @@ async def test_create_azure_connection_requires_admin(
 async def test_create_azure_connection_success_on_growth(
     ac, db, override_auth, auth_user
 ):
-    # Upgrade tenant
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     payload = {
@@ -79,9 +69,6 @@ async def test_create_azure_connection_success_on_growth(
 async def test_create_azure_connection_requires_secret_when_auth_secret(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     payload = {
@@ -99,9 +86,6 @@ async def test_create_azure_connection_requires_secret_when_auth_secret(
 async def test_create_azure_connection_invalid_auth_method(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     payload = {
@@ -118,9 +102,6 @@ async def test_create_azure_connection_invalid_auth_method(
 
 @pytest.mark.asyncio
 async def test_verify_azure_connection(ac, db, override_auth, auth_user):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     conn = AzureConnection(
@@ -144,9 +125,6 @@ async def test_verify_azure_connection(ac, db, override_auth, auth_user):
 async def test_verify_azure_connection_tenant_isolation(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     other_tenant = Tenant(
@@ -173,9 +151,6 @@ async def test_verify_azure_connection_tenant_isolation(
 async def test_verify_azure_connection_success_on_starter(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.STARTER.value
-    await db.commit()
     auth_user.tier = PricingTier.STARTER
 
     conn = AzureConnection(
@@ -243,10 +218,6 @@ async def test_list_azure_connections_tenant_isolation(
 
 @pytest.mark.asyncio
 async def test_create_azure_connection_duplicate(ac, db, override_auth, auth_user):
-    # Setup Growth tier
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     # Pre-create

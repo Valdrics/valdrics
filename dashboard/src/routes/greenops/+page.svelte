@@ -11,11 +11,13 @@
 
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
+	import './greenops.app.css';
 	import { base } from '$app/paths';
 	import { goto } from '$app/navigation';
 	import { api } from '$lib/api';
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
+	import './greenops-bento.css';
 	import GreenOpsTierPreview from './GreenOpsTierPreview.svelte';
 	import GreenOpsMetricsGrid from './GreenOpsMetricsGrid.svelte';
 	import GreenOpsRecommendationsSchedule from './GreenOpsRecommendationsSchedule.svelte';

@@ -63,14 +63,16 @@ def test_configure_isolated_bootstrap_env_overrides_shell_database_url(
         "DATABASE_URL",
         "postgresql+asyncpg://user:pass@db.example.com:5432/app",
     )
+    original_environment = dict(os.environ)
 
     safe_database_url = "sqlite+aiosqlite:///tmp/enforcement-evidence.sqlite3"
-    returned = _configure_isolated_bootstrap_env(database_url=safe_database_url)
+    with _configure_isolated_bootstrap_env(database_url=safe_database_url) as returned:
+        assert returned == safe_database_url
+        assert os.environ["DATABASE_URL"] == safe_database_url
+        assert os.environ["TESTING"] == "true"
+        assert os.environ["DB_SSL_MODE"] == "disable"
 
-    assert returned == safe_database_url
-    assert os.environ["DATABASE_URL"] == safe_database_url
-    assert os.environ["TESTING"] == "true"
-    assert os.environ["DB_SSL_MODE"] == "disable"
+    assert os.environ == original_environment
 
 
 def test_extract_and_result_payload_helpers_are_deterministic() -> None:

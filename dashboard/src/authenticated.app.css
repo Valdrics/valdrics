@@ -1,0 +1,18 @@
+@import 'tailwindcss' source(none);
+@import './app.theme.css';
+@import './app.components-layout.css';
+@import './app.shared-utilities.css';
+
+@source not './**/*.test.ts';
+@source not './**/*.spec.ts';
+@source not './**/*.test.js';
+@source not './**/*.spec.js';
+@source './routes/layout/AppAuthenticatedShell.svelte';
+@source './routes/admin';
+@source './lib/components/AuthGate.svelte';
+@source './lib/components/CloudLogo.svelte';
+@source './lib/components/CommandPalette.svelte';
+@source './lib/components/DateRangePicker.svelte';
+@source './lib/components/ErrorBoundary.svelte';
+@source './lib/components/Toast.svelte';
+@source './lib/components/UpgradeNotice.svelte';

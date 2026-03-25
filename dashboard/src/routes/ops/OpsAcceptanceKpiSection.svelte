@@ -7,7 +7,7 @@
 
 	type AsyncAction = () => void | Promise<void>;
 
-	interface Props {
+	interface Props extends Record<string, unknown> {
 		capturingAcceptanceKpis: boolean;
 		downloadingAcceptanceJson: boolean;
 		downloadingAcceptanceCsv: boolean;

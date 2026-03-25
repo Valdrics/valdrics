@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 from scripts import check_frontend_api_contracts as script_module
 
@@ -137,3 +139,27 @@ def test_main_resolves_relative_repo_root_from_repo_when_run_outside_repo(
 def test_main_rejects_relative_repo_root_escape(capsys) -> None:
     assert script_module.main(["--repo-root", os.path.join("..", "..")]) == 2
     assert "repo_root must stay within repo root when relative" in capsys.readouterr().out
+
+
+def test_parse_backend_paths_restores_env_and_sys_path(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    original_testing = os.environ.get("TESTING")
+    sentinel_path = str(tmp_path / "sentinel")
+    sys.path.append(sentinel_path)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "app.main",
+        SimpleNamespace(app=SimpleNamespace(routes=[])),
+    )
+
+    script_module.parse_backend_paths(repo_root)
+
+    assert os.environ.get("TESTING") == original_testing
+    assert sys.path.count(str(repo_root)) == 0
+    assert sys.path[-1] == sentinel_path
+    sys.path.remove(sentinel_path)

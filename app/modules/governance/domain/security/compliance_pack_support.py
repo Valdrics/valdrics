@@ -9,6 +9,7 @@ import structlog
 from app.modules.governance.domain.security.compliance_pack_contracts import (
     CompliancePackValidationError,
 )
+from app.shared.core.runtime_paths import PROJECT_ROOT
 
 logger = structlog.get_logger()
 
@@ -36,17 +37,7 @@ _REFERENCE_DOC_PATHS: tuple[tuple[str, str], ...] = (
 
 
 def _project_root() -> Path:
-    """
-    Best-effort project root discovery.
-
-    Compliance pack exports should not depend on the current working directory,
-    especially in containerized deployments.
-    """
-    here = Path(__file__).resolve()
-    for candidate in (here, *here.parents):
-        if (candidate / "pyproject.toml").is_file():
-            return candidate
-    return Path.cwd()
+    return PROJECT_ROOT
 
 
 def _read_doc(*, root: Path, rel_path: str) -> str | None:

@@ -68,8 +68,29 @@ def test_verify_plugins_main_fails_when_required_aws_categories_are_missing(
         ),
     )
 
-    assert verify_plugins.main() == 1
+    assert verify_plugins.main([]) == 1
     assert "idle_cloudfront_distributions" in capsys.readouterr().out
+
+
+def test_verify_plugins_main_accepts_provider_override(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    seen: list[str] = []
+
+    def _fake_verify(provider: str) -> plugin_registry_verification.ProviderVerificationResult:
+        seen.append(provider)
+        return plugin_registry_verification.ProviderVerificationResult(
+            provider=provider,
+            categories=("stopped_azure_vms",),
+            missing=(),
+        )
+
+    monkeypatch.setattr(verify_plugins, "verify_provider", _fake_verify)
+
+    assert verify_plugins.main(["--provider", "azure"]) == 0
+    assert seen == ["azure"]
+    assert "AZURE" in capsys.readouterr().out
 
 
 def test_verify_all_plugins_main_returns_success_when_all_providers_are_registered(
@@ -79,24 +100,49 @@ def test_verify_all_plugins_main_returns_success_when_all_providers_are_register
     monkeypatch.setattr(
         verify_all_plugins,
         "verify_providers",
-        lambda: (
+        lambda providers: (
             plugin_registry_verification.ProviderVerificationResult(
-                provider="aws",
+                provider=providers[0],
                 categories=("customer_managed_kms_keys",),
                 missing=(),
             ),
             plugin_registry_verification.ProviderVerificationResult(
-                provider="azure",
+                provider=providers[1],
                 categories=("stopped_azure_vms",),
                 missing=(),
             ),
             plugin_registry_verification.ProviderVerificationResult(
-                provider="gcp",
+                provider=providers[2],
                 categories=("stopped_gcp_instances",),
                 missing=(),
             ),
         ),
     )
 
-    assert verify_all_plugins.main() == 0
+    assert verify_all_plugins.main([]) == 0
     assert "SUCCESS" in capsys.readouterr().out
+
+
+def test_verify_all_plugins_main_accepts_provider_filters(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    seen: list[tuple[str, ...]] = []
+
+    def _fake_verify(
+        providers: tuple[str, ...],
+    ) -> tuple[plugin_registry_verification.ProviderVerificationResult, ...]:
+        seen.append(providers)
+        return (
+            plugin_registry_verification.ProviderVerificationResult(
+                provider="gcp",
+                categories=("stopped_gcp_instances",),
+                missing=(),
+            ),
+        )
+
+    monkeypatch.setattr(verify_all_plugins, "verify_providers", _fake_verify)
+
+    assert verify_all_plugins.main(["--provider", "gcp"]) == 0
+    assert seen == [("gcp",)]
+    assert "GCP" in capsys.readouterr().out

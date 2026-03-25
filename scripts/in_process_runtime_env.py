@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import tempfile
+from unittest.mock import patch
 
 
 def _build_synthetic_secret(label: str, *, minimum_length: int = 32) -> str:
@@ -33,11 +36,11 @@ def build_isolated_test_environment_values(*, database_url: str) -> dict[str, st
     }
 
 
-def configure_isolated_test_environment(*, database_url: str) -> None:
-    for key, value in build_isolated_test_environment_values(
-        database_url=database_url
-    ).items():
-        os.environ[key] = value
+@contextmanager
+def configure_isolated_test_environment(*, database_url: str) -> Iterator[dict[str, str]]:
+    overrides = build_isolated_test_environment_values(database_url=database_url)
+    with patch.dict(os.environ, overrides, clear=False):
+        yield overrides
 
 
 def build_unique_sqlite_database_url(*, prefix: str) -> tuple[str, Path]:

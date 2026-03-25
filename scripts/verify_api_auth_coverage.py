@@ -13,6 +13,7 @@ import os
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
+from unittest.mock import patch
 
 from fastapi.routing import APIRoute
 
@@ -116,11 +117,17 @@ def collect_auth_coverage_violations(app: object) -> list[AuthCoverageViolation]
 
 def load_app_for_audit() -> object:
     # Keep config deterministic and test-safe for script execution.
-    os.environ["TESTING"] = "true"
-    os.environ["DEBUG"] = "false"
-    from app.main import app
+    with patch.dict(
+        os.environ,
+        {
+            "TESTING": "true",
+            "DEBUG": "false",
+        },
+        clear=False,
+    ):
+        from app.main import app
 
-    return app
+        return app
 
 
 def main(argv: Iterable[str] | None = None) -> int:

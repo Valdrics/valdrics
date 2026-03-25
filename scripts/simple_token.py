@@ -17,7 +17,8 @@ DEPRECATION_MESSAGE = (
 )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    del argv
     print(DEPRECATION_MESSAGE, file=sys.stderr)
     return 2
 

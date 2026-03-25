@@ -1,3 +1,5 @@
+import type { PublicContentEntryInput } from './publicContent.types';
+
 export const RAW_PUBLIC_CONTENT_RESOURCES = [
 	{
 		kind: 'resources',
@@ -340,4 +342,4 @@ export const RAW_PUBLIC_CONTENT_RESOURCES = [
 			{ kind: 'resources', slug: 'enterprise-governance-overview' }
 		]
 	}
-] as const;
+] as const satisfies readonly PublicContentEntryInput[];

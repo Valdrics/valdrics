@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock
 from app.main import app as valdrics_app
 from app.main import (
     INTERNAL_METRICS_PATH,
+    refresh_fastapi_app_metadata,
     valdrics_exception_handler,
     http_exception_handler,
     csrf_protect_exception_handler,
@@ -110,6 +111,26 @@ async def test_not_found(lite_client: AsyncClient):
 def test_gzip_middleware_registered():
     """API should register gzip middleware for larger responses."""
     assert any(m.cls == GZipMiddleware for m in valdrics_app.user_middleware)
+
+
+def test_refresh_fastapi_app_metadata_updates_title_version_and_openapi_cache():
+    original_title = valdrics_app.title
+    original_version = valdrics_app.version
+    original_openapi_schema = valdrics_app.openapi_schema
+    try:
+        valdrics_app.openapi_schema = {"cached": True}
+
+        refresh_fastapi_app_metadata(
+            MagicMock(APP_NAME="Valdrics Reloaded", VERSION="9.9.9")
+        )
+
+        assert valdrics_app.title == "Valdrics Reloaded"
+        assert valdrics_app.version == "9.9.9"
+        assert valdrics_app.openapi_schema is None
+    finally:
+        valdrics_app.title = original_title
+        valdrics_app.version = original_version
+        valdrics_app.openapi_schema = original_openapi_schema
 
 
 def _make_request(path: str = "/boom", method: str = "GET") -> Request:

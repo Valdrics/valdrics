@@ -80,13 +80,21 @@
 	});
 
 	onMount(() => {
+		if (typeof window.matchMedia !== 'function') {
+			prefersReducedMotion = false;
+			return;
+		}
 		const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
 		const syncReducedMotion = () => {
 			prefersReducedMotion = mediaQuery.matches;
 		};
 		syncReducedMotion();
-		mediaQuery.addEventListener('change', syncReducedMotion);
-		return () => mediaQuery.removeEventListener('change', syncReducedMotion);
+		if (typeof mediaQuery.addEventListener === 'function') {
+			mediaQuery.addEventListener('change', syncReducedMotion);
+			return () => mediaQuery.removeEventListener('change', syncReducedMotion);
+		}
+		mediaQuery.addListener(syncReducedMotion);
+		return () => mediaQuery.removeListener(syncReducedMotion);
 	});
 
 	function close() {
@@ -134,7 +142,7 @@
 
 		<!-- Palette -->
 		<div
-			class="relative w-full max-w-xl glass-card rounded-xl overflow-hidden shadow-2xl border-white/10"
+			class="command-palette-panel relative w-full max-w-xl rounded-xl overflow-hidden shadow-2xl border-white/10"
 			class:command-palette-panel-enter={!prefersReducedMotion}
 			onkeydown={handleKeydown}
 			role="dialog"
@@ -206,6 +214,17 @@
 	/* Integration with the global theme tokens */
 	input::placeholder {
 		color: var(--color-ink-500);
+	}
+
+	.command-palette-panel {
+		background: linear-gradient(
+			135deg,
+			rgba(255, 255, 255, 0.03) 0%,
+			rgba(255, 255, 255, 0.01) 100%
+		);
+		backdrop-filter: blur(10px);
+		border: 1px solid rgba(255, 255, 255, 0.08);
+		box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
 	}
 
 	.command-palette-overlay-enter {

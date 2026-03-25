@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import scripts.verify_dependency_locking as dependency_locking
 from scripts.verify_dependency_locking import main, verify_dependency_locking
 
 
@@ -273,6 +274,25 @@ def test_verify_dependency_locking_rejects_non_directory_repo_root(tmp_path: Pat
 
     with pytest.raises(ValueError, match="repo_root must be a directory"):
         verify_dependency_locking(repo_root=repo_root)
+
+
+def test_main_resolves_default_repo_root_from_script_location(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[Path] = []
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(dependency_locking, "_repo_root", lambda: repo)
+    monkeypatch.setattr(
+        dependency_locking,
+        "verify_dependency_locking",
+        lambda *, repo_root, pyproject_path, lock_path, workflows_root, dockerfile_paths: seen.append(repo_root) or (),
+    )
+
+    assert main([]) == 0
+    assert seen == [repo]
 
 
 def test_main_rejects_relative_path_escape(tmp_path: Path) -> None:

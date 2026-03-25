@@ -285,6 +285,13 @@ router = valdrics_app
 
 __all__ = ["app", "valdrics_app", "lifespan"]
 
+
+def refresh_fastapi_app_metadata(settings_obj: Any | None = None) -> None:
+    settings_obj = settings_obj or get_settings()
+    valdrics_app.title = str(settings_obj.APP_NAME)
+    valdrics_app.version = str(settings_obj.VERSION)
+    valdrics_app.openapi_schema = None
+
 # Initialize Tracing
 setup_tracing(valdrics_app)
 

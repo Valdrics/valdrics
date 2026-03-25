@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+import scripts.verify_container_image_pinning as image_pinning
 from scripts.verify_container_image_pinning import (
     main,
     verify_container_image_pinning,
@@ -180,3 +181,22 @@ def test_main_rejects_directory_compose_path(tmp_path: Path) -> None:
     compose_dir.mkdir()
 
     assert main(["--repo-root", str(repo_root), "--compose-path", "docker-compose.yml"]) == 2
+
+
+def test_main_resolves_default_repo_root_from_script_location(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[Path] = []
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(image_pinning, "_repo_root", lambda: repo)
+    monkeypatch.setattr(
+        image_pinning,
+        "verify_container_image_pinning",
+        lambda *, repo_root, compose_paths, environment=None: seen.append(repo_root) or (),
+    )
+
+    assert main([]) == 0
+    assert seen == [repo]

@@ -100,8 +100,8 @@ function renderPage(tier: string = 'pro') {
 }
 
 async function enterSaasStep(container: HTMLElement) {
-	await fireEvent.click(screen.getByRole('button', { name: /SaaS Spend Connector/i }));
-	await fireEvent.click(screen.getByRole('button', { name: /Continue to Setup/i }));
+	await fireEvent.click(await screen.findByRole('button', { name: /SaaS Spend Connector/i }));
+	await fireEvent.click(await screen.findByRole('button', { name: /Continue to Setup/i }));
 	await screen.findByText('Step 2: Connect SaaS Spend');
 	await waitFor(() => {
 		expect(screen.queryByText('Fetching configuration details...')).toBeNull();
@@ -197,7 +197,7 @@ describe('onboarding cloud+ flow', () => {
 		const starterPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'starter');
 		renderPage('free');
 
-		await fireEvent.click(screen.getByRole('button', { name: /Microsoft Azure/i }));
+		await fireEvent.click(await screen.findByRole('button', { name: /Microsoft Azure/i }));
 
 		expect(screen.getByText('Move to Starter for Azure and GCP coverage')).toBeTruthy();
 		expect(document.body.textContent || '').toContain(starterPlan?.story?.summary ?? '');
@@ -208,7 +208,7 @@ describe('onboarding cloud+ flow', () => {
 		const proPlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'pro');
 		renderPage('growth');
 
-		await fireEvent.click(screen.getByRole('button', { name: /SaaS Spend Connector/i }));
+		await fireEvent.click(await screen.findByRole('button', { name: /SaaS Spend Connector/i }));
 
 		expect(screen.getByText('Move to Pro for Cloud+ connectors')).toBeTruthy();
 		expect(document.body.textContent || '').toContain(proPlan?.story?.summary ?? '');

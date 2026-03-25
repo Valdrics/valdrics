@@ -200,7 +200,10 @@ async def invoke_llm(
     elif provider != settings_provider().LLM_PROVIDER or byok_key:
         current_llm = llm_factory.create(provider, model=model, api_key=byok_key)
 
-    chain = prompt_template | current_llm
+    def _format_prompt_messages() -> Any:
+        # Format prompt messages directly to avoid LangChain RunnableSequence
+        # dispatching sync prompt work through the loop's default executor.
+        return prompt_template.format_messages(cost_data=formatted_data)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -210,7 +213,7 @@ async def invoke_llm(
     )
     async def _invoke_with_retry() -> tuple[str, dict[str, Any]]:
         logger_obj.info("invoking_llm", provider=provider, model=model)
-        response = await chain.ainvoke({"cost_data": formatted_data})
+        response = await current_llm.ainvoke(_format_prompt_messages())
         content = response.content
         safe_content = content if isinstance(content, str) else json.dumps(content, default=str)
         metadata = getattr(response, "response_metadata", {})
@@ -261,13 +264,12 @@ async def invoke_llm(
                         model=fallback_model,
                         max_output_tokens=max_output_tokens,
                     )
-                    fallback_chain = prompt_template | fallback_llm
                     logger_obj.info(
                         "trying_fallback_llm",
                         provider=fallback_provider,
                         model=fallback_model,
                     )
-                    response = await fallback_chain.ainvoke({"cost_data": formatted_data})
+                    response = await fallback_llm.ainvoke(_format_prompt_messages())
                     content = response.content
                     safe_content = (
                         content if isinstance(content, str) else json.dumps(content, default=str)

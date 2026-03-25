@@ -1,0 +1,11 @@
+@import 'tailwindcss' source(none);
+@import '../../app.theme.css';
+
+@source not './**/*.test.ts';
+@source not './**/*.spec.ts';
+@source not './**/*.test.js';
+@source not './**/*.spec.js';
+@source '.';
+@source '../../lib/components/EnforcementOpsCard.svelte';
+@source '../../lib/components/EnforcementSettingsCard.svelte';
+@source '../../lib/components/IdentitySettingsCard.svelte';

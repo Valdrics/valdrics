@@ -5,7 +5,7 @@ Comprehensive tests for WebhookRetryService module.
 Covers webhook storage, idempotency, retry logic, duplicate detection, and Paystack webhook processing.
 """
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -17,9 +17,9 @@ from app.modules.billing.domain.billing.webhook_retry import (
     WebhookPermanentError,
     process_paystack_webhook,
     WEBHOOK_MAX_ATTEMPTS,
-    WEBHOOK_IDEMPOTENCY_TTL_HOURS,
 )
 from app.models.background_job import BackgroundJob, JobStatus
+from app.shared.core.config import get_settings
 
 
 @pytest.fixture
@@ -808,10 +808,27 @@ class TestWebhookConfiguration:
         assert WEBHOOK_MAX_ATTEMPTS == 5
         assert WEBHOOK_MAX_ATTEMPTS > 0
 
-    def test_webhook_idempotency_ttl_is_reasonable(self):
-        """Test that idempotency TTL is set to a reasonable value."""
-        assert WEBHOOK_IDEMPOTENCY_TTL_HOURS == 72
-        assert WEBHOOK_IDEMPOTENCY_TTL_HOURS > 0
+    def test_webhook_idempotency_ttl_default_matches_settings(self):
+        """Test that idempotency TTL defaults remain wired through settings."""
+        assert get_settings().WEBHOOK_IDEMPOTENCY_TTL_HOURS == 72
+        assert get_settings().WEBHOOK_IDEMPOTENCY_TTL_HOURS > 0
+
+    def test_completed_within_ttl_uses_current_settings_value(
+        self, webhook_service, monkeypatch
+    ):
+        """Completed-job checks should honor the current runtime TTL."""
+        settings = get_settings()
+        now = datetime(2026, 3, 25, 12, 0, tzinfo=timezone.utc)
+        job = MagicMock(spec=BackgroundJob)
+        job.completed_at = now - timedelta(hours=2)
+        job.updated_at = None
+        job.created_at = None
+
+        monkeypatch.setattr(settings, "WEBHOOK_IDEMPOTENCY_TTL_HOURS", 1)
+        assert webhook_service._completed_within_ttl(job, now=now) is False
+
+        monkeypatch.setattr(settings, "WEBHOOK_IDEMPOTENCY_TTL_HOURS", 3)
+        assert webhook_service._completed_within_ttl(job, now=now) is True
 
 
 class TestWebhookIntegration:

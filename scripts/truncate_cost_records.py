@@ -1,11 +1,13 @@
 import asyncio
-import sys
+
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import create_async_engine
+
 from app.shared.core.config import get_settings
 
-async def truncate_cost_data():
+
+async def truncate_cost_data() -> int:
     """
     Definitively empties the cost_records table using TRUNCATE CASCADE.
     This is the fastest way to reclaim storage in physical partitions.
@@ -14,7 +16,7 @@ async def truncate_cost_data():
     db_url = settings.DATABASE_URL
     if not db_url:
         print("DATABASE_URL not set.")
-        return
+        return 1
 
     print(f"TRUNCATING cost_records on: {db_url.split('@')[-1]}")
     engine = create_async_engine(db_url)
@@ -38,12 +40,19 @@ async def truncate_cost_data():
                 SELECT pg_size_pretty(pg_database_size(current_database())) as db_size;
             """))
             print(f"Final DB Size: {res.scalar()}")
+            return 0
 
     except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as e:
         print(f"❌ CRITICAL ERROR: {e}")
-        sys.exit(1)
+        return 1
     finally:
         await engine.dispose()
 
+
+def main(argv: list[str] | None = None) -> int:
+    del argv
+    return asyncio.run(truncate_cost_data())
+
+
 if __name__ == "__main__":
-    asyncio.run(truncate_cost_data())
+    raise SystemExit(main())

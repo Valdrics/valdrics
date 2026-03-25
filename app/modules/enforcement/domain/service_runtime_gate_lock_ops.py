@@ -16,6 +16,29 @@ from app.shared.core.ops_metrics import (
 )
 
 
+def _session_backend_name(session: Any) -> str:
+    bind = getattr(session, "bind", None)
+    dialect_name = getattr(getattr(bind, "dialect", None), "name", None)
+    if isinstance(dialect_name, str) and dialect_name.strip():
+        return dialect_name.strip().lower()
+
+    get_bind = getattr(session, "get_bind", None)
+    if callable(get_bind):
+        try:
+            runtime_bind = get_bind()
+        except (RuntimeError, TypeError, ValueError, AttributeError):
+            runtime_bind = None
+        runtime_dialect_name = getattr(
+            getattr(runtime_bind, "dialect", None),
+            "name",
+            None,
+        )
+        if isinstance(runtime_dialect_name, str) and runtime_dialect_name.strip():
+            return runtime_dialect_name.strip().lower()
+
+    return "unknown"
+
+
 async def acquire_gate_evaluation_lock(
     service: Any,
     *,
@@ -40,20 +63,31 @@ async def acquire_gate_evaluation_lock(
     )
 
     lock_timeout_seconds = service._gate_lock_timeout_seconds()
+    backend_name = _session_backend_name(service.db)
+    lock_stmt = (
+        update(EnforcementPolicy)
+        .where(EnforcementPolicy.id == policy.id)
+        .where(EnforcementPolicy.tenant_id == policy.tenant_id)
+        .values(policy_version=EnforcementPolicy.policy_version)
+    )
     started_at = perf_counter_fn()
     try:
-        result = cast(
-            CursorResult[Any],
-            await wait_for_fn(
-                service.db.execute(
-                    update(EnforcementPolicy)
-                    .where(EnforcementPolicy.id == policy.id)
-                    .where(EnforcementPolicy.tenant_id == policy.tenant_id)
-                    .values(policy_version=EnforcementPolicy.policy_version)
+        if backend_name == "sqlite":
+            # SQLite only permits a single writer at a time and does not provide
+            # row-level lock semantics. Let the write serialize naturally instead
+            # of converting valid writer contention into a false timeout.
+            result = cast(
+                CursorResult[Any],
+                await service.db.execute(lock_stmt),
+            )
+        else:
+            result = cast(
+                CursorResult[Any],
+                await wait_for_fn(
+                    service.db.execute(lock_stmt),
+                    timeout=lock_timeout_seconds,
                 ),
-                timeout=lock_timeout_seconds,
-            ),
-        )
+            )
     except TimeoutError as exc:
         wait_seconds = max(0.0, perf_counter_fn() - started_at)
         lock_wait_seconds.labels(

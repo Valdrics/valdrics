@@ -722,11 +722,10 @@ async def test_apply_tier_analysis_shape_limits_enforces_window_and_record_cap(
 async def test_invoke_llm_fallback_policy_excludes_openai_for_free_tier(mock_llm):
     analyzer = FinOpsAnalyzer(mock_llm)
     prompt = MagicMock()
-    primary_chain = MagicMock()
-    primary_chain.ainvoke = AsyncMock(side_effect=RuntimeError("primary failed"))
-    fallback_chain = MagicMock()
-    fallback_chain.ainvoke = AsyncMock(side_effect=RuntimeError("fallback failed"))
-    prompt.__or__.side_effect = [primary_chain, fallback_chain]
+    prompt.format_messages.return_value = ["formatted-message"]
+    analyzer.llm.ainvoke = AsyncMock(side_effect=RuntimeError("primary failed"))
+    fallback_llm = MagicMock()
+    fallback_llm.ainvoke = AsyncMock(side_effect=RuntimeError("fallback failed"))
 
     with (
         patch.object(analyzer, "_get_prompt", new_callable=AsyncMock, return_value=prompt),
@@ -734,7 +733,7 @@ async def test_invoke_llm_fallback_policy_excludes_openai_for_free_tier(mock_llm
         patch("app.shared.llm.analyzer.LLMFactory.create") as mock_factory,
     ):
         mock_settings.return_value.LLM_PROVIDER = "groq"
-        mock_factory.return_value = MagicMock()
+        mock_factory.return_value = fallback_llm
         with pytest.raises(AIAnalysisError):
             await analyzer._invoke_llm(
                 "{}",
@@ -752,19 +751,14 @@ async def test_invoke_llm_fallback_policy_excludes_openai_for_free_tier(mock_llm
 async def test_invoke_llm_fallback_policy_allows_openai_for_pro_tier(mock_llm):
     analyzer = FinOpsAnalyzer(mock_llm)
     prompt = MagicMock()
-    primary_chain = MagicMock()
-    primary_chain.ainvoke = AsyncMock(side_effect=RuntimeError("primary failed"))
-    fallback_google_chain = MagicMock()
-    fallback_google_chain.ainvoke = AsyncMock(side_effect=RuntimeError("google failed"))
-    fallback_openai_chain = MagicMock()
-    fallback_openai_chain.ainvoke = AsyncMock(
+    prompt.format_messages.return_value = ["formatted-message"]
+    analyzer.llm.ainvoke = AsyncMock(side_effect=RuntimeError("primary failed"))
+    fallback_google_llm = MagicMock()
+    fallback_google_llm.ainvoke = AsyncMock(side_effect=RuntimeError("google failed"))
+    fallback_openai_llm = MagicMock()
+    fallback_openai_llm.ainvoke = AsyncMock(
         return_value=MagicMock(content='{"ok": true}', response_metadata={})
     )
-    prompt.__or__.side_effect = [
-        primary_chain,
-        fallback_google_chain,
-        fallback_openai_chain,
-    ]
 
     with (
         patch.object(analyzer, "_get_prompt", new_callable=AsyncMock, return_value=prompt),
@@ -772,7 +766,7 @@ async def test_invoke_llm_fallback_policy_allows_openai_for_pro_tier(mock_llm):
         patch("app.shared.llm.analyzer.LLMFactory.create") as mock_factory,
     ):
         mock_settings.return_value.LLM_PROVIDER = "groq"
-        mock_factory.side_effect = [MagicMock(), MagicMock()]
+        mock_factory.side_effect = [fallback_google_llm, fallback_openai_llm]
 
         content, _ = await analyzer._invoke_llm(
             "{}",

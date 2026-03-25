@@ -868,6 +868,50 @@ def test_compute_coverage_subset_from_xml_counts_lines_and_branches(tmp_path: Pa
     assert round(totals.percent(), 1) == 60.0
 
 
+def test_compute_coverage_subset_from_xml_uses_repo_root_for_relative_sources(
+    tmp_path: Path, monkeypatch
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    target_file = repo_root / "app/modules/enforcement/api/v1/example.py"
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    target_file.write_text("pass\n", encoding="utf-8")
+
+    xml_path = repo_root / "coverage-enterprise-gate.xml"
+    coverage = ET.Element("coverage")
+    sources = ET.SubElement(coverage, "sources")
+    ET.SubElement(sources, "source").text = "app/modules/enforcement"
+    packages = ET.SubElement(coverage, "packages")
+    package = ET.SubElement(packages, "package", {"name": "api.v1"})
+    classes = ET.SubElement(package, "classes")
+    cls = ET.SubElement(
+        classes,
+        "class",
+        {
+            "name": "example.py",
+            "filename": "api/v1/example.py",
+            "line-rate": "1.0",
+            "branch-rate": "1.0",
+        },
+    )
+    lines = ET.SubElement(cls, "lines")
+    ET.SubElement(lines, "line", {"number": "1", "hits": "1"})
+    ET.ElementTree(coverage).write(xml_path, encoding="utf-8", xml_declaration=True)
+
+    monkeypatch.chdir(outside)
+
+    totals = compute_coverage_subset_from_xml(
+        xml_path=xml_path,
+        include_patterns=["app/modules/enforcement/*"],
+        repo_root=repo_root,
+    )
+
+    assert totals.lines_valid == 1
+    assert totals.lines_covered == 1
+
+
 def test_run_gate_falls_back_to_xml_coverage_when_coverage_data_file_missing(monkeypatch) -> None:
     coverage_cmd = [
         "uv",

@@ -4,7 +4,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.shared.db.session import async_session_maker
 
 
-async def check():
+async def check() -> int:
     try:
         async with async_session_maker() as db:
             # Check if audit_logs exists
@@ -38,9 +38,16 @@ async def check():
                     print(f"Found {len(partitions)} partitions:")
                     for p in partitions:
                         print(f" - {p.child_table}")
+        return 0
     except (SQLAlchemyError, OSError, RuntimeError, TypeError, ValueError) as e:
         print(f"Error: {e}")
+        return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    del argv
+    return asyncio.run(check())
 
 
 if __name__ == "__main__":
-    asyncio.run(check())
+    raise SystemExit(main())

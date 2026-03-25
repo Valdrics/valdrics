@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 from uuid import UUID
 
 from app.models.pricing import PricingPlan, TenantSubscription
@@ -153,75 +154,77 @@ def _build_pricing_plan_rows() -> list[PricingPlan]:
 
 
 async def _bootstrap_schema(database_url: str) -> None:
-    previous_testing = os.environ.get("TESTING")
-    previous_bootstrap = os.environ.get("LOCAL_SQLITE_BOOTSTRAP")
-    os.environ["DATABASE_URL"] = database_url
-    os.environ["TESTING"] = "false"
-    os.environ["LOCAL_SQLITE_BOOTSTRAP"] = "true"
-    settings = reload_settings_from_environment()
-    reset_db_runtime()
-    engine = get_engine()
-    try:
-        await bootstrap_local_sqlite_schema(
-            engine=engine,
-            effective_url=database_url,
-            settings_obj=settings,
-        )
-    finally:
-        await engine.dispose()
-        await dispose_db_runtime()
-        if previous_testing is None:
-            os.environ.pop("TESTING", None)
-        else:
-            os.environ["TESTING"] = previous_testing
-        if previous_bootstrap is None:
-            os.environ.pop("LOCAL_SQLITE_BOOTSTRAP", None)
-        else:
-            os.environ["LOCAL_SQLITE_BOOTSTRAP"] = previous_bootstrap
+    with patch.dict(
+        os.environ,
+        {
+            "DATABASE_URL": database_url,
+            "TESTING": "false",
+            "LOCAL_SQLITE_BOOTSTRAP": "true",
+        },
+        clear=False,
+    ):
+        settings = reload_settings_from_environment()
+        reset_db_runtime()
+        engine = get_engine()
+        try:
+            await bootstrap_local_sqlite_schema(
+                engine=engine,
+                effective_url=database_url,
+                settings_obj=settings,
+            )
+        finally:
+            await engine.dispose()
+            await dispose_db_runtime()
 
 
 async def _seed_fixture(fixture: PlaywrightE2EFixture) -> None:
-    os.environ["DATABASE_URL"] = fixture.database_url
-    os.environ["TESTING"] = "true"
-    os.environ.pop("LOCAL_SQLITE_BOOTSTRAP", None)
-    reload_settings_from_environment()
-    reset_db_runtime()
+    with patch.dict(
+        os.environ,
+        {
+            "DATABASE_URL": fixture.database_url,
+            "TESTING": "true",
+        },
+        clear=False,
+    ):
+        os.environ.pop("LOCAL_SQLITE_BOOTSTRAP", None)
+        reload_settings_from_environment()
+        reset_db_runtime()
 
-    async with async_session_maker() as session:
-        await mark_session_system_context(session)
-        now = datetime.now(timezone.utc)
-        session.add(
-            Tenant(
-                id=fixture.tenant_id,
-                name=fixture.tenant_name,
-                plan=fixture.tier,
-                is_deleted=False,
+        async with async_session_maker() as session:
+            await mark_session_system_context(session)
+            now = datetime.now(timezone.utc)
+            session.add(
+                Tenant(
+                    id=fixture.tenant_id,
+                    name=fixture.tenant_name,
+                    plan=fixture.tier,
+                    is_deleted=False,
+                )
             )
-        )
-        session.add(
-            User(
-                id=fixture.user_id,
-                tenant_id=fixture.tenant_id,
-                email=fixture.email,
-                role=fixture.role,
-                persona=fixture.persona,
-                is_active=True,
+            session.add(
+                User(
+                    id=fixture.user_id,
+                    tenant_id=fixture.tenant_id,
+                    email=fixture.email,
+                    role=fixture.role,
+                    persona=fixture.persona,
+                    is_active=True,
+                )
             )
-        )
-        session.add(
-            TenantSubscription(
-                tenant_id=fixture.tenant_id,
-                tier=fixture.tier,
-                status="active",
-                next_payment_date=now + timedelta(days=30),
-                billing_currency="USD",
-                billing_cycle="monthly",
+            session.add(
+                TenantSubscription(
+                    tenant_id=fixture.tenant_id,
+                    tier=fixture.tier,
+                    status="active",
+                    next_payment_date=now + timedelta(days=30),
+                    billing_currency="USD",
+                    billing_cycle="monthly",
+                )
             )
-        )
-        session.add_all(_build_pricing_plan_rows())
-        await session.commit()
+            session.add_all(_build_pricing_plan_rows())
+            await session.commit()
 
-    await dispose_db_runtime()
+        await dispose_db_runtime()
 
 
 async def _prepare_database(fixture: PlaywrightE2EFixture) -> None:

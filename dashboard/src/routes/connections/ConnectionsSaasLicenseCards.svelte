@@ -33,37 +33,39 @@
 </script>
 
 <!-- SaaS -->
-<div class="glass-panel stagger-enter" style="animation-delay: 300ms;">
-	<div class="flex items-center justify-between mb-4">
-		<div class="flex items-center gap-3">
+<div class="glass-panel stagger-enter connections-connector-card connections-card-delay-3">
+	<div class="connections-card__header">
+		<div class="connections-card__identity">
 			<CloudLogo provider="saas" size={40} />
 			<div>
-				<h3 class="font-bold text-lg">SaaS</h3>
-				<p class="text-xs text-ink-500">Cloud+ Spend Connector</p>
+				<h3 class="connections-card__title">SaaS</h3>
+				<p class="connections-card__subtitle">Cloud+ Spend Connector</p>
 			</div>
 		</div>
 		{#if loadingSaaS}
 			<div class="skeleton w-4 h-4 rounded-full"></div>
 		{:else if saasConnections.length > 0}
-			<span class="badge badge-accent">Connected ({saasConnections.length})</span>
+			<span class="badge badge-accent connections-card__status"
+				>Connected ({saasConnections.length})</span
+			>
 		{:else}
-			<span class="badge badge-default">Disconnected</span>
+			<span class="badge badge-default connections-card__status">Disconnected</span>
 		{/if}
 	</div>
 
 	{#if saasConnections.length > 0}
-		<div class="space-y-4 mb-6">
+		<div class="connections-list">
 			{#each saasConnections as conn (conn.id)}
-				<div class="p-3 rounded-xl bg-ink-900/50 border border-ink-800">
-					<div class="flex justify-between items-start mb-2">
-						<div>
-							<div class="text-xs text-ink-300 font-semibold">{conn.name || 'SaaS Feed'}</div>
-							<div class="text-xs text-ink-500 font-mono">Vendor: {conn.vendor || 'unknown'}</div>
+				<div class="connections-record">
+					<div class="connections-record__header">
+						<div class="connections-record__meta">
+							<div class="connections-record__name">{conn.name || 'SaaS Feed'}</div>
+							<div class="connections-record__mono">Vendor: {conn.vendor || 'unknown'}</div>
 						</div>
-						<div class="flex items-center gap-2">
+						<div class="connections-record__actions">
 							<button
 								type="button"
-								class="px-2 py-1 rounded-lg text-xs font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
+								class="connections-inline-action"
 								onclick={() => verifyCloudPlusConnection('saas', conn.id)}
 								disabled={!!verifyingCloudPlus[conn.id]}
 							>
@@ -71,23 +73,31 @@
 							</button>
 							<button
 								type="button"
-								class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
+								class="connections-delete-button"
 								onclick={() => deleteConnection('saas', conn.id)}
 								title="Delete Connection"
 							>
-								<span class="text-xs">🗑️</span>
+								<span>🗑️</span>
 							</button>
 						</div>
 					</div>
-					<div class="flex justify-between text-xs">
-						<span class="text-ink-500">Auth Method:</span>
-						<span class="text-accent-400">{conn.auth_method || 'manual'}</span>
-					</div>
-					<div class="flex justify-between text-xs mt-1">
-						<span class="text-ink-500">Status:</span>
-						<span class={conn.is_active ? 'text-success-400' : 'text-warning-400'}>
-							{conn.is_active ? 'active' : 'pending verification'}
-						</span>
+					<div class="connections-record__details">
+						<div class="connections-record__detail">
+							<span class="connections-record__label">Auth Method:</span>
+							<span class="connections-record__value connections-record__value--accent">
+								{conn.auth_method || 'manual'}
+							</span>
+						</div>
+						<div class="connections-record__detail">
+							<span class="connections-record__label">Status:</span>
+							<span
+								class="connections-status"
+								class:connections-status--active={conn.is_active}
+								class:connections-status--pending={!conn.is_active}
+							>
+								{conn.is_active ? 'active' : 'pending verification'}
+							</span>
+						</div>
 					</div>
 				</div>
 			{/each}
@@ -95,49 +105,46 @@
 	{/if}
 
 	{#if canUseCloudPlusFeatures()}
-		<details class="rounded-xl border border-ink-800 bg-ink-900/40 p-3 space-y-3">
-			<summary class="cursor-pointer text-xs font-semibold text-ink-200">
+		<details class="connections-disclosure">
+			<summary class="connections-disclosure__summary">
 				{saasConnections.length > 0 ? 'Add another SaaS connector' : 'Create SaaS connector'}
 			</summary>
-			<div class="space-y-3 mt-3">
+			<div class="connections-disclosure__body">
 				<input
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+					class="input connections-field"
 					placeholder="Connection name (e.g. Stripe Billing)"
 					bind:value={saasName}
 				/>
 				<input
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+					class="input connections-field"
 					placeholder="Vendor (stripe, salesforce, etc.)"
 					bind:value={saasVendor}
 				/>
-				<select
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
-					bind:value={saasAuthMethod}
-				>
+				<select class="input connections-field" bind:value={saasAuthMethod}>
 					<option value="api_key">API key</option>
 					<option value="oauth">OAuth token</option>
 					<option value="manual">Manual feed</option>
 					<option value="csv">CSV feed</option>
 				</select>
 				<input
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+					class="input connections-field"
 					type="password"
 					placeholder="API key / OAuth token"
 					bind:value={saasApiKey}
 				/>
 				<textarea
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-20 font-mono"
+					class="input connections-field connections-field--code"
 					placeholder="Connector config JSON (example: include instance_url for Salesforce)"
 					bind:value={saasConnectorConfig}
 				></textarea>
 				<textarea
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-24 font-mono"
+					class="input connections-field connections-field--feed"
 					placeholder="Spend feed JSON array for manual/csv mode"
 					bind:value={saasFeedInput}
 				></textarea>
 				<button
 					type="button"
-					class="btn btn-secondary text-xs w-full"
+					class="btn btn-secondary connections-submit"
 					onclick={() => createCloudPlusConnection('saas')}
 					disabled={creatingSaaS}
 				>
@@ -146,51 +153,53 @@
 			</div>
 		</details>
 	{:else if !loadingSaaS}
-		<p class="text-xs text-ink-400 mb-4">
+		<p class="connections-card__empty-copy">
 			Connect SaaS spend feeds for Cloud+ cost visibility and optimization.
 		</p>
-		<div class="flex flex-col gap-2">
-			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a
-			>
-			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span
-			>
-			<p class="text-[11px] leading-relaxed text-ink-500">{proUpgradePrompt.body}</p>
+		<div class="connections-upgrade-stack">
+			<a href={`${base}/billing`} class="btn btn-secondary connections-submit">
+				{proUpgradePrompt.cta}
+			</a>
+			<span class="badge badge-warning connections-upgrade-badge">{proUpgradePrompt.badge}</span>
+			<p class="connections-upgrade-copy">{proUpgradePrompt.body}</p>
 		</div>
 	{/if}
 </div>
 
 <!-- License / ITAM -->
-<div class="glass-panel stagger-enter" style="animation-delay: 400ms;">
-	<div class="flex items-center justify-between mb-4">
-		<div class="flex items-center gap-3">
+<div class="glass-panel stagger-enter connections-connector-card connections-card-delay-4">
+	<div class="connections-card__header">
+		<div class="connections-card__identity">
 			<CloudLogo provider="license" size={40} />
 			<div>
-				<h3 class="font-bold text-lg">License</h3>
-				<p class="text-xs text-ink-500">Cloud+ ITAM Connector</p>
+				<h3 class="connections-card__title">License</h3>
+				<p class="connections-card__subtitle">Cloud+ ITAM Connector</p>
 			</div>
 		</div>
 		{#if loadingLicense}
 			<div class="skeleton w-4 h-4 rounded-full"></div>
 		{:else if licenseConnections.length > 0}
-			<span class="badge badge-accent">Connected ({licenseConnections.length})</span>
+			<span class="badge badge-accent connections-card__status"
+				>Connected ({licenseConnections.length})</span
+			>
 		{:else}
-			<span class="badge badge-default">Disconnected</span>
+			<span class="badge badge-default connections-card__status">Disconnected</span>
 		{/if}
 	</div>
 
 	{#if licenseConnections.length > 0}
-		<div class="space-y-4 mb-6">
+		<div class="connections-list">
 			{#each licenseConnections as conn (conn.id)}
-				<div class="p-3 rounded-xl bg-ink-900/50 border border-ink-800">
-					<div class="flex justify-between items-start mb-2">
-						<div>
-							<div class="text-xs text-ink-300 font-semibold">{conn.name || 'License Feed'}</div>
-							<div class="text-xs text-ink-500 font-mono">Vendor: {conn.vendor || 'unknown'}</div>
+				<div class="connections-record">
+					<div class="connections-record__header">
+						<div class="connections-record__meta">
+							<div class="connections-record__name">{conn.name || 'License Feed'}</div>
+							<div class="connections-record__mono">Vendor: {conn.vendor || 'unknown'}</div>
 						</div>
-						<div class="flex items-center gap-2">
+						<div class="connections-record__actions">
 							<button
 								type="button"
-								class="px-2 py-1 rounded-lg text-xs font-semibold bg-accent-500/10 text-accent-300 hover:bg-accent-500/20 transition-all"
+								class="connections-inline-action"
 								onclick={() => verifyCloudPlusConnection('license', conn.id)}
 								disabled={!!verifyingCloudPlus[conn.id]}
 							>
@@ -198,23 +207,31 @@
 							</button>
 							<button
 								type="button"
-								class="p-1.5 rounded-lg bg-danger-500/10 text-danger-400 hover:bg-danger-500 hover:text-white transition-all shadow-sm"
+								class="connections-delete-button"
 								onclick={() => deleteConnection('license', conn.id)}
 								title="Delete Connection"
 							>
-								<span class="text-xs">🗑️</span>
+								<span>🗑️</span>
 							</button>
 						</div>
 					</div>
-					<div class="flex justify-between text-xs">
-						<span class="text-ink-500">Auth Method:</span>
-						<span class="text-accent-400">{conn.auth_method || 'manual'}</span>
-					</div>
-					<div class="flex justify-between text-xs mt-1">
-						<span class="text-ink-500">Status:</span>
-						<span class={conn.is_active ? 'text-success-400' : 'text-warning-400'}>
-							{conn.is_active ? 'active' : 'pending verification'}
-						</span>
+					<div class="connections-record__details">
+						<div class="connections-record__detail">
+							<span class="connections-record__label">Auth Method:</span>
+							<span class="connections-record__value connections-record__value--accent">
+								{conn.auth_method || 'manual'}
+							</span>
+						</div>
+						<div class="connections-record__detail">
+							<span class="connections-record__label">Status:</span>
+							<span
+								class="connections-status"
+								class:connections-status--active={conn.is_active}
+								class:connections-status--pending={!conn.is_active}
+							>
+								{conn.is_active ? 'active' : 'pending verification'}
+							</span>
+						</div>
 					</div>
 				</div>
 			{/each}
@@ -222,51 +239,48 @@
 	{/if}
 
 	{#if canUseCloudPlusFeatures()}
-		<details class="rounded-xl border border-ink-800 bg-ink-900/40 p-3 space-y-3">
-			<summary class="cursor-pointer text-xs font-semibold text-ink-200">
+		<details class="connections-disclosure">
+			<summary class="connections-disclosure__summary">
 				{licenseConnections.length > 0
 					? 'Add another License connector'
 					: 'Create License connector'}
 			</summary>
-			<div class="space-y-3 mt-3">
+			<div class="connections-disclosure__body">
 				<input
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+					class="input connections-field"
 					placeholder="Connection name (e.g. Microsoft 365 Licenses)"
 					bind:value={licenseName}
 				/>
 				<input
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+					class="input connections-field"
 					placeholder="Vendor (microsoft_365, flexera, etc.)"
 					bind:value={licenseVendor}
 				/>
-				<select
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
-					bind:value={licenseAuthMethod}
-				>
+				<select class="input connections-field" bind:value={licenseAuthMethod}>
 					<option value="oauth">OAuth token</option>
 					<option value="api_key">API key</option>
 					<option value="manual">Manual feed</option>
 					<option value="csv">CSV feed</option>
 				</select>
 				<input
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200"
+					class="input connections-field"
 					type="password"
 					placeholder="API key / OAuth token"
 					bind:value={licenseApiKey}
 				/>
 				<textarea
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-20 font-mono"
+					class="input connections-field connections-field--code"
 					placeholder="Connector config JSON (example: default_seat_price_usd and sku_prices)"
 					bind:value={licenseConnectorConfig}
 				></textarea>
 				<textarea
-					class="w-full rounded-lg bg-ink-950 border border-ink-800 px-3 py-2 text-xs text-ink-200 h-24 font-mono"
+					class="input connections-field connections-field--feed"
 					placeholder="License feed JSON array for manual/csv mode"
 					bind:value={licenseFeedInput}
 				></textarea>
 				<button
 					type="button"
-					class="btn btn-secondary text-xs w-full"
+					class="btn btn-secondary connections-submit"
 					onclick={() => createCloudPlusConnection('license')}
 					disabled={creatingLicense}
 				>
@@ -275,15 +289,15 @@
 			</div>
 		</details>
 	{:else if !loadingLicense}
-		<p class="text-xs text-ink-400 mb-4">
+		<p class="connections-card__empty-copy">
 			Connect license/ITAM spend feeds to include seat and contract costs in FinOps.
 		</p>
-		<div class="flex flex-col gap-2">
-			<a href={`${base}/billing`} class="btn btn-secondary text-xs w-full">{proUpgradePrompt.cta}</a
-			>
-			<span class="badge badge-warning text-xs w-full justify-center">{proUpgradePrompt.badge}</span
-			>
-			<p class="text-[11px] leading-relaxed text-ink-500">{proUpgradePrompt.body}</p>
+		<div class="connections-upgrade-stack">
+			<a href={`${base}/billing`} class="btn btn-secondary connections-submit">
+				{proUpgradePrompt.cta}
+			</a>
+			<span class="badge badge-warning connections-upgrade-badge">{proUpgradePrompt.badge}</span>
+			<p class="connections-upgrade-copy">{proUpgradePrompt.body}</p>
 		</div>
 	{/if}
 </div>

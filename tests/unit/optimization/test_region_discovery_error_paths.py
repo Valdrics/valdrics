@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from botocore.exceptions import ClientError
+from botocore.exceptions import ClientError, EndpointConnectionError
 
 from app.modules.optimization.adapters.aws.region_discovery import RegionDiscovery
 
@@ -120,6 +120,25 @@ async def test_enabled_regions_client_error_fallback():
     mock_ec2.describe_regions.side_effect = ClientError(
         error_response={"Error": {"Code": "AuthFailure", "Message": "denied"}},
         operation_name="DescribeRegions",
+    )
+    mock_session = MagicMock()
+    mock_session.client.return_value.__aenter__.return_value = mock_ec2
+
+    with patch(
+        "app.modules.optimization.adapters.aws.region_discovery.aioboto3.Session",
+        return_value=mock_session,
+    ):
+        rd = RegionDiscovery(credentials={"AccessKeyId": "ak", "SecretAccessKey": "sk"})
+        regions = await rd.get_enabled_regions()
+
+    assert regions == rd._get_fallback_regions()
+
+
+@pytest.mark.asyncio
+async def test_enabled_regions_endpoint_connection_error_fallback():
+    mock_ec2 = AsyncMock()
+    mock_ec2.describe_regions.side_effect = EndpointConnectionError(
+        endpoint_url="https://ec2.us-east-1.amazonaws.com/"
     )
     mock_session = MagicMock()
     mock_session.client.return_value.__aenter__.return_value = mock_ec2

@@ -1,0 +1,8 @@
+@import 'tailwindcss' source(none);
+@import '../../app.theme.css';
+
+@source not './**/*.test.ts';
+@source not './**/*.spec.ts';
+@source not './**/*.test.js';
+@source not './**/*.spec.js';
+@source '.';

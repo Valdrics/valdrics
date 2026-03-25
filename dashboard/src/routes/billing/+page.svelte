@@ -1,4 +1,5 @@
 <script lang="ts">
+	import './billing.app.css';
 	import { base } from '$app/paths';
 	import { page } from '$app/stores';
 	import { api } from '$lib/api';

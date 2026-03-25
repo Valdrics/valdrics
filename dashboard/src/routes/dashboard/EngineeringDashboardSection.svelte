@@ -88,12 +88,12 @@
 	{/if}
 
 	{#if aiData.general_recommendations && aiData.general_recommendations.length > 0}
-		<div class="card stagger-enter" style="animation-delay: 400ms;">
-			<h3 class="text-lg font-semibold mb-3">💡 Recommendations</h3>
-			<ul class="space-y-2">
+		<div class="card stagger-enter engineering-dashboard__recommendations">
+			<h3 class="engineering-dashboard__section-title">💡 Recommendations</h3>
+			<ul class="engineering-dashboard__recommendation-list">
 				{#each aiData.general_recommendations as recommendation (recommendation)}
-					<li class="flex items-start gap-2 text-sm text-ink-300">
-						<span class="text-accent-400">•</span>
+					<li class="engineering-dashboard__recommendation-item">
+						<span class="engineering-dashboard__recommendation-bullet">•</span>
 						{recommendation}
 					</li>
 				{/each}
@@ -101,14 +101,12 @@
 		</div>
 	{/if}
 {:else if analysisText}
-	<div class="card stagger-enter" style="animation-delay: 200ms;">
-		<div class="flex items-center justify-between mb-3">
-			<h2 class="text-lg font-semibold">AI Insights</h2>
+	<div class="card stagger-enter engineering-dashboard__insights">
+		<div class="engineering-dashboard__insights-header">
+			<h2 class="engineering-dashboard__section-title">AI Insights</h2>
 			<span class="badge badge-default">LLM</span>
 		</div>
-		<div class="text-sm text-ink-300 whitespace-pre-wrap leading-relaxed">
-			{analysisText}
-		</div>
+		<div class="engineering-dashboard__insights-body">{analysisText}</div>
 	</div>
 {/if}
 
@@ -119,3 +117,54 @@
 		{onRemediate}
 	/>
 {/if}
+
+<style>
+	.engineering-dashboard__recommendations {
+		animation-delay: 400ms;
+	}
+
+	.engineering-dashboard__insights {
+		animation-delay: 200ms;
+	}
+
+	.engineering-dashboard__section-title {
+		margin: 0 0 var(--space-3);
+		font-size: var(--text-lg);
+		font-weight: 600;
+	}
+
+	.engineering-dashboard__recommendation-list {
+		display: grid;
+		gap: var(--space-2);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.engineering-dashboard__recommendation-item {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--space-2);
+		font-size: var(--text-sm);
+		color: var(--color-ink-300);
+	}
+
+	.engineering-dashboard__recommendation-bullet {
+		color: var(--color-accent-400);
+	}
+
+	.engineering-dashboard__insights-header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--space-3);
+		margin-bottom: var(--space-3);
+	}
+
+	.engineering-dashboard__insights-body {
+		white-space: pre-wrap;
+		font-size: var(--text-sm);
+		line-height: 1.7;
+		color: var(--color-ink-300);
+	}
+</style>

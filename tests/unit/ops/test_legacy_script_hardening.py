@@ -127,6 +127,28 @@ def test_delete_cloudfront_main_returns_failure_when_action_fails(
     assert delete_cloudfront.main(["--distribution-id", "dist-123"]) == 1
 
 
+def test_deactivate_aws_main_returns_failure_when_action_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        deactivate_aws,
+        "deactivate_all_connections",
+        AsyncMock(side_effect=RuntimeError("boom")),
+    )
+    assert deactivate_aws.main([]) == 2
+
+
+def test_emergency_disconnect_main_returns_failure_when_action_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        emergency_disconnect,
+        "disconnect_connection",
+        AsyncMock(side_effect=RuntimeError("boom")),
+    )
+    assert emergency_disconnect.main(["--connection-id", "00000000-0000-0000-0000-000000000000"]) == 2
+
+
 def test_update_exchange_rates_main_returns_failure_on_runtime_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -136,3 +158,30 @@ def test_update_exchange_rates_main_returns_failure_on_runtime_error(
         AsyncMock(side_effect=RuntimeError("boom")),
     )
     assert update_exchange_rates.main() == 1
+
+
+def test_update_exchange_rates_api_config_uses_runtime_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("EXCHANGE_RATE_API_KEY", raising=False)
+    assert update_exchange_rates._exchange_rate_api_config() == (
+        "https://open.er-api.com/v6/latest/USD",
+        "open.er-api",
+    )
+
+    monkeypatch.setenv("EXCHANGE_RATE_API_KEY", "live-key")
+    assert update_exchange_rates._exchange_rate_api_config() == (
+        "https://v6.exchangerate-api.com/v6/live-key/latest/USD",
+        "exchangerate-api",
+    )
+
+
+def test_update_exchange_rates_default_currencies_use_runtime_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = update_exchange_rates.get_settings()
+    monkeypatch.setattr(settings, "SUPPORTED_CURRENCIES", ["USD", "NGN"])
+    assert update_exchange_rates._default_currencies() == {"USD", "NGN"}
+
+    monkeypatch.setattr(settings, "SUPPORTED_CURRENCIES", ["USD", "EUR", "KES"])
+    assert update_exchange_rates._default_currencies() == {"USD", "EUR", "KES"}

@@ -6,8 +6,11 @@ and measuring system performance under various conditions.
 """
 
 import asyncio
+import json
+from pathlib import Path
 import time
 import statistics
+import tempfile
 from typing import Dict, Any, List
 from dataclasses import dataclass, field
 from datetime import timedelta
@@ -286,8 +289,6 @@ class PerformanceRegressionDetector:
     def load_baselines(self) -> None:
         """Load baseline performance data."""
         try:
-            import json
-
             with open(self.baseline_file, "r") as f:
                 data = json.load(f)
                 for item in data.get("results", []):
@@ -301,10 +302,22 @@ class PerformanceRegressionDetector:
     def save_baselines(self, benchmark_summary: Dict[str, Any]) -> None:
         """Save current results as new baselines."""
         try:
-            import json
-
-            with open(self.baseline_file, "w") as f:
-                json.dump(benchmark_summary, f, indent=2, default=str)
+            baseline_path = Path(self.baseline_file)
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=baseline_path.parent,
+                prefix=f".{baseline_path.stem}.",
+                suffix=f"{baseline_path.suffix or '.json'}.tmp",
+                delete=False,
+            ) as handle:
+                staged_path = Path(handle.name)
+                json.dump(benchmark_summary, handle, indent=2, default=str)
+            try:
+                staged_path.replace(baseline_path)
+            except Exception:
+                staged_path.unlink(missing_ok=True)
+                raise
             logger.info("baselines_saved", file=self.baseline_file)
         except PERFORMANCE_BASELINE_SAVE_RECOVERABLE_EXCEPTIONS as e:
             logger.error("failed_to_save_baselines", error=str(e))

@@ -7,6 +7,7 @@ This script is intentionally conservative and only prints key names, never value
 
 from __future__ import annotations
 
+import argparse
 import re
 from pathlib import Path
 
@@ -31,8 +32,48 @@ def is_live_secret_value(key: str, value: str) -> bool:
     return bool(pattern.match(str(value or "").strip()))
 
 
-def main() -> int:
-    env_path = Path(".env")
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parents[2]
+
+
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Scan a local env file for known live-secret patterns."
+    )
+    parser.add_argument(
+        "--env-file",
+        type=Path,
+        default=Path(".env"),
+        help="Env file to scan. Relative paths are resolved from the repo root.",
+    )
+    return parser
+
+
+def _resolve_env_path(path: Path) -> Path:
+    raw = Path(path).expanduser()
+    repo_root = _repo_root()
+    if raw.is_absolute():
+        resolved = raw.resolve()
+    else:
+        resolved = (repo_root / raw).resolve()
+        try:
+            resolved.relative_to(repo_root)
+        except ValueError as exc:
+            raise ValueError("--env-file must stay within repo root when relative") from exc
+
+    if resolved.exists() and not resolved.is_file():
+        raise ValueError(f"--env-file must be a file path: {resolved.as_posix()}")
+    return resolved
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _build_parser().parse_args(argv)
+    try:
+        env_path = _resolve_env_path(args.env_file)
+    except ValueError as exc:
+        print(str(exc))
+        return 2
+
     if not env_path.exists():
         print("No .env file found.")
         return 0

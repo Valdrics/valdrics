@@ -3,9 +3,12 @@ import asyncio
 import os
 import sys
 from datetime import timedelta
+from pathlib import Path
 
 from dotenv import load_dotenv
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql import Select
 
 from scripts.safety_guardrails import (
     current_environment,
@@ -14,6 +17,7 @@ from scripts.safety_guardrails import (
     ensure_interactive_confirmation,
     ensure_protected_environment_bypass,
 )
+from scripts.env_generation_common import repo_root_for
 
 CONFIRM_PHRASE = "VALDRICS_BREAK_GLASS"  # nosec B105 - operator confirmation phrase
 INTERACTIVE_CONFIRM_TOKEN = (
@@ -26,6 +30,10 @@ PROD_EMERGENCY_BYPASS = (
     "I_UNDERSTAND_EMERGENCY_TOKEN_RISK"  # nosec B105 - operator bypass phrase
 )
 NONINTERACTIVE_BYPASS_ENV = "VALDRICS_ALLOW_NONINTERACTIVE_EMERGENCY_TOKEN"
+
+
+def _repo_root() -> Path:
+    return repo_root_for(__file__)
 
 
 def _validate_request(
@@ -86,24 +94,36 @@ def _validate_target_role(role: str) -> None:
 async def generate_token(
     *, email: str, ttl_hours: int, operator: str, reason: str
 ) -> str:
-    load_dotenv()
+    load_dotenv(_repo_root() / ".env")
 
     from app.models.tenant import User
     from app.shared.core.auth import create_access_token
     from app.shared.core.security import decrypt_string
-    from app.shared.core.security import generate_blind_index
     from app.shared.db.session import async_session_maker
 
-    email_bidx = generate_blind_index(email.strip())
+    target_email = str(email or "").strip().casefold()
+    if not target_email:
+        raise RuntimeError("No user found for the supplied email.")
+
+    async def _query_candidate_rows(db: AsyncSession) -> list[tuple[object, object, object, object]]:
+        statement: Select[tuple[object, object, object, object]] = (
+            select(User.id, User.email, User.role, User.tenant_id)
+            .where(User.role.in_(("owner", "admin")))
+            .order_by(User.role.asc(), User.id.asc())
+        )
+        return list((await db.execute(statement)).all())
 
     async with async_session_maker() as db:
-        row = (
-            await db.execute(
-                select(User.id, User.email, User.role, User.tenant_id)
-                .where(User.email_bidx == email_bidx)
-                .limit(1)
-            )
-        ).first()
+        row = None
+        for candidate in await _query_candidate_rows(db):
+            _user_id, encrypted_email, _role, _tenant_id = candidate
+            try:
+                email_plain = decrypt_string(str(encrypted_email), context="pii")
+            except (OSError, RuntimeError, TypeError, ValueError):
+                continue
+            if str(email_plain).strip().casefold() == target_email:
+                row = candidate
+                break
         if not row:
             raise RuntimeError("No user found for the supplied email.")
 
@@ -148,7 +168,7 @@ async def generate_token(
         return token
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Generate a short-lived emergency token.")
     parser.add_argument("--email", default="", help="Target user email.")
     parser.add_argument("--operator", default="", help="Operator identifier (email or handle).")
@@ -186,7 +206,7 @@ def main() -> int:
             f"{NONINTERACTIVE_BYPASS_ENV}=true."
         ),
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     try:
         _validate_request(
@@ -210,7 +230,7 @@ def main() -> int:
     except RuntimeError as exc:
         print(f"❌ {exc}", file=sys.stderr)
         return 2
-    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+    except (OSError, TypeError, ValueError) as exc:
         print(f"❌ Error: {exc}", file=sys.stderr)
         return 1
 

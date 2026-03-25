@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -50,4 +51,17 @@ def test_main_executes_selected_command_and_prints_payload(capsys: pytest.Captur
 
     assert exit_code == 0
     run_command.assert_awaited_once_with("tables")
-    assert capsys.readouterr().out.strip() == "{'count': 2}"
+    assert json.loads(capsys.readouterr().out.strip()) == {"count": 2}
+
+
+def test_main_returns_two_when_run_command_fails(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with patch(
+        "scripts.db_diagnostics.run_command",
+        new=AsyncMock(side_effect=RuntimeError("boom")),
+    ):
+        exit_code = db_diagnostics.main(["tables"])
+
+    assert exit_code == 2
+    assert "DB diagnostics failed: boom" in capsys.readouterr().out

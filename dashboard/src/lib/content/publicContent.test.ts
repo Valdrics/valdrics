@@ -6,8 +6,13 @@ import {
 	listPublicSitemapEntries,
 	listRelatedPublicContent
 } from './publicContent';
+import { validatePublicContentRegistry } from './publicContent.validation';
 
 describe('public content registry', () => {
+	it('passes schema validation in the test boundary', () => {
+		expect(() => validatePublicContentRegistry()).not.toThrow();
+	});
+
 	it('exposes typed content collections for each public kind', () => {
 		expect(listPublicContent('docs').length).toBeGreaterThan(0);
 		expect(listPublicContent('resources').length).toBeGreaterThan(0);

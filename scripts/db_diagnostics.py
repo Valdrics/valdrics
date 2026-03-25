@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
@@ -196,8 +197,12 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
-    result = asyncio.run(run_command(args.command))
-    print(result.payload)
+    try:
+        result = asyncio.run(run_command(args.command))
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
+        print(f"DB diagnostics failed: {exc}")
+        return 2
+    print(json.dumps(result.payload, sort_keys=True))
     return 0
 
 

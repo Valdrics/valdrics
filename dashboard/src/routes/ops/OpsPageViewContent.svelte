@@ -4,10 +4,8 @@
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError } from '$lib/fetchWithTimeout';
-	import OpsBacklogSection from './OpsBacklogSection.svelte';
+	import { createLazyComponent } from '$lib/lazyComponent';
 	import OpsIntroSection from './OpsIntroSection.svelte';
-	import OpsOperationalHealthSection from './OpsOperationalHealthSection.svelte';
-	import OpsRemediationModal from './OpsRemediationModal.svelte';
 	import OpsStatusBanners from './OpsStatusBanners.svelte';
 	import OpsSummaryCards from './OpsSummaryCards.svelte';
 	import type {
@@ -21,6 +19,11 @@
 	import { formatDate, formatUsd, policyDecisionClass } from './opsUtils';
 
 	const OPS_REQUEST_TIMEOUT_MS = 10000;
+	const loadOpsOperationalHealthSection = createLazyComponent(
+		() => import('./OpsOperationalHealthSection.svelte')
+	);
+	const loadOpsBacklogSection = createLazyComponent(() => import('./OpsBacklogSection.svelte'));
+	const loadOpsRemediationModal = createLazyComponent(() => import('./OpsRemediationModal.svelte'));
 
 	let { data } = $props();
 	let loading = $state(false);
@@ -42,6 +45,8 @@
 	let remediationModalError = $state('');
 	let remediationModalSuccess = $state('');
 	let bypassGracePeriod = $state(false);
+	let backlogAnchor: HTMLDivElement | null = $state(null);
+	let backlogVisible = $state(false);
 
 	function getHeaders() {
 		return {
@@ -299,6 +304,27 @@
 	}
 
 	onMount(() => {
+		if (import.meta.env.MODE === 'test' || typeof IntersectionObserver === 'undefined') {
+			backlogVisible = true;
+		} else {
+			const observer = new IntersectionObserver(
+				(entries) => {
+					if (entries.some((entry) => entry.isIntersecting)) {
+						backlogVisible = true;
+						observer.disconnect();
+					}
+				},
+				{ rootMargin: '240px 0px' }
+			);
+
+			if (backlogAnchor) {
+				observer.observe(backlogAnchor);
+			}
+
+			void loadOpsData();
+			return () => observer.disconnect();
+		}
+
 		void loadOpsData();
 	});
 </script>
@@ -320,43 +346,85 @@
 				recommendationsCount={recommendations.length}
 			/>
 
-			<OpsOperationalHealthSection {data} />
+			{#await loadOpsOperationalHealthSection()}
+				<div class="card">
+					<div class="skeleton h-8 w-56 mb-4"></div>
+					<div class="skeleton h-64 rounded-2xl"></div>
+				</div>
+			{:then module}
+				{@const OpsOperationalHealthSection = module.default}
+				<OpsOperationalHealthSection {data} />
+			{:catch}
+				<div class="card">
+					<div class="skeleton h-8 w-56 mb-4"></div>
+				</div>
+			{/await}
 
-			<OpsBacklogSection
-				{pendingRequests}
-				recentCompletions={remediationHistory}
-				{processingJobs}
-				{jobs}
-				{recommendations}
-				{refreshingStrategies}
-				{actingId}
-				{formatDate}
-				{formatUsd}
-				onLoadOpsData={loadOpsData}
-				onOpenRemediationModal={openRemediationModal}
-				onProcessPendingJobs={processPendingJobs}
-				onRefreshRecommendations={refreshRecommendations}
-				onApplyRecommendation={applyRecommendation}
-			/>
+			<div bind:this={backlogAnchor}>
+				{#if backlogVisible}
+					{#await loadOpsBacklogSection()}
+						<div class="card">
+							<div class="skeleton h-8 w-48 mb-4"></div>
+							<div class="skeleton h-80 rounded-2xl"></div>
+						</div>
+					{:then module}
+						{@const OpsBacklogSection = module.default}
+						<OpsBacklogSection
+							{pendingRequests}
+							recentCompletions={remediationHistory}
+							{processingJobs}
+							{jobs}
+							{recommendations}
+							{refreshingStrategies}
+							{actingId}
+							{formatDate}
+							{formatUsd}
+							onLoadOpsData={loadOpsData}
+							onOpenRemediationModal={openRemediationModal}
+							onProcessPendingJobs={processPendingJobs}
+							onRefreshRecommendations={refreshRecommendations}
+							onApplyRecommendation={applyRecommendation}
+						/>
+					{:catch}
+						<div class="card">
+							<div class="skeleton h-8 w-48 mb-4"></div>
+						</div>
+					{/await}
+				{:else}
+					<div class="card">
+						<div class="skeleton h-8 w-48 mb-4"></div>
+						<div class="skeleton h-80 rounded-2xl"></div>
+					</div>
+				{/if}
+			</div>
 		{/if}
 	</AuthGate>
 </div>
 
-<OpsRemediationModal
-	open={remediationModalOpen}
-	{selectedRequest}
-	{selectedPolicyPreview}
-	{policyPreviewLoading}
-	{remediationSubmitting}
-	{remediationModalError}
-	{remediationModalSuccess}
-	{actingId}
-	bind:bypassGracePeriod
-	{formatUsd}
-	{formatDate}
-	{policyDecisionClass}
-	onClose={closeRemediationModal}
-	onPreview={previewSelectedPolicy}
-	onApprove={approveSelectedRequest}
-	onExecute={executeSelectedRequest}
-/>
+{#if remediationModalOpen || selectedRequest}
+	{#await loadOpsRemediationModal()}
+		<div class="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"></div>
+	{:then module}
+		{@const OpsRemediationModal = module.default}
+		<OpsRemediationModal
+			open={remediationModalOpen}
+			{selectedRequest}
+			{selectedPolicyPreview}
+			{policyPreviewLoading}
+			{remediationSubmitting}
+			{remediationModalError}
+			{remediationModalSuccess}
+			{actingId}
+			bind:bypassGracePeriod
+			{formatUsd}
+			{formatDate}
+			{policyDecisionClass}
+			onClose={closeRemediationModal}
+			onPreview={previewSelectedPolicy}
+			onApprove={approveSelectedRequest}
+			onExecute={executeSelectedRequest}
+		/>
+	{:catch}
+		<div class="fixed inset-0 z-50 bg-black/30 backdrop-blur-sm"></div>
+	{/await}
+{/if}

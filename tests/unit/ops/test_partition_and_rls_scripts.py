@@ -11,6 +11,9 @@ from scripts import (
     check_partitions,
     cleanup_partitions,
     create_partitions,
+    list_partitions,
+    list_tables,
+    list_zombies,
     manage_partitions,
     remediate_rls_gaps,
     run_archival_setup,
@@ -354,6 +357,18 @@ async def test_manage_partitions_validate_reports_missing_partition(
     assert payload["missing"]["audit_logs"]
 
 
+def test_manage_partitions_main_returns_two_when_command_missing(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert manage_partitions.main([]) == 2
+    assert "Manage Postgres partitions" in capsys.readouterr().out
+
+
+def test_manage_partitions_main_rejects_negative_months_ahead() -> None:
+    with pytest.raises(SystemExit, match="--months-ahead must be >= 0"):
+        manage_partitions.main(["create", "--months-ahead", "-1"])
+
+
 @pytest.mark.asyncio
 async def test_check_partitions_reports_partitions(
     monkeypatch: pytest.MonkeyPatch,
@@ -373,11 +388,105 @@ async def test_check_partitions_reports_partitions(
         lambda: _AsyncContextManager(session),
     )
 
-    await check_partitions.check()
+    assert await check_partitions.check() == 0
 
     output = capsys.readouterr().out
     assert "Found 1 partitions" in output
     assert "audit_logs_p2026_03" in output
+
+
+@pytest.mark.asyncio
+async def test_check_partitions_returns_failure_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    session = SimpleNamespace(execute=AsyncMock(side_effect=RuntimeError("boom")))
+    monkeypatch.setattr(
+        check_partitions,
+        "async_session_maker",
+        lambda: _AsyncContextManager(session),
+    )
+
+    assert await check_partitions.check() == 1
+    assert "boom" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_create_partitions_returns_failure_when_any_partition_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call_count = {"value": 0}
+
+    async def _execute(*args, **kwargs):
+        del args, kwargs
+        call_count["value"] += 1
+        if call_count["value"] == 1:
+            raise RuntimeError("ddl failed")
+        return None
+
+    session = SimpleNamespace(
+        execute=AsyncMock(side_effect=_execute),
+        commit=AsyncMock(),
+        rollback=AsyncMock(),
+        close=AsyncMock(),
+    )
+    monkeypatch.setattr(create_partitions, "async_session_maker", lambda: session)
+
+    assert await create_partitions.create_partitions(months_before=0, months_ahead=0) == 1
+
+
+def test_create_partitions_main_rejects_negative_months_before() -> None:
+    with pytest.raises(SystemExit, match="--months-before must be >= 0"):
+        create_partitions.main(["--months-before", "-1"])
+
+
+@pytest.mark.asyncio
+async def test_list_tables_returns_failure_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    session = SimpleNamespace(execute=AsyncMock(side_effect=RuntimeError("boom")))
+    monkeypatch.setattr(
+        list_tables,
+        "async_session_maker",
+        lambda: _AsyncContextManager(session),
+    )
+
+    assert await list_tables.list_tables() == 1
+    assert "boom" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_list_partitions_returns_failure_and_disposes_engine(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    conn = SimpleNamespace(execute=AsyncMock(side_effect=RuntimeError("boom")))
+    engine = SimpleNamespace(
+        connect=lambda: _AsyncContextManager(conn),
+        dispose=AsyncMock(),
+    )
+    monkeypatch.setattr(list_partitions, "get_engine", lambda: engine)
+
+    assert await list_partitions.list_partitions() == 1
+    engine.dispose.assert_awaited_once()
+    assert "boom" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_list_zombies_returns_failure_on_error(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    session = SimpleNamespace(execute=AsyncMock(side_effect=RuntimeError("boom")))
+    monkeypatch.setattr(
+        list_zombies,
+        "async_session_maker",
+        lambda: _AsyncContextManager(session),
+    )
+
+    assert await list_zombies.check_zombies() == 1
+    assert "boom" in capsys.readouterr().out
 
 
 @pytest.mark.asyncio
@@ -394,7 +503,7 @@ async def test_run_archival_setup_invokes_partition_maintenance_service(
     monkeypatch.setattr(
         run_archival_setup,
         "_parse_args",
-        lambda: SimpleNamespace(months_old=13, months_ahead=3),
+        lambda _argv=None: SimpleNamespace(months_old=13, months_ahead=3),
     )
     monkeypatch.setattr(
         run_archival_setup,
@@ -407,9 +516,21 @@ async def test_run_archival_setup_invokes_partition_maintenance_service(
         lambda _: service,
     )
 
-    await run_archival_setup.main()
+    assert await run_archival_setup.main() == 0
 
     service.create_future_partitions.assert_awaited_once_with(months_ahead=3)
     service.archive_old_partitions.assert_awaited_once_with(months_old=13)
     session.commit.assert_awaited_once()
     assert "created=2 archived=5" in capsys.readouterr().out
+
+
+@pytest.mark.asyncio
+async def test_run_archival_setup_rejects_non_positive_months_old() -> None:
+    with pytest.raises(SystemExit, match="--months-old must be > 0"):
+        await run_archival_setup.main(["--months-old", "0"])
+
+
+@pytest.mark.asyncio
+async def test_run_archival_setup_rejects_negative_months_ahead() -> None:
+    with pytest.raises(SystemExit, match="--months-ahead must be >= 0"):
+        await run_archival_setup.main(["--months-ahead", "-1"])

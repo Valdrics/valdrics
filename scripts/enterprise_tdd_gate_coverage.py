@@ -34,10 +34,13 @@ def _resolve_xml_class_repo_path(
     source_roots: tuple[Path, ...],
     repo_root: Path,
 ) -> str | None:
+    repo_root_resolved = repo_root.resolve()
     for source_root in source_roots:
+        if not source_root.is_absolute():
+            source_root = (repo_root_resolved / source_root).resolve()
         candidate = source_root / filename
         if candidate.exists():
-            return candidate.resolve().relative_to(repo_root.resolve()).as_posix()
+            return candidate.resolve().relative_to(repo_root_resolved).as_posix()
     return None
 
 

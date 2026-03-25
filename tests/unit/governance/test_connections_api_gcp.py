@@ -15,10 +15,6 @@ pytest_plugins = ("tests.unit.governance.connections_api_fixtures",)
 async def test_create_gcp_connection_success_on_growth(
     ac, db, override_auth, auth_user
 ):
-    # Upgrade tenant
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     payload = {
@@ -36,9 +32,6 @@ async def test_create_gcp_connection_success_on_growth(
 async def test_create_gcp_connection_requires_admin(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
     auth_user.role = UserRole.MEMBER
 
@@ -56,9 +49,6 @@ async def test_create_gcp_connection_requires_admin(
 async def test_create_gcp_connection_requires_json_when_secret(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     payload = {
@@ -72,9 +62,6 @@ async def test_create_gcp_connection_requires_json_when_secret(
 
 @pytest.mark.asyncio
 async def test_create_gcp_connection_invalid_json(ac, db, override_auth, auth_user):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     payload = {
@@ -91,9 +78,6 @@ async def test_create_gcp_connection_invalid_json(ac, db, override_auth, auth_us
 async def test_create_gcp_connection_workload_identity_verification_failure(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     payload = {
@@ -124,9 +108,6 @@ async def test_create_gcp_connection_workload_identity_verification_failure(
 async def test_verify_gcp_connection_success_on_starter(
     ac, db, override_auth, auth_user
 ):
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.STARTER.value
-    await db.commit()
     auth_user.tier = PricingTier.STARTER
 
     conn = GCPConnection(
@@ -201,10 +182,6 @@ async def test_delete_gcp_connection_tenant_isolation(ac, db, override_auth, aut
 
 @pytest.mark.asyncio
 async def test_create_gcp_connection_duplicate(ac, db, override_auth, auth_user):
-    # Setup Growth tier
-    tenant = await db.get(Tenant, auth_user.tenant_id)
-    tenant.plan = PricingTier.GROWTH.value
-    await db.commit()
     auth_user.tier = PricingTier.GROWTH
 
     # Pre-create

@@ -1,12 +1,21 @@
 <script lang="ts">
+	import '../../authenticated.app.css';
+	import { browser } from '$app/environment';
+	import { invalidate } from '$app/navigation';
 	import { base } from '$app/paths';
 	import type { Snippet } from 'svelte';
 	import { uiState } from '$lib/stores/ui.svelte';
+	import { createLazyComponent } from '$lib/lazyComponent';
 	import CloudLogo from '$lib/components/CloudLogo.svelte';
-	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import ErrorBoundary from '$lib/components/ErrorBoundary.svelte';
 
 	type NavItem = { href: string; label: string; icon: string };
+	type CommandPaletteProps = {
+		isOpen?: boolean;
+		actions?: NavItem[];
+		role?: string;
+		platformOperator?: boolean;
+	};
 
 	interface Props {
 		user: {
@@ -20,12 +29,7 @@
 		primaryNavItems: NavItem[];
 		secondaryNavItems: NavItem[];
 		activeSecondaryNavItems: NavItem[];
-		showAllNav: boolean;
 		persona: string;
-		prefersReducedMotion: boolean;
-		jobStore?: {
-			activeJobsCount: number;
-		} | null;
 		toAppPath: (path: string) => string;
 		isActive: (href: string) => boolean;
 		children: Snippet;
@@ -39,16 +43,119 @@
 		primaryNavItems,
 		secondaryNavItems,
 		activeSecondaryNavItems,
-		showAllNav = $bindable(),
 		persona,
-		prefersReducedMotion,
-		jobStore = null,
 		toAppPath,
 		isActive,
 		children
 	}: Props = $props();
 
-	let activeJobsCount = $derived(jobStore?.activeJobsCount ?? 0);
+	const NAV_SHOW_ALL_KEY = 'valdrics.nav.show_all.v1';
+	type LiveJobStore = {
+		activeJobsCount: number;
+		init: () => Promise<void> | void;
+		disconnect: () => void;
+	};
+	let showAllNav = $state(false);
+	let navPreferenceLoaded = $state(false);
+	let prefersReducedMotion = $state(false);
+	let liveJobStore = $state<LiveJobStore | null>(null);
+	let activeJobsCount = $derived(liveJobStore?.activeJobsCount ?? 0);
+	const loadCommandPalette = createLazyComponent<CommandPaletteProps>(
+		() => import('$lib/components/CommandPalette.svelte')
+	);
+
+	$effect(() => {
+		if (!browser) return;
+		const handleKeydown = (event: KeyboardEvent) => {
+			if ((event.metaKey || event.ctrlKey) && event.key === 'k') {
+				event.preventDefault();
+				uiState.isCommandPaletteOpen = !uiState.isCommandPaletteOpen;
+			}
+		};
+		window.addEventListener('keydown', handleKeydown);
+		return () => window.removeEventListener('keydown', handleKeydown);
+	});
+
+	$effect(() => {
+		if (!browser || navPreferenceLoaded) return;
+		const raw = window.localStorage.getItem(NAV_SHOW_ALL_KEY);
+		if (raw === null) {
+			showAllNav = false;
+		} else {
+			showAllNav = raw === '1' || raw.toLowerCase() === 'true';
+		}
+		navPreferenceLoaded = true;
+	});
+
+	$effect(() => {
+		if (!browser || !navPreferenceLoaded) return;
+		window.localStorage.setItem(NAV_SHOW_ALL_KEY, showAllNav ? '1' : '0');
+	});
+
+	$effect(() => {
+		if (!browser) return;
+		if (typeof window.matchMedia !== 'function') {
+			prefersReducedMotion = false;
+			return;
+		}
+		const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+		const update = () => {
+			prefersReducedMotion = media.matches;
+		};
+		update();
+		if (typeof media.addEventListener === 'function') {
+			media.addEventListener('change', update);
+			return () => media.removeEventListener('change', update);
+		}
+		media.addListener(update);
+		return () => media.removeListener(update);
+	});
+
+	$effect(() => {
+		if (!browser) return;
+		let cancelled = false;
+		let unsubscribe: (() => void) | undefined;
+
+		void import('$lib/supabase.browser').then(({ createSupabaseBrowserClient }) => {
+			if (cancelled) return;
+			const supabase = createSupabaseBrowserClient();
+			const {
+				data: { subscription }
+			} = supabase.auth.onAuthStateChange((event) => {
+				if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+					invalidate('supabase:auth');
+				}
+			});
+			unsubscribe = () => subscription.unsubscribe();
+		});
+
+		return () => {
+			cancelled = true;
+			unsubscribe?.();
+		};
+	});
+
+	$effect(() => {
+		if (!browser) return;
+		let cancelled = false;
+		let disconnect: (() => void) | undefined;
+
+		void import('$lib/stores/jobs.svelte').then(({ jobStore }) => {
+			if (cancelled) {
+				jobStore.disconnect();
+				return;
+			}
+			liveJobStore = jobStore;
+			disconnect = () => jobStore.disconnect();
+			void jobStore.init();
+		});
+
+		return () => {
+			cancelled = true;
+			liveJobStore = null;
+			disconnect?.();
+		};
+	});
 </script>
 
 <svelte:head>
@@ -219,14 +326,18 @@
 	</div>
 </main>
 
-<CommandPalette
-	actions={[...primaryNavItems, ...secondaryNavItems]}
-	{role}
-	{platformOperator}
-	bind:isOpen={
-		() => uiState.isCommandPaletteOpen, (value) => (uiState.isCommandPaletteOpen = value)
-	}
-/>
+{#if uiState.isCommandPaletteOpen}
+	{#await loadCommandPalette() then { default: CommandPalette }}
+		<CommandPalette
+			actions={[...primaryNavItems, ...secondaryNavItems]}
+			{role}
+			{platformOperator}
+			bind:isOpen={
+				() => uiState.isCommandPaletteOpen, (value) => (uiState.isCommandPaletteOpen = value)
+			}
+		/>
+	{/await}
+{/if}
 
 <style>
 	.authenticated-shell-enter {
