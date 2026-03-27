@@ -74,13 +74,14 @@ async def test_get_public_plans_fallback_on_error(mock_db: AsyncMock) -> None:
 
 @pytest.mark.asyncio
 @patch("app.modules.billing.domain.billing.paystack_billing.BillingService")
-@patch("app.modules.billing.api.v1.billing.settings")
+@patch("app.modules.billing.api.v1.billing.get_settings")
 async def test_create_checkout_success(
-    mock_settings: MagicMock,
+    mock_get_settings: MagicMock,
     mock_billing_service_class: MagicMock,
     mock_db: AsyncMock,
     mock_user: MagicMock,
 ) -> None:
+    mock_settings = mock_get_settings.return_value
     mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
     mock_settings.FRONTEND_URL = "https://app.valdrics.io"
     mock_settings.CORS_ORIGINS = ["https://app.valdrics.io"]
@@ -105,13 +106,14 @@ async def test_create_checkout_success(
 
 @pytest.mark.asyncio
 @patch("app.modules.billing.domain.billing.paystack_billing.BillingService")
-@patch("app.modules.billing.api.v1.billing.settings")
+@patch("app.modules.billing.api.v1.billing.get_settings")
 async def test_create_checkout_rejects_untrusted_callback(
-    mock_settings: MagicMock,
+    mock_get_settings: MagicMock,
     mock_billing_service_class: MagicMock,
     mock_db: AsyncMock,
     mock_user: MagicMock,
 ) -> None:
+    mock_settings = mock_get_settings.return_value
     mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
     mock_settings.FRONTEND_URL = "https://app.valdrics.io"
     mock_settings.CORS_ORIGINS = ["https://app.valdrics.io"]
@@ -131,13 +133,14 @@ async def test_create_checkout_rejects_untrusted_callback(
 @pytest.mark.asyncio
 @patch("app.modules.billing.domain.billing.paystack_billing.WebhookHandler")
 @patch("app.modules.billing.domain.billing.webhook_retry.WebhookRetryService")
-@patch("app.modules.billing.api.v1.billing.settings")
+@patch("app.modules.billing.api.v1.billing.get_settings")
 async def test_handle_webhook_success(
-    mock_settings: MagicMock,
+    mock_get_settings: MagicMock,
     mock_retry_class: MagicMock,
     mock_handler_class: MagicMock,
     mock_db: AsyncMock,
 ) -> None:
+    mock_settings = mock_get_settings.return_value
     mock_settings.ENVIRONMENT = "development"
     request = AsyncMock()
     # Mock headers as MagicMock so .get is synchronous
@@ -174,13 +177,14 @@ async def test_handle_webhook_success(
 @pytest.mark.asyncio
 @patch("app.modules.billing.domain.billing.paystack_billing.WebhookHandler")
 @patch("app.modules.billing.domain.billing.webhook_retry.WebhookRetryService")
-@patch("app.modules.billing.api.v1.billing.settings")
+@patch("app.modules.billing.api.v1.billing.get_settings")
 async def test_handle_webhook_duplicate_short_circuits_to_duplicate_response(
-    mock_settings: MagicMock,
+    mock_get_settings: MagicMock,
     mock_retry_class: MagicMock,
     mock_handler_class: MagicMock,
     mock_db: AsyncMock,
 ) -> None:
+    mock_settings = mock_get_settings.return_value
     mock_settings.ENVIRONMENT = "development"
     request = AsyncMock()
     request.headers = MagicMock()
@@ -313,8 +317,8 @@ def test_extract_client_ip_ignores_xff_when_proxy_headers_untrusted() -> None:
     request.headers.get.return_value = "198.51.100.20, 198.51.100.21"
 
     with patch(
-        "app.modules.billing.api.v1.billing.settings",
-        SimpleNamespace(
+        "app.modules.billing.api.v1.billing.get_settings",
+        return_value=SimpleNamespace(
             TRUST_PROXY_HEADERS=False,
             TRUSTED_PROXY_HOPS=1,
             TRUSTED_PROXY_CIDRS=[],
@@ -329,8 +333,8 @@ def test_extract_client_ip_uses_xff_when_proxy_headers_trusted() -> None:
     request.headers.get.return_value = "198.51.100.20, 198.51.100.21"
 
     with patch(
-        "app.modules.billing.api.v1.billing.settings",
-        SimpleNamespace(
+        "app.modules.billing.api.v1.billing.get_settings",
+        return_value=SimpleNamespace(
             TRUST_PROXY_HEADERS=True,
             TRUSTED_PROXY_HOPS=1,
             TRUSTED_PROXY_CIDRS=["203.0.113.10/32"],
@@ -345,8 +349,8 @@ def test_extract_client_ip_ignores_xff_when_remote_not_in_trusted_proxy_cidrs() 
     request.headers.get.return_value = "198.51.100.20, 198.51.100.21"
 
     with patch(
-        "app.modules.billing.api.v1.billing.settings",
-        SimpleNamespace(
+        "app.modules.billing.api.v1.billing.get_settings",
+        return_value=SimpleNamespace(
             TRUST_PROXY_HEADERS=True,
             TRUSTED_PROXY_HOPS=1,
             TRUSTED_PROXY_CIDRS=["198.51.100.0/24"],

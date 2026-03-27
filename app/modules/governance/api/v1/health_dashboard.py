@@ -67,10 +67,27 @@ HEALTH_DASHBOARD_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS = (
     ValueError,
 )
 
-# Track startup time
-_startup_time = datetime.now(timezone.utc)
+# Track process startup from the real FastAPI lifespan, not module import time.
+_startup_time: datetime | None = None
 HEALTH_DASHBOARD_CACHE_TTL = timedelta(seconds=20)
 FAIR_USE_RUNTIME_CACHE_TTL = timedelta(seconds=20)
+
+
+def set_startup_time(started_at: datetime | None = None) -> datetime:
+    """Record the service startup time for uptime calculations."""
+    global _startup_time
+    resolved = started_at or datetime.now(timezone.utc)
+    if resolved.tzinfo is None:
+        resolved = resolved.replace(tzinfo=timezone.utc)
+    else:
+        resolved = resolved.astimezone(timezone.utc)
+    _startup_time = resolved
+    return _startup_time
+
+
+def _resolve_startup_time(now: datetime) -> datetime:
+    """Return the tracked startup time, falling back to the current request time."""
+    return _startup_time or now
 
 
 @router.get("", response_model=InvestorHealthDashboard)
@@ -101,7 +118,7 @@ async def get_investor_health_dashboard(
             except HEALTH_DASHBOARD_CACHE_RECOVERABLE_EXCEPTIONS as exc:
                 logger.warning("health_dashboard_cache_decode_failed", error=str(exc))
 
-    uptime = now - _startup_time
+    uptime = now - _resolve_startup_time(now)
     system = SystemHealth(
         status="healthy",
         uptime_hours=round(uptime.total_seconds() / 3600, 2),

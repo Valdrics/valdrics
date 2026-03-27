@@ -29,6 +29,7 @@ from typing import Any, Dict, Optional
 import structlog
 from contextlib import contextmanager
 import sys
+from threading import RLock
 
 logger = structlog.get_logger()
 FATAL_EXCEPTIONS = (SystemExit, KeyboardInterrupt, GeneratorExit)
@@ -50,6 +51,7 @@ class ProviderCircuit:
     success_count: int = 0
     last_failure_time: Optional[datetime] = None
     last_success_time: Optional[datetime] = None
+    probe_in_flight: bool = False
 
     # Thresholds
     failure_threshold: int = 3  # Failures to open circuit
@@ -77,99 +79,140 @@ class LLMCircuitBreaker:
         self.success_threshold = success_threshold
         self.recovery_timeout = recovery_timeout
         self._circuits: Dict[str, ProviderCircuit] = {}
+        self._lock = RLock()
 
     def _get_circuit(self, provider: str) -> ProviderCircuit:
         """Get or create circuit for provider."""
-        if provider not in self._circuits:
-            self._circuits[provider] = ProviderCircuit(
-                name=provider,
-                failure_threshold=self.failure_threshold,
-                success_threshold=self.success_threshold,
-                recovery_timeout=self.recovery_timeout,
-            )
-        return self._circuits[provider]
+        with self._lock:
+            if provider not in self._circuits:
+                self._circuits[provider] = ProviderCircuit(
+                    name=provider,
+                    failure_threshold=self.failure_threshold,
+                    success_threshold=self.success_threshold,
+                    recovery_timeout=self.recovery_timeout,
+                )
+            return self._circuits[provider]
 
     def is_available(self, provider: str) -> bool:
         """Check if provider is available for requests."""
-        circuit = self._get_circuit(provider)
-        now = datetime.now(timezone.utc)
+        with self._lock:
+            circuit = self._get_circuit(provider)
+            now = datetime.now(timezone.utc)
 
-        if circuit.state == CircuitState.CLOSED:
-            return True
+            if circuit.state == CircuitState.CLOSED:
+                return True
 
-        if circuit.state == CircuitState.OPEN:
-            # Check if recovery timeout has passed
-            if circuit.last_failure_time:
-                elapsed = (now - circuit.last_failure_time).total_seconds()
-                if elapsed >= circuit.recovery_timeout:
-                    # Transition to half-open
-                    circuit.state = CircuitState.HALF_OPEN
-                    logger.info(
-                        "circuit_half_open",
-                        provider=provider,
-                        message="Testing recovery",
-                    )
-                    return True
+            if circuit.state == CircuitState.OPEN:
+                # Check if recovery timeout has passed
+                if circuit.last_failure_time:
+                    elapsed = (now - circuit.last_failure_time).total_seconds()
+                    if elapsed >= circuit.recovery_timeout:
+                        # Transition to half-open
+                        circuit.state = CircuitState.HALF_OPEN
+                        logger.info(
+                            "circuit_half_open",
+                            provider=provider,
+                            message="Testing recovery",
+                        )
+                        return True
+                return False
+
+            if circuit.state == CircuitState.HALF_OPEN:
+                return True
+
             return False
 
-        if circuit.state == CircuitState.HALF_OPEN:
-            # Allow one request to test recovery
-            return True
+    def _try_acquire_probe(self, provider: str) -> bool:
+        """Acquire the single half-open probe slot for a provider."""
+        with self._lock:
+            circuit = self._get_circuit(provider)
+            now = datetime.now(timezone.utc)
 
-        return False
+            if circuit.state == CircuitState.CLOSED:
+                return True
+
+            if circuit.state == CircuitState.OPEN:
+                if circuit.last_failure_time is None:
+                    return False
+                elapsed = (now - circuit.last_failure_time).total_seconds()
+                if elapsed < circuit.recovery_timeout:
+                    return False
+                circuit.state = CircuitState.HALF_OPEN
+                circuit.probe_in_flight = True
+                logger.info(
+                    "circuit_half_open",
+                    provider=provider,
+                    message="Testing recovery",
+                )
+                return True
+
+            if circuit.state == CircuitState.HALF_OPEN:
+                if circuit.probe_in_flight:
+                    return False
+                circuit.probe_in_flight = True
+                return True
+
+            return False
 
     def record_success(self, provider: str) -> None:
         """Record successful request to provider."""
-        circuit = self._get_circuit(provider)
-        circuit.success_count += 1
-        circuit.last_success_time = datetime.now(timezone.utc)
+        with self._lock:
+            circuit = self._get_circuit(provider)
+            circuit.success_count += 1
+            circuit.last_success_time = datetime.now(timezone.utc)
 
-        if circuit.state == CircuitState.HALF_OPEN:
-            if circuit.success_count >= circuit.success_threshold:
-                # Recovery confirmed, close circuit
-                circuit.state = CircuitState.CLOSED
+            if circuit.state == CircuitState.HALF_OPEN:
+                if circuit.success_count >= circuit.success_threshold:
+                    # Recovery confirmed, close circuit
+                    circuit.state = CircuitState.CLOSED
+                    circuit.failure_count = 0
+                    circuit.success_count = 0
+                    circuit.probe_in_flight = False
+                    logger.info(
+                        "circuit_closed", provider=provider, message="Provider recovered"
+                    )
+                else:
+                    circuit.probe_in_flight = False
+
+            elif circuit.state == CircuitState.CLOSED:
+                # Reset failure count on success
                 circuit.failure_count = 0
-                circuit.success_count = 0
-                logger.info(
-                    "circuit_closed", provider=provider, message="Provider recovered"
-                )
-
-        elif circuit.state == CircuitState.CLOSED:
-            # Reset failure count on success
-            circuit.failure_count = 0
+                circuit.probe_in_flight = False
 
     def record_failure(self, provider: str, error: Optional[str] = None) -> None:
         """Record failed request to provider."""
-        circuit = self._get_circuit(provider)
-        circuit.failure_count += 1
-        circuit.last_failure_time = datetime.now(timezone.utc)
-        circuit.success_count = 0  # Reset success count
+        with self._lock:
+            circuit = self._get_circuit(provider)
+            circuit.failure_count += 1
+            circuit.last_failure_time = datetime.now(timezone.utc)
+            circuit.success_count = 0  # Reset success count
+            circuit.probe_in_flight = False
 
-        logger.warning(
-            "llm_provider_failure",
-            provider=provider,
-            failure_count=circuit.failure_count,
-            threshold=circuit.failure_threshold,
-            error=error,
-        )
-
-        if circuit.state == CircuitState.HALF_OPEN:
-            # Failed during recovery test, reopen circuit
-            circuit.state = CircuitState.OPEN
             logger.warning(
-                "circuit_reopened", provider=provider, message="Recovery failed"
+                "llm_provider_failure",
+                provider=provider,
+                failure_count=circuit.failure_count,
+                threshold=circuit.failure_threshold,
+                error=error,
             )
 
-        elif circuit.state == CircuitState.CLOSED:
-            if circuit.failure_count >= circuit.failure_threshold:
-                # Too many failures, open circuit
+            if circuit.state == CircuitState.HALF_OPEN:
+                # Failed during recovery test, reopen circuit
                 circuit.state = CircuitState.OPEN
-                logger.error(
-                    "circuit_opened",
-                    provider=provider,
-                    failure_count=circuit.failure_count,
-                    message="Provider marked unavailable",
+                logger.warning(
+                    "circuit_reopened", provider=provider, message="Recovery failed"
                 )
+
+            elif circuit.state == CircuitState.CLOSED:
+                if circuit.failure_count >= circuit.failure_threshold:
+                    # Too many failures, open circuit
+                    circuit.state = CircuitState.OPEN
+                    logger.error(
+                        "circuit_opened",
+                        provider=provider,
+                        failure_count=circuit.failure_count,
+                        message="Provider marked unavailable",
+                    )
 
     @contextmanager
     def protect(self, provider: str) -> Any:
@@ -180,7 +223,7 @@ class LLMCircuitBreaker:
             with breaker.protect("groq"):
                 response = await client.chat(...)
         """
-        if not self.is_available(provider):
+        if not self._try_acquire_probe(provider):
             raise CircuitOpenError(f"Circuit open for {provider}")
 
         try:
@@ -194,31 +237,33 @@ class LLMCircuitBreaker:
 
     def get_status(self) -> Dict[str, dict[str, Any]]:
         """Get status of all circuits for monitoring."""
-        return {
-            name: {
-                "state": circuit.state.value,
-                "failure_count": circuit.failure_count,
-                "success_count": circuit.success_count,
-                "last_failure": circuit.last_failure_time.isoformat()
-                if circuit.last_failure_time
-                else None,
-                "last_success": circuit.last_success_time.isoformat()
-                if circuit.last_success_time
-                else None,
+        with self._lock:
+            return {
+                name: {
+                    "state": circuit.state.value,
+                    "failure_count": circuit.failure_count,
+                    "success_count": circuit.success_count,
+                    "last_failure": circuit.last_failure_time.isoformat()
+                    if circuit.last_failure_time
+                    else None,
+                    "last_success": circuit.last_success_time.isoformat()
+                    if circuit.last_success_time
+                    else None,
+                }
+                for name, circuit in self._circuits.items()
             }
-            for name, circuit in self._circuits.items()
-        }
 
     def reset(self, provider: str) -> None:
         """Manually reset a circuit (for admin use)."""
-        if provider in self._circuits:
-            self._circuits[provider] = ProviderCircuit(
-                name=provider,
-                failure_threshold=self.failure_threshold,
-                success_threshold=self.success_threshold,
-                recovery_timeout=self.recovery_timeout,
-            )
-            logger.info("circuit_reset", provider=provider)
+        with self._lock:
+            if provider in self._circuits:
+                self._circuits[provider] = ProviderCircuit(
+                    name=provider,
+                    failure_threshold=self.failure_threshold,
+                    success_threshold=self.success_threshold,
+                    recovery_timeout=self.recovery_timeout,
+                )
+                logger.info("circuit_reset", provider=provider)
 
 
 class CircuitOpenError(Exception):

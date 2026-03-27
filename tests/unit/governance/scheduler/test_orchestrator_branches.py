@@ -21,43 +21,77 @@ def orchestrator() -> SchedulerOrchestrator:
 
 @pytest.mark.asyncio
 async def test_acquire_dispatch_lock_paths(
-    orchestrator: SchedulerOrchestrator, monkeypatch: pytest.MonkeyPatch
+    orchestrator: SchedulerOrchestrator,
 ) -> None:
     import app.modules.governance.domain.scheduler.orchestrator as orchestrator_module
 
-    monkeypatch.setattr(orchestrator_module.settings, "TESTING", False, raising=False)
-    monkeypatch.setattr(
-        orchestrator_module.settings, "SCHEDULER_LOCK_FAIL_OPEN", False, raising=False
+    settings_obj = SimpleNamespace(
+        TESTING=False,
+        PYTEST_CURRENT_TEST="",
+        SCHEDULER_LOCK_FAIL_OPEN=False,
     )
 
-    with patch(
-        "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
-        return_value=None,
-    ):
-        assert await orchestrator._acquire_dispatch_lock("demo") is False
+    with patch.object(orchestrator_module, "get_settings", return_value=settings_obj):
+        with patch(
+            "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
+            return_value=None,
+        ):
+            assert await orchestrator._acquire_dispatch_lock("demo") is False
+
+        redis = MagicMock()
+        redis.set = AsyncMock(return_value=False)
+        with patch(
+            "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
+            return_value=redis,
+        ):
+            assert await orchestrator._acquire_dispatch_lock("demo") is False
+
+        redis.set = AsyncMock(side_effect=RuntimeError("redis down"))
+        with patch(
+            "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
+            return_value=redis,
+        ):
+            assert await orchestrator._acquire_dispatch_lock("demo") is False
+
+        settings_obj.SCHEDULER_LOCK_FAIL_OPEN = True
+        with patch(
+            "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
+            return_value=redis,
+        ):
+            assert await orchestrator._acquire_dispatch_lock("demo") is True
+
+
+@pytest.mark.asyncio
+async def test_acquire_dispatch_lock_uses_live_settings_after_construction(
+    orchestrator: SchedulerOrchestrator,
+) -> None:
+    import app.modules.governance.domain.scheduler.orchestrator as orchestrator_module
 
     redis = MagicMock()
-    redis.set = AsyncMock(return_value=False)
-    with patch(
-        "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
-        return_value=redis,
-    ):
-        assert await orchestrator._acquire_dispatch_lock("demo") is False
-
     redis.set = AsyncMock(side_effect=RuntimeError("redis down"))
-    with patch(
-        "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
-        return_value=redis,
+    stale_settings = SimpleNamespace(
+        TESTING=False,
+        PYTEST_CURRENT_TEST="",
+        SCHEDULER_LOCK_FAIL_OPEN=False,
+    )
+    live_settings = SimpleNamespace(
+        TESTING=False,
+        PYTEST_CURRENT_TEST="",
+        SCHEDULER_LOCK_FAIL_OPEN=True,
+    )
+
+    with (
+        patch.object(
+            orchestrator_module,
+            "get_settings",
+            side_effect=[stale_settings, live_settings],
+        ),
+        patch(
+            "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
+            return_value=redis,
+        ),
     ):
         assert await orchestrator._acquire_dispatch_lock("demo") is False
-
-    monkeypatch.setattr(
-        orchestrator_module.settings, "SCHEDULER_LOCK_FAIL_OPEN", True, raising=False
-    )
-    with patch(
-        "app.modules.governance.domain.scheduler.orchestrator.get_redis_client",
-        return_value=redis,
-    ):
         assert await orchestrator._acquire_dispatch_lock("demo") is True
 
 
@@ -95,21 +129,12 @@ async def test_cohort_analysis_job_celery_error_still_updates_last_run(
 @pytest.mark.asyncio
 async def test_fetch_live_carbon_intensity_success_and_cache(
     orchestrator: SchedulerOrchestrator,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import app.modules.governance.domain.scheduler.orchestrator as orchestrator_module
 
-    monkeypatch.setattr(
-        orchestrator_module.settings,
-        "ELECTRICITY_MAPS_API_KEY",
-        "abc123",
-        raising=False,
-    )
-    monkeypatch.setattr(
-        orchestrator_module.settings,
-        "CARBON_INTENSITY_API_TIMEOUT_SECONDS",
-        3,
-        raising=False,
+    settings_obj = SimpleNamespace(
+        ELECTRICITY_MAPS_API_KEY="abc123",
+        CARBON_INTENSITY_API_TIMEOUT_SECONDS=3,
     )
 
     response = MagicMock()
@@ -119,57 +144,57 @@ async def test_fetch_live_carbon_intensity_success_and_cache(
     client = AsyncMock()
     client.get = AsyncMock(return_value=response)
 
-    with patch(
-        "app.shared.core.http.get_http_client",
-        return_value=client,
-    ):
-        value = await orchestrator._fetch_live_carbon_intensity("us-east-1")
-        assert value == 97.0
+    with patch.object(orchestrator_module, "get_settings", return_value=settings_obj):
+        with patch(
+            "app.shared.core.http.get_http_client",
+            return_value=client,
+        ):
+            value = await orchestrator._fetch_live_carbon_intensity("us-east-1")
+            assert value == 97.0
 
-    with patch(
-        "app.shared.core.http.get_http_client"
-    ) as get_http_client:
-        cached_value = await orchestrator._fetch_live_carbon_intensity("us-east-1")
-        assert cached_value == 97.0
-        get_http_client.assert_not_called()
+        with patch(
+            "app.shared.core.http.get_http_client"
+        ) as get_http_client:
+            cached_value = await orchestrator._fetch_live_carbon_intensity("us-east-1")
+            assert cached_value == 97.0
+            get_http_client.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_fetch_live_carbon_intensity_none_and_exception_paths(
     orchestrator: SchedulerOrchestrator,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import app.modules.governance.domain.scheduler.orchestrator as orchestrator_module
 
-    monkeypatch.setattr(
-        orchestrator_module.settings, "ELECTRICITY_MAPS_API_KEY", None, raising=False
-    )
-    assert await orchestrator._fetch_live_carbon_intensity("us-east-1") is None
+    settings_obj = SimpleNamespace(ELECTRICITY_MAPS_API_KEY=None)
+    with patch.object(orchestrator_module, "get_settings", return_value=settings_obj):
+        assert await orchestrator._fetch_live_carbon_intensity("us-east-1") is None
 
-    monkeypatch.setattr(
-        orchestrator_module.settings,
-        "ELECTRICITY_MAPS_API_KEY",
-        "abc123",
-        raising=False,
-    )
-    assert await orchestrator._fetch_live_carbon_intensity("unknown-region") is None
+        settings_obj.ELECTRICITY_MAPS_API_KEY = "abc123"
+        assert await orchestrator._fetch_live_carbon_intensity("unknown-region") is None
 
     response = MagicMock()
     response.raise_for_status.return_value = None
     response.json.return_value = {}
     client = AsyncMock()
     client.get = AsyncMock(return_value=response)
-    with patch(
-        "app.shared.core.http.get_http_client",
-        return_value=client,
+    with (
+        patch.object(orchestrator_module, "get_settings", return_value=settings_obj),
+        patch(
+            "app.shared.core.http.get_http_client",
+            return_value=client,
+        ),
     ):
         assert await orchestrator._fetch_live_carbon_intensity("us-east-1") is None
 
     client = AsyncMock()
     client.get = AsyncMock(side_effect=httpx.HTTPError("boom"))
-    with patch(
-        "app.shared.core.http.get_http_client",
-        return_value=client,
+    with (
+        patch.object(orchestrator_module, "get_settings", return_value=settings_obj),
+        patch(
+            "app.shared.core.http.get_http_client",
+            return_value=client,
+        ),
     ):
         assert await orchestrator._fetch_live_carbon_intensity("us-east-1") is None
 
@@ -177,24 +202,52 @@ async def test_fetch_live_carbon_intensity_none_and_exception_paths(
 @pytest.mark.asyncio
 async def test_is_low_carbon_window_uses_live_intensity_threshold(
     orchestrator: SchedulerOrchestrator,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import app.modules.governance.domain.scheduler.orchestrator as orchestrator_module
 
-    monkeypatch.setattr(
-        orchestrator_module.settings,
-        "CARBON_LOW_INTENSITY_THRESHOLD",
-        150.0,
-        raising=False,
+    settings_obj = SimpleNamespace(CARBON_LOW_INTENSITY_THRESHOLD=150.0)
+    with patch.object(orchestrator_module, "get_settings", return_value=settings_obj):
+        with patch.object(
+            orchestrator, "_fetch_live_carbon_intensity", AsyncMock(return_value=120.0)
+        ):
+            assert await orchestrator.is_low_carbon_window("us-east-1") is True
+        with patch.object(
+            orchestrator, "_fetch_live_carbon_intensity", AsyncMock(return_value=180.0)
+        ):
+            assert await orchestrator.is_low_carbon_window("us-east-1") is False
+
+
+@pytest.mark.asyncio
+async def test_process_background_jobs_inline_uses_live_batch_settings(
+    orchestrator: SchedulerOrchestrator,
+) -> None:
+    import app.modules.governance.domain.scheduler.orchestrator as orchestrator_module
+
+    db = AsyncMock()
+    orchestrator.session_maker.return_value.__aenter__.return_value = db
+    orchestrator.session_maker.return_value.__aexit__.return_value = None
+    settings_obj = SimpleNamespace(
+        BACKGROUND_JOB_PROCESS_BATCH_SIZE=3,
+        BACKGROUND_JOB_PROCESS_MAX_BATCHES_PER_TICK=2,
     )
-    with patch.object(
-        orchestrator, "_fetch_live_carbon_intensity", AsyncMock(return_value=120.0)
+
+    with (
+        patch.object(orchestrator_module, "get_settings", return_value=settings_obj),
+        patch(
+            "app.modules.governance.domain.scheduler.orchestrator.mark_session_system_context",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.modules.governance.domain.jobs.processor.JobProcessor",
+        ) as processor_cls,
     ):
-        assert await orchestrator.is_low_carbon_window("us-east-1") is True
-    with patch.object(
-        orchestrator, "_fetch_live_carbon_intensity", AsyncMock(return_value=180.0)
-    ):
-        assert await orchestrator.is_low_carbon_window("us-east-1") is False
+        processor = processor_cls.return_value
+        processor.process_pending_jobs = AsyncMock(
+            return_value={"processed": 0, "succeeded": 0, "failed": 0}
+        )
+        await orchestrator._process_background_jobs_inline()
+
+    processor.process_pending_jobs.assert_awaited_once_with(limit=3)
 
 
 @pytest.mark.asyncio

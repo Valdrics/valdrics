@@ -45,7 +45,7 @@ async function parseErrorMessage(response: Response, fallback: string): Promise<
 export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsInput) {
 	const { getData, state } = input;
 
-	async function refreshAcceptanceKpis() {
+	async function loadAcceptanceKpisInternal({ silent = false }: { silent?: boolean } = {}) {
 		const data = getData();
 		if (!hasSessionToken(data)) return;
 		if (hasInvalidUnitWindow(state.unitStartDate, state.unitEndDate)) {
@@ -55,8 +55,10 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 		}
 
 		state.refreshingAcceptanceKpis = true;
-		state.error = '';
-		state.success = '';
+		if (!silent) {
+			state.error = '';
+			state.success = '';
+		}
 		try {
 			const headers = buildHeaders(data);
 			const res = await api.get(
@@ -73,21 +75,31 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 				throw new Error(await parseErrorMessage(res, 'Failed to load acceptance KPIs.'));
 			}
 			state.acceptanceKpis = await res.json();
-			state.success = 'Acceptance KPI evidence refreshed.';
+			if (!silent) {
+				state.success = 'Acceptance KPI evidence refreshed.';
+			}
 		} catch (error) {
-			const err = error as Error;
-			state.error = err.message || 'Failed to refresh acceptance KPIs.';
+			if (!silent) {
+				const err = error as Error;
+				state.error = err.message || 'Failed to refresh acceptance KPIs.';
+			}
 		} finally {
 			state.refreshingAcceptanceKpis = false;
 		}
 	}
 
-	async function refreshAcceptanceKpiHistory() {
+	async function refreshAcceptanceKpis() {
+		await loadAcceptanceKpisInternal();
+	}
+
+	async function loadAcceptanceKpiHistoryInternal({ silent = false }: { silent?: boolean } = {}) {
 		const data = getData();
 		if (!hasSessionToken(data)) return;
 		state.refreshingAcceptanceKpiHistory = true;
-		state.error = '';
-		state.success = '';
+		if (!silent) {
+			state.error = '';
+			state.success = '';
+		}
 		try {
 			const headers = buildHeaders(data);
 			const res = await api.get(edgeApiPath(buildAcceptanceKpiHistoryUrl(50)), { headers });
@@ -96,13 +108,21 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 			}
 			const payload = (await res.json()) as AcceptanceKpiEvidenceResponse;
 			state.acceptanceKpiHistory = payload.items || [];
-			state.success = 'Acceptance KPI evidence history refreshed.';
+			if (!silent) {
+				state.success = 'Acceptance KPI evidence history refreshed.';
+			}
 		} catch (error) {
-			const err = error as Error;
-			state.error = err.message || 'Failed to refresh acceptance KPI history.';
+			if (!silent) {
+				const err = error as Error;
+				state.error = err.message || 'Failed to refresh acceptance KPI history.';
+			}
 		} finally {
 			state.refreshingAcceptanceKpiHistory = false;
 		}
+	}
+
+	async function refreshAcceptanceKpiHistory() {
+		await loadAcceptanceKpiHistoryInternal();
 	}
 
 	async function captureAcceptanceKpis() {
@@ -137,7 +157,7 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 			state.lastAcceptanceKpiCapture = payload;
 			state.acceptanceKpis = payload.acceptance_kpis;
 			state.success = 'Acceptance KPI evidence captured.';
-			void refreshAcceptanceKpiHistory();
+			void loadAcceptanceKpiHistoryInternal({ silent: true });
 		} catch (error) {
 			const err = error as Error;
 			state.error = err.message || 'Failed to capture acceptance KPI evidence.';
@@ -146,12 +166,14 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 		}
 	}
 
-	async function refreshAcceptanceRuns() {
+	async function loadAcceptanceRunsInternal({ silent = false }: { silent?: boolean } = {}) {
 		const data = getData();
 		if (!hasSessionToken(data)) return;
 		state.refreshingAcceptanceRuns = true;
-		state.error = '';
-		state.success = '';
+		if (!silent) {
+			state.error = '';
+			state.success = '';
+		}
 		try {
 			const headers = buildHeaders(data);
 			const res = await api.get(edgeApiPath(buildAcceptanceEvidenceUrl()), { headers });
@@ -162,13 +184,39 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 			}
 			const payload = (await res.json()) as IntegrationAcceptanceEvidenceResponse;
 			state.acceptanceRuns = buildAcceptanceRuns(payload.items || []);
-			state.success = 'Integration acceptance evidence refreshed.';
+			if (!silent) {
+				state.success = 'Integration acceptance evidence refreshed.';
+			}
 		} catch (error) {
-			const err = error as Error;
-			state.error = err.message || 'Failed to refresh integration acceptance evidence.';
+			if (!silent) {
+				const err = error as Error;
+				state.error = err.message || 'Failed to refresh integration acceptance evidence.';
+			}
 		} finally {
 			state.refreshingAcceptanceRuns = false;
 		}
+	}
+
+	async function refreshAcceptanceRuns() {
+		await loadAcceptanceRunsInternal();
+	}
+
+	async function preloadAcceptanceEvidence({
+		includeKpis = true,
+		includeRuns = true
+	}: {
+		includeKpis?: boolean;
+		includeRuns?: boolean;
+	} = {}) {
+		const tasks: Promise<void>[] = [];
+		if (includeKpis) {
+			tasks.push(loadAcceptanceKpisInternal({ silent: true }));
+			tasks.push(loadAcceptanceKpiHistoryInternal({ silent: true }));
+		}
+		if (includeRuns) {
+			tasks.push(loadAcceptanceRunsInternal({ silent: true }));
+		}
+		await Promise.all(tasks);
 	}
 
 	async function captureAcceptanceRuns() {
@@ -208,7 +256,7 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 			}
 			const payload = (await res.json()) as IntegrationAcceptanceCaptureResponse;
 			state.lastAcceptanceCapture = payload;
-			await refreshAcceptanceRuns();
+			await loadAcceptanceRunsInternal({ silent: true });
 			state.success = `Integration acceptance run captured (${payload.run_id.slice(0, 8)}...) - ${payload.passed} passed / ${payload.failed} failed.`;
 		} catch (error) {
 			const err = error as Error;
@@ -289,13 +337,13 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 			const kpiPayload = await captureAcceptanceKpisOrThrow(data);
 			state.lastAcceptanceKpiCapture = kpiPayload;
 			state.acceptanceKpis = kpiPayload.acceptance_kpis;
-			await refreshAcceptanceKpiHistory();
+			await loadAcceptanceKpiHistoryInternal({ silent: true });
 			state.capturingAcceptanceKpis = false;
 
 			state.capturingAcceptanceRuns = true;
 			const integrationPayload = await captureIntegrationAcceptanceOrThrow(data);
 			state.lastAcceptanceCapture = integrationPayload;
-			await refreshAcceptanceRuns();
+			await loadAcceptanceRunsInternal({ silent: true });
 			state.capturingAcceptanceRuns = false;
 
 			state.success = `Acceptance suite captured: KPIs (${kpiPayload.event_id.slice(0, 8)}...) + integrations (${integrationPayload.run_id.slice(0, 8)}...)`;
@@ -374,6 +422,7 @@ export function createOpsOperationalAcceptanceActions(input: AcceptanceActionsIn
 	return {
 		refreshAcceptanceKpis,
 		refreshAcceptanceKpiHistory,
+		preloadAcceptanceEvidence,
 		captureAcceptanceKpis,
 		refreshAcceptanceRuns,
 		captureAcceptanceRuns,

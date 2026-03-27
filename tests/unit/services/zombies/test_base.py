@@ -2,6 +2,7 @@ import pytest
 from typing import Dict
 import asyncio
 from typing import List, Any
+from types import SimpleNamespace
 from unittest.mock import patch
 from app.modules.optimization.domain.ports import BaseZombieDetector
 from app.modules.optimization.domain.plugin import ZombiePlugin
@@ -123,3 +124,20 @@ async def test_base_detector_does_not_swallow_base_exceptions():
 
     with pytest.raises(FatalPluginFailure):
         await detector.scan_all()
+
+
+@pytest.mark.asyncio
+async def test_base_detector_uses_live_plugin_timeout_setting():
+    detector = MockDetector()
+    plugin = MockPlugin("slow_plugin", should_timeout=True)
+    live_settings = SimpleNamespace(ZOMBIE_PLUGIN_TIMEOUT_SECONDS=0.01)
+
+    with patch(
+        "app.modules.optimization.domain.ports.get_settings",
+        return_value=live_settings,
+    ):
+        category_key, items, metadata = await detector._run_plugin_with_timeout(plugin)
+
+    assert category_key == "slow_plugin"
+    assert items == []
+    assert metadata["status"] == "timeout"

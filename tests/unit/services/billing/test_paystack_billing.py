@@ -2,6 +2,7 @@ import pytest
 import hmac
 import hashlib
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from app.modules.billing.domain.billing.paystack_billing import (
@@ -37,6 +38,23 @@ def mock_settings():
 
 
 class TestPaystackClient:
+    def test_paystack_shared_settings_proxy_reads_live_settings(self):
+        from app.modules.billing.domain.billing import paystack_shared
+
+        with patch.object(
+            paystack_shared,
+            "get_settings",
+            return_value=SimpleNamespace(PAYSTACK_SECRET_KEY="sk_live_1"),
+        ):
+            assert paystack_shared.settings.PAYSTACK_SECRET_KEY == "sk_live_1"
+
+        with patch.object(
+            paystack_shared,
+            "get_settings",
+            return_value=SimpleNamespace(PAYSTACK_SECRET_KEY="sk_live_2"),
+        ):
+            assert paystack_shared.settings.PAYSTACK_SECRET_KEY == "sk_live_2"
+
     @pytest.mark.asyncio
     async def test_paystack_client_init_error(self):
         with patch("app.modules.billing.domain.billing.paystack_shared.settings") as m:

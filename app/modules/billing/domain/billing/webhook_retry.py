@@ -36,7 +36,6 @@ from app.modules.governance.domain.jobs.errors import (
     PermanentJobError,
 )
 from app.modules.governance.domain.jobs.processor import (
-    JOB_LOCK_TIMEOUT_MINUTES,
     enqueue_job,
 )
 from app.shared.core.config import get_settings
@@ -57,6 +56,17 @@ WEBHOOK_MAX_ATTEMPTS = 5  # More retries for revenue-critical
 def _webhook_idempotency_ttl_hours() -> int:
     """Resolve idempotency TTL from the current settings snapshot."""
     return get_settings().WEBHOOK_IDEMPOTENCY_TTL_HOURS
+
+
+def _job_lock_timeout_minutes() -> int:
+    """Resolve stale-running cutoff from the current job processor settings."""
+    try:
+        timeout_minutes = int(
+            getattr(get_settings(), "BACKGROUND_JOB_RUNNING_TIMEOUT_MINUTES", 30)
+        )
+    except (TypeError, ValueError):
+        timeout_minutes = 30
+    return max(1, timeout_minutes)
 
 
 class WebhookRetryableError(JobExecutionError):
@@ -172,7 +182,7 @@ class WebhookRetryService:
         started_at = self._normalize_datetime(getattr(job, "started_at", None))
         if started_at is None:
             return False
-        cutoff = now - timedelta(minutes=JOB_LOCK_TIMEOUT_MINUTES)
+        cutoff = now - timedelta(minutes=_job_lock_timeout_minutes())
         return started_at <= cutoff
 
     async def _reload_existing_job_for_update(self, job_id: Any) -> BackgroundJob | None:

@@ -1,7 +1,7 @@
 <script lang="ts">
-	import FindingsTable from '$lib/components/FindingsTable.svelte';
+	import { onMount } from 'svelte';
+	import { createLazyComponent } from '$lib/lazyComponent';
 	import SavingsHero from '$lib/components/SavingsHero.svelte';
-	import ZombieTable from '$lib/components/ZombieTable.svelte';
 	import type { ZombieCollections } from '$lib/zombieCollections';
 
 	type DashboardFinding = {
@@ -53,39 +53,76 @@
 		recommended_instance_type?: string;
 	};
 
+	type FindingsTableProps = {
+		resources: Array<{
+			provider: 'aws' | 'azure' | 'gcp';
+			finding_id?: string;
+			resource_id: string;
+			resource_type?: string;
+			monthly_cost?: string | number;
+			confidence?: 'high' | 'medium' | 'low';
+			risk_if_deleted?: 'high' | 'medium' | 'low';
+			explanation: string;
+			confidence_reason?: string;
+			recommended_action?: string;
+			connection_id?: string;
+			owner?: string;
+			is_gpu?: boolean;
+		}>;
+		onRemediate: (finding: RemediationFinding) => void;
+	};
+
+	type ZombieTableProps = {
+		zombies: ZombieCollections<RemediationFinding> | null | undefined;
+		zombieCount: number;
+		onRemediate: (finding: RemediationFinding) => void;
+	};
+
+	const loadFindingsTable = createLazyComponent<FindingsTableProps>(
+		() => import('$lib/components/FindingsTable.svelte')
+	);
+	const loadZombieTable = createLazyComponent<ZombieTableProps>(
+		() => import('$lib/components/ZombieTable.svelte')
+	);
+
 	let { zombies, analysisText, zombieCount, onRemediate } = $props<{
 		zombies: DashboardZombieCollections | null | undefined;
 		analysisText: string;
 		zombieCount: number;
 		onRemediate: (finding: RemediationFinding) => void;
 	}>();
+
+	let heavyTablesAnchor: HTMLDivElement | null = $state(null);
+	let heavyTablesVisible = $state(false);
+
+	onMount(() => {
+		if (import.meta.env.MODE === 'test' || typeof IntersectionObserver === 'undefined') {
+			heavyTablesVisible = true;
+			return;
+		}
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					heavyTablesVisible = true;
+					observer.disconnect();
+				}
+			},
+			{ rootMargin: '220px 0px' }
+		);
+
+		if (heavyTablesAnchor) {
+			observer.observe(heavyTablesAnchor);
+		}
+
+		return () => observer.disconnect();
+	});
 </script>
 
 {#if zombies?.ai_analysis}
 	{@const aiData = zombies.ai_analysis as SavingsHeroData}
 
 	<SavingsHero {aiData} />
-
-	{#if aiData.resources && aiData.resources.length > 0}
-		<FindingsTable
-			resources={aiData.resources as Array<{
-				provider: 'aws' | 'azure' | 'gcp';
-				finding_id?: string;
-				resource_id: string;
-				resource_type?: string;
-				monthly_cost?: string | number;
-				confidence?: 'high' | 'medium' | 'low';
-				risk_if_deleted?: 'high' | 'medium' | 'low';
-				explanation: string;
-				confidence_reason?: string;
-				recommended_action?: string;
-				connection_id?: string;
-				owner?: string;
-				is_gpu?: boolean;
-			}>}
-			{onRemediate}
-		/>
-	{/if}
 
 	{#if aiData.general_recommendations && aiData.general_recommendations.length > 0}
 		<div class="card stagger-enter engineering-dashboard__recommendations">
@@ -110,12 +147,49 @@
 	</div>
 {/if}
 
-{#if zombieCount > 0}
-	<ZombieTable
-		zombies={zombies as ZombieCollections<RemediationFinding> | null | undefined}
-		{zombieCount}
-		{onRemediate}
-	/>
+{#if (zombies?.ai_analysis && (zombies.ai_analysis as SavingsHeroData).resources?.length) || zombieCount > 0}
+	<div bind:this={heavyTablesAnchor}>
+		{#if heavyTablesVisible}
+			{#if zombies?.ai_analysis}
+				{@const aiData = zombies.ai_analysis as SavingsHeroData}
+				{#if aiData.resources && aiData.resources.length > 0}
+					{#await loadFindingsTable()}
+						<div class="card stagger-enter engineering-dashboard__table-skeleton">
+							<div class="skeleton h-8 w-48 mb-4"></div>
+							<div class="skeleton h-64 rounded-2xl"></div>
+						</div>
+					{:then module}
+						{@const FindingsTable = module.default}
+						<FindingsTable
+							resources={aiData.resources as FindingsTableProps['resources']}
+							{onRemediate}
+						/>
+					{/await}
+				{/if}
+			{/if}
+
+			{#if zombieCount > 0}
+				{#await loadZombieTable()}
+					<div class="card stagger-enter engineering-dashboard__table-skeleton">
+						<div class="skeleton h-8 w-48 mb-4"></div>
+						<div class="skeleton h-64 rounded-2xl"></div>
+					</div>
+				{:then module}
+					{@const ZombieTable = module.default}
+					<ZombieTable
+						zombies={zombies as ZombieCollections<RemediationFinding> | null | undefined}
+						{zombieCount}
+						{onRemediate}
+					/>
+				{/await}
+			{/if}
+		{:else}
+			<div class="card stagger-enter engineering-dashboard__table-skeleton">
+				<div class="skeleton h-8 w-48 mb-4"></div>
+				<div class="skeleton h-64 rounded-2xl"></div>
+			</div>
+		{/if}
+	</div>
 {/if}
 
 <style>
@@ -166,5 +240,9 @@
 		font-size: var(--text-sm);
 		line-height: 1.7;
 		color: var(--color-ink-300);
+	}
+
+	.engineering-dashboard__table-skeleton {
+		animation-delay: 520ms;
 	}
 </style>

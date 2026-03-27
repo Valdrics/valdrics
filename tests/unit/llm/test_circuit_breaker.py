@@ -271,6 +271,23 @@ class TestLLMCircuitBreaker:
             with breaker.protect("provider"):
                 pass
 
+    def test_protect_half_open_rejects_second_probe_while_first_in_flight(self, breaker):
+        """Half-open recovery should serialize probes instead of allowing concurrency."""
+        breaker.record_failure("provider")
+        breaker.record_failure("provider")
+        breaker.record_failure("provider")
+
+        circuit = breaker._get_circuit("provider")
+        circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(seconds=61)
+
+        with breaker.protect("provider"):
+            with pytest.raises(CircuitOpenError, match="Circuit open for provider"):
+                with breaker.protect("provider"):
+                    pass
+            breaker.record_success("provider")
+
+        assert circuit.probe_in_flight is False
+
     def test_protect_context_manager_does_not_swallow_fatal_errors(self, breaker):
         with pytest.raises(KeyboardInterrupt):
             with breaker.protect("provider"):

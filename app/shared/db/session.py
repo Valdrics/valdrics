@@ -46,8 +46,6 @@ __all__ = ["ValdricsException"]
 # without importing `app/main.py`.
 import app.models  # noqa: F401, E402
 
-settings = get_settings()
-
 _RLS_EXEMPT_TABLE_PATTERN = re.compile(
     r"\b(" + "|".join(re.escape(table.lower()) for table in RLS_EXEMPT_TABLES) + r")\b"
 )
@@ -311,7 +309,9 @@ def async_session_maker(*args: Any, **kwargs: Any) -> Any:
 def _get_slow_query_threshold_seconds() -> float:
     """Return configurable slow-query threshold with a safe fallback."""
     try:
-        threshold = float(getattr(settings, "DB_SLOW_QUERY_THRESHOLD_SECONDS", 0.2))
+        threshold = float(
+            getattr(get_settings(), "DB_SLOW_QUERY_THRESHOLD_SECONDS", 0.2)
+        )
     except (TypeError, ValueError):
         threshold = 0.2
     return threshold if threshold > 0 else 0.2

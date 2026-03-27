@@ -8,8 +8,6 @@
 		canAccessOpsJobSlo
 	} from '$lib/entitlements';
 	import OpsStatusBanners from './OpsStatusBanners.svelte';
-	import OpsIngestionSlaSection from './OpsIngestionSlaSection.svelte';
-	import OpsJobSloSection from './OpsJobSloSection.svelte';
 	import OpsUnitEconomicsSection from './OpsUnitEconomicsSection.svelte';
 	import { buildOpsOperationalInitialState } from './opsOperationalState';
 	import { createOpsOperationalCoreActions } from './opsOperationalCoreActions';
@@ -27,6 +25,7 @@
 		jobSloMetricBadgeClass
 	} from './opsUtils';
 	import { formatDelta, unitDeltaClass } from './unitEconomics';
+	import type { IngestionSLAResponse, JobSLOResponse } from './opsTypes';
 
 	const OPS_REQUEST_TIMEOUT_MS = 10000;
 	const loadOpsAcceptanceKpiSection = createLazyComponent(
@@ -38,11 +37,34 @@
 	const loadOpsCloseWorkflowSection = createLazyComponent(
 		() => import('./OpsCloseWorkflowSection.svelte')
 	);
+	const loadOpsIngestionSlaSection = createLazyComponent<{
+		ingestionSlaWindowHours: number;
+		refreshingIngestionSla: boolean;
+		refreshIngestionSla: () => void | Promise<void>;
+		ingestionSla: IngestionSLAResponse | null;
+		ingestionSlaBadgeClass: (value: IngestionSLAResponse) => string;
+		formatNumber: (value: number | null | undefined, digits?: number) => string;
+		formatDuration: (value: number | null | undefined) => string;
+		formatDate: (value: string | null | undefined) => string;
+	}>(() => import('./OpsIngestionSlaSection.svelte'));
+	const loadOpsJobSloSection = createLazyComponent<{
+		jobSloWindowHours: number;
+		refreshingJobSlo: boolean;
+		refreshJobSlo: () => void | Promise<void>;
+		jobSlo: JobSLOResponse | null;
+		jobSloBadgeClass: (value: JobSLOResponse) => string;
+		jobSloMetricBadgeClass: (metric: JobSLOResponse['metrics'][number]) => string;
+		formatDuration: (value: number | null | undefined) => string;
+	}>(() => import('./OpsJobSloSection.svelte'));
 
 	let { data } = $props();
 	const opsState = $state(buildOpsOperationalInitialState());
+	let reliabilityAnchor: HTMLDivElement | null = $state(null);
 	let advancedEvidenceAnchor: HTMLDivElement | null = $state(null);
+	let reliabilityVisible = $state(false);
 	let advancedEvidenceVisible = $state(false);
+	let reliabilityLoaded = $state(false);
+	let advancedEvidenceLoaded = $state(false);
 	const canAccessJobSlo = () => canAccessOpsJobSlo(data.subscription?.tier, data.profile?.role);
 	const canAccessAcceptanceKpis = () =>
 		canAccessOpsAcceptanceEvidence(data.subscription?.tier, data.profile?.role);
@@ -54,9 +76,7 @@
 		state: opsState,
 		requestTimeoutMs: OPS_REQUEST_TIMEOUT_MS,
 		access: {
-			jobSlo: canAccessJobSlo,
-			acceptanceKpis: canAccessAcceptanceKpis,
-			closeWorkflow: canAccessCloseWorkflow
+			jobSlo: canAccessJobSlo
 		}
 	});
 
@@ -81,29 +101,65 @@
 	const closeStatusBadgeClassSafe = (value: string | null | undefined): string =>
 		closeStatusBadgeClass(value ?? undefined);
 
+	$effect(() => {
+		if (!reliabilityVisible || reliabilityLoaded) return;
+		reliabilityLoaded = true;
+		void coreActions.loadReliabilityData({ silent: true });
+	});
+
+	$effect(() => {
+		if (!advancedEvidenceVisible || advancedEvidenceLoaded) return;
+		advancedEvidenceLoaded = true;
+		void acceptanceActions.preloadAcceptanceEvidence({
+			includeKpis: canAccessAcceptanceKpis(),
+			includeRuns: true
+		});
+		if (canAccessCloseWorkflow()) {
+			void closeActions.preloadClosePackage();
+		}
+	});
+
 	onMount(() => {
 		if (import.meta.env.MODE === 'test' || typeof IntersectionObserver === 'undefined') {
+			reliabilityVisible = true;
 			advancedEvidenceVisible = true;
-		} else {
-			const observer = new IntersectionObserver(
-				(entries) => {
-					if (entries.some((entry) => entry.isIntersecting)) {
-						advancedEvidenceVisible = true;
-						observer.disconnect();
-					}
-				},
-				{ rootMargin: '240px 0px' }
-			);
-
-			if (advancedEvidenceAnchor) {
-				observer.observe(advancedEvidenceAnchor);
-			}
-
-			void coreActions.loadOperationalData();
-			return () => observer.disconnect();
+			void coreActions.loadPrimaryOperationalData();
+			return;
 		}
 
-		void coreActions.loadOperationalData();
+		const reliabilityObserver = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					reliabilityVisible = true;
+					reliabilityObserver.disconnect();
+				}
+			},
+			{ rootMargin: '200px 0px' }
+		);
+
+		const advancedObserver = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					advancedEvidenceVisible = true;
+					advancedObserver.disconnect();
+				}
+			},
+			{ rootMargin: '240px 0px' }
+		);
+
+		if (reliabilityAnchor) {
+			reliabilityObserver.observe(reliabilityAnchor);
+		}
+
+		if (advancedEvidenceAnchor) {
+			advancedObserver.observe(advancedEvidenceAnchor);
+		}
+
+		void coreActions.loadPrimaryOperationalData();
+		return () => {
+			reliabilityObserver.disconnect();
+			advancedObserver.disconnect();
+		};
 	});
 </script>
 
@@ -127,38 +183,71 @@
 		bind:unitSettings={opsState.unitSettings}
 	/>
 
-	<OpsIngestionSlaSection
-		{...{
-			refreshingIngestionSla: opsState.refreshingIngestionSla,
-			refreshIngestionSla: coreActions.refreshIngestionSla,
-			ingestionSla: opsState.ingestionSla,
-			ingestionSlaBadgeClass,
-			formatNumber: formatNumberSafe,
-			formatDuration: formatDurationSafe,
-			formatDate: formatDateSafe
-		}}
-		bind:ingestionSlaWindowHours={opsState.ingestionSlaWindowHours}
-	/>
+	<div bind:this={reliabilityAnchor}>
+		{#if reliabilityVisible}
+			{#await loadOpsIngestionSlaSection()}
+				<div class="card">
+					<div class="skeleton h-8 w-48 mb-4"></div>
+					<div class="skeleton h-40 rounded-2xl"></div>
+				</div>
+			{:then module}
+				{@const OpsIngestionSlaSection = module.default}
+				<OpsIngestionSlaSection
+					{...{
+						refreshingIngestionSla: opsState.refreshingIngestionSla,
+						refreshIngestionSla: coreActions.refreshIngestionSla,
+						ingestionSla: opsState.ingestionSla,
+						ingestionSlaBadgeClass,
+						formatNumber: formatNumberSafe,
+						formatDuration: formatDurationSafe,
+						formatDate: formatDateSafe
+					}}
+					bind:ingestionSlaWindowHours={opsState.ingestionSlaWindowHours}
+				/>
+			{:catch}
+				<div class="card">
+					<div class="skeleton h-8 w-48 mb-4"></div>
+				</div>
+			{/await}
 
-	{#if canAccessJobSlo()}
-		<OpsJobSloSection
-			{...{
-				refreshingJobSlo: opsState.refreshingJobSlo,
-				refreshJobSlo: coreActions.refreshJobSlo,
-				jobSlo: opsState.jobSlo,
-				jobSloBadgeClass,
-				jobSloMetricBadgeClass,
-				formatDuration: formatDurationSafe
-			}}
-			bind:jobSloWindowHours={opsState.jobSloWindowHours}
-		/>
-	{:else}
-		<UpgradeNotice
-			currentTier={data.subscription?.tier}
-			requiredTier="pro"
-			feature="job reliability SLO evidence"
-		/>
-	{/if}
+			{#if canAccessJobSlo()}
+				{#await loadOpsJobSloSection()}
+					<div class="card">
+						<div class="skeleton h-8 w-48 mb-4"></div>
+						<div class="skeleton h-40 rounded-2xl"></div>
+					</div>
+				{:then module}
+					{@const OpsJobSloSection = module.default}
+					<OpsJobSloSection
+						{...{
+							refreshingJobSlo: opsState.refreshingJobSlo,
+							refreshJobSlo: coreActions.refreshJobSlo,
+							jobSlo: opsState.jobSlo,
+							jobSloBadgeClass,
+							jobSloMetricBadgeClass,
+							formatDuration: formatDurationSafe
+						}}
+						bind:jobSloWindowHours={opsState.jobSloWindowHours}
+					/>
+				{:catch}
+					<div class="card">
+						<div class="skeleton h-8 w-48 mb-4"></div>
+					</div>
+				{/await}
+			{:else}
+				<UpgradeNotice
+					currentTier={data.subscription?.tier}
+					requiredTier="pro"
+					feature="job reliability SLO evidence"
+				/>
+			{/if}
+		{:else}
+			<div class="card">
+				<div class="skeleton h-8 w-48 mb-4"></div>
+				<div class="skeleton h-40 rounded-2xl"></div>
+			</div>
+		{/if}
+	</div>
 
 	<div bind:this={advancedEvidenceAnchor}>
 		{#if advancedEvidenceVisible}

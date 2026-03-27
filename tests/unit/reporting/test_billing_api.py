@@ -190,11 +190,12 @@ async def test_load_billing_usage_returns_zeroes_without_tenant_context(mock_db)
 @pytest.mark.asyncio
 async def test_create_checkout_success(mock_db):
     with (
-        patch("app.modules.billing.api.v1.billing.settings") as mock_settings,
+        patch("app.modules.billing.api.v1.billing.get_settings") as mock_get_settings,
         patch(
             "app.modules.billing.domain.billing.paystack_billing.BillingService"
         ) as mock_service_cls,
     ):
+        mock_settings = mock_get_settings.return_value
         mock_settings.PAYSTACK_SECRET_KEY = "sk_test"
         mock_settings.FRONTEND_URL = "https://app"
         mock_service = mock_service_cls.return_value
@@ -209,7 +210,8 @@ async def test_create_checkout_success(mock_db):
 @pytest.mark.asyncio
 async def test_create_checkout_no_tenant(mock_user):
     mock_user.tenant_id = None
-    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
+    with patch("app.modules.billing.api.v1.billing.get_settings") as mock_get_settings:
+        mock_settings = mock_get_settings.return_value
         mock_settings.PAYSTACK_SECRET_KEY = "sk_test"
         async with AsyncClient(transport=transport, base_url="https://test") as ac:
             response = await ac.post("/api/v1/billing/checkout", json={"tier": "pro"})
@@ -218,7 +220,8 @@ async def test_create_checkout_no_tenant(mock_user):
 
 @pytest.mark.asyncio
 async def test_create_checkout_error(mock_db):
-    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
+    with patch("app.modules.billing.api.v1.billing.get_settings") as mock_get_settings:
+        mock_settings = mock_get_settings.return_value
         mock_settings.PAYSTACK_SECRET_KEY = "sk_test"
         mock_settings.FRONTEND_URL = "https://app.valdrics.test"
         mock_settings.CORS_ORIGINS = ["https://app.valdrics.test"]
@@ -239,7 +242,8 @@ async def test_create_checkout_error(mock_db):
 
 @pytest.mark.asyncio
 async def test_create_checkout_rate_unavailable_returns_503(mock_db):
-    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
+    with patch("app.modules.billing.api.v1.billing.get_settings") as mock_get_settings:
+        mock_settings = mock_get_settings.return_value
         mock_settings.PAYSTACK_SECRET_KEY = "sk_test"
         mock_settings.FRONTEND_URL = "https://app.valdrics.test"
         mock_settings.CORS_ORIGINS = ["https://app.valdrics.test"]
@@ -489,7 +493,8 @@ async def test_handle_webhook_returns_accepted_when_payload_is_queued(mock_db):
 
 @pytest.mark.asyncio
 async def test_handle_webhook_unauthorized_ip():
-    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
+    with patch("app.modules.billing.api.v1.billing.get_settings") as mock_get_settings:
+        mock_settings = mock_get_settings.return_value
         mock_settings.ENVIRONMENT = "production"
         async with AsyncClient(transport=transport, base_url="https://test") as ac:
             response = await ac.post(
@@ -500,7 +505,8 @@ async def test_handle_webhook_unauthorized_ip():
 
 @pytest.mark.asyncio
 async def test_handle_webhook_unauthorized_ip_staging():
-    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
+    with patch("app.modules.billing.api.v1.billing.get_settings") as mock_get_settings:
+        mock_settings = mock_get_settings.return_value
         mock_settings.ENVIRONMENT = "staging"
         async with AsyncClient(transport=transport, base_url="https://test") as ac:
             response = await ac.post(
@@ -511,7 +517,8 @@ async def test_handle_webhook_unauthorized_ip_staging():
 
 @pytest.mark.asyncio
 async def test_handle_webhook_rightmost_forwarded_ip_is_used():
-    with patch("app.modules.billing.api.v1.billing.settings") as mock_settings:
+    with patch("app.modules.billing.api.v1.billing.get_settings") as mock_get_settings:
+        mock_settings = mock_get_settings.return_value
         mock_settings.ENVIRONMENT = "production"
         mock_settings.TRUST_PROXY_HEADERS = True
         mock_settings.TRUSTED_PROXY_HOPS = 1

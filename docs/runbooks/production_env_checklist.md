@@ -265,6 +265,24 @@ This check fails if any of the following drift:
 
 Promotion should not proceed when the bundle verifier fails.
 
+## 2e. Render the operator handoff from verified reports
+
+Once the bundle verifies cleanly, render the single operator-facing handoff file:
+
+```bash
+uv run python scripts/render_managed_deployment_handoff.py --environment production
+```
+
+Default output:
+
+- `.runtime/deploy/<environment>/operator-handoff.md`
+
+Contract notes:
+
+- This file is derived from the verified runtime, migration, and deployment reports.
+- It is a human-friendly handoff for promotion review; the JSON reports remain the source of truth.
+- Regenerate it after any runtime env, migration env, or deployment artifact change.
+
 ## 3. Strict SaaS integration rules
 
 When `SAAS_STRICT_INTEGRATIONS=true`:
@@ -296,14 +314,15 @@ All tokens/secrets are stored in tenant notification settings.
 2. Publish immutable images with `.github/workflows/publish-release-images.yml`.
 3. Generate `.runtime/deploy/production/deployment.report.json` with `--release-tag`, `--api-image-digest`, and `--dashboard-image-digest`.
 4. Verify the bundle: `uv run python scripts/verify_managed_deployment_bundle.py --environment production`
-5. Validate the migration env: `uv run python scripts/validate_migration_env.py --env-file .runtime/production.migrate.env`
-6. Run migrations with the migration env:
+5. Render the operator handoff: `uv run python scripts/render_managed_deployment_handoff.py --environment production`
+6. Validate the migration env: `uv run python scripts/validate_migration_env.py --env-file .runtime/production.migrate.env`
+7. Run migrations with the migration env:
    `set -a && source .runtime/production.migrate.env && uv run alembic upgrade head`
-7. Validate the full runtime env:
+8. Validate the full runtime env:
    `uv run python scripts/validate_runtime_env.py --environment production --env-file .runtime/production.env`
-8. Apply the generated Koyeb secrets and dashboard public env.
-9. Promote API, worker, and dashboard using the digest-pinned `promotion_ref` values recorded in `.runtime/deploy/production/koyeb-release.json`.
-10. Validate health and notification paths.
+9. Apply the generated Koyeb secrets and dashboard public env.
+10. Promote API, worker, and dashboard using the digest-pinned `promotion_ref` values recorded in `.runtime/deploy/production/koyeb-release.json`.
+11. Validate health and notification paths.
 
 ## 6. Smoke tests after deploy
 

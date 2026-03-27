@@ -114,9 +114,12 @@ def test_gzip_middleware_registered():
 
 
 def test_refresh_fastapi_app_metadata_updates_title_version_and_openapi_cache():
+    from app import main as main_module
+
     original_title = valdrics_app.title
     original_version = valdrics_app.version
     original_openapi_schema = valdrics_app.openapi_schema
+    original_tracker = main_module.EmissionsTracker
     try:
         valdrics_app.openapi_schema = {"cached": True}
 
@@ -131,6 +134,28 @@ def test_refresh_fastapi_app_metadata_updates_title_version_and_openapi_cache():
         valdrics_app.title = original_title
         valdrics_app.version = original_version
         valdrics_app.openapi_schema = original_openapi_schema
+        main_module.EmissionsTracker = original_tracker
+
+
+def test_refresh_fastapi_app_metadata_refreshes_emissions_tracker():
+    from app import main as main_module
+
+    original_tracker = main_module.EmissionsTracker
+    try:
+        refreshed_tracker = object()
+        with patch(
+            "app.main.app_runtime_module.refresh_emissions_tracker",
+            return_value=refreshed_tracker,
+        ) as mock_refresh:
+            refresh_fastapi_app_metadata(
+                MagicMock(APP_NAME="Valdrics Reloaded", VERSION="9.9.9")
+            )
+
+        mock_refresh.assert_called_once_with()
+
+        assert main_module.EmissionsTracker is refreshed_tracker
+    finally:
+        main_module.EmissionsTracker = original_tracker
 
 
 def _make_request(path: str = "/boom", method: str = "GET") -> Request:

@@ -15,7 +15,8 @@
 		setLandingCurrencyPreference,
 		type LandingCurrencyCode
 	} from '$lib/landing/currencyPreference';
-	import type { LandingAttribution } from '$lib/landing/landingFunnel';
+	import type { FunnelStage, LandingAttribution } from '$lib/landing/landingFunnel';
+	import type { LandingTelemetryContext } from '$lib/landing/landingTelemetry';
 	import {
 		DEFAULT_EXPERIMENT_ASSIGNMENTS,
 		LANDING_CONSENT_KEY,
@@ -28,7 +29,6 @@
 		buildLandingHeroSignupPath
 	} from '$lib/landing/landingHeroActions';
 	import { buildLandingPublicPath } from '$lib/landing/landingPublicAttribution';
-	import { createLandingHeroTelemetryBridge } from '$lib/landing/landingHeroTelemetryBridge';
 	import {
 		calculateLandingHeroScenarioMetrics,
 		formatLandingHeroCurrencyAmount
@@ -39,8 +39,24 @@
 	} from '$lib/landing/roiCalculator';
 	import { getReducedMotionPreference } from '$lib/landing/reducedMotion';
 	import { nextSnapshotIndex } from '$lib/landing/signalRotation';
-	import { BUYER_ROLE_VIEWS, HERO_ROLE_CONTEXT } from '$lib/landing/heroContent';
+	import { BUYER_ROLE_VIEWS, HERO_ROLE_CONTEXT } from '$lib/landing/heroContent.core';
 	import LandingHeroView from '$lib/components/landing/LandingHeroView.svelte';
+
+	type LandingHeroTelemetryApi = {
+		buildTelemetryContext: (stage?: FunnelStage) => LandingTelemetryContext;
+		emitLandingTelemetrySafe: (
+			name: string,
+			section: string,
+			value?: string,
+			context?: LandingTelemetryContext
+		) => void;
+		markEngaged: () => void;
+		initialize: () => void;
+		setTelemetryConsent: (accepted: boolean) => void;
+		trackCta: (action: string, section: string, value: string) => void;
+		trackScenarioAdjust: (control: string) => void;
+	};
+
 	const DEFAULT_SIGNAL_SNAPSHOT = LANDING_SIGNAL_SNAPSHOTS[0];
 	const ONE_PAGER_HREF = `${base}/resources/valdrics-enterprise-one-pager.md`,
 		RESOURCES_PATH = `${base}/resources`;
@@ -81,6 +97,7 @@
 		cookieBannerVisible = $state(false),
 		localCurrencyCode = $state<LandingCurrencyCode>(resolveDetectedLandingCurrency()),
 		roiCurrencyCode = $state<LandingCurrencyCode>(resolveInitialLandingCurrency());
+	let telemetryApi = $state<LandingHeroTelemetryApi | null>(null);
 	let activeSnapshot = $derived(LANDING_SIGNAL_SNAPSHOTS[snapshotIndex] ?? DEFAULT_SIGNAL_SNAPSHOT);
 	let activeBuyerRole = $derived(BUYER_ROLE_VIEWS[buyerRoleIndex] ?? BUYER_ROLE_VIEWS[0]);
 	let activeSignalLane = $derived(
@@ -160,6 +177,123 @@
 			windowMonths: scenarioWindowMonths
 		})
 	);
+
+	let telemetryBridgePromise: Promise<LandingHeroTelemetryApi> | null = null;
+
+	function buildFallbackTelemetryContext(stage?: FunnelStage): LandingTelemetryContext {
+		return {
+			visitorId,
+			persona: activeBuyerRole.id,
+			referrer: pageReferrer || undefined,
+			pagePath: $page.url.pathname,
+			funnelStage: stage,
+			experiment: {
+				hero: experiments.heroVariant,
+				cta: experiments.ctaVariant,
+				order: experiments.sectionOrderVariant
+			},
+			utm: attribution.utm
+		};
+	}
+
+	function buildTelemetryContext(stage?: FunnelStage): LandingTelemetryContext {
+		return telemetryApi?.buildTelemetryContext(stage) ?? buildFallbackTelemetryContext(stage);
+	}
+
+	function emitLandingTelemetrySafe(
+		name: string,
+		section: string,
+		value?: string,
+		context?: LandingTelemetryContext
+	): void {
+		telemetryApi?.emitLandingTelemetrySafe(name, section, value, context);
+	}
+
+	function initializeTelemetry(): void {
+		telemetryApi?.initialize();
+	}
+
+	function markEngaged(): void {
+		if (telemetryApi) {
+			telemetryApi.markEngaged();
+			return;
+		}
+
+		void ensureTelemetryBridge().then((api) => api.markEngaged());
+	}
+
+	function trackCta(action: string, section: string, value: string): void {
+		if (telemetryApi) {
+			telemetryApi.trackCta(action, section, value);
+			return;
+		}
+
+		void ensureTelemetryBridge().then((api) => api.trackCta(action, section, value));
+	}
+
+	function trackScenarioAdjust(control: string): void {
+		if (telemetryApi) {
+			telemetryApi.trackScenarioAdjust(control);
+			return;
+		}
+
+		void ensureTelemetryBridge().then((api) => api.trackScenarioAdjust(control));
+	}
+
+	function setTelemetryConsent(accepted: boolean): void {
+		telemetryEnabled = accepted;
+		cookieBannerVisible = false;
+
+		if (browser && typeof window !== 'undefined') {
+			window.localStorage.setItem(LANDING_CONSENT_KEY, accepted ? 'accepted' : 'rejected');
+		}
+
+		void ensureTelemetryBridge().then((api) => api.setTelemetryConsent(accepted));
+	}
+
+	async function ensureTelemetryBridge(): Promise<LandingHeroTelemetryApi> {
+		if (telemetryApi) {
+			return telemetryApi;
+		}
+
+		if (!telemetryBridgePromise) {
+			telemetryBridgePromise = import('$lib/landing/landingHeroTelemetryBridge')
+				.then(({ createLandingHeroTelemetryBridge }) => {
+					const nextTelemetryApi = createLandingHeroTelemetryBridge({
+						getTelemetryEnabled: () => telemetryEnabled,
+						setTelemetryEnabled: (value) => (telemetryEnabled = value),
+						getTelemetryInitialized: () => telemetryInitialized,
+						setTelemetryInitialized: (value) => (telemetryInitialized = value),
+						setCookieBannerVisible: (value) => (cookieBannerVisible = value),
+						getEngagedCaptured: () => engagedCaptured,
+						setEngagedCaptured: (value) => (engagedCaptured = value),
+						getScenarioAdjustCaptured: () => scenarioAdjustCaptured,
+						setScenarioAdjustCaptured: (value) => (scenarioAdjustCaptured = value),
+						getVisitorId: () => visitorId,
+						setVisitorId: (value) => (visitorId = value),
+						getExperiments: () => experiments,
+						setExperiments: (value) => (experiments = value),
+						getAttribution: () => attribution,
+						setAttribution: (value) => (attribution = value),
+						getPersona: () => activeBuyerRole.id,
+						getPagePath: () => $page.url.pathname,
+						getReferrer: () => pageReferrer,
+						getStorage: () => (browser ? window.localStorage : undefined),
+						getPageUrl: () => $page.url,
+						consentStorageKey: LANDING_CONSENT_KEY
+					});
+					telemetryApi = nextTelemetryApi;
+					return nextTelemetryApi;
+				})
+				.catch((error) => {
+					telemetryBridgePromise = null;
+					throw error;
+				});
+		}
+
+		return telemetryBridgePromise!;
+	}
+
 	$effect(() => {
 		const defaultBuyerIndex = BUYER_ROLE_VIEWS.findIndex(
 			(role) => role.id === experiments.buyerPersonaDefault
@@ -179,8 +313,9 @@
 		let cancelled = false;
 		let teardown: (() => void) | void;
 
-		void import('$lib/landing/landingHeroBrowserRuntime').then(
-			({ mountLandingHeroBrowserRuntime }) => {
+		void ensureTelemetryBridge()
+			.then(() => import('$lib/landing/landingHeroBrowserRuntime'))
+			.then(({ mountLandingHeroBrowserRuntime }) => {
 				if (cancelled) return;
 				teardown = mountLandingHeroBrowserRuntime({
 					browserEnabled: browser,
@@ -189,7 +324,7 @@
 					signalMapElement,
 					consentStorageKey: LANDING_CONSENT_KEY,
 					scrollMilestones: LANDING_SCROLL_MILESTONES,
-					initializeTelemetry: initialize,
+					initializeTelemetry,
 					markEngaged,
 					buildTelemetryContext,
 					emitLandingTelemetrySafe,
@@ -201,46 +336,16 @@
 					setSignalMapInView: (value) => (signalMapInView = value),
 					setLandingScrollProgressPct: (value) => (landingScrollProgressPct = value)
 				});
-			}
-		);
+			})
+			.catch(() => {
+				// Telemetry/runtime failures must not block landing rendering.
+			});
 
 		return () => {
 			cancelled = true;
 			teardown?.();
 		};
 	});
-	const telemetry = createLandingHeroTelemetryBridge({
-		getTelemetryEnabled: () => telemetryEnabled,
-		setTelemetryEnabled: (value) => (telemetryEnabled = value),
-		getTelemetryInitialized: () => telemetryInitialized,
-		setTelemetryInitialized: (value) => (telemetryInitialized = value),
-		setCookieBannerVisible: (value) => (cookieBannerVisible = value),
-		getEngagedCaptured: () => engagedCaptured,
-		setEngagedCaptured: (value) => (engagedCaptured = value),
-		getScenarioAdjustCaptured: () => scenarioAdjustCaptured,
-		setScenarioAdjustCaptured: (value) => (scenarioAdjustCaptured = value),
-		getVisitorId: () => visitorId,
-		setVisitorId: (value) => (visitorId = value),
-		getExperiments: () => experiments,
-		setExperiments: (value) => (experiments = value),
-		getAttribution: () => attribution,
-		setAttribution: (value) => (attribution = value),
-		getPersona: () => activeBuyerRole.id,
-		getPagePath: () => $page.url.pathname,
-		getReferrer: () => pageReferrer,
-		getStorage: () => (browser ? window.localStorage : undefined),
-		getPageUrl: () => $page.url,
-		consentStorageKey: LANDING_CONSENT_KEY
-	});
-	const {
-		buildTelemetryContext,
-		emitLandingTelemetrySafe,
-		markEngaged,
-		initialize,
-		setTelemetryConsent,
-		trackCta,
-		trackScenarioAdjust
-	} = telemetry;
 	const closeCookieBanner = () => (cookieBannerVisible = false),
 		openCookieSettings = () => (cookieBannerVisible = true);
 	function buildSignupHref(intent: string, extraParams: Record<string, string> = {}): string {

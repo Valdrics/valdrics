@@ -92,6 +92,22 @@ class TestLLMCircuitBreaker:
         circuit = breaker._get_circuit("groq")
         assert circuit.state == CircuitState.CLOSED
 
+    def test_half_open_allows_only_single_probe_in_protect(self):
+        """Only one probe should be allowed while half-open recovery is in flight."""
+        breaker = LLMCircuitBreaker(
+            failure_threshold=1, success_threshold=1, recovery_timeout=0
+        )
+
+        breaker.record_failure("groq")
+
+        with breaker.protect("groq"):
+            with pytest.raises(CircuitOpenError):
+                with breaker.protect("groq"):
+                    pass
+            breaker.record_success("groq")
+
+        assert breaker.is_available("groq") is True
+
     def test_per_provider_isolation(self):
         """Each provider should have independent circuit state."""
         breaker = LLMCircuitBreaker(failure_threshold=2)

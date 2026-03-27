@@ -25,7 +25,6 @@ import structlog
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
-settings = get_settings()
 
 REDIS_CLIENT_INIT_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     ImportError,
@@ -48,7 +47,7 @@ REDIS_OPERATION_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
 
 
 def _cache_settings() -> Any:
-    return settings
+    return get_settings()
 
 
 def _configured_redis_url(settings_obj: Any | None = None) -> str | None:

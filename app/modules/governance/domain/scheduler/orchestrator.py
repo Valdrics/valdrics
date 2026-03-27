@@ -22,7 +22,6 @@ from app.shared.core.ops_metrics import (
 )
 
 logger = structlog.get_logger()
-settings = get_settings()
 
 # Arbitrary constant for scheduler advisory locks - DEPRECATED in favor of SELECT FOR UPDATE
 # Keeping for reference of lock inheritance
@@ -84,6 +83,10 @@ class SchedulerOrchestrator:
         self._last_run_success: bool | None = None
         self._last_run_time: str | None = None
         self._carbon_cache: dict[str, tuple[float, float]] = {}
+
+    @staticmethod
+    def _settings() -> Any:
+        return get_settings()
 
     async def _dispatch_task(
         self,
@@ -176,6 +179,7 @@ class SchedulerOrchestrator:
         Acquire a distributed dispatch lock to prevent duplicate schedule dispatches
         when multiple API instances are running APScheduler.
         """
+        settings = self._settings()
         # Test runs should be deterministic and fast; do not depend on Redis lock timing.
         if settings.TESTING or settings.PYTEST_CURRENT_TEST:
             return True
@@ -245,6 +249,7 @@ class SchedulerOrchestrator:
         """
         region_hint = str(region or "").strip().lower() or "global"
         live_intensity = await self._fetch_live_carbon_intensity(region_hint)
+        settings = self._settings()
         if live_intensity is not None:
             is_green = live_intensity <= settings.CARBON_LOW_INTENSITY_THRESHOLD
             logger.info(
@@ -270,6 +275,7 @@ class SchedulerOrchestrator:
 
     async def _fetch_live_carbon_intensity(self, region: str) -> float | None:
         region_hint = str(region or "").strip().lower() or "global"
+        settings = self._settings()
         api_key = settings.ELECTRICITY_MAPS_API_KEY
         if not api_key:
             return None
@@ -354,6 +360,7 @@ class SchedulerOrchestrator:
 
     async def enforcement_reconciliation_sweep_job(self) -> None:
         """Dispatches periodic enforcement reservation reconciliation sweep."""
+        settings = self._settings()
         if not bool(
             getattr(settings, "ENFORCEMENT_RECONCILIATION_SWEEP_ENABLED", True)
         ):
@@ -371,6 +378,7 @@ class SchedulerOrchestrator:
     async def _process_background_jobs_inline(self) -> None:
         from app.modules.governance.domain.jobs.processor import JobProcessor
 
+        settings = self._settings()
         batch_size = max(
             1, int(getattr(settings, "BACKGROUND_JOB_PROCESS_BATCH_SIZE", 25))
         )
@@ -409,6 +417,7 @@ class SchedulerOrchestrator:
         """
         Detect overdue pending jobs without mutating future-scheduled retries.
         """
+        settings = self._settings()
         async with self.session_maker() as db:
             from app.models.background_job import BackgroundJob, JobStatus
             from datetime import datetime, timezone, timedelta

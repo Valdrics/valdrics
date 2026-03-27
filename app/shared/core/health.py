@@ -32,7 +32,6 @@ from app.shared.core.cache import get_cache_service
 from app.shared.core.async_utils import maybe_await
 
 logger = structlog.get_logger()
-settings = get_settings()
 HEALTH_RECOVERABLE_ERRORS = (
     SQLAlchemyError,
     HTTPError,
@@ -271,8 +270,8 @@ class HealthService:
                 "system_resources": system_status,
                 "background_jobs": jobs_status,
             },
-            "version": getattr(settings, "VERSION", "unknown"),
-            "environment": getattr(settings, "ENVIRONMENT", "unknown"),
+            "version": getattr(self._get_settings(), "VERSION", "unknown"),
+            "environment": getattr(self._get_settings(), "ENVIRONMENT", "unknown"),
         }
 
         # Log health check results

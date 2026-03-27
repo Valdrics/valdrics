@@ -1,25 +1,11 @@
 import { api } from '$lib/api';
 import { edgeApiPath } from '$lib/edgeProxy';
 import { TimeoutError } from '$lib/fetchWithTimeout';
-import {
-	buildAcceptanceEvidenceUrl,
-	buildAcceptanceKpiHistoryUrl,
-	buildAcceptanceKpiUrl,
-	buildClosePackageUrl,
-	buildIngestionSlaUrl,
-	buildJobSloUrl,
-	buildAcceptanceRuns
-} from './opsUtils';
+import { buildIngestionSlaUrl, buildJobSloUrl } from './opsUtils';
 import { buildUnitEconomicsUrl, hasInvalidUnitWindow } from './unitEconomics';
-import {
-	syncInvoiceFormFromClosePackage,
-	type OpsOperationalState,
-	type OpsRuntimeData
-} from './opsOperationalState';
+import type { OpsOperationalState, OpsRuntimeData } from './opsOperationalState';
 import type {
-	AcceptanceKpiEvidenceResponse,
 	IngestionSLAResponse,
-	IntegrationAcceptanceEvidenceResponse,
 	JobSLOResponse,
 	UnitEconomicsResponse,
 	UnitEconomicsSettings
@@ -33,8 +19,6 @@ interface CoreActionsInput {
 	requestTimeoutMs: number;
 	access: {
 		jobSlo: () => boolean;
-		acceptanceKpis: () => boolean;
-		closeWorkflow: () => boolean;
 	};
 }
 
@@ -66,7 +50,7 @@ async function parseErrorMessage(response: Response, fallback: string): Promise<
 export function createOpsOperationalCoreActions(input: CoreActionsInput) {
 	const { getData, state, requestTimeoutMs, access } = input;
 
-	async function loadOperationalData() {
+	async function loadPrimaryOperationalData() {
 		const data = getData();
 		if (!hasSessionToken(data)) {
 			return;
@@ -91,7 +75,43 @@ export function createOpsOperationalCoreActions(input: CoreActionsInput) {
 					),
 					headers,
 					requestTimeoutMs
-				),
+				)
+			]);
+
+			const responseOrNull = (index: number): Response | null =>
+				results[index]?.status === 'fulfilled'
+					? (results[index] as PromiseFulfilledResult<Response>).value
+					: null;
+
+			const settingsRes = responseOrNull(0);
+			const unitRes = responseOrNull(1);
+
+			state.unitSettings = settingsRes?.ok
+				? ((await settingsRes.json()) as UnitEconomicsSettings)
+				: null;
+			state.unitEconomics = unitRes?.ok ? ((await unitRes.json()) as UnitEconomicsResponse) : null;
+
+			const timedOutCount = results.filter(
+				(result) => result.status === 'rejected' && result.reason instanceof TimeoutError
+			).length;
+			if (timedOutCount > 0) {
+				state.error = `${timedOutCount} Ops widgets timed out. You can refresh unit economics.`;
+			}
+		} catch (error) {
+			const err = error as Error;
+			state.error = err.message || 'Failed to load unit economics widgets.';
+		}
+	}
+
+	async function loadReliabilityData({ silent = true }: { silent?: boolean } = {}) {
+		const data = getData();
+		if (!hasSessionToken(data)) {
+			return;
+		}
+
+		try {
+			const headers = buildHeaders(data);
+			const results = await Promise.allSettled([
 				getWithTimeout(
 					edgeApiPath(buildIngestionSlaUrl(state.ingestionSlaWindowHours)),
 					headers,
@@ -103,39 +123,7 @@ export function createOpsOperationalCoreActions(input: CoreActionsInput) {
 							headers,
 							requestTimeoutMs
 						)
-					: Promise.resolve(null),
-				access.acceptanceKpis()
-					? getWithTimeout(
-							edgeApiPath(
-								buildAcceptanceKpiUrl(
-									state.unitStartDate,
-									state.unitEndDate,
-									state.ingestionSlaWindowHours
-								)
-							),
-							headers,
-							requestTimeoutMs
-						)
-					: Promise.resolve(null),
-				access.acceptanceKpis()
-					? getWithTimeout(edgeApiPath(buildAcceptanceKpiHistoryUrl(25)), headers, requestTimeoutMs)
-					: Promise.resolve(null),
-				access.closeWorkflow()
-					? getWithTimeout(
-							edgeApiPath(
-								buildClosePackageUrl(
-									state.closeStartDate,
-									state.closeEndDate,
-									state.closeProvider,
-									'json',
-									false
-								)
-							),
-							headers,
-							requestTimeoutMs
-						)
-					: Promise.resolve(null),
-				getWithTimeout(edgeApiPath(buildAcceptanceEvidenceUrl()), headers, requestTimeoutMs)
+					: Promise.resolve(null)
 			]);
 
 			const responseOrNull = (index: number): Response | null =>
@@ -143,50 +131,31 @@ export function createOpsOperationalCoreActions(input: CoreActionsInput) {
 					? (results[index] as PromiseFulfilledResult<Response>).value
 					: null;
 
-			const settingsRes = responseOrNull(0);
-			const unitRes = responseOrNull(1);
-			const ingestionSlaRes = responseOrNull(2);
-			const jobSloRes = responseOrNull(3);
-			const acceptanceRes = responseOrNull(4);
-			const acceptanceHistoryRes = responseOrNull(5);
-			const closePackageRes = responseOrNull(6);
-			const acceptanceEvidenceRes = responseOrNull(7);
+			const ingestionSlaRes = responseOrNull(0);
+			const jobSloRes = responseOrNull(1);
 
-			state.unitSettings = settingsRes?.ok
-				? ((await settingsRes.json()) as UnitEconomicsSettings)
-				: null;
-			state.unitEconomics = unitRes?.ok ? ((await unitRes.json()) as UnitEconomicsResponse) : null;
 			state.ingestionSla = ingestionSlaRes?.ok
 				? ((await ingestionSlaRes.json()) as IngestionSLAResponse)
 				: null;
 			state.jobSlo = jobSloRes?.ok ? ((await jobSloRes.json()) as JobSLOResponse) : null;
-			state.acceptanceKpis = acceptanceRes?.ok ? await acceptanceRes.json() : null;
-
-			const acceptanceHistoryPayload = acceptanceHistoryRes?.ok
-				? ((await acceptanceHistoryRes.json()) as AcceptanceKpiEvidenceResponse)
-				: null;
-			state.acceptanceKpiHistory = acceptanceHistoryPayload?.items || [];
-
-			state.closePackage = closePackageRes?.ok ? await closePackageRes.json() : null;
-			if (state.closePackage) {
-				syncInvoiceFormFromClosePackage(state);
-			}
-
-			const acceptanceEvidencePayload = acceptanceEvidenceRes?.ok
-				? ((await acceptanceEvidenceRes.json()) as IntegrationAcceptanceEvidenceResponse)
-				: null;
-			state.acceptanceRuns = buildAcceptanceRuns(acceptanceEvidencePayload?.items || []);
 
 			const timedOutCount = results.filter(
 				(result) => result.status === 'rejected' && result.reason instanceof TimeoutError
 			).length;
-			if (timedOutCount > 0) {
-				state.error = `${timedOutCount} Ops widgets timed out. You can refresh individual sections.`;
+			if (timedOutCount > 0 && !silent) {
+				state.error = `${timedOutCount} reliability widgets timed out. You can refresh individual sections.`;
 			}
 		} catch (error) {
-			const err = error as Error;
-			state.error = err.message || 'Failed to load operations widgets.';
+			if (!silent) {
+				const err = error as Error;
+				state.error = err.message || 'Failed to load reliability widgets.';
+			}
 		}
+	}
+
+	async function loadOperationalData() {
+		await loadPrimaryOperationalData();
+		await loadReliabilityData({ silent: true });
 	}
 
 	async function refreshUnitEconomics() {
@@ -320,6 +289,8 @@ export function createOpsOperationalCoreActions(input: CoreActionsInput) {
 
 	return {
 		loadOperationalData,
+		loadPrimaryOperationalData,
+		loadReliabilityData,
 		refreshUnitEconomics,
 		refreshIngestionSla,
 		refreshJobSlo,

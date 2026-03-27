@@ -123,7 +123,7 @@ describe('dashboard page lazy sections', () => {
 
 		await screen.findByText(/greenops sustainability/i);
 		expect(screen.getByRole('heading', { name: /unit economics/i })).toBeTruthy();
-		expect(screen.getByRole('heading', { name: /12-month roa/i })).toBeTruthy();
+		expect(await screen.findByRole('heading', { name: /12-month roa/i })).toBeTruthy();
 		await waitFor(() => {
 			expect(screen.queryByText(/loading finance insights/i)).toBeNull();
 		});
