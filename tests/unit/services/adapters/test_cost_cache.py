@@ -235,7 +235,8 @@ class TestCostCache:
 
 @pytest.mark.asyncio
 async def test_get_cost_cache_factory():
-    with patch("app.shared.adapters.cost_cache.settings") as mock_settings:
+    with patch("app.shared.adapters.cost_cache.get_settings") as mock_get_settings:
+        mock_settings = mock_get_settings.return_value
         mock_settings.REDIS_URL = None
         # Reset singleton for test
         with patch("app.shared.adapters.cost_cache._cache_instance", None):
@@ -269,16 +270,16 @@ async def test_get_cost_cache_factory():
 async def test_get_cost_cache_rebuilds_when_redis_url_changes_without_manual_reset():
     with patch("app.shared.adapters.cost_cache._cache_instance", None):
         with patch(
-            "app.shared.adapters.cost_cache.settings",
-            SimpleNamespace(REDIS_URL=None),
+            "app.shared.adapters.cost_cache.get_settings",
+            return_value=SimpleNamespace(REDIS_URL=None),
         ):
             cache = await get_cost_cache()
             assert isinstance(cache.backend, InMemoryCache)
 
         with (
             patch(
-                "app.shared.adapters.cost_cache.settings",
-                SimpleNamespace(REDIS_URL="redis://localhost"),
+                "app.shared.adapters.cost_cache.get_settings",
+                return_value=SimpleNamespace(REDIS_URL="redis://localhost"),
             ),
             patch("app.shared.adapters.cost_cache.RedisCache") as mock_redis_cls,
         ):

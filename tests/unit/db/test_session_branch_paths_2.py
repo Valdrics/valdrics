@@ -304,9 +304,15 @@ def test_reset_db_runtime_dispose_exception_logged() -> None:
 
 
 def test_slow_query_threshold_and_after_cursor_execute_fast_path() -> None:
-    with patch.object(session_mod, "settings", SimpleNamespace(DB_SLOW_QUERY_THRESHOLD_SECONDS="bad")):
+    with patch(
+        "app.shared.db.session.get_settings",
+        return_value=SimpleNamespace(DB_SLOW_QUERY_THRESHOLD_SECONDS="bad"),
+    ):
         assert session_mod._get_slow_query_threshold_seconds() == 0.2
-    with patch.object(session_mod, "settings", SimpleNamespace(DB_SLOW_QUERY_THRESHOLD_SECONDS=0)):
+    with patch(
+        "app.shared.db.session.get_settings",
+        return_value=SimpleNamespace(DB_SLOW_QUERY_THRESHOLD_SECONDS=0),
+    ):
         assert session_mod._get_slow_query_threshold_seconds() == 0.2
 
     conn = MagicMock()
@@ -317,6 +323,18 @@ def test_slow_query_threshold_and_after_cursor_execute_fast_path() -> None:
     ):
         session_mod.after_cursor_execute(conn, None, "SELECT 1", {}, None, False)
     mock_logger.warning.assert_not_called()
+
+
+def test_slow_query_threshold_uses_live_settings_after_import() -> None:
+    stale_settings = SimpleNamespace(DB_SLOW_QUERY_THRESHOLD_SECONDS=0.2)
+    live_settings = SimpleNamespace(DB_SLOW_QUERY_THRESHOLD_SECONDS=1.5)
+
+    with patch(
+        "app.shared.db.session.get_settings",
+        side_effect=[stale_settings, live_settings],
+    ):
+        assert session_mod._get_slow_query_threshold_seconds() == 0.2
+        assert session_mod._get_slow_query_threshold_seconds() == 1.5
 
 
 def test_backend_from_url_and_session_backend_resolution_branches() -> None:

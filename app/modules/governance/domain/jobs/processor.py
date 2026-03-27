@@ -49,13 +49,9 @@ __all__ = [
 from app.modules.governance.domain.jobs.handlers import get_handler_factory
 
 logger = structlog.get_logger()
-settings = get_settings()
 
 # Job processing configuration
 MAX_JOBS_PER_BATCH = 10
-JOB_LOCK_TIMEOUT_MINUTES = max(
-    1, int(getattr(settings, "BACKGROUND_JOB_RUNNING_TIMEOUT_MINUTES", 30))
-)
 BACKOFF_BASE_SECONDS = 60
 JOB_TIMEOUT_SECONDS = 300  # 5 minutes default timeout
 MAX_JOB_RESULT_BYTES = 256 * 1024
@@ -82,6 +78,20 @@ JOB_RUNTIME_UNEXPECTED_ERRORS: tuple[type[Exception], ...] = (
     UnicodeError,
     ArithmeticError,
 )
+
+
+def _job_lock_timeout_minutes() -> int:
+    """Resolve stale-running lock timeout from live settings."""
+    settings = get_settings()
+    try:
+        timeout_minutes = int(
+            getattr(settings, "BACKGROUND_JOB_RUNNING_TIMEOUT_MINUTES", 30)
+        )
+    except (TypeError, ValueError):
+        timeout_minutes = 30
+    return max(1, timeout_minutes)
+
+
 class JobProcessor:
     """
     Processes background jobs from the database queue.
@@ -107,7 +117,7 @@ class JobProcessor:
             return False
         if started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)
-        cutoff = now - timedelta(minutes=JOB_LOCK_TIMEOUT_MINUTES)
+        cutoff = now - timedelta(minutes=_job_lock_timeout_minutes())
         return started_at <= cutoff
 
     def _apply_failure_transition(
@@ -138,7 +148,8 @@ class JobProcessor:
 
     async def _recover_stale_running_jobs(self, *, now: datetime) -> int:
         """Requeue or dead-letter RUNNING jobs abandoned by a crashed worker."""
-        cutoff = now - timedelta(minutes=JOB_LOCK_TIMEOUT_MINUTES)
+        lock_timeout_minutes = _job_lock_timeout_minutes()
+        cutoff = now - timedelta(minutes=lock_timeout_minutes)
         recovered = 0
 
         async with self.db.begin_nested():
@@ -161,7 +172,7 @@ class JobProcessor:
                     {
                         "status": "recovered_stale_running_job",
                         "recovered_at": now.isoformat(),
-                        "lock_timeout_minutes": JOB_LOCK_TIMEOUT_MINUTES,
+                        "lock_timeout_minutes": lock_timeout_minutes,
                     },
                 )
                 job.started_at = None
@@ -169,7 +180,7 @@ class JobProcessor:
                     job,
                     error_message=(
                         "Recovered stale RUNNING job after lock timeout "
-                        f"({JOB_LOCK_TIMEOUT_MINUTES} minutes)"
+                        f"({lock_timeout_minutes} minutes)"
                     ),
                     now=now,
                     permanent=False,
@@ -189,7 +200,7 @@ class JobProcessor:
             logger.warning(
                 "job_processor_recovered_stale_running_jobs",
                 recovered=recovered,
-                lock_timeout_minutes=JOB_LOCK_TIMEOUT_MINUTES,
+                lock_timeout_minutes=lock_timeout_minutes,
             )
 
         return recovered

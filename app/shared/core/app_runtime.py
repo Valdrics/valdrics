@@ -62,6 +62,13 @@ EMISSIONS_TRACKER_STOP_RECOVERABLE_EXCEPTIONS = (
 )
 
 
+def refresh_emissions_tracker() -> Any:
+    """Refresh the CodeCarbon tracker class after settings reloads."""
+    global EmissionsTracker
+    EmissionsTracker = _load_emissions_tracker()
+    return EmissionsTracker
+
+
 def _stop_emissions_tracker(tracker: Any) -> None:
     if not tracker:
         return
@@ -80,4 +87,5 @@ __all__ = [
     "_runtime_data_dir",
     "_stop_emissions_tracker",
     "EmissionsTracker",
+    "refresh_emissions_tracker",
 ]

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { BUYER_ROLE_VIEWS } from '$lib/landing/heroContent';
+	import { BUYER_ROLE_VIEWS } from '$lib/landing/heroContent.core';
 
 	type BuyerRoleView = {
 		id: string;

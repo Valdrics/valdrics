@@ -19,6 +19,7 @@ from pydantic import BaseModel
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.shared.core import app_runtime as app_runtime_module
 from app.shared.core.app_routes import register_api_routers, register_lifecycle_routes
 from app.shared.core.app_runtime import (
     _api_documentation_allowed,
@@ -127,6 +128,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await dispose_db_runtime()
     validate_runtime_dependencies(settings)
     init_sentry()
+    from app.modules.governance.api.v1.health_dashboard import set_startup_time
+
+    set_startup_time()
 
     # Setup: Initialize scheduler and emissions tracker
     logger.info("app_starting", app_name=settings.APP_NAME)
@@ -287,10 +291,12 @@ __all__ = ["app", "valdrics_app", "lifespan"]
 
 
 def refresh_fastapi_app_metadata(settings_obj: Any | None = None) -> None:
+    global EmissionsTracker
     settings_obj = settings_obj or get_settings()
     valdrics_app.title = str(settings_obj.APP_NAME)
     valdrics_app.version = str(settings_obj.VERSION)
     valdrics_app.openapi_schema = None
+    EmissionsTracker = app_runtime_module.refresh_emissions_tracker()
 
 # Initialize Tracing
 setup_tracing(valdrics_app)

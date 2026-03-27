@@ -53,6 +53,7 @@ async def test_lifespan_flow(mock_lifespan_deps):
     from app.main import lifespan, app
 
     with (
+        patch("app.modules.governance.api.v1.health_dashboard.set_startup_time") as mock_startup,
         patch("app.main.should_bootstrap_local_sqlite", return_value=False),
         patch("app.main.dispose_db_runtime", new_callable=AsyncMock),
     ):
@@ -62,6 +63,7 @@ async def test_lifespan_flow(mock_lifespan_deps):
                 exist_ok=True,
             )
 
+    mock_startup.assert_called_once_with()
     mock_lifespan_deps["dispose"].assert_called_once()
 
 

@@ -60,7 +60,12 @@ __all__ = [
 ]
 
 router = APIRouter(tags=["Billing"])
-settings = get_settings()
+
+
+def _settings():
+    return get_settings()
+
+
 def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
     """
     Validate and normalize user-provided checkout callback URLs.
@@ -70,6 +75,7 @@ def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
     - enforce HTTPS in staging/production
     - block credentialed URLs
     """
+    settings = _settings()
     default_callback = f"{settings.FRONTEND_URL.rstrip('/')}/billing?success=true"
     candidate = (raw_callback_url or "").strip()
     callback = candidate or default_callback
@@ -111,6 +117,7 @@ def _build_checkout_callback_url(raw_callback_url: Optional[str]) -> str:
 
 
 def _extract_client_ip(request: Request) -> str:
+    settings = _settings()
     return resolve_client_ip(request, settings_obj=settings)
 
 
@@ -237,6 +244,7 @@ async def create_checkout(
     db: AsyncSession = Depends(get_db),
 ) -> Dict[str, str]:
     """Initialize Paystack checkout session."""
+    settings = _settings()
     if not settings.PAYSTACK_SECRET_KEY:
         raise HTTPException(503, "Billing not configured")
 
@@ -318,6 +326,7 @@ async def handle_webhook(request: Request, db: AsyncSession = Depends(get_db)) -
     Webhooks are validated, persisted to background_jobs, and acknowledged
     immediately with 202 to keep provider latency out of the request path.
     """
+    settings = _settings()
     try:
         return await process_paystack_webhook(
             request,

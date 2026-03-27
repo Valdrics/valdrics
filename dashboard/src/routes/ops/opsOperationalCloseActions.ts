@@ -91,6 +91,10 @@ export function createOpsOperationalCloseActions(input: CloseActionsInput) {
 		await previewClosePackageInternal();
 	}
 
+	async function preloadClosePackage() {
+		await previewClosePackageInternal({ silent: true });
+	}
+
 	async function saveProviderInvoice(event?: SubmitEvent) {
 		event?.preventDefault();
 		const data = getData();
@@ -291,6 +295,7 @@ export function createOpsOperationalCloseActions(input: CloseActionsInput) {
 
 	return {
 		previewClosePackage,
+		preloadClosePackage,
 		saveProviderInvoice,
 		deleteProviderInvoice,
 		downloadClosePackageJson,

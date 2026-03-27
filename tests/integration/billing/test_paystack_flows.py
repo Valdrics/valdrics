@@ -60,11 +60,12 @@ async def test_create_checkout_success(ac: AsyncClient, test_data, db):
     )
 
     with (
-        patch("app.modules.billing.api.v1.billing.settings") as api_settings,
+        patch("app.modules.billing.api.v1.billing.get_settings") as api_get_settings,
         patch(
             "app.modules.billing.domain.billing.paystack_shared.settings"
         ) as billing_settings,
     ):
+        api_settings = api_get_settings.return_value
         api_settings.PAYSTACK_SECRET_KEY = "test-secret-key"
         api_settings.FRONTEND_URL = "http://localhost:3000"
         api_settings.ENVIRONMENT = "development"

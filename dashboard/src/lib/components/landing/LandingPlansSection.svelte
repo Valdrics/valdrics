@@ -1,151 +1,103 @@
 <script lang="ts">
 	import { base } from '$app/paths';
-	import {
-		FREE_TIER_HIGHLIGHTS,
-		FREE_TIER_LIMIT_NOTE,
-		IMPLEMENTATION_COST_FACTS,
-		PLAN_COMPARE_CARDS,
-		PLANS_PRICING_EXPLANATION
-	} from '$lib/landing/heroContent';
-	import { DEFAULT_PRICING_PLANS } from '$lib/pricing/publicPlans';
+
+	const landingPlanPreview = [
+		{
+			name: 'Free',
+			price: '$0',
+			summary: 'Prove one owner-routed workflow without procurement overhead.',
+			cta: 'Start Free Workspace',
+			href: null
+		},
+		{
+			name: 'Growth',
+			price: '$149',
+			summary:
+				'Best fit for cross-functional teams that need shared cost ownership and collaboration.',
+			cta: 'See Growth on Pricing',
+			href: `${base}/pricing`
+		},
+		{
+			name: 'Pro',
+			price: '$299',
+			summary:
+				'Finance-grade controls, exports, and workflow depth without jumping straight into enterprise sales.',
+			cta: 'Review Pro Details',
+			href: `${base}/pricing`
+		}
+	] as const;
 
 	let {
-		buildFreeTierCtaHref,
-		buildPlanCtaHref,
+		freeTierCtaHref,
+		trustEnterpriseHref,
 		onTrackCta
 	}: {
-		buildFreeTierCtaHref: () => string;
-		buildPlanCtaHref: (planId: string) => string;
+		freeTierCtaHref: string;
+		trustEnterpriseHref: string;
 		onTrackCta: (action: string, section: string, value: string) => void;
 	} = $props();
-
-	const freePlan = DEFAULT_PRICING_PLANS.find((plan) => plan.id === 'free');
-
-	if (!freePlan?.story) {
-		throw new Error('Landing plans section requires a free-plan public story.');
-	}
-
-	const freePlanStory = freePlan.story;
-	const enterprisePathHref = `${base}/enterprise`;
 </script>
 
-<section
-	id="plans"
-	class="container mx-auto px-6 pb-16 landing-section-lazy"
-	data-landing-section="plans"
->
-	<div class="landing-section-head">
-		<h2 class="landing-h2">Choose the plan that fits your control depth</h2>
-		<p class="landing-section-sub">{PLANS_PRICING_EXPLANATION}</p>
-	</div>
-
-	<div class="landing-plan-choices">
-		<div class="landing-plans-grid">
-			{#each PLAN_COMPARE_CARDS as plan (plan.id)}
-				<article
-					class={`glass-panel landing-plan-card ${plan.popular ? 'is-featured' : ''}`}
-					data-plan-id={plan.id}
-				>
-					<p class="landing-proof-k">{plan.badge}</p>
-					<h3 class="landing-h3">{plan.name}</h3>
-					<p class="landing-plan-price">{plan.price}</p>
-					<p class="landing-plan-price-note">{plan.priceNote}</p>
-					<p class="landing-p">{plan.summary}</p>
-					<ul class="landing-plan-features">
-						{#each plan.features.slice(0, 3) as feature (feature)}
-							<li>{feature}</li>
-						{/each}
-					</ul>
-					<div class="landing-plan-context" aria-label={`${plan.name} plan fit`}>
-						<dl class="landing-plan-context__row landing-plan-context__row--stacked">
-							<dt class="landing-plan-context__label">Best for</dt>
-							<dd class="landing-plan-context__value">{plan.bestFor}</dd>
-						</dl>
-					</div>
-					<a
-						href={buildPlanCtaHref(plan.id)}
-						class={`btn ${plan.popular ? 'btn-primary landing-plan-primary-cta' : 'btn-secondary landing-plan-secondary-cta'}`}
-						onclick={() => onTrackCta('cta_click', 'plans', `start_plan_${plan.id}`)}
-					>
-						{`Start with ${plan.name}`}
-					</a>
+<section id="plans" class="landing-public-section" data-landing-section="plans">
+	<div class="container mx-auto px-6 py-12">
+		<div class="landing-public-section-head">
+			<p class="landing-public-eyebrow">Pricing</p>
+			<h2>Pricing that matches rollout stage</h2>
+			<p>
+				Start small, prove the workflow, and only move up when the team needs more governance depth.
+			</p>
+		</div>
+		<div class="landing-public-plan-grid">
+			{#each landingPlanPreview as plan (plan.name)}
+				<article class="landing-public-surface landing-public-plan-card">
+					<p class="landing-public-proof-label">{plan.name}</p>
+					<div class="landing-public-plan-price">{plan.price}</div>
+					<p>{plan.summary}</p>
+					{#if plan.href}
+						<a
+							href={plan.href}
+							class="btn btn-secondary"
+							onclick={() => onTrackCta('cta_click', 'plans', plan.name.toLowerCase())}
+						>
+							{plan.cta}
+						</a>
+					{:else}
+						<a
+							href={freeTierCtaHref}
+							class="btn btn-primary"
+							onclick={() => onTrackCta('cta_click', 'plans', 'free')}
+						>
+							{plan.cta}
+						</a>
+					{/if}
 				</article>
 			{/each}
 		</div>
-
-		<div class="landing-free-tier-strip glass-panel">
-			<div class="landing-free-tier-strip-copy">
-				<p class="landing-free-tier-badge">{freePlanStory.badge}</p>
-				<div>
-					<p class="landing-proof-k">Free workspace strip</p>
-					<h3 class="landing-h3">{freePlanStory.headline}</h3>
-					<p class="landing-p">{FREE_TIER_LIMIT_NOTE}</p>
-				</div>
+		<div class="landing-public-band landing-public-band--compact">
+			<div>
+				<p class="landing-public-eyebrow">Full pricing</p>
+				<h3>Compare the full plan details before you commit</h3>
+				<p>
+					Use the pricing page for the full plan breakdown. Use enterprise review only when
+					security, procurement, or deployment requirements need a separate path.
+				</p>
 			</div>
-			<ul class="landing-plan-features">
-				{#each FREE_TIER_HIGHLIGHTS.slice(0, 3) as feature (feature)}
-					<li>{feature}</li>
-				{/each}
-			</ul>
-			<div class="landing-free-tier-strip-actions">
-				<p class="landing-free-tier-strip-price">$0 / month</p>
-				<p class="landing-free-tier-note">Published list prices shown in USD.</p>
+			<div class="landing-public-band-actions">
 				<a
-					href={buildFreeTierCtaHref()}
-					class="btn btn-secondary landing-free-tier-primary-cta"
-					onclick={() => onTrackCta('cta_click', 'plans', 'start_plan_free')}
+					href={`${base}/pricing`}
+					class="btn btn-secondary"
+					onclick={() => onTrackCta('cta_click', 'plans', 'view_pricing')}
 				>
-					Start on Free Tier
+					See Detailed Pricing
+				</a>
+				<a
+					href={trustEnterpriseHref}
+					class="btn btn-secondary"
+					onclick={() => onTrackCta('cta_click', 'plans', 'enterprise_review')}
+				>
+					Enterprise Review
 				</a>
 			</div>
 		</div>
 	</div>
-
-	<section class="landing-rollout-section glass-panel" aria-labelledby="rollout-tco-title">
-		<p class="landing-proof-k">Rollout and buying path</p>
-		<h3 id="rollout-tco-title" class="landing-h3">
-			Know the team footprint before signup or procurement
-		</h3>
-		<p class="landing-p">
-			Start with one controlled workflow in a workspace. Use enterprise review only when audit,
-			procurement, or rollout governance needs a separate process.
-		</p>
-
-		<div class="landing-rollout-grid">
-			<article class="landing-rollout-block">
-				<p class="landing-proof-k">Setup path</p>
-				<ol class="landing-onboard-steps">
-					<li>Connect cloud and software sources.</li>
-					<li>Assign owners and approval responsibilities.</li>
-					<li>Run your first owner-led remediation cycle.</li>
-				</ol>
-			</article>
-
-			<article class="landing-rollout-block">
-				<p class="landing-proof-k">Implementation facts</p>
-				<ul class="landing-plan-features">
-					{#each IMPLEMENTATION_COST_FACTS.slice(0, 3) as detail (detail)}
-						<li>{detail}</li>
-					{/each}
-				</ul>
-			</article>
-		</div>
-
-		<div class="landing-rollout-actions">
-			<a
-				href={`${base}/pricing`}
-				class="landing-cta-link"
-				onclick={() => onTrackCta('cta_click', 'plans', 'view_full_pricing')}
-			>
-				View full pricing
-			</a>
-			<a
-				href={enterprisePathHref}
-				class="btn btn-secondary"
-				onclick={() => onTrackCta('cta_click', 'plans', 'enterprise_review')}
-			>
-				Enterprise Review
-			</a>
-		</div>
-	</section>
 </section>

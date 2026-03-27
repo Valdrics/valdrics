@@ -12,7 +12,6 @@ from app.shared.core.exceptions import ExternalAPIError
 from app.modules.optimization.domain.plugin import ZombiePlugin
 
 logger = structlog.get_logger()
-settings = get_settings()
 
 ZOMBIE_SCAN_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     ExternalAPIError,
@@ -275,7 +274,7 @@ class BaseZombieDetector(ABC):
             scan_coro = self._execute_plugin_scan(plugin)
 
             # Use global timeout from settings
-            timeout = settings.ZOMBIE_PLUGIN_TIMEOUT_SECONDS
+            timeout = get_settings().ZOMBIE_PLUGIN_TIMEOUT_SECONDS
             with cloud_api_scan_context(
                 tenant_id=tenant_id,
                 provider=self.provider_name,

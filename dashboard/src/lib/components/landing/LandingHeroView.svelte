@@ -26,6 +26,13 @@
 		() => import('$lib/components/landing/LandingExitIntentPrompt.svelte')
 	);
 
+	const publicLaneTitles: Record<SignalLaneId, string> = {
+		economic_visibility: 'Signal captured',
+		deterministic_enforcement: 'Checks applied',
+		financial_governance: 'Approval routed',
+		operational_resilience: 'Outcome recorded'
+	};
+
 	const productPillars = [
 		{
 			title: 'See the issue with context',
@@ -43,13 +50,6 @@
 				'Every material action keeps the decision trail and savings story ready for finance, security, or procurement review.'
 		}
 	] as const;
-
-	const publicLaneTitles: Record<SignalLaneId, string> = {
-		economic_visibility: 'Signal captured',
-		deterministic_enforcement: 'Checks applied',
-		financial_governance: 'Approval routed',
-		operational_resilience: 'Outcome recorded'
-	};
 
 	const landingPlanPreview = [
 		{
@@ -440,7 +440,7 @@
 			<div class="landing-public-band landing-public-band--compact">
 				<div>
 					<p class="landing-public-eyebrow">Full pricing</p>
-					<h3>Prices shown in USD.</h3>
+					<h3>Compare the full plan details before you commit</h3>
 					<p>
 						Use the pricing page for full plan details. Contact enterprise for security,
 						procurement, or deployment requirements.

@@ -7,6 +7,7 @@ Covers webhook storage, idempotency, retry logic, duplicate detection, and Payst
 
 from datetime import datetime, timedelta, timezone
 import json
+from types import SimpleNamespace
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -103,6 +104,31 @@ class TestIdempotencyKeyGeneration:
         )
 
         assert key_paystack != key_stripe
+
+
+class TestRunningJobCutoff:
+    def test_is_stale_running_uses_live_timeout_setting(self, webhook_service):
+        now = datetime.now(timezone.utc)
+        job = BackgroundJob(
+            id=uuid.uuid4(),
+            job_type="webhook_retry",
+            attempts=1,
+            max_attempts=5,
+            status=JobStatus.RUNNING.value,
+            started_at=now - timedelta(minutes=10),
+        )
+
+        with patch(
+            "app.modules.billing.domain.billing.webhook_retry.get_settings",
+            return_value=SimpleNamespace(BACKGROUND_JOB_RUNNING_TIMEOUT_MINUTES=5),
+        ):
+            assert webhook_service._is_stale_running(job, now=now) is True
+
+        with patch(
+            "app.modules.billing.domain.billing.webhook_retry.get_settings",
+            return_value=SimpleNamespace(BACKGROUND_JOB_RUNNING_TIMEOUT_MINUTES=15),
+        ):
+            assert webhook_service._is_stale_running(job, now=now) is False
 
 
 class TestDuplicateDetection:

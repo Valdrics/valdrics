@@ -169,7 +169,8 @@ class TestCostCacheFactory:
     @pytest.mark.asyncio
     async def test_factory_returns_cache(self):
         """Factory should return CostCache instance."""
-        with patch("app.shared.adapters.cost_cache.settings") as mock_settings:
+        with patch("app.shared.adapters.cost_cache.get_settings") as mock_get_settings:
+            mock_settings = mock_get_settings.return_value
             mock_settings.REDIS_URL = None
 
             # Reset singleton

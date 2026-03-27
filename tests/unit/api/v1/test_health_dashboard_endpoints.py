@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from fastapi import HTTPException
 
+import app.modules.governance.api.v1.health_dashboard as health_dashboard_module
 from app.modules.governance.api.v1.health_dashboard import (
     get_investor_health_dashboard,
     get_llm_fair_use_runtime,
@@ -263,6 +264,160 @@ async def test_get_investor_health_dashboard_handler_success():
     assert response.license_governance.requests_created_24h == 12
     assert response.landing_funnel.weekly_current.connected_tenants == 3
     assert response.landing_funnel.alerts[0].status == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_get_investor_health_dashboard_uses_lifespan_startup_time():
+    mock_admin = MagicMock()
+    mock_admin.role = "admin"
+    mock_admin.tenant_id = None
+    mock_db = AsyncMock()
+    now = datetime(2026, 3, 27, 12, 0, tzinfo=timezone.utc)
+    started_at = datetime(2026, 3, 27, 10, 0, tzinfo=timezone.utc)
+
+    with (
+        patch(
+            "app.modules.governance.api.v1.health_dashboard.get_cache_service",
+            return_value=_DisabledCache(),
+        ),
+        patch.object(health_dashboard_module, "_startup_time", started_at),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard.datetime",
+            wraps=datetime,
+        ) as mock_datetime,
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_tenant_metrics",
+            new=AsyncMock(
+                return_value=TenantMetrics(
+                    total_tenants=0,
+                    active_last_24h=0,
+                    active_last_7d=0,
+                    free_tenants=0,
+                    paid_tenants=0,
+                    churn_risk=0,
+                )
+            ),
+        ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_job_queue_health",
+            new=AsyncMock(
+                return_value=JobQueueHealth(
+                    pending_jobs=0,
+                    running_jobs=0,
+                    failed_last_24h=0,
+                    dead_letter_count=0,
+                    avg_processing_time_ms=0.0,
+                    p50_processing_time_ms=0.0,
+                    p95_processing_time_ms=0.0,
+                    p99_processing_time_ms=0.0,
+                )
+            ),
+        ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_llm_usage_metrics",
+            new=AsyncMock(
+                return_value=LLMUsageMetrics(
+                    total_requests_24h=0,
+                    cache_hit_rate=0.0,
+                    estimated_cost_24h=0.0,
+                    budget_utilization=0.0,
+                )
+            ),
+        ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_cloud_connection_health",
+            new=AsyncMock(
+                return_value=CloudConnectionHealth(
+                    total_connections=0,
+                    active_connections=0,
+                    inactive_connections=0,
+                    errored_connections=0,
+                    providers={},
+                )
+            ),
+        ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_cloud_plus_connection_health",
+            new=AsyncMock(
+                return_value=CloudPlusConnectionHealth(
+                    total_connections=0,
+                    active_connections=0,
+                    inactive_connections=0,
+                    errored_connections=0,
+                    providers={},
+                )
+            ),
+        ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_license_governance_health",
+            new=AsyncMock(
+                return_value=LicenseGovernanceHealth(
+                    window_hours=24,
+                    active_license_connections=0,
+                    requests_created_24h=0,
+                    requests_completed_24h=0,
+                    requests_failed_24h=0,
+                    requests_in_flight=0,
+                    completion_rate_percent=0.0,
+                    failure_rate_percent=0.0,
+                    avg_time_to_complete_hours=0.0,
+                )
+            ),
+        ),
+        patch(
+            "app.modules.governance.api.v1.health_dashboard._get_landing_funnel_health",
+            new=AsyncMock(
+                return_value={
+                    "weekly_current": {
+                        "total_events": 0,
+                        "cta_events": 0,
+                        "signup_intent_events": 0,
+                        "onboarded_tenants": 0,
+                        "connected_tenants": 0,
+                        "first_value_tenants": 0,
+                        "pql_tenants": 0,
+                        "pricing_view_tenants": 0,
+                        "checkout_started_tenants": 0,
+                        "paid_tenants": 0,
+                        "signup_to_connection_rate": 0.0,
+                        "connection_to_first_value_rate": 0.0,
+                    },
+                    "weekly_previous": {
+                        "total_events": 0,
+                        "cta_events": 0,
+                        "signup_intent_events": 0,
+                        "onboarded_tenants": 0,
+                        "connected_tenants": 0,
+                        "first_value_tenants": 0,
+                        "pql_tenants": 0,
+                        "pricing_view_tenants": 0,
+                        "checkout_started_tenants": 0,
+                        "paid_tenants": 0,
+                        "signup_to_connection_rate": 0.0,
+                        "connection_to_first_value_rate": 0.0,
+                    },
+                    "weekly_delta": {
+                        "total_events": 0,
+                        "signup_intent_events": 0,
+                        "onboarded_tenants": 0,
+                        "connected_tenants": 0,
+                        "first_value_tenants": 0,
+                        "pql_tenants": 0,
+                        "pricing_view_tenants": 0,
+                        "checkout_started_tenants": 0,
+                        "paid_tenants": 0,
+                        "signup_to_connection_rate": 0.0,
+                        "connection_to_first_value_rate": 0.0,
+                    },
+                    "alerts": [],
+                }
+            ),
+        ),
+    ):
+        mock_datetime.now.return_value = now
+        response = await get_investor_health_dashboard(mock_admin, mock_db)
+
+    assert response.system.uptime_hours == 2.0
 
 
 @pytest.mark.asyncio

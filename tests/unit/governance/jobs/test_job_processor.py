@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -33,6 +34,31 @@ def mock_db_session():
 @pytest.fixture
 def job_processor(mock_db_session):
     return JobProcessor(mock_db_session)
+
+
+@pytest.mark.asyncio
+async def test_is_stale_running_job_uses_live_timeout_setting(job_processor):
+    now = datetime.now(timezone.utc)
+    job = BackgroundJob(
+        id=uuid4(),
+        job_type="test_job",
+        attempts=1,
+        max_attempts=3,
+        status=JobStatus.RUNNING.value,
+        started_at=now - timedelta(minutes=10),
+    )
+
+    with patch(
+        "app.modules.governance.domain.jobs.processor.get_settings",
+        return_value=SimpleNamespace(BACKGROUND_JOB_RUNNING_TIMEOUT_MINUTES=5),
+    ):
+        assert job_processor._is_stale_running_job(job, now=now) is True
+
+    with patch(
+        "app.modules.governance.domain.jobs.processor.get_settings",
+        return_value=SimpleNamespace(BACKGROUND_JOB_RUNNING_TIMEOUT_MINUTES=15),
+    ):
+        assert job_processor._is_stale_running_job(job, now=now) is False
 
 
 @pytest.mark.asyncio

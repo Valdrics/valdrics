@@ -486,3 +486,39 @@ async def test_comprehensive_health_check_sequences_db_backed_checks():
     assert result["checks"]["background_jobs"]["status"] == "healthy"
     assert observed_order[0] == "database"
     assert observed_order[-1] == "background_jobs"
+
+
+@pytest.mark.asyncio
+async def test_comprehensive_health_check_uses_live_version_and_environment():
+    service = HealthService()
+    settings_obj = SimpleNamespace(VERSION="2026.03-live", ENVIRONMENT="staging")
+
+    with (
+        patch("app.shared.core.health.get_settings", return_value=settings_obj),
+        patch.object(service, "_check_database", AsyncMock(return_value={"status": "up"})),
+        patch.object(service, "_check_cache", AsyncMock(return_value={"status": "healthy"})),
+        patch.object(
+            service,
+            "_check_external_services",
+            AsyncMock(return_value={"status": "healthy", "services": {}}),
+        ),
+        patch.object(
+            service,
+            "_check_circuit_breakers",
+            AsyncMock(return_value={"status": "healthy"}),
+        ),
+        patch.object(
+            service,
+            "_check_system_resources",
+            AsyncMock(return_value={"status": "healthy"}),
+        ),
+        patch.object(
+            service,
+            "_check_background_jobs",
+            AsyncMock(return_value={"status": "healthy"}),
+        ),
+    ):
+        result = await service.comprehensive_health_check()
+
+    assert result["version"] == "2026.03-live"
+    assert result["environment"] == "staging"
