@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import Page from './+page.svelte';
+import { listPublicContent } from '$lib/content/publicContent';
 
 vi.mock('$app/paths', () => ({
 	base: '',
@@ -12,9 +13,21 @@ vi.mock('$app/stores', () => ({
 	page: readable({ url: new URL('https://example.com/insights') })
 }));
 
+const SHARED_PAGE_DATA = {
+	user: null,
+	session: null,
+	subscription: { tier: 'starter', status: 'active' },
+	profile: null
+} as const;
+
 describe('insights page', () => {
 	it('renders insight cards and content CTAs', () => {
-		render(Page);
+		render(Page, {
+			data: {
+				...SHARED_PAGE_DATA,
+				insights: listPublicContent('insights')
+			}
+		});
 
 		expect(screen.getByRole('heading', { level: 1, name: /insights/i })).toBeTruthy();
 		expect(

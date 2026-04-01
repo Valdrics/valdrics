@@ -172,6 +172,44 @@ async def test_run_preflight_checks_failure_with_retry(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_run_preflight_checks_uses_perf_counter_for_latency(monkeypatch):
+    class DummyResponse:
+        status_code = 200
+        text = "ok"
+
+    class SuccessfulClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url):
+            return DummyResponse()
+
+    perf_values = iter([10.0, 10.125])
+
+    class _PinnedDatetime:
+        @staticmethod
+        def now(_tz=None):
+            return "pinned-wall-clock"
+
+    monkeypatch.setattr(load_test_api.httpx, "AsyncClient", lambda *a, **k: SuccessfulClient())
+    monkeypatch.setattr(load_test_api, "_perf_counter", lambda: next(perf_values))
+    monkeypatch.setattr(load_test_api, "datetime", _PinnedDatetime)
+
+    result = await load_test_api._run_preflight_checks(
+        target_url="http://127.0.0.1:8000",
+        endpoints=["/health/live"],
+        headers={},
+        timeout_seconds=2.0,
+        attempts=1,
+    )
+
+    assert result["checks"][0]["latency_ms"] == 125.0
+
+
+@pytest.mark.asyncio
 async def test_collect_runtime_snapshot_extracts_database_engine(monkeypatch):
     class DummyResponse:
         status_code = 200

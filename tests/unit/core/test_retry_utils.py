@@ -51,6 +51,10 @@ async def test_execute_with_retry_raises_after_exhaustion():
 
 def test_calculate_backoff_clamped_and_deterministic():
     manager = RetryManager("database")
+    original_min_wait = RETRY_CONFIGS["database"]["min_wait"]
+    original_max_wait = RETRY_CONFIGS["database"]["max_wait"]
+    original_multiplier = RETRY_CONFIGS["database"]["multiplier"]
+
     manager.config["min_wait"] = 0.1
     manager.config["max_wait"] = 0.2
     manager.config["multiplier"] = 2.0
@@ -58,6 +62,10 @@ def test_calculate_backoff_clamped_and_deterministic():
     with patch("app.shared.core.retry._JITTER_RNG.random", return_value=0.5):
         assert manager._calculate_backoff(0) == 0.1
         assert manager._calculate_backoff(10) == 0.2
+
+    assert RETRY_CONFIGS["database"]["min_wait"] == original_min_wait
+    assert RETRY_CONFIGS["database"]["max_wait"] == original_max_wait
+    assert RETRY_CONFIGS["database"]["multiplier"] == original_multiplier
 
 
 @pytest.mark.asyncio

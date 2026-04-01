@@ -86,6 +86,7 @@
 		<meta property="article:section" content={contentEntry.kind} />
 	{/if}
 	{#each structuredDataMarkup as item, index (`structured-data-${index}`)}
+		<!-- Structured data in Svelte head requires raw script injection; JSON is pre-escaped above. -->
 		<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 		{@html item}
 	{/each}

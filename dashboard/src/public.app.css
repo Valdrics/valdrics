@@ -8,6 +8,8 @@
 @source not './**/*.test.js';
 @source not './**/*.spec.js';
 @source './routes/layout/PublicSiteShell.svelte';
+@source './routes/layout/PublicMobileMenuDialog.svelte';
+@source './routes/layout/PublicSiteFooter.svelte';
 @source './routes/+page.svelte';
 @source './routes/__capture/dashboard-hero';
 @source './routes/about';

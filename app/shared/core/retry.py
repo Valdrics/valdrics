@@ -86,21 +86,7 @@ class RetryManager:
 
     def __init__(self, operation_type: str = "default") -> None:
         self.operation_type = operation_type
-        self.config: RetryConfig = RETRY_CONFIGS.get(
-            operation_type,
-            {
-                "max_attempts": 3,
-                "min_wait": 0.1,
-                "max_wait": 2.0,
-                "multiplier": 2.0,
-                "exceptions": (
-                    sqlalchemy.exc.OperationalError,
-                    sqlalchemy.exc.InterfaceError,
-                    asyncio.TimeoutError,
-                    ConnectionError,
-                ),
-            },
-        )
+        self.config = get_retry_config(operation_type)
 
     def _calculate_backoff(self, attempt: int) -> float:
         """Calculate exponential backoff with jitter."""

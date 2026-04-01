@@ -20,6 +20,7 @@ import argparse
 import asyncio
 import json
 import os
+import time
 from typing import Any
 from datetime import date, timedelta
 from datetime import datetime, timezone
@@ -59,6 +60,10 @@ LOAD_TEST_PROBE_RECOVERABLE_EXCEPTIONS = (
     TypeError,
     ValueError,
 )
+
+
+def _perf_counter() -> float:
+    return time.perf_counter()
 
 
 def _parse_args() -> argparse.Namespace:
@@ -266,12 +271,12 @@ async def _run_preflight_checks(
         for endpoint in endpoints:
             passed = False
             for attempt in range(1, attempts + 1):
-                started = datetime.now(timezone.utc)
+                started = _perf_counter()
                 try:
                     response = await client.get(f"{target_url}{endpoint}")
                     latency_ms = max(
                         0.0,
-                        (datetime.now(timezone.utc) - started).total_seconds() * 1000.0,
+                        (_perf_counter() - started) * 1000.0,
                     )
                     status_code = int(response.status_code)
                     preview = str(response.text or "").replace("\n", " ")[:140]
@@ -292,7 +297,7 @@ async def _run_preflight_checks(
                 except LOAD_TEST_PROBE_RECOVERABLE_EXCEPTIONS as exc:
                     latency_ms = max(
                         0.0,
-                        (datetime.now(timezone.utc) - started).total_seconds() * 1000.0,
+                        (_perf_counter() - started) * 1000.0,
                     )
                     checks.append(
                         {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
-import { getPublicContentEntry } from '$lib/content/publicContent';
+import { getPublicContentEntry, listRelatedPublicContent } from '$lib/content/publicContent';
 import PublicContentArticlePage from './PublicContentArticlePage.svelte';
 
 vi.mock('$app/paths', () => ({
@@ -26,6 +26,7 @@ describe('PublicContentArticlePage', () => {
 
 		render(PublicContentArticlePage, {
 			entry,
+			relatedEntries: listRelatedPublicContent(entry),
 			hubHref: '/docs',
 			hubLabel: 'Back to Documentation'
 		});

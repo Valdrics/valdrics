@@ -20,8 +20,25 @@
 		buildNotificationSavePayload,
 		mergeLoadedNotificationSettings
 	} from './settingsNotificationState';
-	import SettingsPageViewBody from './SettingsPageViewBody.svelte';
 	import './SettingsPageViewContent.css';
+
+	function createModuleLoader<T>(loader: () => Promise<T>): () => Promise<T> {
+		let promise: Promise<T> | null = null;
+
+		return () => {
+			if (!promise) {
+				promise = loader().catch((error) => {
+					promise = null;
+					throw error;
+				});
+			}
+			return promise;
+		};
+	}
+
+	const loadSettingsPageViewBody = createModuleLoader(
+		() => import('./SettingsPageViewBody.svelte')
+	);
 
 	let { data } = $props();
 	const SETTINGS_REQUEST_TIMEOUT_MS = 8000;
@@ -58,6 +75,8 @@
 	let persona = $derived(String(data.profile?.persona ?? 'engineering'));
 	let savingPersona = $state(false);
 	let settingsSchemasPromise: Promise<typeof import('./settingsPageSchemas')> | null = null;
+	let deferredSettingsDataPromise: Promise<void> | null = null;
+	let deferredSettingsDataLoaded = $state(false);
 
 	const getHeaders = () => ({ Authorization: `Bearer ${data.session?.access_token}` });
 
@@ -387,18 +406,46 @@
 		}
 	}
 
+	async function ensureDeferredSettingsData(): Promise<void> {
+		if (deferredSettingsDataLoaded) {
+			return;
+		}
+
+		if (!data.user) {
+			loadingLLM = false;
+			loadingActiveOps = false;
+			loadingSafety = false;
+			deferredSettingsDataLoaded = true;
+			return;
+		}
+
+		if (!deferredSettingsDataPromise) {
+			deferredSettingsDataPromise = Promise.all([
+				loadModels(),
+				loadLLMSettings(),
+				loadSafetyStatus(),
+				['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)
+					? loadActiveOpsSettings()
+					: Promise.resolve().then(() => {
+							loadingActiveOps = false;
+						})
+			])
+				.then(() => {
+					deferredSettingsDataLoaded = true;
+				})
+				.catch((error) => {
+					deferredSettingsDataPromise = null;
+					throw error;
+				});
+		}
+
+		return deferredSettingsDataPromise;
+	}
+
 	onMount(() => {
 		if (data.user) {
 			void loadSettings();
 			void loadCarbonSettings();
-			void loadModels();
-			void loadLLMSettings();
-			void loadSafetyStatus();
-			if (['growth', 'pro', 'enterprise'].includes(data.subscription?.tier)) {
-				void loadActiveOpsSettings();
-			} else {
-				loadingActiveOps = false;
-			}
 		} else {
 			loading = false;
 			loadingCarbon = false;
@@ -444,7 +491,8 @@
 		testWorkflowDispatch,
 		runPolicyDiagnostics,
 		saveSettings,
-		saving
+		saving,
+		onRevealDeferredSections: ensureDeferredSettingsData
 	});
 </script>
 
@@ -452,11 +500,21 @@
 	<title>Settings | Valdrics</title>
 </svelte:head>
 
-<SettingsPageViewBody
-	{...viewProps}
-	bind:persona
-	bind:carbonSettings
-	bind:llmSettings
-	bind:activeOpsSettings
-	bind:settings
-/>
+{#await loadSettingsPageViewBody()}
+	<div class="card">
+		<div class="skeleton h-8 w-48 mb-4"></div>
+		<div class="skeleton h-4 w-full mb-2"></div>
+		<div class="skeleton h-4 w-3/4 mb-6"></div>
+		<div class="skeleton h-64 rounded-2xl"></div>
+	</div>
+{:then module}
+	{@const SettingsPageViewBody = module.default}
+	<SettingsPageViewBody
+		{...viewProps}
+		bind:persona
+		bind:carbonSettings
+		bind:llmSettings
+		bind:activeOpsSettings
+		bind:settings
+	/>
+{/await}

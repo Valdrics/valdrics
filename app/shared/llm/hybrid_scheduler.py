@@ -81,16 +81,40 @@ class HybridAnalysisScheduler:
 
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.cache = get_cache_service()
-        self.delta_service = DeltaAnalysisService(self.cache)
+        self._cache: Any | None = None
+        self._delta_service: DeltaAnalysisService | None = None
+        self._delta_service_cache: Any | None = None
         self._analyzer: FinOpsAnalyzer | None = None
         self._analyzer_provider: str | None = None
         self._analyzer_is_injected = False
         # Capture dependencies at construction for deterministic behavior in tests
         # that patch these symbols during scheduler creation.
+        self._cache_service_getter = get_cache_service
+        self._delta_service_cls = DeltaAnalysisService
         self._llm_factory_create = LLMFactory.create
         self._settings_getter = get_settings
         self._analyzer_cls = FinOpsAnalyzer
+
+    def _get_cache(self) -> Any:
+        cache = self._cache_service_getter()
+        if self._cache is not cache:
+            self._cache = cache
+            if self._delta_service_cache is not cache:
+                self._delta_service = None
+                self._delta_service_cache = None
+        return cache
+
+    @property
+    def cache(self) -> Any:
+        return self._get_cache()
+
+    @property
+    def delta_service(self) -> DeltaAnalysisService:
+        cache = self._get_cache()
+        if self._delta_service is None or self._delta_service_cache is not cache:
+            self._delta_service = self._delta_service_cls(cache)
+            self._delta_service_cache = cache
+        return self._delta_service
 
     def set_analyzer(self, value: FinOpsAnalyzer) -> None:
         """Inject an analyzer instance explicitly."""

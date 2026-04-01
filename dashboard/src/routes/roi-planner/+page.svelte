@@ -5,7 +5,6 @@
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import LandingRoiCalculator from '$lib/components/landing/LandingRoiCalculator.svelte';
 	import {
-		resolveDetectedLandingCurrency,
 		resolveInitialLandingCurrency,
 		setLandingCurrencyPreference,
 		type LandingCurrencyCode
@@ -25,8 +24,11 @@
 	let roiTeamMembers = $state(DEFAULT_LANDING_ROI_INPUTS.teamMembers);
 	let roiBlendedHourlyUsd = $state(DEFAULT_LANDING_ROI_INPUTS.blendedHourlyUsd);
 	let roiPlatformAnnualCostUsd = $state(DEFAULT_LANDING_ROI_INPUTS.platformAnnualCostUsd);
-	let localCurrencyCode = $state<LandingCurrencyCode>(resolveDetectedLandingCurrency());
-	let roiCurrencyCode = $state<LandingCurrencyCode>(resolveInitialLandingCurrency());
+	let roiCurrencyOverride = $state<LandingCurrencyCode | null>(null);
+	let localCurrencyCode = $derived.by(() => data.detectedCurrencyCode);
+	let roiCurrencyCode = $derived(
+		roiCurrencyOverride ?? resolveInitialLandingCurrency(localCurrencyCode)
+	);
 
 	let roiInputs = $derived(
 		normalizeLandingRoiInputs({
@@ -45,7 +47,7 @@
 	}
 
 	function handleCurrencyCodeChange(value: LandingCurrencyCode): void {
-		roiCurrencyCode = value;
+		roiCurrencyOverride = value;
 		if (browser) {
 			setLandingCurrencyPreference(value);
 		}

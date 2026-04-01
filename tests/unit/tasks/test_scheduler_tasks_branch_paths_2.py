@@ -569,6 +569,31 @@ async def test_acceptance_sweep_retries_then_succeeds() -> None:
 
 
 @pytest.mark.asyncio
+async def test_acceptance_sweep_uses_perf_counter_for_duration_metric() -> None:
+    db = AsyncMock()
+    _configure_sync_begin(db)
+    tenant = SimpleNamespace(id=uuid4())
+    db.execute.side_effect = [_scalars_result([tenant]), _rowcount_result(1)]
+
+    with (
+        patch("app.tasks.scheduler_tasks._open_db_session", return_value=_db_cm(db)),
+        patch(
+            "app.tasks.scheduler_sweep_ops._perf_counter",
+            side_effect=[30.0, 30.4],
+        ),
+        patch("app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED"),
+        patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_RUNS"),
+        patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_DURATION") as mock_duration,
+    ):
+        await st._acceptance_sweep_logic()
+
+    assert (
+        mock_duration.labels.return_value.observe.call_args.args[0]
+        == pytest.approx(0.4)
+    )
+
+
+@pytest.mark.asyncio
 async def test_acceptance_sweep_final_failure_records_metric() -> None:
     db = AsyncMock()
     _configure_sync_begin(db)
@@ -753,3 +778,22 @@ def test_daily_finops_scan_logs_partial_failure_and_completion() -> None:
         successful=2,
         failed=1,
     )
+
+
+def test_daily_finops_scan_uses_perf_counter_for_duration() -> None:
+    task = MagicMock()
+    task.delay.return_value = None
+
+    with (
+        patch("app.tasks.scheduler_tasks.run_cohort_analysis", task),
+        patch(
+            "app.tasks.scheduler_tasks._perf_counter",
+            side_effect=[80.0, 80.4],
+        ),
+        patch("app.tasks.scheduler_tasks.logger") as mock_logger,
+    ):
+        st.daily_finops_scan()
+
+    completed_call = mock_logger.info.call_args_list[-1]
+    assert completed_call.args == ("daily_finops_scan_completed",)
+    assert completed_call.kwargs["duration_seconds"] == pytest.approx(0.4)

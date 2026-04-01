@@ -1,38 +1,32 @@
 import { browser } from '$app/environment';
-import { detectLocalCurrency, SUPPORTED_CURRENCIES } from '$lib/landing/roiCalculator';
+import { detectLocalCurrency } from '$lib/landing/roiCalculator';
+import {
+	normalizeLandingCurrencyCode,
+	type LandingCurrencyCode
+} from '$lib/landing/landingCurrencyPolicy';
 
-export type LandingCurrencyCode = 'USD' | 'EUR' | 'GBP' | 'NGN' | 'CNY';
+export type { LandingCurrencyCode } from '$lib/landing/landingCurrencyPolicy';
 
 const STORAGE_KEY = 'valdrics_landing_currency';
-const SUPPORTED_CODES = new Set(
-	SUPPORTED_CURRENCIES.map((currency) => currency.code as LandingCurrencyCode)
-);
 
-function normalizeCurrencyCode(value: unknown): LandingCurrencyCode | null {
-	const normalized = String(value ?? '')
-		.trim()
-		.toUpperCase();
-	if (!SUPPORTED_CODES.has(normalized as LandingCurrencyCode)) {
-		return null;
-	}
-	return normalized as LandingCurrencyCode;
-}
-
-export function getLandingCurrencyPreference(): LandingCurrencyCode {
-	if (!browser) return 'USD';
+export function getLandingCurrencyPreference(
+	fallback: LandingCurrencyCode = resolveDetectedLandingCurrency()
+): LandingCurrencyCode {
+	if (!browser) return fallback;
 	try {
-		return (
-			normalizeCurrencyCode(window.localStorage.getItem(STORAGE_KEY)) ??
-			resolveDetectedLandingCurrency()
-		);
+		const storedCurrency = normalizeLandingCurrencyCode(window.localStorage.getItem(STORAGE_KEY));
+		if (!storedCurrency) {
+			return fallback;
+		}
+		return storedCurrency === 'USD' || storedCurrency === fallback ? storedCurrency : fallback;
 	} catch {
-		return resolveDetectedLandingCurrency();
+		return fallback;
 	}
 }
 
 export function setLandingCurrencyPreference(code: LandingCurrencyCode): void {
 	if (!browser) return;
-	const normalized = normalizeCurrencyCode(code);
+	const normalized = normalizeLandingCurrencyCode(code);
 	if (!normalized) return;
 	try {
 		window.localStorage.setItem(STORAGE_KEY, normalized);
@@ -41,11 +35,13 @@ export function setLandingCurrencyPreference(code: LandingCurrencyCode): void {
 	}
 }
 
-export function resolveInitialLandingCurrency(): LandingCurrencyCode {
-	return getLandingCurrencyPreference();
+export function resolveInitialLandingCurrency(
+	fallback: LandingCurrencyCode = resolveDetectedLandingCurrency()
+): LandingCurrencyCode {
+	return getLandingCurrencyPreference(fallback);
 }
 
 export function resolveDetectedLandingCurrency(): LandingCurrencyCode {
 	if (!browser) return 'USD';
-	return normalizeCurrencyCode(detectLocalCurrency()) ?? 'USD';
+	return normalizeLandingCurrencyCode(detectLocalCurrency()) ?? 'USD';
 }

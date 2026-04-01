@@ -861,6 +861,112 @@ async def test_execute_resolves_bound_finding_on_success(remediation_service, db
 
 
 @pytest.mark.asyncio
+async def test_execute_records_duration_with_perf_counter(
+    remediation_service, db_session
+):
+    request_id = uuid4()
+    tenant_id = uuid4()
+    connection_id = uuid4()
+    finding_id = uuid4()
+    finding = OptimizationFinding(
+        id=finding_id,
+        tenant_id=tenant_id,
+        source=FindingSource.ZOMBIE_SCAN,
+        status=FindingStatus.OPEN,
+        fingerprint="d" * 64,
+        provider="aws",
+        category="idle_instances",
+        connection_id=connection_id,
+        connection_name="Prod AWS",
+        resource_id="i-123",
+        resource_type="ec2_instance",
+        region="us-east-1",
+        estimated_monthly_savings=Decimal("20.0"),
+        confidence_score=Decimal("0.91"),
+        explainability_notes="Idle instance detected.",
+        requires_manual_review=False,
+        automated_action_allowed=True,
+        decision_gate=None,
+        payload={"resource_id": "i-123"},
+    )
+    req = MagicMock(spec=RemediationRequest)
+    req.id = request_id
+    req.tenant_id = tenant_id
+    req.status = RemediationStatus.APPROVED
+    req.resource_id = "i-123"
+    req.resource_type = "ec2_instance"
+    req.action = RemediationAction.STOP_INSTANCE
+    req.create_backup = False
+    req.reviewed_by_user_id = uuid4()
+    req.estimated_monthly_savings = Decimal("20.0")
+    req.provider = "aws"
+    req.connection_id = connection_id
+    req.finding_id = finding_id
+    req.finding_snapshot = {
+        "provider": "aws",
+        "connection_id": str(connection_id),
+        "region": "us-east-1",
+        "resource_id": "i-123",
+        "resource_type": "ec2_instance",
+        "fingerprint": "d" * 64,
+    }
+    req.region = "us-east-1"
+    req.action_parameters = {}
+
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = req
+    db_session.execute.return_value = mock_res
+    remediation_service.get_by_id = AsyncMock(return_value=finding)
+    remediation_service._resolve_credentials = AsyncMock(
+        return_value={"region": "us-east-1"}
+    )
+
+    with (
+        patch(
+            "app.modules.optimization.domain.remediation.RemediationActionFactory.get_strategy"
+        ) as mock_get_strategy,
+        patch(
+            "app.modules.optimization.domain.remediation.AuditLogger.log",
+            new=AsyncMock(),
+        ),
+        patch(
+            "app.modules.optimization.domain.remediation.SafetyGuardrailService"
+        ) as mock_safety,
+        patch(
+            "app.modules.optimization.domain.remediation_execute.REMEDIATION_DURATION_SECONDS"
+        ) as mock_duration,
+        patch(
+            "app.modules.optimization.domain.remediation_execute._perf_counter",
+            side_effect=[10.0, 10.75],
+        ),
+    ):
+        mock_safety.return_value.check_all_guards = AsyncMock()
+        mock_strategy = MagicMock()
+        mock_strategy.execute = AsyncMock(
+            return_value=ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                resource_id="i-123",
+                action_taken=RemediationAction.STOP_INSTANCE.value,
+            )
+        )
+        mock_get_strategy.return_value = mock_strategy
+
+        result = await remediation_service.execute(
+            request_id, tenant_id, bypass_grace_period=True
+        )
+
+    assert result.status == RemediationStatus.COMPLETED
+    mock_duration.labels.assert_called_once_with(
+        action=RemediationAction.STOP_INSTANCE.value,
+        provider="aws",
+    )
+    assert (
+        mock_duration.labels.return_value.observe.call_args.args[0]
+        == pytest.approx(0.75)
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_client_credential_mapping(remediation_service):
     # Test with CamelCase credentials
     remediation_service.credentials = {

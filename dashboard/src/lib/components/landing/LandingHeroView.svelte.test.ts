@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render } from '@testing-library/svelte';
+import { cleanup, render, waitFor } from '@testing-library/svelte';
 import LandingHeroView from './LandingHeroView.svelte';
 import type { LandingCurrencyCode } from '$lib/landing/currencyPreference';
 import { CLOUD_HOOK_STATES } from '$lib/landing/heroContent.core';
@@ -43,20 +43,10 @@ function buildProps() {
 		onSelectDemoStep: vi.fn(),
 		onSelectSnapshot: vi.fn(),
 		onSignalMapElementChange: vi.fn(),
-		normalizedScenarioWasteWithoutPct: 18,
-		normalizedScenarioWasteWithPct: 7,
-		normalizedScenarioWindowMonths: 12,
-		scenarioWithoutBarPct: 100,
-		scenarioWithBarPct: 40,
-		scenarioWasteWithoutUsd: 21600,
-		scenarioWasteWithUsd: 8400,
-		scenarioWasteRecoveryMonthlyUsd: 13200,
-		scenarioWasteRecoveryWindowUsd: 158400,
-		monthlySpendUsd: 120000,
+		roiMonthlySpendUsd: 120000,
 		scenarioWasteWithoutPct: 18,
 		scenarioWasteWithPct: 7,
 		scenarioWindowMonths: 12,
-		formatUsd: (amount: number) => `$${amount.toFixed(0)}`,
 		localCurrencyCode: 'USD' as LandingCurrencyCode,
 		currencyCode: 'USD' as LandingCurrencyCode,
 		onCurrencyCodeChange: vi.fn(),
@@ -87,31 +77,35 @@ function buildProps() {
 }
 
 describe('LandingHeroView', () => {
-	it('renders the fixed landing narrative order', () => {
+	it('renders the fixed landing narrative order', async () => {
 		const view = render(LandingHeroView, {
 			props: buildProps()
 		});
 
-		const sectionIds = Array.from(view.container.querySelectorAll('section[id]')).map(
-			(element) => element.id
-		);
-		expect(sectionIds).toEqual(['hero', 'product', 'simulator', 'plans', 'trust']);
+		await waitFor(() => {
+			const sectionIds = Array.from(view.container.querySelectorAll('section[id]')).map(
+				(element) => element.id
+			);
+			expect(sectionIds).toEqual(['hero', 'product', 'simulator', 'plans', 'trust']);
+		});
 	});
 
-	it('renders the trust section with proof and human-proof links wired', () => {
+	it('renders the trust section with proof and human-proof links wired', async () => {
 		const view = render(LandingHeroView, {
 			props: buildProps()
 		});
 
-		const trustSection = view.container.querySelector('#trust');
-		expect(trustSection).toBeTruthy();
-		expect(trustSection?.textContent || '').toContain('Review the company before you talk to us');
-		expect(
-			(trustSection?.querySelector('a[href*="/proof"]') as HTMLAnchorElement | null)?.href || ''
-		).toContain('/proof');
-		expect(
-			(trustSection?.querySelector('a[href*="/about"]') as HTMLAnchorElement | null)?.href || ''
-		).toContain('/about');
+		await waitFor(() => {
+			const trustSection = view.container.querySelector('#trust');
+			expect(trustSection).toBeTruthy();
+			expect(trustSection?.textContent || '').toContain('Review the company before you talk to us');
+			expect(
+				(trustSection?.querySelector('a[href*="/proof"]') as HTMLAnchorElement | null)?.href || ''
+			).toContain('/proof');
+			expect(
+				(trustSection?.querySelector('a[href*="/about"]') as HTMLAnchorElement | null)?.href || ''
+			).toContain('/about');
+		});
 	});
 
 	it('renders the hero with a real dashboard still instead of the old synthetic mockup', () => {

@@ -152,6 +152,33 @@ def test_run_fails_when_svelte_uses_html_injection_without_sanitization(
     assert "`{@html ...}` requires DOMPurify.sanitize(...)" in capsys.readouterr().out
 
 
+def test_run_allows_preescaped_json_ld_html_injection(tmp_path: Path) -> None:
+    _seed_safe_dashboard(tmp_path)
+    _write(
+        tmp_path / "dashboard/src/lib/PublicPageMeta.svelte",
+        """
+<script lang="ts">
+  const structuredDataJson = [
+    JSON.stringify({ '@type': 'ContactPage' })
+      .replaceAll('<', '\\\\u003c')
+      .replaceAll('</script', '<\\\\/script')
+  ];
+  const structuredDataMarkup = structuredDataJson.map(
+    (value) => '<script type="application/ld+json">' + value + '</scr' + 'ipt>'
+  );
+</script>
+
+<svelte:head>
+  {#each structuredDataMarkup as item}
+    {@html item}
+  {/each}
+</svelte:head>
+""".strip(),
+    )
+
+    assert run(tmp_path) == 0
+
+
 def test_main_resolves_relative_repo_root_from_repo_when_run_outside_repo(
     tmp_path: Path,
     monkeypatch,

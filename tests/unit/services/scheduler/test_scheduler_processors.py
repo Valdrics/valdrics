@@ -5,6 +5,7 @@ No existing tests for these modules.
 """
 
 from datetime import date
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -84,6 +85,66 @@ class TestAnalysisProcessor:
             )
             # Should complete without error
             assert result is None or isinstance(result, dict)
+
+    @pytest.mark.asyncio
+    async def test_process_tenant_uses_live_llm_provider_setting(
+        self, mock_db: AsyncMock, mock_tenant
+    ) -> None:
+        processor = AnalysisProcessor()
+        conn = MagicMock()
+        conn.provider = "aws"
+        conn.region = "us-east-1"
+        conn.id = uuid4()
+        mock_tenant.aws_connections = [conn]
+        mock_tenant.azure_connections = []
+        mock_tenant.gcp_connections = []
+        mock_tenant.notification_settings = MagicMock(slack_enabled=False)
+
+        usage_summary = MagicMock()
+        usage_summary.records = [MagicMock(amount=25.0, service="Amazon EC2")]
+        usage_summary.total_cost = 25.0
+
+        settings_obj = SimpleNamespace(LLM_PROVIDER="groq")
+
+        with (
+            patch(
+                "app.modules.governance.domain.scheduler.processors.get_settings",
+                return_value=settings_obj,
+            ),
+            patch(
+                "app.modules.governance.domain.scheduler.processors.AdapterFactory.get_adapter",
+            ) as get_adapter,
+            patch(
+                "app.modules.governance.domain.scheduler.processors.ZombieDetectorFactory.get_detector",
+            ) as get_detector,
+            patch(
+                "app.modules.governance.domain.scheduler.processors.LLMFactory.create"
+            ) as create_llm,
+            patch(
+                "app.modules.governance.domain.scheduler.processors.FinOpsAnalyzer"
+            ) as analyzer_cls,
+            patch(
+                "app.modules.governance.domain.scheduler.processors.CarbonCalculator"
+            ) as carbon_calc_cls,
+        ):
+            adapter = get_adapter.return_value
+            adapter.get_daily_costs = AsyncMock(return_value=usage_summary)
+            get_detector.return_value.scan_all = AsyncMock(return_value={"ec2": []})
+            analyzer_cls.return_value.analyze = AsyncMock(
+                return_value={"insights": [], "recommendations": []}
+            )
+            carbon_calc_cls.return_value.calculate_from_costs.return_value = {
+                "total_co2_kg": 1.0
+            }
+
+            await processor.process_tenant(
+                mock_db,
+                mock_tenant,
+                date.today(),
+                date.today(),
+            )
+
+        create_llm.assert_called_once_with("groq")
 
 
 class TestSavingsProcessor:

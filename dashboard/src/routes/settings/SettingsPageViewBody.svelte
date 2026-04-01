@@ -19,17 +19,29 @@
 	type LlmSettingsState = typeof INITIAL_LLM_SETTINGS;
 	type ActiveOpsSettingsState = typeof INITIAL_ACTIVEOPS_SETTINGS;
 	type ProviderModelsState = typeof INITIAL_PROVIDER_MODELS;
-	type TieredSettingsCardProps = {
-		accessToken?: string;
-		tier?: string;
-	};
-	type SettingsNotificationControlsProps = {
+	type SettingsDeferredSectionProps = {
 		data: {
 			user?: unknown;
 			session?: { access_token?: string };
 			subscription?: { tier?: string };
 			profile?: { persona?: string };
 		};
+		llmSettings: LlmSettingsState;
+		loadingLLM: boolean;
+		savingLLM: boolean;
+		providerModels: ProviderModelsState;
+		saveLLMSettings: AsyncAction;
+		activeOpsSettings: ActiveOpsSettingsState;
+		loadingActiveOps: boolean;
+		savingActiveOps: boolean;
+		saveActiveOpsSettings: AsyncAction;
+		loadingSafety: boolean;
+		resettingSafety: boolean;
+		loadSafetyStatus: AsyncAction;
+		resetSafetyCircuitBreaker: AsyncAction;
+		safetyError: string;
+		safetySuccess: string;
+		safetyStatus: SafetyStatus | null;
 		settings: NotificationSettingsState;
 		testing: boolean;
 		testingJira: boolean;
@@ -87,7 +99,8 @@
 		testWorkflowDispatch,
 		runPolicyDiagnostics,
 		saveSettings,
-		saving
+		saving,
+		onRevealDeferredSections = async () => {}
 	}: {
 		data: {
 			user?: unknown;
@@ -135,76 +148,47 @@
 		runPolicyDiagnostics: AsyncAction;
 		saveSettings: AsyncAction;
 		saving: boolean;
+		onRevealDeferredSections?: AsyncAction;
 	} = $props();
 
 	const isGrowthTier = $derived(
 		['growth', 'pro', 'enterprise'].includes(data.subscription?.tier ?? '')
 	);
 	const carbonUpgradePrompt = getUpgradePrompt('growth', 'GreenOps controls');
-	const loadIdentitySettingsCard = createLazyComponent<TieredSettingsCardProps>(
-		() => import('$lib/components/IdentitySettingsCard.svelte')
+	const loadSettingsDeferredSection = createLazyComponent<SettingsDeferredSectionProps>(
+		() => import('./SettingsDeferredSection.svelte')
 	);
-	const loadEnforcementSettingsCard = createLazyComponent<TieredSettingsCardProps>(
-		() => import('$lib/components/EnforcementSettingsCard.svelte')
-	);
-	const loadEnforcementOpsCard = createLazyComponent<TieredSettingsCardProps>(
-		() => import('$lib/components/EnforcementOpsCard.svelte')
-	);
-	const loadSettingsAiStrategyCard = createLazyComponent<{
-		loadingLLM: boolean;
-		llmSettings: LlmSettingsState;
-		providerModels: ProviderModelsState;
-		saveLLMSettings: AsyncAction;
-		savingLLM: boolean;
-	}>(() => import('./SettingsAiStrategyCard.svelte'));
-	const loadSettingsActiveOpsCard = createLazyComponent<{
-		data: {
-			user?: unknown;
-			session?: { access_token?: string };
-			subscription?: { tier?: string };
-			profile?: { persona?: string };
-		};
-		loadingActiveOps: boolean;
-		activeOpsSettings: ActiveOpsSettingsState;
-		saveActiveOpsSettings: AsyncAction;
-		savingActiveOps: boolean;
-	}>(() => import('./SettingsActiveOpsCard.svelte'));
-	const loadSettingsSafetyControlsCard = createLazyComponent<{
-		loadingSafety: boolean;
-		resettingSafety: boolean;
-		loadSafetyStatus: AsyncAction;
-		resetSafetyCircuitBreaker: AsyncAction;
-		safetyError: string;
-		safetySuccess: string;
-		safetyStatus: SafetyStatus | null;
-	}>(() => import('./SettingsSafetyControlsCard.svelte'));
-	const loadSettingsNotificationControls = createLazyComponent<SettingsNotificationControlsProps>(
-		() => import('./SettingsNotificationControls.svelte')
-	);
-	let advancedSettingsAnchor: HTMLDivElement | null = $state(null);
-	let advancedSettingsVisible = $state(false);
+	let deferredSectionAnchor: HTMLDivElement | null = $state(null);
+	let deferredSectionVisible = $state(false);
+	let deferredSectionNotified = $state(false);
 
 	onMount(() => {
 		if (import.meta.env.MODE === 'test' || typeof IntersectionObserver === 'undefined') {
-			advancedSettingsVisible = true;
+			deferredSectionVisible = true;
 			return;
 		}
 
 		const observer = new IntersectionObserver(
 			(entries) => {
 				if (entries.some((entry) => entry.isIntersecting)) {
-					advancedSettingsVisible = true;
+					deferredSectionVisible = true;
 					observer.disconnect();
 				}
 			},
-			{ rootMargin: '320px 0px' }
+			{ rootMargin: '280px 0px' }
 		);
 
-		if (advancedSettingsAnchor) {
-			observer.observe(advancedSettingsAnchor);
+		if (deferredSectionAnchor) {
+			observer.observe(deferredSectionAnchor);
 		}
 
 		return () => observer.disconnect();
+	});
+
+	$effect(() => {
+		if (!deferredSectionVisible || deferredSectionNotified) return;
+		deferredSectionNotified = true;
+		void onRevealDeferredSections();
 	});
 </script>
 
@@ -396,118 +380,33 @@
 				{/if}
 			</div>
 
-			{#await loadIdentitySettingsCard()}
-				<div class="card">
-					<div class="skeleton h-6 w-40 mb-4"></div>
-					<div class="skeleton h-4 w-full mb-2"></div>
-					<div class="skeleton h-4 w-3/4"></div>
-				</div>
-			{:then module}
-				{@const IdentitySettingsCard = module.default}
-				<IdentitySettingsCard
-					accessToken={data.session?.access_token}
-					tier={data.subscription?.tier}
-				/>
-			{:catch}
-				<div class="card">
-					<div class="skeleton h-6 w-40 mb-4"></div>
-					<div class="skeleton h-4 w-full mb-2"></div>
-					<div class="skeleton h-4 w-3/4"></div>
-				</div>
-			{/await}
-
-			{#await loadEnforcementSettingsCard()}
-				<div class="card">
-					<div class="skeleton h-6 w-48 mb-4"></div>
-					<div class="skeleton h-4 w-full mb-2"></div>
-					<div class="skeleton h-4 w-2/3"></div>
-				</div>
-			{:then module}
-				{@const EnforcementSettingsCard = module.default}
-				<EnforcementSettingsCard
-					accessToken={data.session?.access_token}
-					tier={data.subscription?.tier}
-				/>
-			{:catch}
-				<div class="card">
-					<div class="skeleton h-6 w-48 mb-4"></div>
-					<div class="skeleton h-4 w-full mb-2"></div>
-					<div class="skeleton h-4 w-2/3"></div>
-				</div>
-			{/await}
-
-			{#await loadEnforcementOpsCard()}
-				<div class="card">
-					<div class="skeleton h-6 w-48 mb-4"></div>
-					<div class="skeleton h-4 w-full mb-2"></div>
-					<div class="skeleton h-4 w-2/3"></div>
-				</div>
-			{:then module}
-				{@const EnforcementOpsCard = module.default}
-				<EnforcementOpsCard
-					accessToken={data.session?.access_token}
-					tier={data.subscription?.tier}
-				/>
-			{:catch}
-				<div class="card">
-					<div class="skeleton h-6 w-48 mb-4"></div>
-					<div class="skeleton h-4 w-full mb-2"></div>
-					<div class="skeleton h-4 w-2/3"></div>
-				</div>
-			{/await}
-
-			<div bind:this={advancedSettingsAnchor}>
-				{#if advancedSettingsVisible}
-					{#await loadSettingsAiStrategyCard()}
-						<div class="card">
-							<div class="skeleton h-6 w-48 mb-4"></div>
-							<div class="skeleton h-24 rounded-2xl"></div>
+			<div bind:this={deferredSectionAnchor}>
+				{#if deferredSectionVisible}
+					{#await loadSettingsDeferredSection()}
+						<div class="space-y-8">
+							<div class="card">
+								<div class="skeleton h-6 w-40 mb-4"></div>
+								<div class="skeleton h-4 w-full mb-2"></div>
+								<div class="skeleton h-4 w-3/4"></div>
+							</div>
+							<div class="card">
+								<div class="skeleton h-6 w-48 mb-4"></div>
+								<div class="skeleton h-24 rounded-2xl"></div>
+							</div>
 						</div>
 					{:then module}
-						{@const SettingsAiStrategyCard = module.default}
-						<SettingsAiStrategyCard
-							{loadingLLM}
+						{@const SettingsDeferredSection = module.default}
+						<SettingsDeferredSection
+							{data}
 							bind:llmSettings
+							{loadingLLM}
+							{savingLLM}
 							{providerModels}
 							{saveLLMSettings}
-							{savingLLM}
-						/>
-					{:catch}
-						<div class="card">
-							<div class="skeleton h-6 w-48 mb-4"></div>
-							<div class="skeleton h-24 rounded-2xl"></div>
-						</div>
-					{/await}
-
-					{#await loadSettingsActiveOpsCard()}
-						<div class="card">
-							<div class="skeleton h-6 w-48 mb-4"></div>
-							<div class="skeleton h-24 rounded-2xl"></div>
-						</div>
-					{:then module}
-						{@const SettingsActiveOpsCard = module.default}
-						<SettingsActiveOpsCard
-							{data}
-							{loadingActiveOps}
 							bind:activeOpsSettings
-							{saveActiveOpsSettings}
+							{loadingActiveOps}
 							{savingActiveOps}
-						/>
-					{:catch}
-						<div class="card">
-							<div class="skeleton h-6 w-48 mb-4"></div>
-							<div class="skeleton h-24 rounded-2xl"></div>
-						</div>
-					{/await}
-
-					{#await loadSettingsSafetyControlsCard()}
-						<div class="card">
-							<div class="skeleton h-6 w-56 mb-4"></div>
-							<div class="skeleton h-20 rounded-2xl"></div>
-						</div>
-					{:then module}
-						{@const SettingsSafetyControlsCard = module.default}
-						<SettingsSafetyControlsCard
+							{saveActiveOpsSettings}
 							{loadingSafety}
 							{resettingSafety}
 							{loadSafetyStatus}
@@ -515,24 +414,6 @@
 							{safetyError}
 							{safetySuccess}
 							{safetyStatus}
-						/>
-					{:catch}
-						<div class="card">
-							<div class="skeleton h-6 w-56 mb-4"></div>
-							<div class="skeleton h-20 rounded-2xl"></div>
-						</div>
-					{/await}
-
-					{#await loadSettingsNotificationControls()}
-						<div class="card">
-							<div class="skeleton h-6 w-52 mb-4"></div>
-							<div class="skeleton h-4 w-full mb-2"></div>
-							<div class="skeleton h-4 w-3/4"></div>
-						</div>
-					{:then module}
-						{@const SettingsNotificationControls = module.default}
-						<SettingsNotificationControls
-							{data}
 							bind:settings
 							{testing}
 							{testingJira}
@@ -549,10 +430,16 @@
 							{saving}
 						/>
 					{:catch}
-						<div class="card">
-							<div class="skeleton h-6 w-52 mb-4"></div>
-							<div class="skeleton h-4 w-full mb-2"></div>
-							<div class="skeleton h-4 w-3/4"></div>
+						<div class="space-y-8">
+							<div class="card">
+								<div class="skeleton h-6 w-40 mb-4"></div>
+								<div class="skeleton h-4 w-full mb-2"></div>
+								<div class="skeleton h-4 w-3/4"></div>
+							</div>
+							<div class="card">
+								<div class="skeleton h-6 w-48 mb-4"></div>
+								<div class="skeleton h-24 rounded-2xl"></div>
+							</div>
 						</div>
 					{/await}
 				{:else}

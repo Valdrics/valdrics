@@ -53,10 +53,10 @@ describe('IdentitySettingsCard', () => {
 			tier: 'free'
 		});
 
-		expect(screen.getByText('Identity (SSO/SCIM)')).toBeTruthy();
-		expect(screen.getByText(upgradePrompt.badge)).toBeTruthy();
-		expect(screen.getByText(upgradePrompt.body)).toBeTruthy();
-		expect(screen.getByRole('link', { name: upgradePrompt.cta })).toBeTruthy();
+		expect(await screen.findByText('Identity (SSO/SCIM)')).toBeTruthy();
+		expect(await screen.findByText(upgradePrompt.badge)).toBeTruthy();
+		expect(await screen.findByText(upgradePrompt.body)).toBeTruthy();
+		expect(await screen.findByRole('link', { name: upgradePrompt.cta })).toBeTruthy();
 		await waitFor(() => {
 			expect(getMock).not.toHaveBeenCalled();
 		});

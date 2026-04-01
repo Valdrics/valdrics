@@ -54,3 +54,51 @@ def test_main_rejects_directory_output_before_network(
 
     with pytest.raises(SystemExit, match="out must be a file path"):
         scim_idp.main()
+
+
+def test_main_uses_perf_counter_for_total_duration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    written: dict[str, object] = {}
+
+    class DummyResponse:
+        status_code = 200
+        text = ""
+        is_success = True
+
+        def json(self):
+            return {}
+
+    class DummyClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get(self, url: str):
+            return DummyResponse()
+
+    perf_values = iter([10.0, 10.1, 10.2, 10.3, 10.4])
+    monkeypatch.setattr(scim_idp, "_perf_counter", lambda: next(perf_values))
+    monkeypatch.setattr(scim_idp.httpx, "Client", DummyClient)
+    monkeypatch.setattr(
+        scim_idp,
+        "_write_out",
+        lambda _path, payload: written.update(payload),
+    )
+
+    exit_code = scim_idp.main(
+        [
+            "--scim-base-url",
+            "https://example.com/scim/v2",
+            "--scim-token",
+            "token",
+        ]
+    )
+
+    assert exit_code == 0
+    assert written["duration_seconds"] == pytest.approx(0.4)

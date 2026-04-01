@@ -73,6 +73,10 @@ _scheduler_async_runner: asyncio.Runner | None = None
 _scheduler_async_runner_lock = Lock()
 
 
+def _perf_counter() -> float:
+    return time.perf_counter()
+
+
 async def _load_active_remediation_connections(
     db: AsyncSession, *args: Any, **kwargs: Any
 ) -> list[Any]:
@@ -201,7 +205,7 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
     )
 
     job_name = f"cohort_{target_cohort.value.lower()}_enqueue"
-    start_time = time.time()
+    start_time = _perf_counter()
     max_retries = 3
     retry_count = 0
 
@@ -355,7 +359,7 @@ async def _cohort_analysis_logic(target_cohort: TenantCohort) -> None:
                 SCHEDULER_JOB_RUNS.labels(job_name=job_name, status="failure").inc()
                 break
 
-        duration = time.time() - start_time
+        duration = _perf_counter() - start_time
         SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(duration)
 
 @shared_task(
@@ -489,7 +493,7 @@ def run_refresh_landing_funnel_health() -> None:
 
 async def _refresh_landing_funnel_health_logic() -> None:
     job_name = "landing_funnel_health_refresh"
-    start_time = time.time()
+    start_time = _perf_counter()
 
     try:
         await _refresh_landing_funnel_health_logic_impl(
@@ -510,7 +514,7 @@ async def _refresh_landing_funnel_health_logic() -> None:
         raise
     finally:
         SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(
-            time.time() - start_time
+            _perf_counter() - start_time
         )
 
 @shared_task(
@@ -531,7 +535,7 @@ async def _process_background_jobs_logic() -> None:
         int(getattr(settings, "BACKGROUND_JOB_PROCESS_MAX_BATCHES_PER_TICK", 8)),
     )
     job_name = "background_job_processing"
-    start_time = time.time()
+    start_time = _perf_counter()
     totals = {"processed": 0, "succeeded": 0, "failed": 0, "batches": 0}
 
     with _scheduler_span("scheduler.process_background_jobs", job_name=job_name):
@@ -555,7 +559,7 @@ async def _process_background_jobs_logic() -> None:
             raise
         finally:
             SCHEDULER_JOB_DURATION.labels(job_name=job_name).observe(
-                time.time() - start_time
+                _perf_counter() - start_time
             )
 
 @shared_task(
@@ -604,7 +608,7 @@ async def _enforcement_reconciliation_sweep_logic() -> None:
 @shared_task(name="scheduler.daily_scan")  # type: ignore[untyped-decorator]
 def daily_finops_scan() -> None:
     logger.info("daily_finops_scan_started")
-    start_time = time.time()
+    start_time = _perf_counter()
     successful_dispatches = 0
     failed_dispatches = 0
 
@@ -619,7 +623,7 @@ def daily_finops_scan() -> None:
                 "daily_finops_scan_partial_failure", cohort=cohort.value, error=str(e)
             )
 
-    duration = time.time() - start_time
+    duration = _perf_counter() - start_time
     logger.info(
         "daily_finops_scan_completed",
         duration_seconds=duration,

@@ -154,3 +154,21 @@ def test_get_circuit_breaker_registry():
     assert b1 is b2
     all_status = get_all_circuit_breakers()
     assert "api" in all_status
+
+
+def test_get_circuit_breaker_registry_rebuilds_when_config_changes():
+    original = get_circuit_breaker(
+        "api", config=CircuitBreakerConfig(name="api", failure_threshold=2)
+    )
+    refreshed = get_circuit_breaker(
+        "api", config=CircuitBreakerConfig(name="api", failure_threshold=7)
+    )
+
+    assert refreshed is not original
+    assert refreshed.config.failure_threshold == 7
+
+
+def test_get_circuit_breaker_normalizes_config_name_to_registry_key():
+    breaker = get_circuit_breaker("api", config=CircuitBreakerConfig())
+
+    assert breaker.config.name == "api"

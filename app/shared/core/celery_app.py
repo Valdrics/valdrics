@@ -2,8 +2,6 @@ from celery import Celery
 from app.shared.core.config import get_settings
 from app.shared.core.runtime_dependencies import validate_runtime_dependencies
 
-settings = get_settings()
-
 CELERY_TASK_MODULES = ["app.tasks.scheduler_tasks", "app.tasks.license_tasks"]
 
 
@@ -74,8 +72,7 @@ def refresh_celery_app_config(settings_obj=None) -> None:
             broker_connection_retry_on_startup=False,  # Never block in tests
         )
 
-
-refresh_celery_app_config(settings)
+refresh_celery_app_config()
 
 if __name__ == "__main__":
     celery_app.start()

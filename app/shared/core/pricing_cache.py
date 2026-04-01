@@ -55,7 +55,10 @@ def runtime_cache_set(tenant_key: str, tier: PricingTier, *, now: float | None =
                 _tenant_tier_runtime_cache.pop(key, None)
 
         while len(_tenant_tier_runtime_cache) > _TENANT_TIER_CACHE_MAX_ENTRIES:
-            oldest_key = next(iter(_tenant_tier_runtime_cache))
+            oldest_key = min(
+                _tenant_tier_runtime_cache,
+                key=lambda cache_key: _tenant_tier_runtime_cache[cache_key][0],
+            )
             _tenant_tier_runtime_cache.pop(oldest_key, None)
 
 

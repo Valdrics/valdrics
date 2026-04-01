@@ -246,13 +246,15 @@ describe('public layout mobile menu', () => {
 	it('surfaces concise conversion-safe contact channels in footer', async () => {
 		await renderPublicLayout();
 
-		expect(screen.getAllByRole('link', { name: /sales@valdrics\.com/i }).length).toBeGreaterThan(0);
-		expect(screen.getAllByRole('link', { name: /support@valdrics\.com/i }).length).toBeGreaterThan(
-			0
-		);
-		expect(screen.getAllByRole('link', { name: /security@valdrics\.com/i }).length).toBeGreaterThan(
-			0
-		);
+		expect(
+			(await screen.findAllByRole('link', { name: /sales@valdrics\.com/i })).length
+		).toBeGreaterThan(0);
+		expect(
+			(await screen.findAllByRole('link', { name: /support@valdrics\.com/i })).length
+		).toBeGreaterThan(0);
+		expect(
+			(await screen.findAllByRole('link', { name: /security@valdrics\.com/i })).length
+		).toBeGreaterThan(0);
 		expect(screen.queryByRole('link', { name: /enterprise@valdrics\.com/i })).toBeNull();
 		expect(screen.queryByRole('link', { name: /billing@valdrics\.com/i })).toBeNull();
 		expect(screen.queryByRole('link', { name: /hello@valdrics\.com/i })).toBeNull();

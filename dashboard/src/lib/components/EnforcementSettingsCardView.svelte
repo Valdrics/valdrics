@@ -1,4 +1,6 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { createLazyComponent } from '$lib/lazyComponent';
 	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
 	import type {
 		EnforcementBudget,
@@ -20,42 +22,63 @@
 	};
 
 	let {
+		accessToken,
 		proPlus,
 		billingHref,
 		loading,
 		savingPolicy,
-		savingBudget,
-		savingCredit,
 		error,
 		success,
 		policy = $bindable(),
-		budgets,
-		credits,
-		budgetForm = $bindable(),
-		creditForm = $bindable(),
-		onSavePolicy,
-		onUpsertBudget,
-		onCreateCredit
+		onSavePolicy
 	}: {
+		accessToken?: string | null;
 		proPlus: boolean;
 		billingHref: string;
 		loading: boolean;
 		savingPolicy: boolean;
-		savingBudget: boolean;
-		savingCredit: boolean;
 		error: string;
 		success: string;
 		policy: EnforcementPolicy;
-		budgets: EnforcementBudget[];
-		credits: EnforcementCredit[];
-		budgetForm: EnforcementBudgetForm;
-		creditForm: EnforcementCreditForm;
 		onSavePolicy: () => void | Promise<void>;
-		onUpsertBudget: () => void | Promise<void>;
-		onCreateCredit: () => void | Promise<void>;
 	} = $props();
 
+	type EnforcementSettingsAdvancedSectionProps = {
+		accessToken?: string | null;
+	};
+
+	const loadEnforcementSettingsAdvancedSection =
+		createLazyComponent<EnforcementSettingsAdvancedSectionProps>(
+			() => import('./EnforcementSettingsAdvancedSection.svelte')
+		);
+
 	const upgradePrompt = getUpgradePrompt('pro', 'enforcement controls');
+
+	let advancedSectionAnchor = $state<HTMLDivElement | null>(null);
+	let advancedSectionReady = $state(import.meta.env.MODE === 'test');
+
+	onMount(() => {
+		if (advancedSectionReady || typeof IntersectionObserver === 'undefined') {
+			advancedSectionReady = true;
+			return;
+		}
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					advancedSectionReady = true;
+					observer.disconnect();
+				}
+			},
+			{ rootMargin: '280px 0px' }
+		);
+
+		if (advancedSectionAnchor) {
+			observer.observe(advancedSectionAnchor);
+		}
+
+		return () => observer.disconnect();
+	});
 </script>
 
 <div
@@ -212,148 +235,29 @@
 				{/if}
 			</div>
 
-			<div class="pt-4 border-t border-ink-700">
-				<h3 class="text-sm font-semibold mb-3">Budget Allocations</h3>
-				<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-					<div class="form-group">
-						<label for="enforcement_budget_scope">Scope Key</label>
-						<input
-							id="enforcement_budget_scope"
-							bind:value={budgetForm.scope_key}
-							aria-label="Enforcement budget scope key"
-						/>
-					</div>
-					<div class="form-group">
-						<label for="enforcement_budget_limit">Monthly Limit (USD)</label>
-						<input
-							type="number"
-							id="enforcement_budget_limit"
-							min="0"
-							step="0.01"
-							bind:value={budgetForm.monthly_limit_usd}
-							aria-label="Enforcement budget monthly limit"
-						/>
-					</div>
-					<label class="flex items-center gap-3 cursor-pointer mt-7">
-						<input
-							type="checkbox"
-							class="toggle"
-							bind:checked={budgetForm.active}
-							aria-label="Enforcement budget active"
-						/>
-						<span>Active</span>
-					</label>
-				</div>
-				<button
-					type="button"
-					class="btn btn-secondary mb-3"
-					onclick={onUpsertBudget}
-					disabled={savingBudget}
-					aria-label="Save enforcement budget"
-				>
-					{savingBudget ? '⏳ Saving...' : 'Save Budget'}
-				</button>
-
-				{#if budgets.length === 0}
-					<p class="text-xs text-ink-500">No budgets configured yet.</p>
+			<div bind:this={advancedSectionAnchor}>
+				{#if advancedSectionReady}
+					{#await loadEnforcementSettingsAdvancedSection()}
+						<div class="pt-4 border-t border-ink-700 space-y-4">
+							<div class="skeleton h-4 w-40"></div>
+							<div class="skeleton h-4 w-full"></div>
+							<div class="skeleton h-4 w-2/3"></div>
+						</div>
+					{:then module}
+						{@const EnforcementSettingsAdvancedSection = module.default}
+						<EnforcementSettingsAdvancedSection {accessToken} />
+					{:catch}
+						<div class="pt-4 border-t border-ink-700">
+							<p class="text-xs text-ink-500">
+								Budget and credit controls are temporarily unavailable.
+							</p>
+						</div>
+					{/await}
 				{:else}
-					<div class="overflow-x-auto">
-						<table class="w-full text-sm">
-							<thead>
-								<tr class="text-left text-ink-500">
-									<th class="py-2">Scope</th>
-									<th class="py-2">Monthly Limit</th>
-									<th class="py-2">Active</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each budgets as row (row.id)}
-									<tr class="border-t border-ink-700">
-										<td class="py-2">{row.scope_key}</td>
-										<td class="py-2">${Number(row.monthly_limit_usd).toFixed(2)}</td>
-										<td class="py-2">{row.active ? 'yes' : 'no'}</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-				{/if}
-			</div>
-
-			<div class="pt-4 border-t border-ink-700">
-				<h3 class="text-sm font-semibold mb-3">Credits</h3>
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
-					<div class="form-group">
-						<label for="enforcement_credit_scope">Scope Key</label>
-						<input
-							id="enforcement_credit_scope"
-							bind:value={creditForm.scope_key}
-							aria-label="Enforcement credit scope key"
-						/>
-					</div>
-					<div class="form-group">
-						<label for="enforcement_credit_total">Credit Amount (USD)</label>
-						<input
-							type="number"
-							id="enforcement_credit_total"
-							min="0.01"
-							step="0.01"
-							bind:value={creditForm.total_amount_usd}
-							aria-label="Enforcement credit total amount"
-						/>
-					</div>
-					<div class="form-group">
-						<label for="enforcement_credit_expiry">Expiry (optional)</label>
-						<input
-							type="datetime-local"
-							id="enforcement_credit_expiry"
-							bind:value={creditForm.expires_at}
-							aria-label="Enforcement credit expiry"
-						/>
-					</div>
-					<div class="form-group">
-						<label for="enforcement_credit_reason">Reason (optional)</label>
-						<input
-							id="enforcement_credit_reason"
-							bind:value={creditForm.reason}
-							aria-label="Enforcement credit reason"
-						/>
-					</div>
-				</div>
-				<button
-					type="button"
-					class="btn btn-secondary mb-3"
-					onclick={onCreateCredit}
-					disabled={savingCredit}
-					aria-label="Create enforcement credit"
-				>
-					{savingCredit ? '⏳ Saving...' : 'Create Credit'}
-				</button>
-
-				{#if credits.length === 0}
-					<p class="text-xs text-ink-500">No credits available.</p>
-				{:else}
-					<div class="overflow-x-auto">
-						<table class="w-full text-sm">
-							<thead>
-								<tr class="text-left text-ink-500">
-									<th class="py-2">Scope</th>
-									<th class="py-2">Remaining</th>
-									<th class="py-2">Expires</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each credits as row (row.id)}
-									<tr class="border-t border-ink-700">
-										<td class="py-2">{row.scope_key}</td>
-										<td class="py-2">${Number(row.remaining_amount_usd).toFixed(2)}</td>
-										<td class="py-2">
-											{row.expires_at ? new Date(row.expires_at).toLocaleString() : 'none'}
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
+					<div class="pt-4 border-t border-ink-700 space-y-4">
+						<div class="skeleton h-4 w-40"></div>
+						<div class="skeleton h-4 w-full"></div>
+						<div class="skeleton h-4 w-2/3"></div>
 					</div>
 				{/if}
 			</div>

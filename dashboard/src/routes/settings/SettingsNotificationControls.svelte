@@ -1,12 +1,26 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { tierAtLeast } from '$lib/tier';
+	import { createLazyComponent } from '$lib/lazyComponent';
 	import type { PolicyDiagnostics } from './settingsPageModels';
-	import SettingsDigestAlertCard from './SettingsDigestAlertCard.svelte';
 	import { INITIAL_NOTIFICATION_SETTINGS } from './settingsPageInitialState';
-	import SettingsWorkflowAutomationCard from './SettingsWorkflowAutomationCard.svelte';
 
 	type AsyncAction = () => void | Promise<void>;
 	type NotificationSettingsState = typeof INITIAL_NOTIFICATION_SETTINGS;
+	type SettingsWorkflowAutomationCardProps = {
+		settings: NotificationSettingsState;
+		isProTier: boolean;
+		testingWorkflow: boolean;
+		diagnosticsLoading: boolean;
+		policyDiagnostics: PolicyDiagnostics | null;
+		testWorkflowDispatch: AsyncAction;
+		runPolicyDiagnostics: AsyncAction;
+	};
+	type SettingsDigestAlertCardProps = {
+		settings: NotificationSettingsState;
+		saveSettings: AsyncAction;
+		saving: boolean;
+	};
 
 	interface Props {
 		data: {
@@ -51,6 +65,32 @@
 	const currentTier = $derived(data.subscription?.tier ?? 'free');
 	const hasGrowthTier = $derived(tierAtLeast(currentTier, 'growth'));
 	const hasProTier = $derived(tierAtLeast(currentTier, 'pro'));
+	const loadSettingsWorkflowAutomationCard =
+		createLazyComponent<SettingsWorkflowAutomationCardProps>(
+			() => import('./SettingsWorkflowAutomationCard.svelte')
+		);
+	const loadSettingsDigestAlertCard = createLazyComponent<SettingsDigestAlertCardProps>(
+		() => import('./SettingsDigestAlertCard.svelte')
+	);
+	let advancedNotificationControlsReady = $state(import.meta.env.MODE === 'test');
+
+	onMount(() => {
+		if (advancedNotificationControlsReady) {
+			return;
+		}
+
+		const activate = () => {
+			advancedNotificationControlsReady = true;
+		};
+
+		if (typeof window.requestIdleCallback === 'function') {
+			const idleId = window.requestIdleCallback(activate, { timeout: 1200 });
+			return () => window.cancelIdleCallback(idleId);
+		}
+
+		const timeoutId = window.setTimeout(activate, 500);
+		return () => window.clearTimeout(timeoutId);
+	});
 </script>
 
 <!-- Slack Settings -->
@@ -263,17 +303,61 @@
 				</button>
 			</div>
 
-			<SettingsWorkflowAutomationCard
-				bind:settings
-				isProTier={hasProTier}
-				{testingWorkflow}
-				{diagnosticsLoading}
-				{policyDiagnostics}
-				{testWorkflowDispatch}
-				{runPolicyDiagnostics}
-			/>
+			{#if advancedNotificationControlsReady}
+				{#await loadSettingsWorkflowAutomationCard()}
+					<div class="rounded-xl border border-ink-700 bg-ink-900/30 p-4">
+						<div class="skeleton mb-2 h-4 w-48"></div>
+						<div class="skeleton mb-2 h-4 w-full"></div>
+						<div class="skeleton h-4 w-2/3"></div>
+					</div>
+				{:then module}
+					{@const SettingsWorkflowAutomationCard = module.default}
+					<SettingsWorkflowAutomationCard
+						bind:settings
+						isProTier={hasProTier}
+						{testingWorkflow}
+						{diagnosticsLoading}
+						{policyDiagnostics}
+						{testWorkflowDispatch}
+						{runPolicyDiagnostics}
+					/>
+				{:catch}
+					<div class="rounded-xl border border-ink-700 bg-ink-900/30 p-4">
+						<p class="text-xs text-ink-500">
+							Workflow automation controls are temporarily unavailable.
+						</p>
+					</div>
+				{/await}
+			{:else}
+				<div class="rounded-xl border border-ink-700 bg-ink-900/30 p-4">
+					<div class="skeleton mb-2 h-4 w-48"></div>
+					<div class="skeleton mb-2 h-4 w-full"></div>
+					<div class="skeleton h-4 w-2/3"></div>
+				</div>
+			{/if}
 		</div>
 	</div>
 </div>
 
-<SettingsDigestAlertCard bind:settings {saveSettings} {saving} />
+{#if advancedNotificationControlsReady}
+	{#await loadSettingsDigestAlertCard()}
+		<div class="card stagger-enter">
+			<div class="skeleton mb-2 h-6 w-40"></div>
+			<div class="skeleton mb-2 h-4 w-full"></div>
+			<div class="skeleton h-4 w-3/4"></div>
+		</div>
+	{:then module}
+		{@const SettingsDigestAlertCard = module.default}
+		<SettingsDigestAlertCard bind:settings {saveSettings} {saving} />
+	{:catch}
+		<div class="card stagger-enter">
+			<p class="text-sm text-ink-400">Digest settings are temporarily unavailable.</p>
+		</div>
+	{/await}
+{:else}
+	<div class="card stagger-enter">
+		<div class="skeleton mb-2 h-6 w-40"></div>
+		<div class="skeleton mb-2 h-4 w-full"></div>
+		<div class="skeleton h-4 w-3/4"></div>
+	</div>
+{/if}

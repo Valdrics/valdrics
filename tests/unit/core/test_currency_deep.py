@@ -19,7 +19,7 @@ from app.shared.core.currency import (
 @pytest.fixture(autouse=True)
 def clear_cache():
     _RATES_CACHE.clear()
-    _RATES_CACHE["USD"] = (Decimal("1.0"), time.time(), "internal")
+    _RATES_CACHE["USD"] = (Decimal("1.0"), time.monotonic(), "internal")
     with patch("app.shared.core.cache.get_cache_service") as mock_cache_cls:
         mock_cache_cls.return_value.enabled = False
         yield
@@ -46,7 +46,7 @@ class TestCurrencyDeep:
 
     @pytest.mark.asyncio
     async def test_fetch_public_rates_failure_falls_back_to_l1(self):
-        _RATES_CACHE["EUR"] = (Decimal("0.91"), time.time(), "internal")
+        _RATES_CACHE["EUR"] = (Decimal("0.91"), time.monotonic(), "internal")
 
         @asynccontextmanager
         async def broken_scope(self):
@@ -75,9 +75,47 @@ class TestCurrencyDeep:
 
     @pytest.mark.asyncio
     async def test_get_exchange_rate_cached_l1(self):
-        _RATES_CACHE["EUR"] = (Decimal("0.90"), time.time(), "internal")
+        _RATES_CACHE["EUR"] = (Decimal("0.90"), time.monotonic(), "internal")
         rate = await get_exchange_rate("EUR")
         assert rate == Decimal("0.90")
+
+    @pytest.mark.asyncio
+    async def test_get_exchange_rate_l1_uses_monotonic_time_not_wall_clock(self):
+        service = ExchangeRateService()
+        _RATES_CACHE["EUR"] = (Decimal("0.90"), 1_000.0, "internal")
+
+        with (
+            patch("app.shared.core.currency.time.monotonic", return_value=1_400.5),
+            patch("app.shared.core.currency.time.time", return_value=500.0),
+            patch.object(
+                service,
+                "_read_redis_rate",
+                new=AsyncMock(return_value=(None, None, None)),
+            ),
+            patch.object(
+                service,
+                "_read_db_rate",
+                new=AsyncMock(return_value=(None, None, None)),
+            ),
+            patch.object(
+                service,
+                "_fetch_live_rate",
+                new=AsyncMock(return_value=(Decimal("1.23"), "cbn_nfem")),
+            ),
+            patch.object(
+                service,
+                "_write_redis_rate",
+                new=AsyncMock(return_value=None),
+            ),
+            patch.object(
+                service,
+                "_upsert_db_rate",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            rate = await service.get_rate("EUR")
+
+        assert rate == Decimal("1.23")
 
     @pytest.mark.asyncio
     async def test_get_exchange_rate_redis_hit(self):

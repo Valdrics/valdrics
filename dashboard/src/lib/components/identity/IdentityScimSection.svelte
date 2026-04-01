@@ -1,40 +1,145 @@
 <script lang="ts">
+	import { env as publicEnv } from '$env/dynamic/public';
+	import { api } from '$lib/api';
+	import { edgeApiPath } from '$lib/edgeProxy';
+	import { formatValidationIssues } from '$lib/validation/clientZod';
+	import {
+		extractErrorMessage,
+		RotateTokenResponseSchema,
+		ScimTokenTestResponseSchema
+	} from './identitySettingsModel';
+	import { scimBaseUrlFromPublicApiUrl } from './identitySettingsHelpers';
 	import type { IdentitySettings } from './identitySettingsTypes';
 
 	let {
+		accessToken,
 		tier,
-		settings = $bindable(),
-		rotating = false,
-		rotatedToken = '',
-		rotatedAt = '',
-		scimTokenInput = $bindable(''),
-		scimTokenTesting = false,
-		scimTokenTestStatus = '',
-		scimBaseUrl,
-		onRotateScimToken = () => {},
-		onCopyToken = () => {},
-		onTestScimToken = () => {},
-		onAddGroupMapping = () => {},
-		onRemoveGroupMapping = () => {}
+		settings = $bindable()
 	}: {
+		accessToken?: string | null;
 		tier?: string | null;
 		settings: IdentitySettings;
-		rotating?: boolean;
-		rotatedToken?: string;
-		rotatedAt?: string;
-		scimTokenInput: string;
-		scimTokenTesting?: boolean;
-		scimTokenTestStatus?: string;
-		scimBaseUrl: string;
-		onRotateScimToken?: () => void | Promise<void>;
-		onCopyToken?: () => void | Promise<void>;
-		onTestScimToken?: () => void | Promise<void>;
-		onAddGroupMapping?: () => void;
-		onRemoveGroupMapping?: (index: number) => void;
 	} = $props();
+
+	let rotating = $state(false);
+	let rotatedToken = $state('');
+	let rotatedAt = $state('');
+	let scimTokenInput = $state('');
+	let scimTokenTesting = $state(false);
+	let scimTokenTestStatus = $state('');
+	let scimFeedback = $state('');
+	let scimFeedbackTone = $state<'success' | 'error'>('success');
 
 	function isEnterprise(currentTier: string | null | undefined): boolean {
 		return (currentTier ?? '').toLowerCase() === 'enterprise';
+	}
+
+	function scimBaseUrl(): string {
+		const publicApiUrl = String(publicEnv.PUBLIC_API_URL || '').trim();
+		return scimBaseUrlFromPublicApiUrl(publicApiUrl);
+	}
+
+	function setFeedback(message: string, tone: 'success' | 'error') {
+		scimFeedback = message;
+		scimFeedbackTone = tone;
+	}
+
+	async function rotateScimToken() {
+		rotating = true;
+		setFeedback('', 'success');
+		rotatedToken = '';
+		rotatedAt = '';
+		try {
+			if (!accessToken) {
+				throw new Error('Missing access token for SCIM token rotation');
+			}
+			const res = await api.post(
+				edgeApiPath('/settings/identity/rotate-scim-token'),
+				{},
+				{ headers: { Authorization: `Bearer ${accessToken}` } }
+			);
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				throw new Error(
+					extractErrorMessage(
+						data,
+						res.status === 403
+							? 'SCIM token rotation requires Enterprise tier and admin access.'
+							: 'Failed to rotate SCIM token'
+					)
+				);
+			}
+			const payloadResult = RotateTokenResponseSchema.safeParse(await res.json());
+			if (!payloadResult.success) {
+				throw payloadResult.error;
+			}
+			const payload = payloadResult.data;
+			rotatedToken = payload.scim_token;
+			rotatedAt = payload.rotated_at;
+			settings.has_scim_token = true;
+			settings.scim_last_rotated_at = payload.rotated_at;
+			setFeedback('SCIM token rotated. Store it now; it is shown only once.', 'success');
+		} catch (error) {
+			setFeedback(formatValidationIssues(error, false), 'error');
+		} finally {
+			rotating = false;
+		}
+	}
+
+	async function copyToken() {
+		if (!rotatedToken) return;
+		try {
+			await navigator.clipboard.writeText(rotatedToken);
+			setFeedback('Copied token to clipboard.', 'success');
+		} catch {
+			setFeedback('Failed to copy token. Copy manually.', 'error');
+		}
+	}
+
+	async function testScimToken() {
+		scimTokenTesting = true;
+		scimTokenTestStatus = '';
+		setFeedback('', 'success');
+		try {
+			if (!scimTokenInput.trim()) return;
+			if (!accessToken) {
+				throw new Error('Missing access token for SCIM token test');
+			}
+			const res = await api.post(
+				edgeApiPath('/settings/identity/scim/test-token'),
+				{ scim_token: scimTokenInput.trim() },
+				{ headers: { Authorization: `Bearer ${accessToken}` } }
+			);
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				throw new Error(extractErrorMessage(data, 'Failed to test SCIM token'));
+			}
+			const payloadResult = ScimTokenTestResponseSchema.safeParse(await res.json());
+			if (!payloadResult.success) {
+				throw payloadResult.error;
+			}
+			scimTokenTestStatus = payloadResult.data.token_matches
+				? 'Token matches.'
+				: 'Token does not match.';
+		} catch (error) {
+			setFeedback(formatValidationIssues(error, false), 'error');
+		} finally {
+			scimTokenTesting = false;
+			scimTokenInput = '';
+		}
+	}
+
+	function addGroupMapping() {
+		settings.scim_group_mappings = [
+			...(settings.scim_group_mappings ?? []),
+			{ group: '', role: 'member', persona: null }
+		];
+	}
+
+	function removeGroupMapping(index: number) {
+		settings.scim_group_mappings = (settings.scim_group_mappings ?? []).filter(
+			(_, currentIndex) => currentIndex !== index
+		);
 	}
 </script>
 
@@ -47,13 +152,21 @@
 		<div>
 			<p class="font-medium">SCIM Provisioning</p>
 			<p class="text-xs text-ink-500 mt-1">
-				Enterprise-only. Base URL: <span class="font-mono">{scimBaseUrl}</span>
+				Enterprise-only. Base URL: <span class="font-mono">{scimBaseUrl()}</span>
 			</p>
 		</div>
 		{#if !isEnterprise(tier)}
 			<span class="badge badge-warning text-xs shrink-0">Enterprise Required</span>
 		{/if}
 	</div>
+
+	{#if scimFeedback}
+		<p
+			class={`mt-3 text-xs ${scimFeedbackTone === 'success' ? 'text-success-300' : 'text-danger-300'}`}
+		>
+			{scimFeedback}
+		</p>
+	{/if}
 
 	<div class="mt-4 space-y-3">
 		<label class="flex items-center gap-3 cursor-pointer">
@@ -72,7 +185,7 @@
 			<button
 				type="button"
 				class="btn btn-secondary"
-				onclick={onRotateScimToken}
+				onclick={rotateScimToken}
 				disabled={rotating || !settings.scim_enabled}
 			>
 				{rotating ? 'Rotating…' : 'Rotate SCIM Token'}
@@ -88,7 +201,7 @@
 				</p>
 				<div class="flex flex-col gap-2 sm:flex-row sm:items-center">
 					<input class="font-mono text-xs" readonly value={rotatedToken} aria-label="SCIM token" />
-					<button type="button" class="btn btn-primary" onclick={onCopyToken}>Copy</button>
+					<button type="button" class="btn btn-primary" onclick={copyToken}>Copy</button>
 				</div>
 			</div>
 		{/if}
@@ -108,7 +221,7 @@
 					<button
 						type="button"
 						class="btn btn-secondary"
-						onclick={onTestScimToken}
+						onclick={testScimToken}
 						disabled={scimTokenTesting || !scimTokenInput.trim()}
 					>
 						{scimTokenTesting ? 'Testing…' : 'Test Token'}
@@ -129,7 +242,7 @@
 							Optional. Map IdP groups to Valdrics role/persona at provisioning time.
 						</p>
 					</div>
-					<button type="button" class="btn btn-secondary" onclick={onAddGroupMapping}>
+					<button type="button" class="btn btn-secondary" onclick={addGroupMapping}>
 						Add mapping
 					</button>
 				</div>
@@ -171,7 +284,7 @@
 									<button
 										type="button"
 										class="btn btn-secondary"
-										onclick={() => onRemoveGroupMapping(index)}
+										onclick={() => removeGroupMapping(index)}
 									>
 										Remove
 									</button>

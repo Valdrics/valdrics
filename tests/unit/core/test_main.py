@@ -120,21 +120,23 @@ def test_refresh_fastapi_app_metadata_updates_title_version_and_openapi_cache():
     original_version = valdrics_app.version
     original_openapi_schema = valdrics_app.openapi_schema
     original_tracker = main_module.EmissionsTracker
+    original_settings = main_module.settings
     try:
         valdrics_app.openapi_schema = {"cached": True}
+        refreshed_settings = MagicMock(APP_NAME="Valdrics Reloaded", VERSION="9.9.9")
 
-        refresh_fastapi_app_metadata(
-            MagicMock(APP_NAME="Valdrics Reloaded", VERSION="9.9.9")
-        )
+        refresh_fastapi_app_metadata(refreshed_settings)
 
         assert valdrics_app.title == "Valdrics Reloaded"
         assert valdrics_app.version == "9.9.9"
         assert valdrics_app.openapi_schema is None
+        assert main_module.settings is refreshed_settings
     finally:
         valdrics_app.title = original_title
         valdrics_app.version = original_version
         valdrics_app.openapi_schema = original_openapi_schema
         main_module.EmissionsTracker = original_tracker
+        main_module.settings = original_settings
 
 
 def test_refresh_fastapi_app_metadata_refreshes_emissions_tracker():

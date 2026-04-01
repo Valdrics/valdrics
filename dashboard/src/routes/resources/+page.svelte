@@ -3,16 +3,16 @@
 	import { page } from '$app/stores';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
+	import type { PublicContentEntry } from '$lib/content/publicContent.types';
 	import { PUBLIC_EXTENDED_CONTACT_CHANNELS } from '$lib/landing/publicNav';
-	import { listPublicContent, type PublicContentEntry } from '$lib/content/publicContent';
 	import {
 		buildPublicEnterpriseHref,
 		buildPublicSignupHref,
 		resolvePublicBuyingMotion
 	} from '$lib/public/publicBuyingMotion';
+	import type { PageData } from './$types';
 
-	const resources = listPublicContent('resources');
-	const resourcesBySlug = new Map(resources.map((resource) => [resource.slug, resource] as const));
+	let { data }: { data: PageData } = $props();
 	let buyingMotion = $derived(resolvePublicBuyingMotion($page.url, 'self_serve_first'));
 	let startFreeHref = $derived(
 		buildPublicSignupHref(base, $page.url, {
@@ -26,14 +26,6 @@
 			source: 'resource_hub'
 		})
 	);
-
-	function mustGetResource(slug: string): PublicContentEntry {
-		const resource = resourcesBySlug.get(slug);
-		if (!resource) {
-			throw new Error(`Unknown resource entry: ${slug}`);
-		}
-		return resource;
-	}
 
 	const heroHighlights = [
 		{
@@ -50,59 +42,22 @@
 		}
 	] as const;
 
-	const guidedPaths = [
-		{
-			kicker: 'Internal alignment',
-			title: 'Make the business case without a long deck rewrite',
-			copy: 'Use concise assets when finance, leadership, or procurement needs the short version before the deeper review surfaces.',
-			entries: [
-				mustGetResource('executive-one-pager'),
-				mustGetResource('roi-assumptions'),
-				mustGetResource('enterprise-governance-overview')
-			]
-		},
-		{
-			kicker: 'Operating rhythm',
-			title: 'Give the team a repeatable review loop',
-			copy: 'Use these assets when you want one cost-review ritual, clearer owner routing, and a practical GreenOps conversation.',
-			entries: [
-				mustGetResource('cloud-waste-review-checklist'),
-				mustGetResource('greenops-decision-framework'),
-				mustGetResource('saas-license-governance-starter-pack')
-			]
-		},
-		{
-			kicker: 'Buyer diligence',
-			title: 'Move into procurement and security without losing the thread',
-			copy: 'These are the assets that help the product story survive security, procurement, and rollout conversations.',
-			entries: [
-				mustGetResource('enterprise-governance-overview'),
-				mustGetResource('saas-license-governance-starter-pack'),
-				mustGetResource('roi-assumptions')
-			]
-		}
-	] as const;
-
-	const stageColumns = [
-		{
-			label: 'Learn',
-			title: 'Run the first review with less noise',
-			copy: 'Operational guides for teams that need a practical first loop.',
-			entries: resources.filter((resource) => resource.stage === 'learn')
-		},
-		{
-			label: 'Evaluate',
-			title: 'Prepare the buying and rollout conversation',
-			copy: 'Assets for leadership, procurement, and rollout planning.',
-			entries: resources.filter((resource) => resource.stage === 'evaluate')
-		},
-		{
-			label: 'Validate',
-			title: 'Pressure-test the modeled case',
-			copy: 'Artifacts that support a deeper diligence or planning review.',
-			entries: resources.filter((resource) => resource.stage === 'validate')
-		}
-	] as const;
+	let guidedPaths = $derived(
+		data.guidedPaths as Array<{
+			kicker: string;
+			title: string;
+			copy: string;
+			entries: PublicContentEntry[];
+		}>
+	);
+	let stageColumns = $derived(
+		data.stageColumns as Array<{
+			label: string;
+			title: string;
+			copy: string;
+			entries: PublicContentEntry[];
+		}>
+	);
 </script>
 
 <PublicPageMeta
@@ -219,7 +174,7 @@
 							class="public-page__badge"
 							aria-label={`${channel.label} contact ${channel.email}`}
 						>
-							{channel.label}: {channel.email}
+							{channel.email}
 						</a>
 					{/each}
 				</div>

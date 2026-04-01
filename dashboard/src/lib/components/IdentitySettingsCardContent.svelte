@@ -1,32 +1,20 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { onMount } from 'svelte';
-	import { env as publicEnv } from '$env/dynamic/public';
 	import { base } from '$app/paths';
 	import { api } from '$lib/api';
-	import IdentityDiagnosticsSection from '$lib/components/identity/IdentityDiagnosticsSection.svelte';
-	import IdentityScimSection from '$lib/components/identity/IdentityScimSection.svelte';
 	import IdentitySsoSection from '$lib/components/identity/IdentitySsoSection.svelte';
+	import { createLazyComponent } from '$lib/lazyComponent';
 	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
-	import {
-		isGrowthPlus,
-		parseDomains,
-		scimBaseUrlFromPublicApiUrl
-	} from '$lib/components/identity/identitySettingsHelpers';
+	import { isGrowthPlus, parseDomains } from '$lib/components/identity/identitySettingsHelpers';
 	import {
 		extractErrorMessage,
 		IDENTITY_REQUEST_TIMEOUT_MS,
-		IdentityDiagnosticsSchema,
 		IdentitySettingsResponseSchema,
 		IdentitySettingsUpdateSchema,
-		RotateTokenResponseSchema,
-		ScimTokenTestResponseSchema,
 		uniqueScimMappingsOrThrow
 	} from '$lib/components/identity/identitySettingsModel';
-	import type {
-		IdentityDiagnostics,
-		IdentitySettings
-	} from '$lib/components/identity/identitySettingsTypes';
+	import type { IdentitySettings } from '$lib/components/identity/identitySettingsTypes';
 	import { edgeApiPath } from '$lib/edgeProxy';
 	import { TimeoutError } from '$lib/fetchWithTimeout';
 	import { clientLogger } from '$lib/logging/client';
@@ -42,24 +30,30 @@
 
 	let loading = $state(true);
 	let saving = $state(false);
-	let rotating = $state(false);
-	let diagnosticsLoading = $state(false);
-	let scimTokenTesting = $state(false);
 	let error = $state('');
 	let success = $state('');
 
 	let settings = $state<IdentitySettings | null>(null);
 	let domainsText = $state('');
-	let rotatedToken = $state<string>('');
-	let rotatedAt = $state<string>('');
-	let diagnostics = $state<IdentityDiagnostics | null>(null);
-	let scimTokenInput = $state('');
-	let scimTokenTestStatus = $state<string>('');
+	let advancedSectionsReady = $state(import.meta.env.MODE === 'test');
 
-	function scimBaseUrl(): string {
-		const publicApiUrl = String(publicEnv.PUBLIC_API_URL || '').trim();
-		return scimBaseUrlFromPublicApiUrl(publicApiUrl);
-	}
+	type IdentityDiagnosticsSectionProps = {
+		accessToken?: string | null;
+		tier?: string | null;
+	};
+
+	type IdentityScimSectionProps = {
+		accessToken?: string | null;
+		tier?: string | null;
+		settings: IdentitySettings;
+	};
+
+	const loadIdentityDiagnosticsSection = createLazyComponent<IdentityDiagnosticsSectionProps>(
+		() => import('$lib/components/identity/IdentityDiagnosticsSection.svelte')
+	);
+	const loadIdentityScimSection = createLazyComponent<IdentityScimSectionProps>(
+		() => import('$lib/components/identity/IdentityScimSection.svelte')
+	);
 
 	async function getHeaders() {
 		return {
@@ -78,14 +72,8 @@
 		loading = true;
 		error = '';
 		success = '';
-		rotatedToken = '';
-		rotatedAt = '';
 		try {
-			if (!accessToken) {
-				settings = null;
-				return;
-			}
-			if (!isGrowthPlus(tier)) {
+			if (!accessToken || !isGrowthPlus(tier)) {
 				settings = null;
 				return;
 			}
@@ -113,7 +101,6 @@
 				}))
 			};
 			domainsText = (loaded.allowed_email_domains ?? []).join(', ');
-			await loadDiagnostics();
 		} catch (e) {
 			clientLogger.error('Failed to load identity settings:', e);
 			error =
@@ -122,77 +109,6 @@
 					: formatValidationIssues(e, false);
 		} finally {
 			loading = false;
-		}
-	}
-
-	async function loadDiagnostics() {
-		diagnosticsLoading = true;
-		scimTokenTestStatus = '';
-		try {
-			if (!accessToken) {
-				diagnostics = null;
-				return;
-			}
-			if (!isGrowthPlus(tier)) {
-				diagnostics = null;
-				return;
-			}
-			const headers = await getHeaders();
-			const res = await getWithTimeout(edgeApiPath('/settings/identity/diagnostics'), headers);
-			if (res.status === 403) {
-				diagnostics = null;
-				return;
-			}
-			if (!res.ok) {
-				const data = await res.json().catch(() => ({}));
-				throw new Error(extractErrorMessage(data, 'Failed to load identity diagnostics'));
-			}
-			const parsedResult = IdentityDiagnosticsSchema.safeParse(await res.json());
-			if (!parsedResult.success) {
-				throw parsedResult.error;
-			}
-			const parsed = parsedResult.data;
-			diagnostics = parsed as IdentityDiagnostics;
-		} catch (e) {
-			clientLogger.error('Failed to load identity diagnostics:', e);
-			error =
-				e instanceof TimeoutError
-					? 'Identity diagnostics request timed out. Try again.'
-					: formatValidationIssues(e, false);
-			diagnostics = null;
-		} finally {
-			diagnosticsLoading = false;
-		}
-	}
-
-	async function testScimToken() {
-		scimTokenTesting = true;
-		scimTokenTestStatus = '';
-		error = '';
-		try {
-			if (!scimTokenInput.trim()) return;
-			const headers = await getHeaders();
-			const res = await api.post(
-				edgeApiPath('/settings/identity/scim/test-token'),
-				{ scim_token: scimTokenInput.trim() },
-				{ headers }
-			);
-			if (!res.ok) {
-				const data = await res.json().catch(() => ({}));
-				throw new Error(extractErrorMessage(data, 'Failed to test SCIM token'));
-			}
-			const payloadResult = ScimTokenTestResponseSchema.safeParse(await res.json());
-			if (!payloadResult.success) {
-				throw payloadResult.error;
-			}
-			const payload = payloadResult.data;
-			scimTokenTestStatus = payload.token_matches ? 'Token matches.' : 'Token does not match.';
-		} catch (e) {
-			error = formatValidationIssues(e, false);
-		} finally {
-			scimTokenTesting = false;
-			// Never keep tokens in UI state longer than needed.
-			scimTokenInput = '';
 		}
 	}
 
@@ -223,10 +139,10 @@
 			if (!validatedResult.success) {
 				throw validatedResult.error;
 			}
-			const validated = validatedResult.data;
-
 			const headers = await getHeaders();
-			const res = await api.put(edgeApiPath('/settings/identity'), validated, { headers });
+			const res = await api.put(edgeApiPath('/settings/identity'), validatedResult.data, {
+				headers
+			});
 			if (!res.ok) {
 				const data = await res.json().catch(() => ({}));
 				throw new Error(extractErrorMessage(data, 'Failed to save identity settings'));
@@ -247,7 +163,6 @@
 			domainsText = (updated.allowed_email_domains ?? []).join(', ');
 			success = 'Identity settings saved.';
 			setTimeout(() => (success = ''), 2500);
-			await loadDiagnostics();
 		} catch (e) {
 			error = formatValidationIssues(e, false);
 		} finally {
@@ -255,75 +170,25 @@
 		}
 	}
 
-	async function rotateScimToken() {
-		rotating = true;
-		error = '';
-		success = '';
-		rotatedToken = '';
-		rotatedAt = '';
-		try {
-			const headers = await getHeaders();
-			const res = await api.post(
-				edgeApiPath('/settings/identity/rotate-scim-token'),
-				{},
-				{ headers }
-			);
-			if (!res.ok) {
-				const data = await res.json().catch(() => ({}));
-				throw new Error(
-					extractErrorMessage(
-						data,
-						res.status === 403
-							? 'SCIM token rotation requires Enterprise tier and admin access.'
-							: 'Failed to rotate SCIM token'
-					)
-				);
-			}
-			const payloadResult = RotateTokenResponseSchema.safeParse(await res.json());
-			if (!payloadResult.success) {
-				throw payloadResult.error;
-			}
-			const payload = payloadResult.data;
-			rotatedToken = payload.scim_token;
-			rotatedAt = payload.rotated_at;
-			success = 'SCIM token rotated. Store it now; it is shown only once.';
-			await loadIdentitySettings();
-		} catch (e) {
-			error = formatValidationIssues(e, false);
-		} finally {
-			rotating = false;
-		}
-	}
-
-	async function copyToken() {
-		if (!rotatedToken) return;
-		try {
-			await navigator.clipboard.writeText(rotatedToken);
-			success = 'Copied token to clipboard.';
-			setTimeout(() => (success = ''), 2000);
-		} catch {
-			error = 'Failed to copy token. Copy manually.';
-		}
-	}
-
 	onMount(() => {
 		void loadIdentitySettings();
+
+		if (advancedSectionsReady) {
+			return;
+		}
+
+		const activateAdvancedSections = () => {
+			advancedSectionsReady = true;
+		};
+
+		if (typeof window.requestIdleCallback === 'function') {
+			const idleId = window.requestIdleCallback(activateAdvancedSections, { timeout: 1200 });
+			return () => window.cancelIdleCallback(idleId);
+		}
+
+		const timeoutId = window.setTimeout(activateAdvancedSections, 500);
+		return () => window.clearTimeout(timeoutId);
 	});
-
-	function addGroupMapping() {
-		if (!settings) return;
-		settings.scim_group_mappings = [
-			...(settings.scim_group_mappings ?? []),
-			{ group: '', role: 'member', persona: null }
-		];
-	}
-
-	function removeGroupMapping(index: number) {
-		if (!settings) return;
-		settings.scim_group_mappings = (settings.scim_group_mappings ?? []).filter(
-			(_, i) => i !== index
-		);
-	}
 
 	const upgradePrompt = getUpgradePrompt('growth', 'identity controls');
 </script>
@@ -381,24 +246,49 @@
 		<div class="space-y-4">
 			<IdentitySsoSection bind:settings bind:domainsText />
 
-			<IdentityDiagnosticsSection {diagnosticsLoading} {diagnostics} onRefresh={loadDiagnostics} />
+			{#if advancedSectionsReady}
+				{#await loadIdentityDiagnosticsSection()}
+					<div class="rounded-xl border border-ink-800/60 bg-ink-950/30 p-4">
+						<div class="skeleton mb-2 h-4 w-40"></div>
+						<div class="skeleton mb-2 h-4 w-full"></div>
+						<div class="skeleton h-4 w-2/3"></div>
+					</div>
+				{:then module}
+					{@const IdentityDiagnosticsSection = module.default}
+					<IdentityDiagnosticsSection {accessToken} {tier} />
+				{:catch}
+					<div class="rounded-xl border border-ink-800/60 bg-ink-950/30 p-4">
+						<p class="text-xs text-ink-500">Diagnostics are temporarily unavailable.</p>
+					</div>
+				{/await}
 
-			<IdentityScimSection
-				{tier}
-				bind:settings
-				{rotating}
-				{rotatedToken}
-				{rotatedAt}
-				bind:scimTokenInput
-				{scimTokenTesting}
-				{scimTokenTestStatus}
-				scimBaseUrl={scimBaseUrl()}
-				onRotateScimToken={rotateScimToken}
-				onCopyToken={copyToken}
-				onTestScimToken={testScimToken}
-				onAddGroupMapping={addGroupMapping}
-				onRemoveGroupMapping={removeGroupMapping}
-			/>
+				{#await loadIdentityScimSection()}
+					<div class="rounded-xl border border-ink-800/60 bg-ink-950/30 p-4">
+						<div class="skeleton mb-2 h-4 w-40"></div>
+						<div class="skeleton mb-2 h-4 w-full"></div>
+						<div class="skeleton h-4 w-2/3"></div>
+					</div>
+				{:then module}
+					{@const IdentityScimSection = module.default}
+					<IdentityScimSection {accessToken} {tier} bind:settings />
+				{:catch}
+					<div class="rounded-xl border border-ink-800/60 bg-ink-950/30 p-4">
+						<p class="text-xs text-ink-500">SCIM controls are temporarily unavailable.</p>
+					</div>
+				{/await}
+			{:else}
+				<div class="rounded-xl border border-ink-800/60 bg-ink-950/30 p-4">
+					<div class="skeleton mb-2 h-4 w-40"></div>
+					<div class="skeleton mb-2 h-4 w-full"></div>
+					<div class="skeleton h-4 w-2/3"></div>
+				</div>
+
+				<div class="rounded-xl border border-ink-800/60 bg-ink-950/30 p-4">
+					<div class="skeleton mb-2 h-4 w-40"></div>
+					<div class="skeleton mb-2 h-4 w-full"></div>
+					<div class="skeleton h-4 w-2/3"></div>
+				</div>
+			{/if}
 
 			<div class="flex items-center justify-end gap-3 pt-2">
 				<button

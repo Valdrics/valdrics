@@ -14,6 +14,7 @@ import tempfile
 from typing import Dict, Any, List
 from dataclasses import dataclass, field
 from datetime import timedelta
+from uuid import uuid4
 import httpx
 import structlog
 
@@ -32,6 +33,14 @@ logger = structlog.get_logger()
 PERFORMANCE_LOAD_REQUEST_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (httpx.HTTPError, RuntimeError, OSError, TimeoutError, TypeError, ValueError, ArithmeticError)
 PERFORMANCE_BASELINE_LOAD_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (OSError, TypeError, ValueError)
 PERFORMANCE_BASELINE_SAVE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (OSError, TypeError, ValueError)
+
+
+def _monotonic_time() -> float:
+    return time.monotonic()
+
+
+def _perf_counter() -> float:
+    return time.perf_counter()
 
 
 def _default_baseline_file() -> str:
@@ -104,7 +113,7 @@ class LoadTester:
         )
 
         self._running = True
-        start_time = time.time()
+        start_time = _monotonic_time()
 
         # Create concurrent tasks
         tasks = []
@@ -115,7 +124,7 @@ class LoadTester:
         # Wait for all tasks to complete
         await asyncio.gather(*tasks, return_exceptions=True)
 
-        end_time = time.time()
+        end_time = _monotonic_time()
         total_duration = end_time - start_time
 
         # Calculate final metrics
@@ -146,22 +155,20 @@ class LoadTester:
             ) * self.config.ramp_up_seconds
             await self._sleep(delay)
 
-        time.time()
-
         while (
             self._running
-            and (time.time() - test_start_time) < self.config.duration_seconds
+            and (_monotonic_time() - test_start_time) < self.config.duration_seconds
         ):
             for endpoint in self.config.endpoints:
                 if not self._running:
                     break
 
-                request_start = time.time()
+                request_start = _perf_counter()
                 try:
                     url = f"{self.config.target_url}{endpoint}"
                     response = await client.get(url, headers=self.config.headers)
 
-                    response_time = time.time() - request_start
+                    response_time = _perf_counter() - request_start
 
                     # Record metrics
                     self.results.total_requests += 1
@@ -200,7 +207,7 @@ class LoadTester:
                     )
 
                 except PERFORMANCE_LOAD_REQUEST_RECOVERABLE_EXCEPTIONS as e:
-                    response_time = time.time() - request_start
+                    response_time = _perf_counter() - request_start
                     self.results.total_requests += 1
                     self.results.failed_requests += 1
                     self.results.errors.append(
@@ -277,7 +284,7 @@ async def benchmark_cache_operations() -> BenchmarkResult:
     cache = get_cache_service()
 
     async def cache_set_get() -> None:
-        key = f"benchmark_{time.time()}"
+        key = f"benchmark_{uuid4().hex}"
         await cache.set(key, "test_value", ttl=timedelta(seconds=60))
         await cache.get(key)
 

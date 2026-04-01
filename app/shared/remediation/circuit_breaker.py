@@ -11,7 +11,6 @@ import structlog
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
-settings = get_settings()
 REDIS_CLIENT_RESOLUTION_RECOVERABLE_EXCEPTIONS = (
     ImportError,
     AttributeError,
@@ -20,6 +19,10 @@ REDIS_CLIENT_RESOLUTION_RECOVERABLE_EXCEPTIONS = (
     TypeError,
     ValueError,
 )
+
+
+def _monotonic_time() -> float:
+    return time.monotonic()
 
 
 class CircuitState(str, Enum):
@@ -142,6 +145,16 @@ class CircuitBreaker:
         state = await self.get_state()
 
         if state == CircuitState.OPEN.value or state == CircuitState.OPEN:
+            if self.state.redis is None:
+                last_fail_monotonic = await self.state.get("last_failure_monotonic")
+                if (
+                    last_fail_monotonic
+                    and (_monotonic_time() - float(last_fail_monotonic))
+                    > self.config.recovery_timeout_seconds
+                ):
+                    await self.state.set("state", CircuitState.HALF_OPEN.value)
+                    logger.info("circuit_breaker_half_open", tenant_id=self.tenant_id)
+                    return True
             last_fail = await self.state.get("last_failure_at")
             if (
                 last_fail
@@ -200,6 +213,8 @@ class CircuitBreaker:
 
         count = await self.state.incr("failure_count")
         await self.state.set("last_failure_at", time.time())
+        if self.state.redis is None:
+            await self.state.set("last_failure_monotonic", _monotonic_time())
         await self.state.set("last_error", error)
 
         if count >= self.config.failure_threshold:
@@ -224,6 +239,7 @@ class CircuitBreaker:
         await self.state.set("state", CircuitState.CLOSED.value)
         await self.state.set("failure_count", 0)
         await self.state.delete("last_failure_at")
+        await self.state.delete("last_failure_monotonic")
         await self.state.delete("last_error")
 
     async def get_status(self) -> Dict[str, Any]:

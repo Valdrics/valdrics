@@ -1,20 +1,20 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import { page } from '$app/stores';
-	import { listRelatedPublicContent, type PublicContentEntry } from '$lib/content/publicContent';
+	import type { PublicContentEntry } from '$lib/content/publicContent.types';
 	import { appendPublicAttribution } from '$lib/public/publicBuyingMotion';
 	import PublicPageMeta from './PublicPageMeta.svelte';
 	import './PublicMarketingPage.css';
 
 	interface Props {
 		entry: PublicContentEntry;
+		relatedEntries: PublicContentEntry[];
 		hubHref: string;
 		hubLabel: string;
 	}
 
-	let { entry, hubHref, hubLabel }: Props = $props();
+	let { entry, relatedEntries, hubHref, hubLabel }: Props = $props();
 
-	let relatedEntries = $derived(listRelatedPublicContent(entry));
 	let trackingEntry = $derived(
 		`${entry.kind}_${entry.slug}`.replace(/[^a-z0-9]+/gi, '_').toLowerCase()
 	);

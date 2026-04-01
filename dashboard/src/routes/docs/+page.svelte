@@ -2,18 +2,10 @@
 	import { base } from '$app/paths';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
-	import { listPublicContent, type PublicContentEntry } from '$lib/content/publicContent';
+	import type { PublicContentEntry } from '$lib/content/publicContent.types';
+	import type { PageData } from './$types';
 
-	const docsEntries = listPublicContent('docs');
-	const docsBySlug = new Map(docsEntries.map((entry) => [entry.slug, entry] as const));
-
-	function mustGetDoc(slug: string): PublicContentEntry {
-		const entry = docsBySlug.get(slug);
-		if (!entry) {
-			throw new Error(`Unknown docs entry: ${slug}`);
-		}
-		return entry;
-	}
+	let { data }: { data: PageData } = $props();
 
 	const heroHighlights = [
 		{
@@ -51,11 +43,7 @@
 		}
 	] as const;
 
-	const operatingGuides = [
-		mustGetDoc('connect-first-provider'),
-		mustGetDoc('owner-routing-and-approval-path'),
-		mustGetDoc('decision-history-and-export-records')
-	] as const;
+	let operatingGuides = $derived(data.operatingGuides as PublicContentEntry[]);
 </script>
 
 <PublicPageMeta

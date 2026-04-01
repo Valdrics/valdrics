@@ -291,8 +291,9 @@ __all__ = ["app", "valdrics_app", "lifespan"]
 
 
 def refresh_fastapi_app_metadata(settings_obj: Any | None = None) -> None:
-    global EmissionsTracker
+    global EmissionsTracker, settings
     settings_obj = settings_obj or get_settings()
+    settings = settings_obj
     valdrics_app.title = str(settings_obj.APP_NAME)
     valdrics_app.version = str(settings_obj.VERSION)
     valdrics_app.openapi_schema = None

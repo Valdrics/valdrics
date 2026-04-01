@@ -10,7 +10,7 @@ import time
 from enum import Enum
 from collections.abc import Awaitable, Callable
 from typing import Any, Optional, TypeVar
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 import structlog
@@ -19,6 +19,10 @@ from app.shared.core.exceptions import ExternalAPIError
 
 logger = structlog.get_logger()
 T = TypeVar("T")
+
+
+def _monotonic_time() -> float:
+    return time.monotonic()
 
 CIRCUIT_BREAKER_CONFIG_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
     RuntimeError,
@@ -85,6 +89,8 @@ class CircuitBreakerMetrics:
     consecutive_successes: int = 0
     last_failure_time: Optional[float] = None
     last_success_time: Optional[float] = None
+    last_failure_monotonic: Optional[float] = None
+    last_success_monotonic: Optional[float] = None
     state_changes: int = 0
 
 class CircuitBreaker:
@@ -190,6 +196,7 @@ class CircuitBreaker:
             last_failure_text = self._as_text(last_failure_raw)
             if last_failure_text:
                 self.metrics.last_failure_time = float(last_failure_text)
+                self.metrics.last_failure_monotonic = None
         except CIRCUIT_BREAKER_DISTRIBUTED_RECOVERABLE_ERRORS as exc:
             logger.warning(
                 "circuit_breaker_distributed_sync_failed",
@@ -211,6 +218,8 @@ class CircuitBreaker:
             if new_state == CircuitState.OPEN:
                 if self.metrics.last_failure_time is None:
                     self.metrics.last_failure_time = time.time()
+                if self.metrics.last_failure_monotonic is None:
+                    self.metrics.last_failure_monotonic = _monotonic_time()
                 pipeline.set(failure_key, f"{self.metrics.last_failure_time:.6f}")
             elif new_state == CircuitState.CLOSED:
                 pipeline.delete(failure_key)
@@ -262,6 +271,12 @@ class CircuitBreaker:
         if self.state != CircuitState.OPEN:
             return False
 
+        if self.metrics.last_failure_monotonic is not None:
+            return (
+                _monotonic_time() - self.metrics.last_failure_monotonic
+                >= self.config.timeout
+            )
+
         if self.metrics.last_failure_time is None:
             return True
 
@@ -274,6 +289,7 @@ class CircuitBreaker:
         self.metrics.consecutive_successes += 1
         self.metrics.consecutive_failures = 0
         self.metrics.last_success_time = time.time()
+        self.metrics.last_success_monotonic = _monotonic_time()
 
         # Check if we should close the circuit
         if (
@@ -290,6 +306,7 @@ class CircuitBreaker:
         self.metrics.consecutive_failures += 1
         self.metrics.consecutive_successes = 0
         self.metrics.last_failure_time = time.time()
+        self.metrics.last_failure_monotonic = _monotonic_time()
 
         # Check if we should open the circuit
         if (
@@ -430,14 +447,23 @@ class CircuitBreaker:
 # Global circuit breaker registry
 _circuit_breakers: dict[str, CircuitBreaker] = {}
 
+
+def _normalize_circuit_breaker_config(
+    name: str, config: Optional[CircuitBreakerConfig]
+) -> CircuitBreakerConfig:
+    normalized = config or CircuitBreakerConfig(name=name)
+    if normalized.name != name:
+        return replace(normalized, name=name)
+    return normalized
+
 def get_circuit_breaker(
     name: str, config: Optional[CircuitBreakerConfig] = None
 ) -> CircuitBreaker:
     """Get or create a circuit breaker by name."""
-    if name not in _circuit_breakers:
-        if config is None:
-            config = CircuitBreakerConfig(name=name)
-        _circuit_breakers[name] = CircuitBreaker(config)
+    normalized_config = _normalize_circuit_breaker_config(name, config)
+    existing = _circuit_breakers.get(name)
+    if existing is None or existing.config != normalized_config:
+        _circuit_breakers[name] = CircuitBreaker(normalized_config)
 
     return _circuit_breakers[name]
 

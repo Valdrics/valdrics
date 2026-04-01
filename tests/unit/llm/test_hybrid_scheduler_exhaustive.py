@@ -372,6 +372,44 @@ def test_get_analyzer_keeps_explicitly_injected_analyzer_when_provider_changes(s
     scheduler._llm_factory_create.assert_not_called()
 
 
+def test_scheduler_rebuilds_cache_and_delta_service_when_cache_backend_changes(
+    mock_db,
+) -> None:
+    cache_one = AsyncMock()
+    cache_two = AsyncMock()
+    delta_one = MagicMock()
+    delta_two = MagicMock()
+    active_cache = cache_one
+
+    def _get_live_cache():
+        return active_cache
+
+    with (
+        patch(
+            "app.shared.llm.hybrid_scheduler.get_cache_service",
+            side_effect=_get_live_cache,
+        ),
+        patch(
+            "app.shared.llm.hybrid_scheduler.DeltaAnalysisService",
+            side_effect=[delta_one, delta_two],
+        ) as mock_delta_service_cls,
+        patch("app.shared.llm.factory.LLMFactory.create"),
+        patch("app.shared.core.config.get_settings"),
+        patch("app.shared.llm.hybrid_scheduler.FinOpsAnalyzer"),
+    ):
+        scheduler = HybridAnalysisScheduler(mock_db)
+
+        assert scheduler.cache is cache_one
+        assert scheduler.delta_service is delta_one
+
+        active_cache = cache_two
+
+        assert scheduler.cache is cache_two
+        assert scheduler.delta_service is delta_two
+
+    assert mock_delta_service_cls.call_args_list == [call(cache_one), call(cache_two)]
+
+
 @pytest.mark.asyncio
 async def test_run_analysis_auto_delta_when_schedule_says_no(scheduler) -> None:
     tenant_id = uuid.uuid4()

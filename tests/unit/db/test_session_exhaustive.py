@@ -293,9 +293,10 @@ class TestSessionExhaustive:
         """Test bypass for exempt tables and system queries."""
         mock_conn = MagicMock()
         mock_conn.info = {"rls_context_set": False}
+        mock_settings = MagicMock()
+        mock_settings.TESTING = False
 
-        with patch("app.shared.db.session.settings") as mock_settings:
-            mock_settings.TESTING = False
+        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
 
             # Internal execution (True) checks should pass
             session_mod.check_rls_policy(mock_conn, None, "SELECT 1", {}, None, True)

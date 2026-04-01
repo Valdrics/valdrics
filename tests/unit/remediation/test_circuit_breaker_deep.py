@@ -52,6 +52,27 @@ class TestCircuitBreakerDeep:
         assert await cb.get_state() == CircuitState.HALF_OPEN
 
     @pytest.mark.asyncio
+    async def test_circuit_breaker_memory_recovery_uses_monotonic_time(self):
+        config = CircuitBreakerConfig(failure_threshold=1, recovery_timeout_seconds=30)
+        cb = CircuitBreaker("tenant-monotonic", config=config)
+
+        with (
+            patch.object(cb_module.time, "time", return_value=100.0),
+            patch.object(cb_module, "_monotonic_time", return_value=10.0),
+        ):
+            await cb.record_failure("trip")
+
+        assert await cb.get_state() == CircuitState.OPEN
+
+        with (
+            patch.object(cb_module.time, "time", return_value=100.0),
+            patch.object(cb_module, "_monotonic_time", return_value=45.0),
+        ):
+            assert await cb.can_execute() is True
+
+        assert await cb.get_state() == CircuitState.HALF_OPEN
+
+    @pytest.mark.asyncio
     async def test_circuit_breaker_half_open_success_reset(self):
         config = CircuitBreakerConfig(failure_threshold=1)
         cb = CircuitBreaker("tenant-1", config=config)

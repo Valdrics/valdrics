@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import Page from './+page.svelte';
+import { listPublicContent, mustGetPublicContentEntry } from '$lib/content/publicContent';
 
 vi.mock('$app/paths', () => ({
 	base: '',
@@ -12,9 +13,41 @@ vi.mock('$app/stores', () => ({
 	page: readable({ url: new URL('https://example.com/resources') })
 }));
 
+const SHARED_PAGE_DATA = {
+	user: null,
+	session: null,
+	subscription: { tier: 'starter', status: 'active' },
+	profile: null
+} as const;
+
 describe('resources page contact directory', () => {
 	it('shows extended public contact channels outside the landing footer', () => {
-		render(Page);
+		render(Page, {
+			data: {
+				...SHARED_PAGE_DATA,
+				resources: listPublicContent('resources'),
+				guidedPaths: [
+					{
+						kicker: 'Internal alignment',
+						title: 'Make the business case without a long deck rewrite',
+						copy: 'Use concise assets when finance, leadership, or procurement needs the short version before the deeper review surfaces.',
+						entries: [
+							mustGetPublicContentEntry('resources', 'executive-one-pager'),
+							mustGetPublicContentEntry('resources', 'roi-assumptions'),
+							mustGetPublicContentEntry('resources', 'enterprise-governance-overview')
+						]
+					}
+				],
+				stageColumns: [
+					{
+						label: 'Learn',
+						title: 'Run the first review with less noise',
+						copy: 'Operational guides for teams that need a practical first loop.',
+						entries: listPublicContent('resources').filter((resource) => resource.stage === 'learn')
+					}
+				]
+			}
+		});
 
 		expect(
 			screen.getByRole('heading', {

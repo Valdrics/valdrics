@@ -29,7 +29,7 @@ def mock_db():
 @pytest.fixture(autouse=True)
 def clear_cache():
     _RATES_CACHE.clear()
-    _RATES_CACHE["USD"] = (Decimal("1.0"), time.time(), "internal")
+    _RATES_CACHE["USD"] = (Decimal("1.0"), time.monotonic(), "internal")
     yield
 
 

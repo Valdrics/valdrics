@@ -579,8 +579,9 @@ class TestMultiTenantEdgeCases:
     async def test_cross_tenant_data_leak_prevention(self):
         """Test prevention of cross-tenant data access."""
         # This would test the RLS enforcement listener
-        with patch("app.shared.db.session.settings") as mock_settings:
-            mock_settings.TESTING = False
+        mock_settings = MagicMock()
+        mock_settings.TESTING = False
+        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
 
             # Mock connection without RLS context
             mock_conn = MagicMock()

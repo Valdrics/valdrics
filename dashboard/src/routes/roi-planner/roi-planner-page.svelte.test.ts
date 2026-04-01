@@ -19,7 +19,8 @@ describe('ROI planner page', () => {
 			},
 			session: null,
 			subscription: { tier: 'free', status: 'active' },
-			profile: null
+			profile: null,
+			detectedCurrencyCode: 'USD'
 		} as unknown as PageData;
 		render(Page, {
 			data
@@ -37,7 +38,8 @@ describe('ROI planner page', () => {
 			user: null,
 			session: null,
 			subscription: { tier: 'free', status: 'active' },
-			profile: null
+			profile: null,
+			detectedCurrencyCode: 'USD'
 		} as unknown as PageData;
 		render(Page, {
 			data

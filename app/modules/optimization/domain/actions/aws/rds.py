@@ -1,15 +1,19 @@
 from typing import Optional
-import time
+from uuid import uuid4
 from app.models.remediation import RemediationAction
 from app.modules.optimization.domain.actions.aws.base import BaseAWSAction
 from app.modules.optimization.domain.actions.base import ExecutionResult, ExecutionStatus, RemediationContext
 from app.modules.optimization.domain.actions.factory import RemediationActionFactory
 
 
+def _snapshot_suffix() -> str:
+    return uuid4().hex[:12]
+
+
 class BaseRDSSnapshotAction(BaseAWSAction):
     async def create_backup(self, resource_id: str, context: RemediationContext) -> Optional[str]:
         """Create a DB snapshot backup before deleting an RDS instance."""
-        snapshot_id = f"valdrics-backup-{resource_id}-{int(time.time())}"
+        snapshot_id = f"valdrics-backup-{resource_id}-{_snapshot_suffix()}"
         async with await self._get_client("rds", context) as rds:
             await rds.create_db_snapshot(
                 DBSnapshotIdentifier=snapshot_id,

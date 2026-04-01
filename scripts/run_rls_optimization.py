@@ -11,6 +11,10 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _perf_counter() -> float:
+    return time.perf_counter()
+
+
 def _sql_script_path() -> Path:
     path = (_repo_root() / "scripts" / "optimize_performance_and_security.sql").resolve()
     if not path.exists():
@@ -22,7 +26,7 @@ def _sql_script_path() -> Path:
 
 async def run_optimization() -> int:
     print("⚡ Starting Database Performance & Security Hardening...")
-    start_total = time.time()
+    start_total = _perf_counter()
 
     sql = _sql_script_path().read_text(encoding="utf-8")
 
@@ -36,7 +40,7 @@ async def run_optimization() -> int:
             # We use the internal driver connection to support this directly
             await raw_conn.driver_connection.execute(sql)
 
-            print(f"🏁 Total hardening time: {time.time() - start_total:.2f}s")
+            print(f"🏁 Total hardening time: {_perf_counter() - start_total:.2f}s")
             print("✅ Database Performance & Security Hardening applied successfully!")
             return 0
     except (OSError, RuntimeError, TypeError, ValueError) as e:

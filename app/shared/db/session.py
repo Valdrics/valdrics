@@ -454,7 +454,7 @@ def check_rls_policy(
         conn=conn,
         statement=statement,
         parameters=parameters,
-        settings_obj=settings,
+        settings_obj=get_settings(),
         rls_exempt_table_pattern=_RLS_EXEMPT_TABLE_PATTERN,
         rls_context_missing_metric=RLS_CONTEXT_MISSING,
         rls_metric_recoverable_errors=RLS_METRIC_RECOVERABLE_ERRORS,

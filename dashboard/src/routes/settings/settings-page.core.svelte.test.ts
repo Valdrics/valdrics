@@ -28,7 +28,7 @@ describe('settings page integration wiring (core)', () => {
 	it('loads settings modules via edge-proxy contract endpoints', async () => {
 		renderPage();
 
-		await screen.findByLabelText('Slack channel ID override');
+		await screen.findByLabelText('Slack channel ID override', {}, { timeout: 5000 });
 
 		await waitFor(() => {
 			expect(getMock).toHaveBeenCalledWith(

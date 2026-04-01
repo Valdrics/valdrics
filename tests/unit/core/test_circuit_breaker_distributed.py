@@ -97,9 +97,13 @@ async def test_persist_state_to_distributed_covers_open_closed_and_half_open() -
     with patch.object(breaker, "_get_redis_client", new=AsyncMock(return_value=redis)):
         # OPEN should set both state and failure key
         breaker.metrics.last_failure_time = None
-        with patch("app.shared.core.circuit_breaker.time.time", return_value=99.0):
+        with (
+            patch("app.shared.core.circuit_breaker.time.time", return_value=99.0),
+            patch("app.shared.core.circuit_breaker._monotonic_time", return_value=77.0),
+        ):
             await breaker._persist_state_to_distributed(CircuitState.OPEN)
         assert breaker.metrics.last_failure_time == 99.0
+        assert breaker.metrics.last_failure_monotonic == 77.0
 
         # CLOSED should delete failure/probe keys
         await breaker._persist_state_to_distributed(CircuitState.CLOSED)
@@ -151,11 +155,42 @@ async def test_should_attempt_reset_logic() -> None:
     breaker.metrics.last_failure_time = None
     assert await breaker._should_attempt_reset() is True
 
+    breaker.metrics.last_failure_monotonic = 100.0
+    with patch("app.shared.core.circuit_breaker._monotonic_time", return_value=120.0):
+        assert await breaker._should_attempt_reset() is False
+    with patch("app.shared.core.circuit_breaker._monotonic_time", return_value=131.0):
+        assert await breaker._should_attempt_reset() is True
+
+    breaker.metrics.last_failure_monotonic = None
     breaker.metrics.last_failure_time = 100.0
     with patch("app.shared.core.circuit_breaker.time.time", return_value=120.0):
         assert await breaker._should_attempt_reset() is False
     with patch("app.shared.core.circuit_breaker.time.time", return_value=131.0):
         assert await breaker._should_attempt_reset() is True
+
+
+@pytest.mark.asyncio
+async def test_record_failure_and_success_capture_monotonic_markers() -> None:
+    breaker = _breaker()
+
+    with (
+        patch("app.shared.core.circuit_breaker.time.time", return_value=200.0),
+        patch("app.shared.core.circuit_breaker._monotonic_time", return_value=50.0),
+    ):
+        await breaker._record_failure(RuntimeError("boom"))
+
+    assert breaker.metrics.last_failure_time == 200.0
+    assert breaker.metrics.last_failure_monotonic == 50.0
+
+    breaker.state = CircuitState.HALF_OPEN
+    with (
+        patch("app.shared.core.circuit_breaker.time.time", return_value=300.0),
+        patch("app.shared.core.circuit_breaker._monotonic_time", return_value=75.0),
+    ):
+        await breaker._record_success()
+
+    assert breaker.metrics.last_success_time == 300.0
+    assert breaker.metrics.last_success_monotonic == 75.0
 
 
 @pytest.mark.asyncio

@@ -51,6 +51,10 @@ from scripts.smoke_test_scim_helpers import (
 )
 
 
+def _perf_counter() -> float:
+    return time.perf_counter()
+
+
 def _repo_root() -> Path:
     return repo_root_for(__file__)
 
@@ -137,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(str(exc)) from None
 
     started_at = _now_iso()
-    start_time = time.time()
+    start_time = _perf_counter()
 
     scim_base_url = _ensure_url(
         args.scim_base_url,
@@ -158,7 +162,7 @@ def main(argv: list[str] | None = None) -> int:
     timeout = httpx.Timeout(float(args.timeout))
     with httpx.Client(timeout=timeout, headers=scim_headers) as client:
         # 1) Discovery: ServiceProviderConfig
-        t0 = time.time()
+        t0 = _perf_counter()
         resp = None
         try:
             resp = client.get(_scim_url(scim_base_url, "/ServiceProviderConfig"))
@@ -182,7 +186,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         # 2) Discovery: Schemas
-        t0 = time.time()
+        t0 = _perf_counter()
         resp = None
         try:
             resp = client.get(_scim_url(scim_base_url, "/Schemas"))
@@ -201,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         # 3) Discovery: ResourceTypes
-        t0 = time.time()
+        t0 = _perf_counter()
         resp = None
         try:
             resp = client.get(_scim_url(scim_base_url, "/ResourceTypes"))
@@ -226,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.write_mode:
             # 4) Create User
-            t0 = time.time()
+            t0 = _perf_counter()
             resp = None
             try:
                 resp = client.post(
@@ -260,7 +264,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
 
             # 5) Create Group
-            t0 = time.time()
+            t0 = _perf_counter()
             resp = None
             try:
                 resp = client.post(
@@ -295,7 +299,7 @@ def main(argv: list[str] | None = None) -> int:
 
             # 6) Add Member
             if created_group_id and created_user_id:
-                t0 = time.time()
+                t0 = _perf_counter()
                 resp = None
                 try:
                     resp = client.patch(
@@ -334,7 +338,7 @@ def main(argv: list[str] | None = None) -> int:
             # Cleanup (default on, opt-out via --no-cleanup)
             if not args.no_cleanup:
                 if created_group_id:
-                    t0 = time.time()
+                    t0 = _perf_counter()
                     resp = None
                     try:
                         resp = client.delete(
@@ -359,7 +363,7 @@ def main(argv: list[str] | None = None) -> int:
                             detail=str(exc),
                         )
                 if created_user_id:
-                    t0 = time.time()
+                    t0 = _perf_counter()
                     resp = None
                     try:
                         resp = client.delete(
@@ -386,7 +390,7 @@ def main(argv: list[str] | None = None) -> int:
 
     passed = all(c.passed for c in checks)
     completed_at = _now_iso()
-    duration_seconds = round(time.time() - start_time, 3)
+    duration_seconds = round(_perf_counter() - start_time, 3)
 
     evidence_payload: dict[str, Any] = {
         "runner": "scripts/smoke_test_scim_idp.py",

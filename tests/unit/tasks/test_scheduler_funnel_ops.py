@@ -77,6 +77,10 @@ async def test_refresh_landing_funnel_health_task_records_success_metrics() -> N
         ) as mock_impl,
         patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_RUNS") as mock_runs,
         patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_DURATION") as mock_duration,
+        patch(
+            "app.tasks.scheduler_tasks._perf_counter",
+            side_effect=[50.0, 50.25],
+        ),
     ):
         await st._refresh_landing_funnel_health_logic()
 
@@ -85,7 +89,10 @@ async def test_refresh_landing_funnel_health_task_records_success_metrics() -> N
         job_name="landing_funnel_health_refresh",
         status="success",
     )
-    mock_duration.labels.return_value.observe.assert_called_once()
+    assert (
+        mock_duration.labels.return_value.observe.call_args.args[0]
+        == pytest.approx(0.25)
+    )
 
 
 @pytest.mark.asyncio

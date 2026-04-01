@@ -159,9 +159,9 @@ describe('EnforcementSettingsCard', () => {
 			);
 		});
 
-		const budgetLimit = screen.getByLabelText(
+		const budgetLimit = (await screen.findByLabelText(
 			'Enforcement budget monthly limit'
-		) as HTMLInputElement;
+		)) as HTMLInputElement;
 		await fireEvent.input(budgetLimit, { target: { value: '1500' } });
 		await fireEvent.click(screen.getByRole('button', { name: /Save enforcement budget/i }));
 
@@ -176,9 +176,9 @@ describe('EnforcementSettingsCard', () => {
 			);
 		});
 
-		const creditAmount = screen.getByLabelText(
+		const creditAmount = (await screen.findByLabelText(
 			'Enforcement credit total amount'
-		) as HTMLInputElement;
+		)) as HTMLInputElement;
 		await fireEvent.input(creditAmount, { target: { value: '300' } });
 		await fireEvent.click(screen.getByRole('button', { name: /Create enforcement credit/i }));
 

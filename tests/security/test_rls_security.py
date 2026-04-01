@@ -72,12 +72,12 @@ async def test_rls_listener_emits_log_on_missing_context():
 
     try:
         # Patch the logger to verify critical was called
+        mock_settings = MagicMock()
+        mock_settings.TESTING = False
         with (
             patch("app.shared.db.session.logger") as mock_logger,
-            patch("app.shared.db.session.settings") as mock_settings_obj,
+            patch("app.shared.db.session.get_settings", return_value=mock_settings),
         ):
-            mock_settings_obj.TESTING = False
-
             from app.shared.core.exceptions import ValdricsException
 
             # Executing a query with RLS FALSE should trigger the listener and RAISE

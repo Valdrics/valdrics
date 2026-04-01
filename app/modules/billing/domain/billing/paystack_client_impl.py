@@ -18,8 +18,13 @@ class PaystackClient:
         if not shared.settings.PAYSTACK_SECRET_KEY:
             raise ValueError("PAYSTACK_SECRET_KEY not configured")
 
-        self.headers: dict[str, str] = {
-            "Authorization": f"Bearer {shared.settings.PAYSTACK_SECRET_KEY}",
+    @staticmethod
+    def _build_headers() -> dict[str, str]:
+        secret = str(shared.settings.PAYSTACK_SECRET_KEY or "").strip()
+        if not secret:
+            raise ValueError("PAYSTACK_SECRET_KEY not configured")
+        return {
+            "Authorization": f"Bearer {secret}",
             "Content-Type": "application/json",
         }
 
@@ -36,7 +41,7 @@ class PaystackClient:
             response = await client.request(
                 method,
                 f"{self.BASE_URL}/{endpoint}",
-                headers=self.headers,
+                headers=self._build_headers(),
                 json=data,
                 timeout=30.0,
             )

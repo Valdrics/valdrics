@@ -23,6 +23,10 @@ from app.shared.core.ops_metrics import (
 
 logger = structlog.get_logger()
 
+
+def _monotonic_time() -> float:
+    return time.monotonic()
+
 # Arbitrary constant for scheduler advisory locks - DEPRECATED in favor of SELECT FOR UPDATE
 # Keeping for reference of lock inheritance
 SCHEDULER_LOCK_BASE_ID = 48293021
@@ -284,7 +288,7 @@ class SchedulerOrchestrator:
         if not zone:
             return None
 
-        now = time.time()
+        now = _monotonic_time()
         cached = self._carbon_cache.get(region_hint)
         if cached and (now - cached[1]) < 600:
             return cached[0]

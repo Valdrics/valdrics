@@ -95,6 +95,19 @@ def _strip_style_blocks(source: str) -> str:
     return STYLE_BLOCK_PATTERN.sub("", source)
 
 
+def _allows_safe_json_ld_html_injection(source: str) -> bool:
+    # Svelte head JSON-LD needs raw script markup injection; require explicit
+    # JSON serialization plus script-breakout escaping before allowing it.
+    required_fragments = (
+        '{@html',
+        'type="application/ld+json"',
+        "JSON.stringify(",
+        "replaceAll('<', '\\\\u003c')",
+        "replaceAll('</script', '<\\\\/script')",
+    )
+    return all(fragment in source for fragment in required_fragments)
+
+
 def run(repo_root: Path) -> int:
     issues: list[Issue] = []
     svelte_config = repo_root / "dashboard" / "svelte.config.js"
@@ -157,7 +170,9 @@ def run(repo_root: Path) -> int:
                 )
             )
 
-        if HTML_INJECTION_PATTERN.search(source) and "DOMPurify.sanitize(" not in source:
+        if HTML_INJECTION_PATTERN.search(source) and not (
+            "DOMPurify.sanitize(" in source or _allows_safe_json_ld_html_injection(source)
+        ):
             issues.append(
                 Issue(
                     file_path=rel_path,

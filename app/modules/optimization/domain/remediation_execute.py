@@ -37,6 +37,12 @@ from app.shared.core.security_metrics import REMEDIATION_TOTAL
 from app.shared.core.provider import normalize_provider
 
 logger = structlog.get_logger()
+
+
+def _perf_counter() -> float:
+    return time.perf_counter()
+
+
 _REMEDIATION_COMMON_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     SQLAlchemyError,
     RuntimeError,
@@ -66,7 +72,7 @@ async def execute_remediation_request(
     *,
     bypass_grace_period: bool = False,
 ) -> RemediationRequest:
-    start_time = time.time()
+    start_time = _perf_counter()
     from app.modules.optimization.domain import remediation as remediation_module
 
     result = await service.db.execute(
@@ -294,7 +300,7 @@ async def execute_remediation_request(
             },
         )
 
-        duration = time.time() - start_time
+        duration = _perf_counter() - start_time
         REMEDIATION_DURATION_SECONDS.labels(
             action=action_value, provider=provider
         ).observe(duration)

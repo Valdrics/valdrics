@@ -22,6 +22,7 @@ Usage:
         # Fall back to next provider
 """
 
+import time
 from datetime import datetime, timezone
 from dataclasses import dataclass
 from enum import Enum
@@ -33,6 +34,10 @@ from threading import RLock
 
 logger = structlog.get_logger()
 FATAL_EXCEPTIONS = (SystemExit, KeyboardInterrupt, GeneratorExit)
+
+
+def _monotonic_time() -> float:
+    return time.monotonic()
 
 
 class CircuitState(str, Enum):
@@ -51,6 +56,8 @@ class ProviderCircuit:
     success_count: int = 0
     last_failure_time: Optional[datetime] = None
     last_success_time: Optional[datetime] = None
+    last_failure_monotonic: Optional[float] = None
+    last_success_monotonic: Optional[float] = None
     probe_in_flight: bool = False
 
     # Thresholds
@@ -104,7 +111,18 @@ class LLMCircuitBreaker:
 
             if circuit.state == CircuitState.OPEN:
                 # Check if recovery timeout has passed
-                if circuit.last_failure_time:
+                if circuit.last_failure_monotonic is not None:
+                    elapsed = _monotonic_time() - circuit.last_failure_monotonic
+                    if elapsed >= circuit.recovery_timeout:
+                        # Transition to half-open
+                        circuit.state = CircuitState.HALF_OPEN
+                        logger.info(
+                            "circuit_half_open",
+                            provider=provider,
+                            message="Testing recovery",
+                        )
+                        return True
+                elif circuit.last_failure_time:
                     elapsed = (now - circuit.last_failure_time).total_seconds()
                     if elapsed >= circuit.recovery_timeout:
                         # Transition to half-open
@@ -132,9 +150,15 @@ class LLMCircuitBreaker:
                 return True
 
             if circuit.state == CircuitState.OPEN:
-                if circuit.last_failure_time is None:
+                if (
+                    circuit.last_failure_monotonic is None
+                    and circuit.last_failure_time is None
+                ):
                     return False
-                elapsed = (now - circuit.last_failure_time).total_seconds()
+                if circuit.last_failure_monotonic is not None:
+                    elapsed = _monotonic_time() - circuit.last_failure_monotonic
+                else:
+                    elapsed = (now - circuit.last_failure_time).total_seconds()
                 if elapsed < circuit.recovery_timeout:
                     return False
                 circuit.state = CircuitState.HALF_OPEN
@@ -160,6 +184,7 @@ class LLMCircuitBreaker:
             circuit = self._get_circuit(provider)
             circuit.success_count += 1
             circuit.last_success_time = datetime.now(timezone.utc)
+            circuit.last_success_monotonic = _monotonic_time()
 
             if circuit.state == CircuitState.HALF_OPEN:
                 if circuit.success_count >= circuit.success_threshold:
@@ -185,6 +210,7 @@ class LLMCircuitBreaker:
             circuit = self._get_circuit(provider)
             circuit.failure_count += 1
             circuit.last_failure_time = datetime.now(timezone.utc)
+            circuit.last_failure_monotonic = _monotonic_time()
             circuit.success_count = 0  # Reset success count
             circuit.probe_in_flight = False
 

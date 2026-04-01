@@ -3,14 +3,15 @@
 	import { page } from '$app/stores';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
-	import { listPublicContent } from '$lib/content/publicContent';
+	import type { PublicContentEntry } from '$lib/content/publicContent.types';
 	import {
 		buildPublicEnterpriseHref,
 		buildPublicSignupHref,
 		resolvePublicBuyingMotion
 	} from '$lib/public/publicBuyingMotion';
+	import type { PageData } from './$types';
 
-	const insights = listPublicContent('insights');
+	let { data }: { data: PageData } = $props();
 	let buyingMotion = $derived(resolvePublicBuyingMotion($page.url, 'self_serve_first'));
 	let startFreeHref = $derived(
 		buildPublicSignupHref(base, $page.url, {
@@ -39,6 +40,8 @@
 			value: 'Use Insights when the buyer needs education before live product evaluation'
 		}
 	] as const;
+
+	let insights = $derived(data.insights as PublicContentEntry[]);
 </script>
 
 <PublicPageMeta

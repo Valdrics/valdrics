@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import Page from './+page.svelte';
+import { mustGetPublicContentEntry } from '$lib/content/publicContent';
 
 vi.mock('$app/paths', () => ({
 	base: '',
@@ -12,9 +13,25 @@ vi.mock('$app/stores', () => ({
 	page: readable({ url: new URL('https://example.com/docs') })
 }));
 
+const SHARED_PAGE_DATA = {
+	user: null,
+	session: null,
+	subscription: { tier: 'starter', status: 'active' },
+	profile: null
+} as const;
+
 describe('docs page', () => {
 	it('renders core documentation sections and links', () => {
-		render(Page);
+		render(Page, {
+			data: {
+				...SHARED_PAGE_DATA,
+				operatingGuides: [
+					mustGetPublicContentEntry('docs', 'connect-first-provider'),
+					mustGetPublicContentEntry('docs', 'owner-routing-and-approval-path'),
+					mustGetPublicContentEntry('docs', 'decision-history-and-export-records')
+				]
+			}
+		});
 
 		const heading = screen.getByRole('heading', {
 			level: 1,

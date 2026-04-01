@@ -69,14 +69,7 @@ class TimeoutManager:
 
     def __init__(self, operation_type: str = "default"):
         self.operation_type = operation_type
-        self.config = TIMEOUT_CONFIGS.get(
-            operation_type,
-            {
-                "total": 30.0,
-                "connect": 10.0,
-                "read": 20.0,
-            },
-        )
+        self.config = get_timeout_config(operation_type)
 
     async def execute_with_timeout(
         self,

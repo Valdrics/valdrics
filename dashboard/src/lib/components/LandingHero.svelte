@@ -1,27 +1,18 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { assets, base } from '$app/paths';
-	import { page } from '$app/stores';
+	import { base } from '$app/paths';
 	import { onMount } from 'svelte';
-	import { LANDING_SIGNAL_SNAPSHOTS } from '$lib/landing/landingSignalSnapshots';
+	import type { LandingExperimentAssignments } from '$lib/landing/landingExperiment';
 	import {
-		resolveLandingExperiments,
-		shouldIncludeExperimentQueryParams,
-		type LandingExperimentAssignments
-	} from '$lib/landing/landingExperiment';
-	import {
-		resolveDetectedLandingCurrency,
 		resolveInitialLandingCurrency,
 		setLandingCurrencyPreference,
 		type LandingCurrencyCode
 	} from '$lib/landing/currencyPreference';
 	import type { FunnelStage, LandingAttribution } from '$lib/landing/landingFunnel';
-	import type { LandingTelemetryContext } from '$lib/landing/landingTelemetry';
 	import {
-		DEFAULT_EXPERIMENT_ASSIGNMENTS,
 		LANDING_CONSENT_KEY,
 		LANDING_SCROLL_MILESTONES,
-		resolveLandingMotionProfile,
+		type LandingMotionProfile,
 		SNAPSHOT_ROTATION_MS
 	} from '$lib/landing/landingHeroConfig';
 	import {
@@ -29,17 +20,13 @@
 		buildLandingHeroSignupPath
 	} from '$lib/landing/landingHeroActions';
 	import { buildLandingPublicPath } from '$lib/landing/landingPublicAttribution';
-	import {
-		calculateLandingHeroScenarioMetrics,
-		formatLandingHeroCurrencyAmount
-	} from '$lib/landing/landingHeroScenario';
-	import {
-		DEFAULT_LANDING_ROI_INPUTS,
-		normalizeLandingRoiInputs
-	} from '$lib/landing/roiCalculator';
+	import { LANDING_ROI_DEFAULTS } from '$lib/landing/landingRoiDefaults';
+	import type { LandingTelemetryContext } from '$lib/landing/landingTelemetry';
 	import { getReducedMotionPreference } from '$lib/landing/reducedMotion';
-	import { nextSnapshotIndex } from '$lib/landing/signalRotation';
-	import { BUYER_ROLE_VIEWS, HERO_ROLE_CONTEXT } from '$lib/landing/heroContent.core';
+	import type {
+		LandingSignalLaneSnapshot,
+		LandingSignalSnapshot
+	} from '$lib/landing/landingSignalSnapshots';
 	import LandingHeroView from '$lib/components/landing/LandingHeroView.svelte';
 
 	type LandingHeroTelemetryApi = {
@@ -57,63 +44,80 @@
 		trackScenarioAdjust: (control: string) => void;
 	};
 
-	const DEFAULT_SIGNAL_SNAPSHOT = LANDING_SIGNAL_SNAPSHOTS[0];
-	const ONE_PAGER_HREF = `${base}/resources/valdrics-enterprise-one-pager.md`,
-		RESOURCES_PATH = `${base}/resources`;
-	const SUBSCRIBE_API_PATH = `${base}/api/marketing/subscribe`,
-		TALK_TO_SALES_PATH = `${base}/talk-to-sales`,
-		ENTERPRISE_PATH = `${base}/enterprise`;
-	if (!DEFAULT_SIGNAL_SNAPSHOT)
-		throw new Error('Landing signal snapshots require at least one snapshot.');
+	const ONE_PAGER_HREF = `${base}/resources/valdrics-enterprise-one-pager.md`;
+	const RESOURCES_PATH = `${base}/resources`;
+	const SUBSCRIBE_API_PATH = `${base}/api/marketing/subscribe`;
+	const TALK_TO_SALES_PATH = `${base}/talk-to-sales`;
+	const ENTERPRISE_PATH = `${base}/enterprise`;
+
+	let {
+		initialExperiments,
+		includeExperimentQueryParams,
+		initialMotionProfile,
+		canonicalUrl,
+		ogImageUrl,
+		detectedCurrencyCode,
+		buyerPersonaId,
+		heroPrimaryIntent,
+		heroTitle,
+		heroSubtitle,
+		initialSnapshot
+	}: {
+		initialExperiments: LandingExperimentAssignments;
+		includeExperimentQueryParams: boolean;
+		initialMotionProfile: LandingMotionProfile;
+		canonicalUrl: string;
+		ogImageUrl: string;
+		detectedCurrencyCode: LandingCurrencyCode;
+		buyerPersonaId: LandingExperimentAssignments['buyerPersonaDefault'];
+		heroPrimaryIntent: string;
+		heroTitle: string;
+		heroSubtitle: string;
+		initialSnapshot: LandingSignalSnapshot;
+	} = $props();
+
 	let signalMapElement: HTMLDivElement | null = null;
-	let signalMapInView = $state(true),
-		documentVisible = $state(true),
-		snapshotIndex = $state(0),
-		buyerRoleIndex = $state(0);
-	let visitorId = $state(''),
-		pageReferrer = $state('');
-	let experiments = $state<LandingExperimentAssignments>(
-		resolveLandingExperiments($page.url, DEFAULT_EXPERIMENT_ASSIGNMENTS.seed)
-	);
-	let attribution = $state<LandingAttribution>({ utm: {} }),
-		engagedCaptured = $state(false);
-	let roiMonthlySpendUsd = $state(DEFAULT_LANDING_ROI_INPUTS.monthlySpendUsd),
-		roiExpectedReductionPct = $state(DEFAULT_LANDING_ROI_INPUTS.expectedReductionPct),
-		roiRolloutDays = $state(DEFAULT_LANDING_ROI_INPUTS.rolloutDays);
-	let roiTeamMembers = $state(DEFAULT_LANDING_ROI_INPUTS.teamMembers),
-		roiBlendedHourlyUsd = $state(DEFAULT_LANDING_ROI_INPUTS.blendedHourlyUsd),
-		roiPlatformAnnualCostUsd = $state(DEFAULT_LANDING_ROI_INPUTS.platformAnnualCostUsd);
-	let scenarioWasteWithoutPct = $state(18),
-		scenarioWasteWithPct = $state(7),
-		scenarioWindowMonths = $state(12),
-		scenarioAdjustCaptured = $state(false),
-		landingScrollProgressPct = $state(0);
-	let snapshotAutoplayPaused = $state(false);
+	let signalMapInView = $state(true);
+	let documentVisible = $state(true);
+	let snapshotIndex = $state(0);
+	let hydratedSnapshotCatalog = $state<readonly LandingSignalSnapshot[]>([]);
+	let snapshotAdvance = $state<((current: number, length: number) => number) | null>(null);
+	let snapshotRuntimeLoaded = $state(false);
+	let visitorId = $state('');
+	let pageReferrer = $state('');
+	let experimentOverrides = $state<LandingExperimentAssignments | null>(null);
+	let attribution = $state<LandingAttribution>({ utm: {} });
+	let engagedCaptured = $state(false);
+	let roiMonthlySpendUsd = $state(LANDING_ROI_DEFAULTS.monthlySpendUsd);
+	let scenarioWasteWithoutPct = $state(18);
+	let scenarioWasteWithPct = $state(7);
+	let scenarioWindowMonths = $state(12);
+	let scenarioAdjustCaptured = $state(false);
+	let landingScrollProgressPct = $state(0);
 	let prefersReducedMotion = $state(
 		getReducedMotionPreference(browser && typeof window !== 'undefined' ? window : undefined)
 	);
-	let telemetryEnabled = $state(false),
-		telemetryInitialized = $state(false),
-		cookieBannerVisible = $state(false),
-		localCurrencyCode = $state<LandingCurrencyCode>(resolveDetectedLandingCurrency()),
-		roiCurrencyCode = $state<LandingCurrencyCode>(resolveInitialLandingCurrency());
+	let telemetryEnabled = $state(false);
+	let telemetryInitialized = $state(false);
+	let cookieBannerVisible = $state(false);
+	let roiCurrencyOverride = $state<LandingCurrencyCode | null>(null);
 	let telemetryApi = $state<LandingHeroTelemetryApi | null>(null);
-	let activeSnapshot = $derived(LANDING_SIGNAL_SNAPSHOTS[snapshotIndex] ?? DEFAULT_SIGNAL_SNAPSHOT);
-	let activeBuyerRole = $derived(BUYER_ROLE_VIEWS[buyerRoleIndex] ?? BUYER_ROLE_VIEWS[0]);
-	let activeSignalLane = $derived(
+	let localCurrencyCode = $derived.by(() => detectedCurrencyCode);
+	let roiCurrencyCode = $derived(
+		roiCurrencyOverride ?? resolveInitialLandingCurrency(localCurrencyCode)
+	);
+	let experiments = $derived(experimentOverrides ?? initialExperiments);
+	let snapshotCatalog = $derived(
+		snapshotRuntimeLoaded ? hydratedSnapshotCatalog : [initialSnapshot]
+	);
+	let activeSnapshot = $derived(snapshotCatalog[snapshotIndex] ?? initialSnapshot);
+	let activeSignalLane = $derived<LandingSignalLaneSnapshot>(
 		activeSnapshot.lanes.find(
 			(lane) => lane.severity === 'watch' || lane.severity === 'critical'
-		) ?? activeSnapshot.lanes[0]
+		) ??
+			activeSnapshot.lanes[0] ??
+			initialSnapshot.lanes[0]!
 	);
-	let heroContext = $derived(HERO_ROLE_CONTEXT[activeBuyerRole.id] ?? HERO_ROLE_CONTEXT.finops);
-	let heroTitle = $derived(
-		experiments.heroVariant === 'from_metrics_to_control'
-			? heroContext.metricsTitle
-			: heroContext.controlTitle
-	);
-	let heroSubtitle = $derived(heroContext.subtitle);
-	let canonicalUrl = $derived(new URL($page.url.pathname, $page.url.origin).toString()),
-		ogImageUrl = $derived(new URL(`${assets}/og-image.png`, $page.url.origin).toString());
 	let primaryCtaLabel = $derived(
 		experiments.ctaVariant === 'book_briefing' ? 'Book Executive Briefing' : 'Start Free Workspace'
 	);
@@ -122,23 +126,22 @@
 	);
 	let secondaryCtaHref = $derived(
 		experiments.ctaVariant === 'book_briefing'
-			? buildSignupHref(heroContext.primaryIntent, { source: 'hero_secondary' })
+			? buildSignupHref(heroPrimaryIntent, { source: 'hero_secondary' })
 			: buildPublicPath(`${base}/pricing`, 'hero_secondary')
 	);
 	let roiPlannerHref = $derived(buildSignupHref('roi_assessment', { source: 'simulator' }));
 	let requestValidationBriefingHref = $derived(
-			buildTalkToSalesHref('trust_validation', 'request_validation_briefing')
-		),
-		aboutHref = $derived(buildPublicPath(`${base}/about`, 'trust_about')),
-		docsHref = $derived(buildPublicPath(`${base}/docs`, 'trust_docs')),
-		statusHref = $derived(buildPublicPath(`${base}/status`, 'trust_status')),
-		proofHref = $derived(buildPublicPath(`${base}/proof`, 'trust_proof')),
-		plansEnterpriseHref = $derived(buildEnterpriseReviewHref('plans_enterprise')),
-		trustEnterpriseHref = $derived(buildEnterpriseReviewHref('trust_enterprise'));
-	let showBackToTop = $derived(landingScrollProgressPct >= 8),
-		motionProfile = $derived(resolveLandingMotionProfile($page.url));
+		buildTalkToSalesHref('trust_validation', 'request_validation_briefing')
+	);
+	let aboutHref = $derived(buildPublicPath(`${base}/about`, 'trust_about'));
+	let docsHref = $derived(buildPublicPath(`${base}/docs`, 'trust_docs'));
+	let statusHref = $derived(buildPublicPath(`${base}/status`, 'trust_status'));
+	let proofHref = $derived(buildPublicPath(`${base}/proof`, 'trust_proof'));
+	let trustEnterpriseHref = $derived(buildEnterpriseReviewHref('trust_enterprise'));
+	let showBackToTop = $derived(landingScrollProgressPct >= 8);
+	let motionProfile = $derived(initialMotionProfile);
 	let primaryCtaIntent = $derived(
-		experiments.ctaVariant === 'book_briefing' ? 'executive_briefing' : heroContext.primaryIntent
+		experiments.ctaVariant === 'book_briefing' ? 'executive_briefing' : heroPrimaryIntent
 	);
 	let primaryCtaHref = $derived(
 		experiments.ctaVariant === 'book_briefing'
@@ -151,41 +154,28 @@
 	let secondaryCtaTelemetryValue = $derived(
 		experiments.ctaVariant === 'book_briefing' ? 'start_free' : 'see_pricing'
 	);
-	let includeExperimentQueryParams = $derived(shouldIncludeExperimentQueryParams($page.url, false));
 	let shouldRotateSnapshots = $derived(
-		!snapshotAutoplayPaused &&
+		snapshotRuntimeLoaded &&
 			!prefersReducedMotion &&
 			documentVisible &&
 			signalMapInView &&
-			LANDING_SIGNAL_SNAPSHOTS.length > 1
+			snapshotCatalog.length > 1
 	);
-	let roiInputs = $derived(
-		normalizeLandingRoiInputs({
-			monthlySpendUsd: roiMonthlySpendUsd,
-			expectedReductionPct: roiExpectedReductionPct,
-			rolloutDays: roiRolloutDays,
-			teamMembers: roiTeamMembers,
-			blendedHourlyUsd: roiBlendedHourlyUsd,
-			platformAnnualCostUsd: roiPlatformAnnualCostUsd
-		})
-	);
-	let scenarioMetrics = $derived(
-		calculateLandingHeroScenarioMetrics({
-			monthlySpendUsd: roiInputs.monthlySpendUsd,
-			wasteWithoutPct: scenarioWasteWithoutPct,
-			wasteWithPct: scenarioWasteWithPct,
-			windowMonths: scenarioWindowMonths
-		})
-	);
-
 	let telemetryBridgePromise: Promise<LandingHeroTelemetryApi> | null = null;
+	let snapshotRuntimePromise: Promise<void> | null = null;
+
+	const getCurrentPageUrl = (): URL =>
+		browser && typeof window !== 'undefined'
+			? new URL(window.location.href)
+			: new URL(canonicalUrl);
 
 	function buildFallbackTelemetryContext(stage?: FunnelStage): LandingTelemetryContext {
+		const pageUrl = getCurrentPageUrl();
 		return {
 			visitorId,
-			persona: activeBuyerRole.id,
+			persona: buyerPersonaId,
 			referrer: pageReferrer || undefined,
-			pagePath: $page.url.pathname,
+			pagePath: pageUrl.pathname,
 			funnelStage: stage,
 			experiment: {
 				hero: experiments.heroVariant,
@@ -272,14 +262,14 @@
 						getVisitorId: () => visitorId,
 						setVisitorId: (value) => (visitorId = value),
 						getExperiments: () => experiments,
-						setExperiments: (value) => (experiments = value),
+						setExperiments: (value) => (experimentOverrides = value),
 						getAttribution: () => attribution,
 						setAttribution: (value) => (attribution = value),
-						getPersona: () => activeBuyerRole.id,
-						getPagePath: () => $page.url.pathname,
+						getPersona: () => buyerPersonaId,
+						getPagePath: () => getCurrentPageUrl().pathname,
 						getReferrer: () => pageReferrer,
 						getStorage: () => (browser ? window.localStorage : undefined),
-						getPageUrl: () => $page.url,
+						getPageUrl: () => getCurrentPageUrl(),
 						consentStorageKey: LANDING_CONSENT_KEY
 					});
 					telemetryApi = nextTelemetryApi;
@@ -291,27 +281,49 @@
 				});
 		}
 
-		return telemetryBridgePromise!;
+		return telemetryBridgePromise;
+	}
+
+	async function ensureSnapshotRuntime(): Promise<void> {
+		if (snapshotRuntimeLoaded) {
+			return;
+		}
+
+		if (!snapshotRuntimePromise) {
+			snapshotRuntimePromise = Promise.all([
+				import('$lib/landing/landingSignalSnapshots'),
+				import('$lib/landing/signalRotation')
+			])
+				.then(([{ LANDING_SIGNAL_SNAPSHOTS }, { nextSnapshotIndex }]) => {
+					hydratedSnapshotCatalog = LANDING_SIGNAL_SNAPSHOTS;
+					snapshotAdvance = nextSnapshotIndex;
+					snapshotRuntimeLoaded = true;
+				})
+				.catch((error) => {
+					snapshotRuntimePromise = null;
+					throw error;
+				});
+		}
+
+		return snapshotRuntimePromise;
 	}
 
 	$effect(() => {
-		const defaultBuyerIndex = BUYER_ROLE_VIEWS.findIndex(
-			(role) => role.id === experiments.buyerPersonaDefault
-		);
-		if (defaultBuyerIndex >= 0) {
-			buyerRoleIndex = defaultBuyerIndex;
-		}
-	});
-	$effect(() => {
-		if (!shouldRotateSnapshots) return;
+		const advance = snapshotAdvance;
+		if (!shouldRotateSnapshots || !advance) return;
 		const interval = setInterval(() => {
-			snapshotIndex = nextSnapshotIndex(snapshotIndex, LANDING_SIGNAL_SNAPSHOTS.length);
+			snapshotIndex = advance(snapshotIndex, snapshotCatalog.length);
 		}, SNAPSHOT_ROTATION_MS);
 		return () => clearInterval(interval);
 	});
+
 	onMount(() => {
 		let cancelled = false;
 		let teardown: (() => void) | void;
+
+		void ensureSnapshotRuntime().catch(() => {
+			// Decorative snapshot rotation must not block the landing experience.
+		});
 
 		void ensureTelemetryBridge()
 			.then(() => import('$lib/landing/landingHeroBrowserRuntime'))
@@ -346,51 +358,55 @@
 			teardown?.();
 		};
 	});
-	const closeCookieBanner = () => (cookieBannerVisible = false),
-		openCookieSettings = () => (cookieBannerVisible = true);
+
+	const closeCookieBanner = () => (cookieBannerVisible = false);
+	const openCookieSettings = () => (cookieBannerVisible = true);
+
 	function buildSignupHref(intent: string, extraParams: Record<string, string> = {}): string {
 		return buildLandingHeroSignupPath({
 			basePath: base,
 			intent,
-			persona: activeBuyerRole.id,
+			persona: buyerPersonaId,
 			includeExperimentQueryParams,
 			experiments,
 			utm: attribution.utm,
 			extraParams
 		});
 	}
+
 	function buildTalkToSalesHref(source: string, intent?: string): string {
 		return buildLandingHeroSalesPath({
 			path: TALK_TO_SALES_PATH,
 			source,
 			intent,
-			persona: activeBuyerRole.id,
+			persona: buyerPersonaId,
 			utm: attribution.utm
 		});
 	}
+
 	function buildPublicPath(path: string, source: string): string {
 		return buildLandingPublicPath({
 			path,
 			source,
-			persona: activeBuyerRole.id,
+			persona: buyerPersonaId,
 			utm: attribution.utm
 		});
 	}
+
 	function buildEnterpriseReviewHref(source: string): string {
 		return buildLandingHeroSalesPath({
 			path: ENTERPRISE_PATH,
 			source,
-			persona: activeBuyerRole.id,
+			persona: buyerPersonaId,
 			utm: attribution.utm
 		});
 	}
+
 	const handleScenarioWasteWithoutChange = (value: number) => (scenarioWasteWithoutPct = value);
 	const handleScenarioWasteWithChange = (value: number) => (scenarioWasteWithPct = value);
 	const handleScenarioWindowChange = (value: number) => (scenarioWindowMonths = value);
-	const formatUsd = (amount: number, currency: string = roiCurrencyCode) =>
-		formatLandingHeroCurrencyAmount(amount, currency);
 	function handleCurrencyCodeChange(value: LandingCurrencyCode): void {
-		roiCurrencyCode = value;
+		roiCurrencyOverride = value;
 		setLandingCurrencyPreference(value);
 	}
 </script>
@@ -408,20 +424,10 @@
 	{secondaryCtaTelemetryValue}
 	{activeSnapshot}
 	{activeSignalLane}
-	normalizedScenarioWasteWithoutPct={scenarioMetrics.normalizedScenarioWasteWithoutPct}
-	normalizedScenarioWasteWithPct={scenarioMetrics.normalizedScenarioWasteWithPct}
-	normalizedScenarioWindowMonths={scenarioMetrics.normalizedScenarioWindowMonths}
-	scenarioWithoutBarPct={scenarioMetrics.scenarioWithoutBarPct}
-	scenarioWithBarPct={scenarioMetrics.scenarioWithBarPct}
-	scenarioWasteWithoutUsd={scenarioMetrics.scenarioWasteWithoutUsd}
-	scenarioWasteWithUsd={scenarioMetrics.scenarioWasteWithUsd}
-	scenarioWasteRecoveryMonthlyUsd={scenarioMetrics.scenarioWasteRecoveryMonthlyUsd}
-	scenarioWasteRecoveryWindowUsd={scenarioMetrics.scenarioWasteRecoveryWindowUsd}
-	monthlySpendUsd={roiInputs.monthlySpendUsd}
+	{roiMonthlySpendUsd}
 	{scenarioWasteWithoutPct}
 	{scenarioWasteWithPct}
 	{scenarioWindowMonths}
-	{formatUsd}
 	{localCurrencyCode}
 	currencyCode={roiCurrencyCode}
 	onCurrencyCodeChange={handleCurrencyCodeChange}

@@ -1,8 +1,8 @@
 <script lang="ts">
 	import CloudLogo from './CloudLogo.svelte';
-	import DOMPurify from 'dompurify';
 	import { Terminal, Check } from '@lucide/svelte';
 	import { clientLogger } from '$lib/logging/client';
+	import { createLazyComponent } from '$lib/lazyComponent';
 
 	interface ZombieFinding {
 		provider: 'aws' | 'azure' | 'gcp';
@@ -20,6 +20,11 @@
 		is_gpu?: boolean;
 	}
 
+	type FindingsTableDetailBodyProps = {
+		explanation: string;
+		confidenceReason?: string;
+	};
+
 	let {
 		resources = [],
 		onRemediate,
@@ -32,7 +37,11 @@
 
 	let currentPage = $state(0);
 	let copiedId = $state<string | null>(null);
+	let detailsModuleReady = $state(import.meta.env.MODE === 'test');
 	const pageSize = 10;
+	const loadFindingsTableDetailBody = createLazyComponent<FindingsTableDetailBodyProps>(
+		() => import('./FindingsTableDetailBody.svelte')
+	);
 
 	let totalPages = $derived(Math.ceil(resources.length / pageSize));
 	let paginatedResources = $derived(
@@ -97,6 +106,10 @@
 			clientLogger.error('Failed to copy: ', err);
 		}
 	}
+
+	function ensureDetailsModule(): void {
+		detailsModuleReady = true;
+	}
 </script>
 
 <div class="card stagger-enter findings-table">
@@ -142,17 +155,27 @@
 							<div class="findings-table__resource-id" title={finding.resource_id}>
 								{finding.resource_id}
 							</div>
-							<details class="findings-table__details">
+							<details
+								class="findings-table__details"
+								ontoggle={(event) => {
+									if ((event.currentTarget as HTMLDetailsElement).open) {
+										ensureDetailsModule();
+									}
+								}}
+							>
 								<summary class="findings-table__summary">View details</summary>
-								<p class="findings-table__explanation">
-									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-									{@html DOMPurify.sanitize(finding.explanation, {
-										ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'br', 'p', 'ul', 'li', 'code'],
-										ALLOWED_ATTR: []
-									})}
-								</p>
-								{#if finding.confidence_reason}
-									<p class="findings-table__confidence-reason">{finding.confidence_reason}</p>
+								{#if detailsModuleReady}
+									{#await loadFindingsTableDetailBody() then module}
+										{@const FindingsTableDetailBody = module.default}
+										<FindingsTableDetailBody
+											explanation={finding.explanation}
+											confidenceReason={finding.confidence_reason}
+										/>
+									{:catch}
+										<p class="findings-table__confidence-reason">
+											Details are temporarily unavailable.
+										</p>
+									{/await}
 								{/if}
 							</details>
 						</td>

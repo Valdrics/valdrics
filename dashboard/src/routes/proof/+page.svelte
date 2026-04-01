@@ -3,15 +3,15 @@
 	import { page } from '$app/stores';
 	import PublicMarketingPage from '$lib/components/public/PublicMarketingPage.svelte';
 	import PublicPageMeta from '$lib/components/public/PublicPageMeta.svelte';
-	import { listPublicContent, type PublicContentEntry } from '$lib/content/publicContent';
+	import type { PublicContentEntry } from '$lib/content/publicContent.types';
 	import {
 		buildPublicEnterpriseHref,
 		buildPublicSignupHref,
 		resolvePublicBuyingMotion
 	} from '$lib/public/publicBuyingMotion';
+	import type { PageData } from './$types';
 
-	const proofEntries = listPublicContent('proof');
-	const proofBySlug = new Map(proofEntries.map((entry) => [entry.slug, entry] as const));
+	let { data }: { data: PageData } = $props();
 	let buyingMotion = $derived(resolvePublicBuyingMotion($page.url, 'enterprise_first'));
 	let startFreeHref = $derived(
 		buildPublicSignupHref(base, $page.url, {
@@ -25,14 +25,6 @@
 			source: 'proof_pack'
 		})
 	);
-
-	function mustGetProof(slug: string): PublicContentEntry {
-		const entry = proofBySlug.get(slug);
-		if (!entry) {
-			throw new Error(`Unknown proof entry: ${slug}`);
-		}
-		return entry;
-	}
 
 	const heroHighlights = [
 		{
@@ -67,13 +59,7 @@
 		}
 	] as const;
 
-	const proofSpotlights = [
-		mustGetProof('safe-access-model'),
-		mustGetProof('identity-and-approval-controls'),
-		mustGetProof('decision-history-and-export-integrity'),
-		mustGetProof('deployment-and-data-residency'),
-		mustGetProof('validation-scope-and-operational-hardening')
-	] as const;
+	let proofSpotlights = $derived(data.proofSpotlights as PublicContentEntry[]);
 </script>
 
 <PublicPageMeta

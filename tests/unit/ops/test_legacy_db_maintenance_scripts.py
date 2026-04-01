@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -52,6 +52,36 @@ def test_run_rls_optimization_uses_repo_root_sql_path(
 
     assert run_rls_optimization.main([]) == 0
     driver_connection.execute.assert_awaited_once_with("SELECT 1;")
+
+
+def test_run_rls_optimization_uses_perf_counter_for_total_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    sql_path = tmp_path / "scripts" / "optimize_performance_and_security.sql"
+    sql_path.parent.mkdir(parents=True)
+    sql_path.write_text("SELECT 1;", encoding="utf-8")
+
+    driver_connection = SimpleNamespace(execute=AsyncMock())
+    raw_conn = SimpleNamespace(driver_connection=driver_connection)
+    connection = SimpleNamespace(get_raw_connection=AsyncMock(return_value=raw_conn))
+    session = SimpleNamespace(connection=AsyncMock(return_value=connection))
+
+    monkeypatch.setattr(run_rls_optimization, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(
+        run_rls_optimization,
+        "async_session_maker",
+        lambda: _AsyncContextManager(session),
+    )
+    monkeypatch.setattr(
+        run_rls_optimization,
+        "_perf_counter",
+        MagicMock(side_effect=[25.0, 25.4]),
+    )
+
+    assert run_rls_optimization.main([]) == 0
+    assert "🏁 Total hardening time: 0.40s" in capsys.readouterr().out
 
 
 @pytest.mark.asyncio

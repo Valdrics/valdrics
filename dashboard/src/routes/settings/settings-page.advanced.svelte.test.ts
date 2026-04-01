@@ -48,7 +48,9 @@ describe('settings page integration wiring (advanced)', () => {
 			);
 		});
 
-		await fireEvent.click(screen.getByRole('button', { name: /Save ActiveOps Settings/i }));
+		await fireEvent.click(
+			await screen.findByRole('button', { name: /Save ActiveOps Settings/i }, { timeout: 5000 })
+		);
 		await waitFor(() => {
 			expect(putMock).toHaveBeenCalledWith(
 				endpoint('/settings/activeops'),
@@ -110,7 +112,7 @@ describe('settings page integration wiring (advanced)', () => {
 		await screen.findByText('Slack integration missing');
 
 		await fireEvent.click(
-			screen.getByRole('button', { name: /Run policy notification diagnostics/i })
+			await screen.findByRole('button', { name: /Run policy notification diagnostics/i })
 		);
 		await waitFor(() => {
 			expect(getMock).toHaveBeenCalledWith(

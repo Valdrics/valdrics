@@ -24,6 +24,10 @@ SCIM_SMOKE_RECOVERABLE_EXCEPTIONS = (
 )
 
 
+def _perf_counter() -> float:
+    return time.perf_counter()
+
+
 @dataclass(frozen=True)
 class Check:
     name: str
@@ -82,7 +86,7 @@ def record_check(
     ok: bool,
     detail: str | None = None,
 ) -> None:
-    duration_ms = (time.time() - started) * 1000.0
+    duration_ms = (_perf_counter() - started) * 1000.0
     status_code = resp.status_code if resp is not None else None
     checks.append(
         Check(

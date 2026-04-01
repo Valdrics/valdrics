@@ -5,4 +5,13 @@
 	let { data }: { data: PageData } = $props();
 </script>
 
-<PublicContentArticlePage entry={data.entry} hubHref="/resources" hubLabel="Back to Resources" />
+<svelte:head>
+	<title>{data.entry.title} | Valdrics Resources</title>
+</svelte:head>
+
+<PublicContentArticlePage
+	entry={data.entry}
+	relatedEntries={data.relatedEntries}
+	hubHref="/resources"
+	hubLabel="Back to Resources"
+/>

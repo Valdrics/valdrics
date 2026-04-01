@@ -26,6 +26,11 @@ SCHEDULER_SWEEP_RECOVERABLE_ERRORS = (
     ValueError,
 )
 
+
+def _perf_counter() -> float:
+    return time.perf_counter()
+
+
 async def billing_sweep_logic(
     *,
     open_db_session_fn: Callable[[], Any],
@@ -147,7 +152,7 @@ async def acceptance_sweep_logic(
     asyncio_module: Any,
 ) -> None:
     job_name = "daily_acceptance_sweep"
-    start_time = time.time()
+    start_time = _perf_counter()
     max_retries = 3
     retry_count = 0
 
@@ -243,7 +248,7 @@ async def acceptance_sweep_logic(
                 else:
                     await asyncio_module.sleep(2 ** (retry_count - 1))
 
-        duration = time.time() - start_time
+        duration = _perf_counter() - start_time
         scheduler_job_duration.labels(job_name=job_name).observe(duration)
 
 

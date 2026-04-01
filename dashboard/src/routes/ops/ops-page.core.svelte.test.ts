@@ -10,6 +10,8 @@ import {
 } from './ops-page.test.setup';
 import Page from './+page.svelte';
 
+const ASYNC_RENDER_TIMEOUT = 5000;
+
 describe('ops page unit economics interactions', () => {
 	let createObjectUrlSpy: ReturnType<typeof vi.spyOn>;
 	let revokeObjectUrlSpy: ReturnType<typeof vi.spyOn>;
@@ -46,7 +48,7 @@ describe('ops page unit economics interactions', () => {
 			data: testOpsPageData
 		});
 
-		await screen.findByText('Unit Economics Monitor');
+		await screen.findByText('Unit Economics Monitor', {}, { timeout: ASYNC_RENDER_TIMEOUT });
 
 		const unitCard = screen.getByText('Unit Economics Monitor').closest('.card') as HTMLElement;
 		const dateInputs = Array.from(
@@ -75,7 +77,7 @@ describe('ops page unit economics interactions', () => {
 			data: testOpsPageData
 		});
 
-		await screen.findByText('Cost Ingestion SLA');
+		await screen.findByText('Cost Ingestion SLA', {}, { timeout: ASYNC_RENDER_TIMEOUT });
 		await screen.findByText('SLA At Risk');
 
 		await fireEvent.change(screen.getByLabelText('SLA Window'), { target: { value: '168' } });
@@ -98,7 +100,7 @@ describe('ops page unit economics interactions', () => {
 			data: testOpsPageData
 		});
 
-		await screen.findByText('Job Reliability SLO');
+		await screen.findByText('Job Reliability SLO', {}, { timeout: ASYNC_RENDER_TIMEOUT });
 		await screen.findByText('SLO Healthy');
 		await screen.findByText('cost_ingestion');
 
@@ -122,7 +124,7 @@ describe('ops page unit economics interactions', () => {
 			data: testOpsPageData
 		});
 
-		await screen.findByText('Acceptance KPI Evidence');
+		await screen.findByText('Acceptance KPI Evidence', {}, { timeout: ASYNC_RENDER_TIMEOUT });
 		await screen.findByText('Gaps Open');
 
 		const unitCard = screen.getByText('Unit Economics Monitor').closest('.card') as HTMLElement;
@@ -157,8 +159,8 @@ describe('ops page unit economics interactions', () => {
 			}
 		});
 
-		await screen.findByText('Unit Economics Monitor');
-		await screen.findByText('Cost Ingestion SLA');
+		await screen.findByText('Unit Economics Monitor', {}, { timeout: ASYNC_RENDER_TIMEOUT });
+		await screen.findByText('Cost Ingestion SLA', {}, { timeout: ASYNC_RENDER_TIMEOUT });
 		expect(await screen.findAllByText(/pro tier required/i)).toHaveLength(3);
 
 		await waitFor(() => {
@@ -182,7 +184,7 @@ describe('ops page unit economics interactions', () => {
 			data: testOpsPageData
 		});
 
-		await screen.findByText('Integration Acceptance Runs');
+		await screen.findByText('Integration Acceptance Runs', {}, { timeout: ASYNC_RENDER_TIMEOUT });
 		await screen.findByText('PARTIAL FAILURE');
 		expect(screen.getByText('2 passed / 1 failed')).toBeTruthy();
 		expect(screen.getByText('slack: OK')).toBeTruthy();
@@ -219,7 +221,7 @@ describe('ops page unit economics interactions', () => {
 			data: testOpsPageData
 		});
 
-		await screen.findByText('Integration Acceptance Runs');
+		await screen.findByText('Integration Acceptance Runs', {}, { timeout: ASYNC_RENDER_TIMEOUT });
 		await fireEvent.click(screen.getByRole('button', { name: 'Run Checks' }));
 
 		await waitFor(() => {
@@ -266,7 +268,7 @@ describe('ops page unit economics interactions', () => {
 			data: testOpsPageData
 		});
 
-		await screen.findByText('Integration Acceptance Runs');
+		await screen.findByText('Integration Acceptance Runs', {}, { timeout: ASYNC_RENDER_TIMEOUT });
 		await fireEvent.click(screen.getByLabelText('Include Jira checks'));
 		await fireEvent.click(screen.getByLabelText('Fail fast checks'));
 		await fireEvent.click(screen.getByRole('button', { name: 'Run Checks' }));

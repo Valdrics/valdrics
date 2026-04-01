@@ -131,14 +131,31 @@ async def test_check_remediation_rate_limit_memory_reset():
     action = "reset_action"
 
     with patch("app.shared.core.rate_limit.get_redis_client", return_value=None):
-        # Initial call
-        await check_remediation_rate_limit(tenant_id, action, limit=1)
-
-        # Mock time to be 2 hours later
-        future_time = time.time() + 7200
-        with patch("time.time", return_value=future_time):
+        with patch(
+            "app.shared.core.rate_limit._monotonic_time",
+            side_effect=[100.0, 100.0 + 7200.0],
+        ):
+            # Initial call
+            await check_remediation_rate_limit(tenant_id, action, limit=1)
             allowed = await check_remediation_rate_limit(tenant_id, action, limit=1)
             assert allowed is True
+
+
+@pytest.mark.asyncio
+async def test_check_remediation_rate_limit_memory_uses_monotonic_window() -> None:
+    tenant_id = "monotonic-tenant"
+    action = "monotonic-action"
+
+    with (
+        patch("app.shared.core.rate_limit.get_redis_client", return_value=None),
+        patch(
+            "app.shared.core.rate_limit._monotonic_time",
+            side_effect=[500.0, 500.0 + 3601.0],
+        ),
+        patch("app.shared.core.rate_limit.time.time", return_value=1.0),
+    ):
+        assert await check_remediation_rate_limit(tenant_id, action, limit=1) is True
+        assert await check_remediation_rate_limit(tenant_id, action, limit=1) is True
 
 
 def test_get_limiter_initialization():

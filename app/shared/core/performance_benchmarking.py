@@ -15,6 +15,10 @@ import structlog
 logger = structlog.get_logger()
 
 
+def _perf_counter() -> float:
+    return time.perf_counter()
+
+
 @dataclass
 class BenchmarkResult:
     """Results from a benchmark test."""
@@ -49,13 +53,13 @@ class PerformanceBenchmark:
             await func(*args, **kwargs)
 
         times: list[float] = []
-        start_time = time.time()
+        start_time = _perf_counter()
         for _ in range(iterations):
-            iteration_start = time.perf_counter()
+            iteration_start = _perf_counter()
             await func(*args, **kwargs)
-            times.append(time.perf_counter() - iteration_start)
+            times.append(_perf_counter() - iteration_start)
 
-        total_time = time.time() - start_time
+        total_time = _perf_counter() - start_time
 
         result = BenchmarkResult(
             name=f"{self.name}_{func.__name__}",
@@ -96,18 +100,18 @@ class PerformanceBenchmark:
         def run_benchmark() -> list[float]:
             times: list[float] = []
             for _ in range(iterations):
-                iteration_start = time.perf_counter()
+                iteration_start = _perf_counter()
                 func(*args, **kwargs)
-                times.append(time.perf_counter() - iteration_start)
+                times.append(_perf_counter() - iteration_start)
             return times
 
         with ThreadPoolExecutor(max_workers=1) as executor:
             executor.submit(run_warmup).result()
 
-        start_time = time.time()
+        start_time = _perf_counter()
         with ThreadPoolExecutor(max_workers=1) as executor:
             times = executor.submit(run_benchmark).result()
-        total_time = time.time() - start_time
+        total_time = _perf_counter() - start_time
 
         result = BenchmarkResult(
             name=f"{self.name}_{func.__name__}",

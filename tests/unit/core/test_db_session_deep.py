@@ -108,10 +108,11 @@ class TestDBSessionDeep:
 
         conn = MagicMock()
         conn.info = {"rls_context_set": False}  # Context explicitly missing
+        mock_settings = MagicMock()
+        mock_settings.TESTING = False
 
         # Temporarily disable TESTING mode for this test
-        with patch("app.shared.db.session.settings") as mock_settings:
-            mock_settings.TESTING = False
+        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
             with pytest.raises(ValdricsException) as exc:
                 check_rls_policy(
                     conn, None, "SELECT * FROM secret_data", None, None, None
@@ -122,9 +123,10 @@ class TestDBSessionDeep:
         """Test RLS policy listener allows exempt tables."""
         conn = MagicMock()
         conn.info = {"rls_context_set": False}
+        mock_settings = MagicMock()
+        mock_settings.TESTING = False
 
-        with patch("app.shared.db.session.settings") as mock_settings:
-            mock_settings.TESTING = False
+        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
             # 'users' is exempt (imported from constants)
             stmt, params = check_rls_policy(
                 conn, None, "SELECT * FROM users", None, None, None
@@ -135,8 +137,9 @@ class TestDBSessionDeep:
         """Test RLS policy listener allows system queries."""
         conn = MagicMock()
         conn.info = {"rls_context_set": False}
-        with patch("app.shared.db.session.settings") as mock_settings:
-            mock_settings.TESTING = False
+        mock_settings = MagicMock()
+        mock_settings.TESTING = False
+        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
             stmt, _ = check_rls_policy(conn, None, "SELECT 1", None, None, None)
             assert stmt == "SELECT 1"
 

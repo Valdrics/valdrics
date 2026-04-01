@@ -62,6 +62,34 @@ async def test_backup_creation_errors_raise(service: RemediationService) -> None
 
 
 @pytest.mark.asyncio
+async def test_rds_backup_ids_use_unique_snapshot_suffixes(
+    service: RemediationService,
+) -> None:
+    rds = AsyncMock()
+
+    async def fake_client(
+        _name: str, _context: RemediationContext
+    ) -> _AsyncContextManager:
+        return _AsyncContextManager(rds)
+
+    action = AWSDeleteRdsInstanceAction()
+    action._get_client = fake_client  # type: ignore[method-assign]
+    context = RemediationContext(tenant_id=uuid4(), region="us-east-1", tier="pro")
+
+    with patch(
+        "app.modules.optimization.domain.actions.aws.rds._snapshot_suffix",
+        side_effect=["abc123def456", "fed654cba321"],
+    ):
+        first = await action.create_backup("db-1", context)
+        second = await action.create_backup("db-1", context)
+
+    assert first == "valdrics-backup-db-1-abc123def456"
+    assert second == "valdrics-backup-db-1-fed654cba321"
+    assert first != second
+    assert rds.create_db_snapshot.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_execute_action_delete_volume_detach_and_delete(
     service: RemediationService,
 ) -> None:

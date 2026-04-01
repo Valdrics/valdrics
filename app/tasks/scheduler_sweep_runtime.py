@@ -5,6 +5,13 @@ from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator, Awaitable, Callable
 
 
+def _perf_counter_from_time_module(time_module: Any) -> float:
+    perf_counter = getattr(time_module, "perf_counter", None)
+    if callable(perf_counter):
+        return float(perf_counter())
+    return float(time_module.time())
+
+
 @asynccontextmanager
 async def open_transaction_session(
     *,
@@ -35,7 +42,7 @@ async def run_sweep_with_retries(
     recoverable_errors: tuple[type[Exception], ...],
     run_once: Callable[[], Awaitable[None]],
 ) -> None:
-    start_time = time_module.time()
+    start_time = _perf_counter_from_time_module(time_module)
     retry_count = 0
 
     while retry_count < max_retries:
@@ -51,7 +58,7 @@ async def run_sweep_with_retries(
             else:
                 await asyncio_module.sleep(2 ** (retry_count - 1))
 
-    duration = time_module.time() - start_time
+    duration = _perf_counter_from_time_module(time_module) - start_time
     scheduler_job_duration.labels(job_name=job_name).observe(duration)
 
 

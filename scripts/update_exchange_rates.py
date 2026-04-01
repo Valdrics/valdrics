@@ -13,9 +13,6 @@ from app.shared.db.session import async_session_maker
 
 logger = structlog.get_logger()
 
-# Standardized BE-FIN-01: Automated Exchange Rate Management.
-settings = get_settings()
-
 
 def _default_currencies() -> set[str]:
     return set(get_settings().SUPPORTED_CURRENCIES)

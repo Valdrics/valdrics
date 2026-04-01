@@ -32,13 +32,13 @@ describe('currencyPreference', () => {
 		expect(module.resolveDetectedLandingCurrency()).toBe('EUR');
 	});
 
-	it('persists an explicit supported currency selection', async () => {
+	it('persists an explicit USD selection across visits', async () => {
 		const module = await loadModuleWithDetectedCurrency('EUR');
-		module.setLandingCurrencyPreference('GBP');
+		module.setLandingCurrencyPreference('USD');
 
-		expect(window.localStorage.getItem('valdrics_landing_currency')).toBe('GBP');
-		expect(module.getLandingCurrencyPreference()).toBe('GBP');
-		expect(module.resolveInitialLandingCurrency()).toBe('GBP');
+		expect(window.localStorage.getItem('valdrics_landing_currency')).toBe('USD');
+		expect(module.getLandingCurrencyPreference()).toBe('USD');
+		expect(module.resolveInitialLandingCurrency()).toBe('USD');
 	});
 
 	it('falls back to the detected local currency when storage contains an unsupported value', async () => {
@@ -49,12 +49,36 @@ describe('currencyPreference', () => {
 		expect(module.resolveInitialLandingCurrency()).toBe('CNY');
 	});
 
-	it('ignores unsupported currency values and preserves the prior valid preference', async () => {
-		const module = await loadModuleWithDetectedCurrency('NGN');
-		module.setLandingCurrencyPreference('EUR');
+	it('ignores unsupported currency values and preserves the current valid public preference', async () => {
+		const module = await loadModuleWithDetectedCurrency('EUR');
+		module.setLandingCurrencyPreference('USD');
+		module.setLandingCurrencyPreference('NGN' as 'USD');
 		module.setLandingCurrencyPreference('ZZZ' as 'USD');
 
+		expect(module.getLandingCurrencyPreference()).toBe('USD');
+		expect(window.localStorage.getItem('valdrics_landing_currency')).toBe('USD');
+	});
+
+	it('falls back to USD when the detected local currency is NGN', async () => {
+		const module = await loadModuleWithDetectedCurrency('NGN');
+
+		expect(module.resolveDetectedLandingCurrency()).toBe('USD');
+		expect(module.resolveInitialLandingCurrency()).toBe('USD');
+	});
+
+	it('ignores a previously stored NGN landing preference', async () => {
+		window.localStorage.setItem('valdrics_landing_currency', 'NGN');
+
+		const module = await loadModuleWithDetectedCurrency('EUR');
 		expect(module.getLandingCurrencyPreference()).toBe('EUR');
-		expect(window.localStorage.getItem('valdrics_landing_currency')).toBe('EUR');
+		expect(module.resolveInitialLandingCurrency()).toBe('EUR');
+	});
+
+	it('ignores a stale stored local currency when the current detected local currency changes', async () => {
+		window.localStorage.setItem('valdrics_landing_currency', 'GBP');
+
+		const module = await loadModuleWithDetectedCurrency('EUR');
+		expect(module.getLandingCurrencyPreference()).toBe('EUR');
+		expect(module.resolveInitialLandingCurrency()).toBe('EUR');
 	});
 });

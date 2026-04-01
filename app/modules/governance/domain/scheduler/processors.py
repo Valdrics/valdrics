@@ -45,8 +45,9 @@ PROCESSOR_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
 class AnalysisProcessor:
     """Handles the heavy lifting of analyzing a single tenant's cloud usage."""
 
-    def __init__(self) -> None:
-        self.settings = get_settings()
+    @property
+    def settings(self) -> Any:
+        return get_settings()
 
     @staticmethod
     def _collect_connections(tenant: Tenant) -> list[Any]:

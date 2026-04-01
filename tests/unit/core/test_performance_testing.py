@@ -120,7 +120,7 @@ async def test_simulate_user_records_failure_and_exception(monkeypatch):
 
     monkeypatch.setattr(LoadTester, "_sleep", fake_sleep)
 
-    await tester._simulate_user(0, test_start_time=time.time())
+    await tester._simulate_user(0, test_start_time=time.monotonic())
 
     assert tester.results.failed_requests == 1
     assert tester.results.errors
@@ -140,7 +140,7 @@ async def test_simulate_user_records_failure_and_exception(monkeypatch):
         "app.shared.core.http.get_http_client",
         lambda: ExplodingClient(),
     )
-    await tester2._simulate_user(0, test_start_time=time.time())
+    await tester2._simulate_user(0, test_start_time=time.monotonic())
 
     assert tester2.results.failed_requests == 1
     assert "network down" in tester2.results.errors[0]
@@ -203,7 +203,7 @@ async def test_simulate_user_records_metrics(monkeypatch):
         ) as mock_duration,
         patch("app.shared.core.performance_testing.API_ERRORS_TOTAL") as mock_errors,
     ):
-        await tester._simulate_user(0, test_start_time=time.time())
+        await tester._simulate_user(0, test_start_time=time.monotonic())
 
         mock_requests.labels.assert_any_call(
             method="GET", endpoint="/ok", status_code=200
@@ -262,7 +262,7 @@ async def test_simulate_user_records_exception_metrics(monkeypatch):
         ) as mock_duration,
         patch("app.shared.core.performance_testing.API_ERRORS_TOTAL") as mock_errors,
     ):
-        await tester._simulate_user(0, test_start_time=time.time())
+        await tester._simulate_user(0, test_start_time=time.monotonic())
 
         mock_requests.labels.assert_called_once_with(
             method="GET", endpoint="/boom", status_code="exception"
@@ -317,7 +317,7 @@ async def test_simulate_user_forwards_configured_headers(monkeypatch):
 
     monkeypatch.setattr(LoadTester, "_sleep", fake_sleep)
 
-    await tester._simulate_user(0, test_start_time=time.time())
+    await tester._simulate_user(0, test_start_time=time.monotonic())
 
     assert tester.results.successful_requests == 1
     assert captured_headers.get("Authorization") == "Bearer token-123"
@@ -337,6 +337,24 @@ async def test_performance_benchmark_async():
     assert benchmark.results[-1] is result
 
 
+@pytest.mark.asyncio
+async def test_performance_benchmark_async_uses_perf_counter_for_total_duration():
+    benchmark = PerformanceBenchmark("unit")
+
+    async def noop():
+        return None
+
+    with (
+        patch(
+            "app.shared.core.performance_benchmarking._perf_counter",
+            side_effect=[10.0, 10.1, 10.3, 10.5],
+        ),
+    ):
+        result = await benchmark.benchmark_async(noop, iterations=1, warmup_iterations=0)
+
+    assert result.total_time == pytest.approx(0.5)
+
+
 def test_performance_benchmark_sync():
     benchmark = PerformanceBenchmark("unit")
 
@@ -348,6 +366,47 @@ def test_performance_benchmark_sync():
     assert result.name == "unit_noop"
     assert result.iterations == 3
     assert benchmark.results[-1] is result
+
+
+def test_performance_benchmark_sync_uses_perf_counter_for_total_duration():
+    benchmark = PerformanceBenchmark("unit")
+
+    def noop():
+        return None
+
+    with (
+        patch(
+            "app.shared.core.performance_benchmarking._perf_counter",
+            side_effect=[20.0, 20.1, 20.3, 20.5],
+        ),
+    ):
+        result = benchmark.benchmark_sync(noop, iterations=1, warmup_iterations=0)
+
+    assert result.total_time == pytest.approx(0.5)
+
+
+@pytest.mark.asyncio
+async def test_run_load_test_uses_monotonic_for_total_duration(monkeypatch):
+    async def fake_simulate_user(self, user_id, test_start_time):
+        self.results.total_requests += 1
+        self.results.successful_requests += 1
+        self.results.total_response_time += 0.1
+        self.results.response_times.append(0.1)
+        self.results.min_response_time = min(self.results.min_response_time, 0.1)
+        self.results.max_response_time = max(self.results.max_response_time, 0.1)
+
+    monkeypatch.setattr(LoadTester, "_simulate_user", fake_simulate_user)
+
+    tester = LoadTester(LoadTestConfig(duration_seconds=1, concurrent_users=1, ramp_up_seconds=0))
+
+    with patch(
+        "app.shared.core.performance_testing._monotonic_time",
+        side_effect=[100.0, 100.5],
+    ):
+        result = await tester.run_load_test()
+
+    assert result.total_requests == 1
+    assert result.throughput_rps == pytest.approx(2.0)
 
 
 def test_performance_regression_detector_detects(tmp_path):
@@ -512,6 +571,7 @@ async def test_benchmark_cache_operations_uses_cache():
 
     async def fake_benchmark_async(self, func, *args, **kwargs):
         await func()
+        await func()
         return BenchmarkResult(name="cache_operations_cache_set_get")
 
     with (
@@ -525,8 +585,13 @@ async def test_benchmark_cache_operations_uses_cache():
 
         result = await benchmark_cache_operations()
         assert result.name == "cache_operations_cache_set_get"
-        cache.set.assert_called_once()
-        cache.get.assert_called_once()
+        assert cache.set.await_count == 2
+        assert cache.get.await_count == 2
+        first_key = cache.set.await_args_list[0].args[0]
+        second_key = cache.set.await_args_list[1].args[0]
+        assert first_key.startswith("benchmark_")
+        assert second_key.startswith("benchmark_")
+        assert first_key != second_key
 
 
 @pytest.mark.asyncio

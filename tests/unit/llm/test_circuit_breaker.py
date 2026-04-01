@@ -132,9 +132,28 @@ class TestLLMCircuitBreaker:
         circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(
             seconds=61
         )  # Past recovery timeout
+        circuit.last_failure_monotonic = None
 
         # Should transition to half-open and be available
         assert breaker.is_available("provider")
+        assert circuit.state == CircuitState.HALF_OPEN
+
+    def test_is_available_open_circuit_recovery_uses_monotonic_time(self, breaker):
+        """Recovery should use elapsed monotonic time, not wall-clock drift."""
+        for _ in range(3):
+            breaker.record_failure("provider")
+
+        circuit = breaker._get_circuit("provider")
+        circuit.last_failure_time = datetime.now(timezone.utc)
+
+        with (
+            patch("app.shared.llm.circuit_breaker.datetime") as mock_datetime,
+            patch("app.shared.llm.circuit_breaker._monotonic_time", return_value=500.0),
+        ):
+            mock_datetime.now.return_value = circuit.last_failure_time
+            circuit.last_failure_monotonic = 430.0
+            assert breaker.is_available("provider") is True
+
         assert circuit.state == CircuitState.HALF_OPEN
 
     def test_is_available_half_open_circuit(self, breaker):
@@ -279,6 +298,7 @@ class TestLLMCircuitBreaker:
 
         circuit = breaker._get_circuit("provider")
         circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(seconds=61)
+        circuit.last_failure_monotonic = None
 
         with breaker.protect("provider"):
             with pytest.raises(CircuitOpenError, match="Circuit open for provider"):
@@ -483,12 +503,14 @@ class TestCircuitBreakerIntegration:
         circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(
             seconds=breaker.recovery_timeout - 0.1
         )
+        circuit.last_failure_monotonic = None
         assert not breaker.is_available(provider)
 
         # At timeout - should become available
         circuit.last_failure_time = datetime.now(timezone.utc) - timedelta(
             seconds=breaker.recovery_timeout
         )
+        circuit.last_failure_monotonic = None
         assert breaker.is_available(provider)
         assert circuit.state == CircuitState.HALF_OPEN
 

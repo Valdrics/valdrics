@@ -5,6 +5,7 @@ Provides API rate limiting using slowapi (built on limits library).
 Configurable via environment variables.
 """
 
+import time
 from typing import Any, Callable, Optional, cast
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -45,6 +46,10 @@ ANALYSIS_TIER_RESOLUTION_RECOVERABLE_EXCEPTIONS = (
     RuntimeError,
 )
 REMEDIATION_REDIS_RATE_LIMIT_RECOVERABLE_EXCEPTIONS = (RedisError, OSError, RuntimeError)
+
+
+def _monotonic_time() -> float:
+    return time.monotonic()
 
 
 def context_aware_key(request: Request) -> str:
@@ -334,7 +339,6 @@ async def check_remediation_rate_limit(
     Returns True if allowed, False if rate limited.
     Uses Redis if available, memory fallback otherwise.
     """
-    import time
     from uuid import UUID
 
     tenant_key = str(tenant_id) if isinstance(tenant_id, UUID) else tenant_id
@@ -375,7 +379,7 @@ async def check_remediation_rate_limit(
         return False
 
     # Memory fallback for local/single-instance deployments
-    current_time = time.time()
+    current_time = _monotonic_time()
     window_key = f"{tenant_key}:{action}"
     _cleanup_stale_remediation_counts(current_time)
 

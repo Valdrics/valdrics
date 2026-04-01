@@ -3,10 +3,6 @@
 	import { page } from '$app/stores';
 	import { resolveSessionTenantId } from '$lib/auth/sessionTenant';
 	import { buildProductFunnelAttributionContext } from '$lib/funnel/productFunnelTelemetry';
-	import OnboardingPageViewBody from './OnboardingPageViewBody.svelte';
-	import { ensureOnboardedRequest } from './onboardingApi';
-	import { proceedToVerifyFlow, verifyAwsConnectionFlow } from './onboardingFlowActions';
-	import { connectDiscoveryCandidateFlow, fetchSetupDataFlow } from './onboardingSetupActions';
 	import {
 		applyCloudPlusVendorDefaults as applyCloudPlusVendorDefaultsHelper,
 		applyDiscoveryCandidateLocally as applyDiscoveryCandidateLocallyHelper,
@@ -31,21 +27,37 @@
 		canUseMultiCloudFeaturesForTier,
 		canUseIdpDeepScanForTier
 	} from './onboardingTierAccess';
-	import {
-		runOnboardingDiscoveryStageA,
-		runOnboardingDiscoveryStageB,
-		updateOnboardingDiscoveryCandidateStatus
-	} from './onboardingDiscoveryActions';
-	import {
-		copyOnboardingTemplate,
-		downloadOnboardingTemplate,
-		getCloudPlusTemplateForTab,
-		getOnboardingSetupAccessError,
-		parseOnboardingCloudPlusConnectorConfig,
-		parseOnboardingCloudPlusFeed,
-		trackOnboardingConnectionVerified
-	} from './onboardingUiActions';
 	import './OnboardingPageViewContent.css';
+
+	function createModuleLoader<T>(loader: () => Promise<T>): () => Promise<T> {
+		let promise: Promise<T> | null = null;
+
+		return () => {
+			if (!promise) {
+				promise = loader().catch((error) => {
+					promise = null;
+					throw error;
+				});
+			}
+			return promise;
+		};
+	}
+
+	const loadOnboardingApiModule = createModuleLoader(() => import('./onboardingApi'));
+	const loadOnboardingSetupActionsModule = createModuleLoader(
+		() => import('./onboardingSetupActions')
+	);
+	const loadOnboardingFlowActionsModule = createModuleLoader(
+		() => import('./onboardingFlowActions')
+	);
+	const loadOnboardingDiscoveryActionsModule = createModuleLoader(
+		() => import('./onboardingDiscoveryActions')
+	);
+	const loadOnboardingUiActionsModule = createModuleLoader(() => import('./onboardingUiActions'));
+	const loadOnboardingPageViewBody = createModuleLoader(
+		() => import('./OnboardingPageViewBody.svelte')
+	);
+
 	let { data } = $props();
 	let currentStep = $state(0),
 		selectedProvider: OnboardingProvider = $state('aws'); // 0: Select Provider, 1: Setup, 2: Verify, 3: Done
@@ -133,6 +145,7 @@
 		discoveryInfo = result.info;
 	}
 	async function runDiscoveryStageA(): Promise<void> {
+		const { runOnboardingDiscoveryStageA } = await loadOnboardingDiscoveryActionsModule();
 		await runOnboardingDiscoveryStageA({
 			discoveryEmail,
 			getAccessToken,
@@ -144,6 +157,7 @@
 		});
 	}
 	async function runDiscoveryStageB(): Promise<void> {
+		const { runOnboardingDiscoveryStageB } = await loadOnboardingDiscoveryActionsModule();
 		await runOnboardingDiscoveryStageB({
 			discoveryDomain,
 			discoveryEmail,
@@ -161,6 +175,8 @@
 		candidate: DiscoveryCandidate,
 		action: 'accept' | 'ignore' | 'connected'
 	): Promise<DiscoveryCandidate | null> {
+		const { updateOnboardingDiscoveryCandidateStatus } =
+			await loadOnboardingDiscoveryActionsModule();
 		return updateOnboardingDiscoveryCandidateStatus({
 			candidate,
 			action,
@@ -181,20 +197,21 @@
 	};
 	async function connectDiscoveryCandidate(candidate: DiscoveryCandidate): Promise<void> {
 		try {
+			const { connectDiscoveryCandidateFlow } = await loadOnboardingSetupActionsModule();
 			const info = await connectDiscoveryCandidateFlow({
 				candidate,
 				canUseMultiCloudFeatures: canUseMultiCloudFeatures(),
 				canUseCloudPlusFeatures: canUseCloudPlusFeatures(),
 				updateDiscoveryCandidateStatus,
-				setSelectedProvider: (provider) => (selectedProvider = provider),
-				setCurrentStep: (step) => (currentStep = step),
+				setSelectedProvider: (provider: OnboardingProvider) => (selectedProvider = provider),
+				setCurrentStep: (step: number) => (currentStep = step),
 				fetchSetupData,
 				cloudPlusNativeConnectors,
 				chooseNativeCloudPlusVendor,
-				setCloudPlusVendor: (vendor) => (cloudPlusVendor = vendor),
+				setCloudPlusVendor: (vendor: string) => (cloudPlusVendor = vendor),
 				applyCloudPlusVendorDefaults,
 				getCloudPlusName: () => cloudPlusName,
-				setCloudPlusName: (name) => (cloudPlusName = name)
+				setCloudPlusName: (name: string) => (cloudPlusName = name)
 			});
 			if (info) discoveryInfo = info;
 		} catch (e) {
@@ -249,6 +266,7 @@
 			error = 'Please log in first';
 			return false;
 		}
+		const { ensureOnboardedRequest } = await loadOnboardingApiModule();
 		const result = await ensureOnboardedRequest(
 			token,
 			buildProductFunnelAttributionContext({
@@ -266,6 +284,7 @@
 		isLoading = true;
 		error = '';
 		try {
+			const { fetchSetupDataFlow } = await loadOnboardingSetupActionsModule();
 			const setup = await fetchSetupDataFlow({
 				selectedProvider,
 				getAccessToken,
@@ -299,6 +318,7 @@
 		}
 	}
 	async function handleContinueToSetup() {
+		const { getOnboardingSetupAccessError } = await loadOnboardingUiActionsModule();
 		const accessError = getOnboardingSetupAccessError({
 			selectedProvider,
 			canUseMultiCloudFeatures: canUseMultiCloudFeatures(),
@@ -321,6 +341,8 @@
 		await fetchSetupData();
 	}
 	async function copyTemplate() {
+		const { getCloudPlusTemplateForTab, copyOnboardingTemplate } =
+			await loadOnboardingUiActionsModule();
 		const { template } = getCloudPlusTemplateForTab({
 			selectedTab,
 			cloudformationYaml,
@@ -331,7 +353,9 @@
 		setTimeout(() => (copied = false), 2000);
 	}
 
-	function downloadTemplate() {
+	async function downloadTemplate() {
+		const { getCloudPlusTemplateForTab, downloadOnboardingTemplate } =
+			await loadOnboardingUiActionsModule();
 		const { template, filename } = getCloudPlusTemplateForTab({
 			selectedTab,
 			cloudformationYaml,
@@ -339,19 +363,18 @@
 		});
 		downloadOnboardingTemplate(template, filename);
 	}
-	const parseCloudPlusFeed = (): Array<Record<string, unknown>> =>
-		parseOnboardingCloudPlusFeed(cloudPlusFeedInput);
-	const parseCloudPlusConnectorConfig = (): Record<string, unknown> =>
-		parseOnboardingCloudPlusConnectorConfig({
-			connectorConfigInput: cloudPlusConnectorConfigInput,
-			selectedConnector: getSelectedNativeConnector(),
-			isNativeAuthMethod: isCloudPlusNativeAuthMethod(),
-			requiredConfigValues: cloudPlusRequiredConfigValues
-		});
 	async function proceedToVerify() {
 		error = '';
 		isVerifying = true;
 		try {
+			const [
+				{ proceedToVerifyFlow },
+				{
+					parseOnboardingCloudPlusFeed,
+					parseOnboardingCloudPlusConnectorConfig,
+					trackOnboardingConnectionVerified
+				}
+			] = await Promise.all([loadOnboardingFlowActionsModule(), loadOnboardingUiActionsModule()]);
 			const result = await proceedToVerifyFlow({
 				selectedProvider,
 				getAccessToken,
@@ -366,8 +389,14 @@
 				cloudPlusVendor,
 				cloudPlusAuthMethod,
 				cloudPlusApiKey,
-				parseCloudPlusFeed,
-				parseCloudPlusConnectorConfig
+				parseCloudPlusFeed: () => parseOnboardingCloudPlusFeed(cloudPlusFeedInput),
+				parseCloudPlusConnectorConfig: () =>
+					parseOnboardingCloudPlusConnectorConfig({
+						connectorConfigInput: cloudPlusConnectorConfigInput,
+						selectedConnector: getSelectedNativeConnector(),
+						isNativeAuthMethod: isCloudPlusNativeAuthMethod(),
+						requiredConfigValues: cloudPlusRequiredConfigValues
+					})
 			});
 			currentStep = result.currentStep;
 			success = result.success;
@@ -392,6 +421,8 @@
 		isVerifying = true;
 		error = '';
 		try {
+			const [{ verifyAwsConnectionFlow }, { trackOnboardingConnectionVerified }] =
+				await Promise.all([loadOnboardingFlowActionsModule(), loadOnboardingUiActionsModule()]);
 			await verifyAwsConnectionFlow({
 				getAccessToken,
 				ensureOnboarded,
@@ -405,7 +436,7 @@
 			currentStep = 3;
 			trackOnboardingConnectionVerified({
 				accessToken: data.session?.access_token,
-				tenantId: resolveTenantId(),
+				tenantId: await resolveTenantId(),
 				url: $page.url,
 				currentTier: data.subscription?.tier,
 				persona: String(data?.profile?.persona ?? ''),
@@ -470,28 +501,38 @@
 <svelte:head>
 	<title>Onboarding | Valdrics</title>
 </svelte:head>
-<OnboardingPageViewBody
-	{...bodyProps}
-	bind:currentStep
-	bind:selectedProvider
-	bind:selectedTab
-	bind:discoveryEmail
-	bind:discoveryIdpProvider
-	bind:roleArn
-	bind:awsAccountId
-	bind:isManagementAccount
-	bind:organizationId
-	bind:azureSubscriptionId
-	bind:azureTenantId
-	bind:azureClientId
-	bind:gcpProjectId
-	bind:gcpBillingProjectId
-	bind:gcpBillingDataset
-	bind:gcpBillingTable
-	bind:cloudPlusName
-	bind:cloudPlusVendor
-	bind:cloudPlusAuthMethod
-	bind:cloudPlusApiKey
-	bind:cloudPlusFeedInput
-	bind:cloudPlusConnectorConfigInput
-/>
+{#await loadOnboardingPageViewBody()}
+	<div class="card">
+		<div class="skeleton h-8 w-56 mb-4"></div>
+		<div class="skeleton h-4 w-full mb-2"></div>
+		<div class="skeleton h-4 w-3/4 mb-6"></div>
+		<div class="skeleton h-64 rounded-2xl"></div>
+	</div>
+{:then module}
+	{@const OnboardingPageViewBody = module.default}
+	<OnboardingPageViewBody
+		{...bodyProps}
+		bind:currentStep
+		bind:selectedProvider
+		bind:selectedTab
+		bind:discoveryEmail
+		bind:discoveryIdpProvider
+		bind:roleArn
+		bind:awsAccountId
+		bind:isManagementAccount
+		bind:organizationId
+		bind:azureSubscriptionId
+		bind:azureTenantId
+		bind:azureClientId
+		bind:gcpProjectId
+		bind:gcpBillingProjectId
+		bind:gcpBillingDataset
+		bind:gcpBillingTable
+		bind:cloudPlusName
+		bind:cloudPlusVendor
+		bind:cloudPlusAuthMethod
+		bind:cloudPlusApiKey
+		bind:cloudPlusFeedInput
+		bind:cloudPlusConnectorConfigInput
+	/>
+{/await}

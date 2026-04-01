@@ -5,4 +5,13 @@
 	let { data }: { data: PageData } = $props();
 </script>
 
-<PublicContentArticlePage entry={data.entry} hubHref="/proof" hubLabel="Back to Proof Pack" />
+<svelte:head>
+	<title>{data.entry.title} | Valdrics Proof</title>
+</svelte:head>
+
+<PublicContentArticlePage
+	entry={data.entry}
+	relatedEntries={data.relatedEntries}
+	hubHref="/proof"
+	hubLabel="Back to Proof Pack"
+/>

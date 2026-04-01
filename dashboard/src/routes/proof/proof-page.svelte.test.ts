@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import { readable } from 'svelte/store';
 import Page from './+page.svelte';
+import { mustGetPublicContentEntry } from '$lib/content/publicContent';
 
 vi.mock('$app/paths', () => ({
 	base: '',
@@ -12,9 +13,27 @@ vi.mock('$app/stores', () => ({
 	page: readable({ url: new URL('https://example.com/proof') })
 }));
 
+const SHARED_PAGE_DATA = {
+	user: null,
+	session: null,
+	subscription: { tier: 'starter', status: 'active' },
+	profile: null
+} as const;
+
 describe('proof page', () => {
 	it('renders structured proof sections and navigation links', () => {
-		render(Page);
+		render(Page, {
+			data: {
+				...SHARED_PAGE_DATA,
+				proofSpotlights: [
+					mustGetPublicContentEntry('proof', 'safe-access-model'),
+					mustGetPublicContentEntry('proof', 'identity-and-approval-controls'),
+					mustGetPublicContentEntry('proof', 'decision-history-and-export-integrity'),
+					mustGetPublicContentEntry('proof', 'deployment-and-data-residency'),
+					mustGetPublicContentEntry('proof', 'validation-scope-and-operational-hardening')
+				]
+			}
+		});
 
 		expect(
 			screen.getByRole('heading', { level: 1, name: /proof surfaces for buyer diligence/i })

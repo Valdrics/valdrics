@@ -202,6 +202,9 @@ describe('Landing component decomposition', () => {
 		const landingDir = resolve(process.cwd(), 'src/lib/components/landing');
 		const files = [
 			'LandingHeroCopy.svelte',
+			'LandingHeroBelowFold.svelte',
+			'LandingHeroRoiPlaceholder.svelte',
+			'LandingHeroTrustSections.svelte',
 			'LandingHeroView.svelte',
 			'LandingHumanProofStrip.svelte',
 			'LandingOutcomeBand.svelte',

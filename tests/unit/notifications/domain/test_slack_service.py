@@ -36,6 +36,27 @@ async def test_send_alert_deduplication(slack_service):
 
 
 @pytest.mark.asyncio
+async def test_send_alert_local_dedup_window_uses_monotonic_time(slack_service):
+    slack_service.client.chat_postMessage = AsyncMock()
+
+    with (
+        patch(
+            "app.shared.core.rate_limit.get_redis_client",
+            side_effect=RuntimeError("redis unavailable"),
+        ),
+        patch(
+            "app.modules.notifications.domain.slack._dedup_now",
+            side_effect=[1_000.0, 5_000.0],
+        ),
+    ):
+        await slack_service.send_alert("Dupe", "Msg")
+        result = await slack_service.send_alert("Dupe", "Msg")
+
+    assert result is True
+    assert slack_service.client.chat_postMessage.call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_send_alert_no_deduplication_different_msg(slack_service):
     """Verifies that different messages with same title are NOT deduped."""
     slack_service.client.chat_postMessage = AsyncMock()

@@ -83,6 +83,24 @@ class TestPaystackClient:
             with pytest.raises(HTTPError):
                 await client._request("GET", "test")
 
+    @pytest.mark.asyncio
+    async def test_request_reads_live_secret_after_client_construction(self, mock_settings):
+        client = PaystackClient()
+        mock_settings.PAYSTACK_SECRET_KEY = "sk_test_rotated"
+
+        async def _request(method, url, headers=None, **kwargs):
+            assert headers is not None
+            assert headers["Authorization"] == "Bearer sk_test_rotated"
+            response = MagicMock()
+            response.raise_for_status.return_value = None
+            response.json.return_value = {"status": True, "data": {}}
+            return response
+
+        with patch("httpx.AsyncClient.request", side_effect=_request):
+            result = await client._request("GET", "test")
+
+        assert result["status"] is True
+
 
 class TestBillingService:
     @pytest.mark.asyncio

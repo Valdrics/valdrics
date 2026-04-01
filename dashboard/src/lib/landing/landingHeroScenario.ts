@@ -1,5 +1,5 @@
 import { resolveGeoCurrencyHint } from '$lib/landing/landingGeoCurrency';
-import { formatCurrencyAmount, SUPPORTED_CURRENCIES } from '$lib/landing/roiCalculator';
+import { formatCurrencyAmount, SUPPORTED_CURRENCIES } from '$lib/landing/currencyDisplay';
 
 const SUPPORTED_CURRENCY_CODES = new Set(SUPPORTED_CURRENCIES.map((currency) => currency.code));
 

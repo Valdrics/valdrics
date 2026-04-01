@@ -37,6 +37,10 @@ _service_cache: dict[tuple[str, str], "SlackService"] = {}
 _service_cache_lock = Lock()
 
 
+def _dedup_now() -> float:
+    return time.monotonic()
+
+
 class SlackService:
     """Service for sending notifications to Slack."""
 
@@ -149,7 +153,7 @@ class SlackService:
         alert_hash = hashlib.sha256(
             f"{title}:{severity}:{msg_hash}".encode()
         ).hexdigest()
-        current_time = time.time()
+        current_time = _dedup_now()
 
         if await self._is_duplicate_alert(alert_hash, current_time):
             logger.info("duplicate_alert_suppressed", title=title)

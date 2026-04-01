@@ -101,10 +101,10 @@ def test_check_rls_policy_violation():
     """Test RLS policy enforcement fails when context is False."""
     mock_conn = MagicMock()
     mock_conn.info = {"rls_context_set": False}
+    mock_settings = MagicMock()
+    mock_settings.TESTING = False
 
-    with patch("app.shared.db.session.settings") as mock_settings:
-        mock_settings.TESTING = False  # Force enforcement logic
-
+    with patch("app.shared.db.session.get_settings", return_value=mock_settings):
         with pytest.raises(ValdricsException) as exc:
             check_rls_policy(
                 mock_conn, None, "SELECT * FROM sensitive_data", (), None, False
@@ -117,10 +117,10 @@ def test_check_rls_policy_exempt():
     """Test RLS policy doesn't block exempt tables."""
     mock_conn = MagicMock()
     mock_conn.info = {"rls_context_set": False}
+    mock_settings = MagicMock()
+    mock_settings.TESTING = False
 
-    with patch("app.shared.db.session.settings") as mock_settings:
-        mock_settings.TESTING = False
-
+    with patch("app.shared.db.session.get_settings", return_value=mock_settings):
         # Should not raise for exempt table
         statement = "SELECT * FROM tenants"
         res_stmt, res_params = check_rls_policy(

@@ -26,7 +26,9 @@ logger = structlog.get_logger()
 class SafetyGuardrailService:
     def __init__(self, db: AsyncSession):
         self.db = db
-        self._settings = get_settings()
+
+    def _get_settings(self):
+        return get_settings()
 
     async def check_all_guards(
         self, tenant_id: UUID, estimated_impact: Decimal = Decimal("0")
@@ -50,8 +52,9 @@ class SafetyGuardrailService:
         """Checks if the daily savings limit has been reached for the configured scope."""
         estimated_impact = estimated_impact or Decimal("0")
         today = datetime.now(timezone.utc).date()
+        settings = self._get_settings()
         configured_scope = str(
-            getattr(self._settings, "REMEDIATION_KILL_SWITCH_SCOPE", "tenant") or "tenant"
+            getattr(settings, "REMEDIATION_KILL_SWITCH_SCOPE", "tenant") or "tenant"
         ).strip().lower()
         if configured_scope not in {"tenant", "global"}:
             logger.warning(
@@ -72,7 +75,7 @@ class SafetyGuardrailService:
         result = await self.db.execute(query)
         total_impact = result.scalar() or Decimal("0")
 
-        threshold = Decimal(str(self._settings.REMEDIATION_KILL_SWITCH_THRESHOLD))
+        threshold = Decimal(str(settings.REMEDIATION_KILL_SWITCH_THRESHOLD))
 
         if (total_impact + estimated_impact) >= threshold:
             logger.error(

@@ -110,6 +110,10 @@ class TestSchedulerTasksMetrics:
             patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_RUNS") as mock_job_runs,
             patch("app.tasks.scheduler_tasks.SCHEDULER_JOB_DURATION") as mock_duration,
             patch("app.tasks.scheduler_tasks.BACKGROUND_JOBS_ENQUEUED"),
+            patch(
+                "app.tasks.scheduler_tasks._perf_counter",
+                side_effect=[100.0, 100.5],
+            ),
         ):
             mock_session = AsyncMock()
             mock_session_maker.return_value = mock_session
@@ -139,8 +143,11 @@ class TestSchedulerTasksMetrics:
             mock_job_runs.labels.assert_called_with(
                 job_name="cohort_active_enqueue", status="success"
             )
-            # Should observe duration
             mock_duration.labels.assert_called_with(job_name="cohort_active_enqueue")
+            assert (
+                mock_duration.labels.return_value.observe.call_args.args[0]
+                == pytest.approx(0.5)
+            )
 
     @pytest.mark.asyncio
     async def test_remediation_sweep_metrics(self):

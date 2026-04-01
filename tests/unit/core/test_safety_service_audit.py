@@ -21,47 +21,88 @@ def service(mock_db):
 @pytest.mark.asyncio
 async def test_global_kill_switch_triggered(service, mock_db):
     tenant_id = uuid4()
-    # Mock settings threshold
-    service._settings.REMEDIATION_KILL_SWITCH_THRESHOLD = 500.0
-    service._settings.REMEDIATION_KILL_SWITCH_SCOPE = "tenant"
+    runtime_settings = MagicMock(
+        REMEDIATION_KILL_SWITCH_THRESHOLD=500.0,
+        REMEDIATION_KILL_SWITCH_SCOPE="tenant",
+    )
 
     # Mock DB result: already $450 saved today, impact is $60
     mock_result = MagicMock()
     mock_result.scalar.return_value = Decimal("450.0")
     mock_db.execute.return_value = mock_result
 
-    with pytest.raises(KillSwitchTriggeredError, match="Safety kill-switch triggered"):
+    with (
+        patch.object(service, "_get_settings", return_value=runtime_settings),
+        pytest.raises(KillSwitchTriggeredError, match="Safety kill-switch triggered"),
+    ):
         await service._check_global_kill_switch(tenant_id, Decimal("60.0"))
 
 
 @pytest.mark.asyncio
 async def test_global_kill_switch_allowed(service, mock_db):
     tenant_id = uuid4()
-    service._settings.REMEDIATION_KILL_SWITCH_THRESHOLD = 500.0
-    service._settings.REMEDIATION_KILL_SWITCH_SCOPE = "tenant"
+    runtime_settings = MagicMock(
+        REMEDIATION_KILL_SWITCH_THRESHOLD=500.0,
+        REMEDIATION_KILL_SWITCH_SCOPE="tenant",
+    )
 
     mock_result = MagicMock()
     mock_result.scalar.return_value = Decimal("400.0")
     mock_db.execute.return_value = mock_result
 
     # Impact $50, total $450 < $500
-    await service._check_global_kill_switch(tenant_id, Decimal("50.0"))
+    with patch.object(service, "_get_settings", return_value=runtime_settings):
+        await service._check_global_kill_switch(tenant_id, Decimal("50.0"))
 
 
 @pytest.mark.asyncio
 async def test_global_kill_switch_invalid_scope_falls_back_to_tenant(service, mock_db):
     tenant_id = uuid4()
-    service._settings.REMEDIATION_KILL_SWITCH_THRESHOLD = 500.0
-    service._settings.REMEDIATION_KILL_SWITCH_SCOPE = "invalid_scope"
+    runtime_settings = MagicMock(
+        REMEDIATION_KILL_SWITCH_THRESHOLD=500.0,
+        REMEDIATION_KILL_SWITCH_SCOPE="invalid_scope",
+    )
 
     mock_result = MagicMock()
     mock_result.scalar.return_value = Decimal("400.0")
     mock_db.execute.return_value = mock_result
 
-    await service._check_global_kill_switch(tenant_id, Decimal("50.0"))
+    with patch.object(service, "_get_settings", return_value=runtime_settings):
+        await service._check_global_kill_switch(tenant_id, Decimal("50.0"))
     stmt = mock_db.execute.await_args.args[0]
     where_text = str(stmt)
     assert "remediation_requests.tenant_id" in where_text
+
+
+@pytest.mark.asyncio
+async def test_global_kill_switch_reads_live_settings_after_service_construction(
+    service, mock_db
+):
+    tenant_id = uuid4()
+    stale_settings = MagicMock(
+        REMEDIATION_KILL_SWITCH_THRESHOLD=500.0,
+        REMEDIATION_KILL_SWITCH_SCOPE="tenant",
+    )
+    refreshed_settings = MagicMock(
+        REMEDIATION_KILL_SWITCH_THRESHOLD=200.0,
+        REMEDIATION_KILL_SWITCH_SCOPE="global",
+    )
+
+    mock_result = MagicMock()
+    mock_result.scalar.return_value = Decimal("150.0")
+    mock_db.execute.return_value = mock_result
+
+    with patch.object(
+        service,
+        "_get_settings",
+        side_effect=[stale_settings, refreshed_settings],
+    ):
+        await service._check_global_kill_switch(tenant_id, Decimal("25.0"))
+        with pytest.raises(KillSwitchTriggeredError, match="Safety kill-switch triggered"):
+            await service._check_global_kill_switch(tenant_id, Decimal("60.0"))
+
+    stmt = mock_db.execute.await_args_list[-1].args[0]
+    assert "remediation_requests.tenant_id" not in str(stmt)
 
 
 @pytest.mark.asyncio

@@ -64,8 +64,9 @@ class TestSessionDeep:
                 assert mock_logger.warning.called
 
     def test_check_rls_policy_exempt(self):
-        with patch("app.shared.db.session.settings") as mock_settings:
-            mock_settings.TESTING = False
+        mock_settings = MagicMock()
+        mock_settings.TESTING = False
+        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
             from app.shared.core.constants import RLS_EXEMPT_TABLES
 
             table = RLS_EXEMPT_TABLES[0]
@@ -75,8 +76,9 @@ class TestSessionDeep:
             assert stmt.startswith("SELECT")
 
     def test_check_rls_policy_violation(self):
-        with patch("app.shared.db.session.settings") as mock_settings:
-            mock_settings.TESTING = False
+        mock_settings = MagicMock()
+        mock_settings.TESTING = False
+        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
             mock_conn = MagicMock()
             mock_conn.info = {"rls_context_set": False}
             with pytest.raises(ValdricsException) as exc:
@@ -86,8 +88,9 @@ class TestSessionDeep:
             assert exc.value.code == "rls_enforcement_failed"
 
     def test_check_rls_policy_allows_transaction_control_statements(self):
-        with patch("app.shared.db.session.settings") as mock_settings:
-            mock_settings.TESTING = False
+        mock_settings = MagicMock()
+        mock_settings.TESTING = False
+        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
             mock_conn = MagicMock()
             mock_conn.info = {"rls_context_set": False}
             stmt, params = check_rls_policy(mock_conn, None, "BEGIN", {}, None, False)
@@ -101,8 +104,9 @@ class TestSessionDeep:
 
     @pytest.mark.asyncio
     async def test_check_rls_policy_violation_async(self):
-        with patch("app.shared.db.session.settings") as mock_settings:
-            mock_settings.TESTING = False
+        mock_settings = MagicMock()
+        mock_settings.TESTING = False
+        with patch("app.shared.db.session.get_settings", return_value=mock_settings):
             mock_conn = MagicMock()
             mock_conn.info = {"rls_context_set": False}
             with pytest.raises(ValdricsException) as exc:
@@ -124,11 +128,13 @@ class TestSessionDeep:
                 session_module._build_db_runtime()
 
     def test_ssl_config_disable(self):
-        with patch("app.shared.db.session.settings") as mock_settings:
-            mock_settings.DATABASE_URL = "postgresql://test"
-            mock_settings.DB_SSL_MODE = "disable"
-            import importlib
-            import app.shared.db.session
+        mock_settings = MagicMock()
+        mock_settings.DATABASE_URL = "postgresql://test"
+        mock_settings.DB_SSL_MODE = "disable"
+        import importlib
+        import app.shared.db.session
+
+        with patch("app.shared.core.config.get_settings", return_value=mock_settings):
             importlib.reload(app.shared.db.session)
 
     def test_ssl_config_require_prod_uses_verified_system_trust(self):

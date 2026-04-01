@@ -93,3 +93,13 @@ async def test_timeout_operation_decorator_uses_timeout_manager():
 async def test_timeout_context_allows_custom_timeout():
     async with timeout_context("llm_api", custom_timeout=12.5) as manager:
         assert manager.config["total"] == 12.5
+
+
+@pytest.mark.asyncio
+async def test_timeout_context_custom_timeout_does_not_mutate_global_config():
+    original_total = TIMEOUT_CONFIGS["llm_api"]["total"]
+
+    async with timeout_context("llm_api", custom_timeout=12.5) as manager:
+        assert manager.config["total"] == 12.5
+
+    assert TIMEOUT_CONFIGS["llm_api"]["total"] == original_total

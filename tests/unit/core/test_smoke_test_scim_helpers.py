@@ -64,6 +64,28 @@ def test_record_check_appends_structured_check_with_status_code() -> None:
     assert checks[0].status_code == 200
 
 
+def test_record_check_uses_perf_counter_for_duration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checks: list[Check] = []
+    response = httpx.Response(
+        200,
+        request=httpx.Request("GET", "https://example.com/scim/v2/Schemas"),
+    )
+    monkeypatch.setattr(scim_helpers, "_perf_counter", lambda: 10.5)
+
+    record_check(
+        checks,
+        name="scim.schemas",
+        resp=response,
+        started=10.0,
+        ok=True,
+        detail=None,
+    )
+
+    assert checks[0].duration_ms == 500.0
+
+
 def test_build_group_add_member_patch_uses_patchop_schema() -> None:
     payload = build_group_add_member_patch("abc123")
     assert payload["schemas"] == ["urn:ietf:params:scim:api:messages:2.0:PatchOp"]

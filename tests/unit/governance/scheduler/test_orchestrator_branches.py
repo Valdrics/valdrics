@@ -144,7 +144,10 @@ async def test_fetch_live_carbon_intensity_success_and_cache(
     client = AsyncMock()
     client.get = AsyncMock(return_value=response)
 
-    with patch.object(orchestrator_module, "get_settings", return_value=settings_obj):
+    with (
+        patch.object(orchestrator_module, "get_settings", return_value=settings_obj),
+        patch.object(orchestrator_module, "_monotonic_time", side_effect=[100.0, 150.0]),
+    ):
         with patch(
             "app.shared.core.http.get_http_client",
             return_value=client,
@@ -158,6 +161,46 @@ async def test_fetch_live_carbon_intensity_success_and_cache(
             cached_value = await orchestrator._fetch_live_carbon_intensity("us-east-1")
             assert cached_value == 97.0
             get_http_client.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_fetch_live_carbon_intensity_cache_expiry_uses_monotonic_time(
+    orchestrator: SchedulerOrchestrator,
+) -> None:
+    import app.modules.governance.domain.scheduler.orchestrator as orchestrator_module
+
+    settings_obj = SimpleNamespace(
+        ELECTRICITY_MAPS_API_KEY="abc123",
+        CARBON_INTENSITY_API_TIMEOUT_SECONDS=3,
+    )
+
+    first_response = MagicMock()
+    first_response.raise_for_status.return_value = None
+    first_response.json.return_value = {"carbonIntensity": 97}
+    second_response = MagicMock()
+    second_response.raise_for_status.return_value = None
+    second_response.json.return_value = {"carbonIntensity": 88}
+
+    client = AsyncMock()
+    client.get = AsyncMock(side_effect=[first_response, second_response])
+
+    with (
+        patch.object(orchestrator_module, "get_settings", return_value=settings_obj),
+        patch.object(
+            orchestrator_module,
+            "_monotonic_time",
+            side_effect=[100.0, 701.0],
+        ),
+        patch(
+            "app.shared.core.http.get_http_client",
+            return_value=client,
+        ),
+        patch.object(orchestrator_module.time, "time", return_value=1.0),
+    ):
+        assert await orchestrator._fetch_live_carbon_intensity("us-east-1") == 97.0
+        assert await orchestrator._fetch_live_carbon_intensity("us-east-1") == 88.0
+
+    assert client.get.await_count == 2
 
 
 @pytest.mark.asyncio

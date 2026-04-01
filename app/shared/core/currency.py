@@ -33,7 +33,7 @@ logger = structlog.get_logger()
 # key: currency code
 # value: (rate_vs_usd, updated_timestamp, provider_name)
 _RATES_CACHE: dict[str, tuple[Decimal, float, Optional[str]]] = {
-    "USD": (Decimal("1.0"), time.time(), "internal")
+    "USD": (Decimal("1.0"), time.monotonic(), "internal")
 }
 _L1_TTL_SECONDS = 300.0
 
@@ -119,7 +119,7 @@ class ExchangeRateService:
 
     @staticmethod
     def _write_l1_rate(currency: str, rate: Decimal, provider: Optional[str]) -> None:
-        _RATES_CACHE[currency] = (rate, time.time(), provider)
+        _RATES_CACHE[currency] = (rate, time.monotonic(), provider)
 
     async def _read_db_rate(
         self, to_currency: str
@@ -329,7 +329,7 @@ class ExchangeRateService:
         if currency == "USD":
             return Decimal("1.0")
 
-        now_ts = time.time()
+        now_ts = time.monotonic()
         max_age_seconds = self.cache_ttl_hours * 3600
 
         # L1: in-memory cache
