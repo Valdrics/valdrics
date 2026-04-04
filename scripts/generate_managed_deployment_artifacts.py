@@ -35,6 +35,7 @@ from scripts.managed_deployment_contract import (
     selected_llm_provider as _selected_llm_provider_shared,
     selected_llm_provider_env_key as _selected_llm_provider_env_key,
 )
+
 DEFAULT_OUTPUT_ROOT = Path(".runtime/deploy")
 DEFAULT_KOYEB_IMAGE_REGISTRY = "ghcr.io/valdrics"
 DEFAULT_RELEASE_TAG = "REPLACE_WITH_RELEASE_TAG"
@@ -141,16 +142,24 @@ def _is_truthy(value: str) -> bool:
 
 
 def _include_forecaster_break_glass(values: dict[str, str]) -> bool:
-    return _is_truthy(_string_value(values, "FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK")) or any(
+    return _is_truthy(
+        _string_value(values, "FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK")
+    ) or any(
         _string_value(values, key).strip()
-        for key in ("FORECASTER_BREAK_GLASS_REASON", "FORECASTER_BREAK_GLASS_EXPIRES_AT")
+        for key in (
+            "FORECASTER_BREAK_GLASS_REASON",
+            "FORECASTER_BREAK_GLASS_EXPIRES_AT",
+        )
     )
 
 
 def _include_outbound_tls_break_glass(values: dict[str, str]) -> bool:
     return _is_truthy(_string_value(values, "ALLOW_INSECURE_OUTBOUND_TLS")) or any(
         _string_value(values, key).strip()
-        for key in ("OUTBOUND_TLS_BREAK_GLASS_REASON", "OUTBOUND_TLS_BREAK_GLASS_EXPIRES_AT")
+        for key in (
+            "OUTBOUND_TLS_BREAK_GLASS_REASON",
+            "OUTBOUND_TLS_BREAK_GLASS_EXPIRES_AT",
+        )
     )
 
 
@@ -238,7 +247,11 @@ def _runtime_blockers(values: dict[str, str]) -> list[str]:
 
     for key in ("API_URL", "FRONTEND_URL"):
         value = _string_value(values, key).strip()
-        if value and not _contains_placeholder(value) and not _is_valid_strict_public_url(value):
+        if (
+            value
+            and not _contains_placeholder(value)
+            and not _is_valid_strict_public_url(value)
+        ):
             blockers.append(key)
 
     for key in ("OTEL_EXPORTER_OTLP_ENDPOINT", "SENTRY_DSN"):
@@ -254,7 +267,9 @@ def _runtime_blockers(values: dict[str, str]) -> list[str]:
     ):
         blockers.append("TRUSTED_PROXY_CIDRS")
 
-    aws_trust_principal_arn = _string_value(values, "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN").strip()
+    aws_trust_principal_arn = _string_value(
+        values, "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN"
+    ).strip()
     if (
         aws_trust_principal_arn
         and not _contains_placeholder(aws_trust_principal_arn)
@@ -263,9 +278,13 @@ def _runtime_blockers(values: dict[str, str]) -> list[str]:
         blockers.append("AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN")
 
     admin_api_key = _string_value(values, "ADMIN_API_KEY").strip()
-    if admin_api_key and not _contains_placeholder(admin_api_key) and not _has_minimum_length(
-        admin_api_key,
-        minimum=32,
+    if (
+        admin_api_key
+        and not _contains_placeholder(admin_api_key)
+        and not _has_minimum_length(
+            admin_api_key,
+            minimum=32,
+        )
     ):
         blockers.append("ADMIN_API_KEY")
 
@@ -287,7 +306,9 @@ def _runtime_blockers(values: dict[str, str]) -> list[str]:
         ):
             blockers.append("PAYSTACK_PUBLIC_KEY")
 
-    internal_metrics_auth_token = _string_value(values, "INTERNAL_METRICS_AUTH_TOKEN").strip()
+    internal_metrics_auth_token = _string_value(
+        values, "INTERNAL_METRICS_AUTH_TOKEN"
+    ).strip()
     if (
         internal_metrics_auth_token
         and not _contains_placeholder(internal_metrics_auth_token)
@@ -344,14 +365,18 @@ def _koyeb_secret_name(environment: str, base_name: str) -> str:
     return f"{base_name}-{environment}"
 
 
-def _koyeb_secret_entries(values: dict[str, str], *, environment: str, component: str) -> list[dict[str, str]]:
+def _koyeb_secret_entries(
+    values: dict[str, str], *, environment: str, component: str
+) -> list[dict[str, str]]:
     entries: list[dict[str, str]] = []
 
     for key, base_name in KOYEB_SHARED_SECRET_NAMES.items():
         value = _string_value(values, key).strip()
         if not value:
             continue
-        entries.append({"name": key, "secret": _koyeb_secret_name(environment, base_name)})
+        entries.append(
+            {"name": key, "secret": _koyeb_secret_name(environment, base_name)}
+        )
 
     provider_key = _selected_llm_provider_env_key(values)
     provider_secret_name = _koyeb_secret_name(
@@ -382,12 +407,16 @@ def _koyeb_secret_entries(values: dict[str, str], *, environment: str, component
     for key, base_name in KOYEB_OPTIONAL_SHARED_SECRET_NAMES.items():
         if not optional_groups.get(key, False):
             continue
-        entries.append({"name": key, "secret": _koyeb_secret_name(environment, base_name)})
+        entries.append(
+            {"name": key, "secret": _koyeb_secret_name(environment, base_name)}
+        )
 
     return entries
 
 
-def _koyeb_value_entries(values: dict[str, str], *, component: str) -> list[dict[str, str]]:
+def _koyeb_value_entries(
+    values: dict[str, str], *, component: str
+) -> list[dict[str, str]]:
     ordered_keys = [
         "ENVIRONMENT",
         "ENABLE_SCHEDULER",
@@ -449,7 +478,9 @@ def _koyeb_manifest(
             },
             "instance_type": "micro",
             "env": _koyeb_value_entries(values, component=component)
-            + _koyeb_secret_entries(values, environment=environment, component=component),
+            + _koyeb_secret_entries(
+                values, environment=environment, component=component
+            ),
         },
     }
     if is_api:
@@ -480,7 +511,9 @@ def _koyeb_manifest(
 
 def _koyeb_dashboard_public_env(values: dict[str, str]) -> dict[str, str]:
     api_url = _string_value(values, "API_URL").rstrip("/")
+    frontend_url = _string_value(values, "FRONTEND_URL").rstrip("/")
     return {
+        "ORIGIN": frontend_url,
         "PUBLIC_API_URL": f"{api_url}/api/v1" if api_url else "",
         "PUBLIC_SUPABASE_URL": _string_value(values, "SUPABASE_URL").strip(),
         "PUBLIC_SUPABASE_ANON_KEY": _string_value(values, "SUPABASE_ANON_KEY").strip(),
@@ -515,7 +548,9 @@ def _normalize_image_digest(value: str, *, field_name: str, default: str) -> str
     if not normalized.startswith("sha256:"):
         raise ValueError(f"{field_name} must be a sha256:<64-hex> digest.")
     digest_body = normalized.split("sha256:", 1)[1].strip()
-    if len(digest_body) != 64 or any(ch not in "0123456789abcdef" for ch in digest_body):
+    if len(digest_body) != 64 or any(
+        ch not in "0123456789abcdef" for ch in digest_body
+    ):
         raise ValueError(f"{field_name} must be a sha256:<64-hex> digest.")
     return f"sha256:{digest_body}"
 
@@ -695,9 +730,14 @@ def _helm_runtime_secret_payload(values: dict[str, str]) -> dict[str, str]:
     for key in sorted(values):
         if key in HELM_SECRET_EXCLUDED_KEYS:
             continue
-        if key in FORECASTER_BREAK_GLASS_KEYS and not _include_forecaster_break_glass(values):
+        if key in FORECASTER_BREAK_GLASS_KEYS and not _include_forecaster_break_glass(
+            values
+        ):
             continue
-        if key in OUTBOUND_TLS_BREAK_GLASS_KEYS and not _include_outbound_tls_break_glass(values):
+        if (
+            key in OUTBOUND_TLS_BREAK_GLASS_KEYS
+            and not _include_outbound_tls_break_glass(values)
+        ):
             continue
         value = _string_value(values, key)
         if value == "":
@@ -706,18 +746,26 @@ def _helm_runtime_secret_payload(values: dict[str, str]) -> dict[str, str]:
     return payload
 
 
-def _koyeb_secret_payload(values: dict[str, str], *, environment: str) -> dict[str, str]:
+def _koyeb_secret_payload(
+    values: dict[str, str], *, environment: str
+) -> dict[str, str]:
     payload: dict[str, str] = {}
-    for entry in _koyeb_secret_entries(values, environment=environment, component="api"):
+    for entry in _koyeb_secret_entries(
+        values, environment=environment, component="api"
+    ):
         payload[entry["secret"]] = _string_value(values, entry["name"])
-    for entry in _koyeb_secret_entries(values, environment=environment, component="worker"):
+    for entry in _koyeb_secret_entries(
+        values, environment=environment, component="worker"
+    ):
         payload.setdefault(entry["secret"], _string_value(values, entry["name"]))
     return payload
 
 
 def _placeholder_keys(payload: dict[str, str]) -> list[str]:
     return sorted(
-        key for key, value in payload.items() if not str(value).strip() or _contains_placeholder(value)
+        key
+        for key, value in payload.items()
+        if not str(value).strip() or _contains_placeholder(value)
     )
 
 
@@ -741,9 +789,13 @@ def generate_managed_deployment_artifacts(
             f"Runtime env file does not exist: {runtime_env_file.as_posix()}"
         )
     if not runtime_env_file.is_file():
-        raise ValueError(f"runtime_env_file must be a file: {runtime_env_file.as_posix()}")
+        raise ValueError(
+            f"runtime_env_file must be a file: {runtime_env_file.as_posix()}"
+        )
     if output_dir.exists() and not output_dir.is_dir():
-        raise ValueError(f"output_dir must be a directory path: {output_dir.as_posix()}")
+        raise ValueError(
+            f"output_dir must be a directory path: {output_dir.as_posix()}"
+        )
     _ensure_output_dir_parent(output_dir)
     output_dir_resolved = output_dir.resolve()
     for protected_root in _protected_output_roots(_repo_root()):
@@ -765,7 +817,9 @@ def generate_managed_deployment_artifacts(
     runtime_blockers = _runtime_blockers(values)
     helm_values = _helm_values(values, environment=normalized_environment)
     helm_secret_payload = _helm_runtime_secret_payload(values)
-    koyeb_secret_payload = _koyeb_secret_payload(values, environment=normalized_environment)
+    koyeb_secret_payload = _koyeb_secret_payload(
+        values, environment=normalized_environment
+    )
     koyeb_dashboard_env = _koyeb_dashboard_public_env(values)
     koyeb_dashboard_env_blockers = _placeholder_keys(koyeb_dashboard_env)
     koyeb_release_metadata = _koyeb_release_metadata(
@@ -842,24 +896,39 @@ def generate_managed_deployment_artifacts(
             and not koyeb_dashboard_env_blockers
             and not koyeb_release_value_blockers
         ),
-        "ready_for_helm": not runtime_blockers and not _placeholder_keys(helm_secret_payload),
+        "ready_for_helm": not runtime_blockers
+        and not _placeholder_keys(helm_secret_payload),
     }
 
     artifact_contents = {
         koyeb_api_path.name: yaml.safe_dump(
-            _koyeb_manifest(values, environment=normalized_environment, component="api"),
+            _koyeb_manifest(
+                values, environment=normalized_environment, component="api"
+            ),
             sort_keys=False,
         ),
         koyeb_worker_path.name: yaml.safe_dump(
-            _koyeb_manifest(values, environment=normalized_environment, component="worker"),
+            _koyeb_manifest(
+                values, environment=normalized_environment, component="worker"
+            ),
             sort_keys=False,
         ),
-        koyeb_secrets_path.name: json.dumps(koyeb_secret_payload, indent=2, sort_keys=True),
-        koyeb_dashboard_env_path.name: json.dumps(koyeb_dashboard_env, indent=2, sort_keys=True),
-        koyeb_release_path.name: json.dumps(koyeb_release_metadata, indent=2, sort_keys=True),
+        koyeb_secrets_path.name: json.dumps(
+            koyeb_secret_payload, indent=2, sort_keys=True
+        ),
+        koyeb_dashboard_env_path.name: json.dumps(
+            koyeb_dashboard_env, indent=2, sort_keys=True
+        ),
+        koyeb_release_path.name: json.dumps(
+            koyeb_release_metadata, indent=2, sort_keys=True
+        ),
         helm_values_path.name: yaml.safe_dump(helm_values, sort_keys=False),
-        helm_secret_path.name: json.dumps(helm_secret_payload, indent=2, sort_keys=True),
-        terraform_tfvars_path.name: json.dumps(terraform_tfvars_payload, indent=2, sort_keys=True),
+        helm_secret_path.name: json.dumps(
+            helm_secret_payload, indent=2, sort_keys=True
+        ),
+        terraform_tfvars_path.name: json.dumps(
+            terraform_tfvars_payload, indent=2, sort_keys=True
+        ),
         report_path.name: json.dumps(report, indent=2, sort_keys=True),
     }
 
@@ -949,9 +1018,7 @@ def main(argv: list[str] | None = None) -> int:
     runtime_env_file = (
         _resolve_default_path(Path(".runtime") / f"{args.environment}.env")
         if args.runtime_env_file is None
-        else _resolve_cli_path(
-            args.runtime_env_file, field_name="runtime_env_file"
-        )
+        else _resolve_cli_path(args.runtime_env_file, field_name="runtime_env_file")
     )
     output_dir = (
         _resolve_default_path(DEFAULT_OUTPUT_ROOT / str(args.environment))

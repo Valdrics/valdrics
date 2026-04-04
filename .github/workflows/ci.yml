@@ -145,6 +145,9 @@ jobs:
       - name: Enforce Documentation Runtime Contracts
         run: uv run python3 scripts/verify_documentation_runtime_contracts.py
 
+      - name: Verify Codebase Audit Report
+        run: uv run python3 scripts/verify_codebase_audit_report.py
+
       - name: Verify Frontend API Contracts
         run: uv run python scripts/check_frontend_api_contracts.py
 
@@ -448,6 +451,9 @@ jobs:
       - name: Dashboard Build (Vite/SvelteKit)
         working-directory: ./dashboard
         run: pnpm run build
+
+      - name: Verify Dashboard Managed Runtime Contract
+        run: python3 scripts/verify_dashboard_runtime_contract.py
 
       - name: Dashboard Bundle Budgets
         working-directory: ./dashboard

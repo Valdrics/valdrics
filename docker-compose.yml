@@ -7,7 +7,7 @@ services:
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-valdrics}
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-valdrics-local-dev-only-change-before-sharing}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?Generate .env.compose.dev with `make env-compose` or set POSTGRES_PASSWORD explicitly}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -21,7 +21,7 @@ services:
     image: redis:7.2.5-alpine
     container_name: valdrics-redis
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -40,7 +40,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - .env.compose.dev
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,7 +68,7 @@ services:
     ports:
       - "3005:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in your environment or .env}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:?Generate .env.compose.dev with `make env-compose` or set GRAFANA_PASSWORD explicitly}
     depends_on:
       - prometheus
 
@@ -84,6 +84,7 @@ services:
       - api
     environment:
       - API_URL=http://api:8000
+      - ORIGIN=${ORIGIN:-http://localhost:3000}
 
 volumes:
   postgres_data:

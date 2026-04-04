@@ -693,6 +693,20 @@ async def test_get_llm_fair_use_runtime_handler_success():
 
 
 @pytest.mark.asyncio
+async def test_get_llm_fair_use_runtime_requires_tenant_context():
+    mock_admin = MagicMock()
+    mock_admin.role = "admin"
+    mock_admin.tenant_id = None
+    mock_db = AsyncMock()
+
+    with pytest.raises(HTTPException) as exc:
+        await get_llm_fair_use_runtime(mock_admin, mock_db)
+
+    assert exc.value.status_code == 403
+    assert exc.value.detail == "Tenant context required."
+
+
+@pytest.mark.asyncio
 async def test_get_llm_fair_use_runtime_returns_cached_payload():
     """Fair-use runtime endpoint should bypass settings/tier lookups on cache hit."""
     mock_admin = MagicMock()

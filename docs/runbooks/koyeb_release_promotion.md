@@ -20,6 +20,8 @@ uv run python scripts/generate_managed_runtime_env.py --environment staging
 uv run python scripts/generate_managed_migration_env.py --environment staging
 uv run python scripts/generate_managed_deployment_artifacts.py --environment staging --runtime-env-file .runtime/staging.env --release-tag <release-tag> --api-image-digest <sha256:...> --dashboard-image-digest <sha256:...>
 uv run python scripts/verify_managed_deployment_bundle.py --environment staging
+uv run python scripts/verify_managed_release_readiness.py --environment staging --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver
+uv run python scripts/render_managed_release_blocker_summary.py
 ```
 
 Do the same for production when promoting the same release tag and the same
@@ -65,6 +67,15 @@ Artifacts used during promotion:
 - `.runtime/deploy/<environment>/koyeb-dashboard-env.json`
 - `.runtime/deploy/<environment>/koyeb-secrets.json`
 - `.runtime/deploy/<environment>/koyeb-release.json`
+- `.runtime/deploy/managed-release-blockers.md`
+
+Dashboard container contract:
+
+- `Dockerfile.dashboard` packages the built SvelteKit output
+- `dashboard/server.node.mjs` serves that build under the managed Node runtime
+- `uv run python scripts/verify_dashboard_runtime_contract.py --build` must pass before promotion
+- `uv run python scripts/verify_managed_release_readiness.py --environment <environment> --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver` is the operator-facing wrapper that runs the dashboard runtime contract, bundle verifier, and public browser gate together
+- when reusing a local `vite preview` URL with `--skip-webserver`, add `--reuse-built-dashboard-runtime` so the readiness gate does not rebuild and invalidate the live preview assets
 
 ## Promotion Rules
 

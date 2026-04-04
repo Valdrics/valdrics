@@ -4,13 +4,11 @@
 	import {
 		INITIAL_ACTIVEOPS_SETTINGS,
 		INITIAL_LLM_SETTINGS,
-		INITIAL_NOTIFICATION_SETTINGS,
 		INITIAL_PROVIDER_MODELS
 	} from './settingsPageInitialState';
-	import type { PolicyDiagnostics, SafetyStatus } from './settingsPageModels';
+	import type { SafetyStatus } from './settingsPageModels';
 
 	type AsyncAction = () => void | Promise<void>;
-	type NotificationSettingsState = typeof INITIAL_NOTIFICATION_SETTINGS;
 	type LlmSettingsState = typeof INITIAL_LLM_SETTINGS;
 	type ActiveOpsSettingsState = typeof INITIAL_ACTIVEOPS_SETTINGS;
 	type ProviderModelsState = typeof INITIAL_PROVIDER_MODELS;
@@ -18,27 +16,13 @@
 		accessToken?: string;
 		tier?: string;
 	};
-	type SettingsNotificationControlsProps = {
+	type SettingsNotificationControlsControllerProps = {
 		data: {
 			user?: unknown;
 			session?: { access_token?: string };
 			subscription?: { tier?: string };
 			profile?: { persona?: string };
 		};
-		settings: NotificationSettingsState;
-		testing: boolean;
-		testingJira: boolean;
-		testingTeams: boolean;
-		testingWorkflow: boolean;
-		diagnosticsLoading: boolean;
-		policyDiagnostics: PolicyDiagnostics | null;
-		testSlack: AsyncAction;
-		testJira: AsyncAction;
-		testTeams: AsyncAction;
-		testWorkflowDispatch: AsyncAction;
-		runPolicyDiagnostics: AsyncAction;
-		saveSettings: AsyncAction;
-		saving: boolean;
 	};
 
 	let {
@@ -58,21 +42,7 @@
 		resetSafetyCircuitBreaker,
 		safetyError,
 		safetySuccess,
-		safetyStatus,
-		settings = $bindable(),
-		testing,
-		testingJira,
-		testingTeams,
-		testingWorkflow,
-		diagnosticsLoading,
-		policyDiagnostics,
-		testSlack,
-		testJira,
-		testTeams,
-		testWorkflowDispatch,
-		runPolicyDiagnostics,
-		saveSettings,
-		saving
+		safetyStatus
 	}: {
 		data: {
 			user?: unknown;
@@ -96,20 +66,6 @@
 		safetyError: string;
 		safetySuccess: string;
 		safetyStatus: SafetyStatus | null;
-		settings: NotificationSettingsState;
-		testing: boolean;
-		testingJira: boolean;
-		testingTeams: boolean;
-		testingWorkflow: boolean;
-		diagnosticsLoading: boolean;
-		policyDiagnostics: PolicyDiagnostics | null;
-		testSlack: AsyncAction;
-		testJira: AsyncAction;
-		testTeams: AsyncAction;
-		testWorkflowDispatch: AsyncAction;
-		runPolicyDiagnostics: AsyncAction;
-		saveSettings: AsyncAction;
-		saving: boolean;
 	} = $props();
 
 	const loadIdentitySettingsCard = createLazyComponent<TieredSettingsCardProps>(
@@ -149,9 +105,10 @@
 		safetySuccess: string;
 		safetyStatus: SafetyStatus | null;
 	}>(() => import('./SettingsSafetyControlsCard.svelte'));
-	const loadSettingsNotificationControls = createLazyComponent<SettingsNotificationControlsProps>(
-		() => import('./SettingsNotificationControls.svelte')
-	);
+	const loadSettingsNotificationControlsController =
+		createLazyComponent<SettingsNotificationControlsControllerProps>(
+			() => import('./SettingsNotificationControlsController.svelte')
+		);
 
 	let advancedSettingsAnchor: HTMLDivElement | null = $state(null);
 	let advancedSettingsVisible = $state(false);
@@ -301,31 +258,15 @@
 			</div>
 		{/await}
 
-		{#await loadSettingsNotificationControls()}
+		{#await loadSettingsNotificationControlsController()}
 			<div class="card">
 				<div class="skeleton h-6 w-52 mb-4"></div>
 				<div class="skeleton h-4 w-full mb-2"></div>
 				<div class="skeleton h-4 w-3/4"></div>
 			</div>
 		{:then module}
-			{@const SettingsNotificationControls = module.default}
-			<SettingsNotificationControls
-				{data}
-				bind:settings
-				{testing}
-				{testingJira}
-				{testingTeams}
-				{testingWorkflow}
-				{diagnosticsLoading}
-				{policyDiagnostics}
-				{testSlack}
-				{testJira}
-				{testTeams}
-				{testWorkflowDispatch}
-				{runPolicyDiagnostics}
-				{saveSettings}
-				{saving}
-			/>
+			{@const SettingsNotificationControlsController = module.default}
+			<SettingsNotificationControlsController {data} />
 		{:catch}
 			<div class="card">
 				<div class="skeleton h-6 w-52 mb-4"></div>

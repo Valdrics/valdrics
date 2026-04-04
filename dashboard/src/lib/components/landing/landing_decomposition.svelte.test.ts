@@ -55,21 +55,10 @@ describe('Landing component decomposition', () => {
 
 		const view = render(LandingRoiSimulator, {
 			props: {
-				normalizedScenarioWasteWithoutPct: 18,
-				normalizedScenarioWasteWithPct: 7,
-				normalizedScenarioWindowMonths: 12,
-				scenarioWithoutBarPct: 100,
-				scenarioWithBarPct: 40,
-				scenarioWasteWithoutUsd: 21600,
-				scenarioWasteWithUsd: 8400,
-				scenarioWasteRecoveryMonthlyUsd: 13200,
-				scenarioWasteRecoveryWindowUsd: 158400,
 				monthlySpendUsd: 120000,
 				scenarioWasteWithoutPct: 18,
 				scenarioWasteWithPct: 7,
 				scenarioWindowMonths: 12,
-				formatUsd: (amount: number, currency: string = 'USD') =>
-					currency === 'EUR' ? `€${amount}` : `$${amount}`,
 				currencyCode: 'USD',
 				localCurrencyCode: 'EUR',
 				onCurrencyCodeChange,

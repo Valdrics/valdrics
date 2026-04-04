@@ -89,6 +89,8 @@ async def test_test_tenant_import_fails_closed_on_orm_error(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    from app.shared.db import session as db_session
+
     raw_result = SimpleNamespace(all=lambda: [1])
 
     async def _execute(statement):
@@ -103,12 +105,8 @@ async def test_test_tenant_import_fails_closed_on_orm_error(
     )
     engine = SimpleNamespace(dispose=AsyncMock())
 
-    monkeypatch.setattr(
-        test_tenant_import,
-        "async_session_maker",
-        lambda: _AsyncContextManager(session),
-    )
-    monkeypatch.setattr(test_tenant_import, "get_engine", lambda: engine)
+    monkeypatch.setattr(db_session, "async_session_maker", lambda: _AsyncContextManager(session))
+    monkeypatch.setattr(db_session, "get_engine", lambda: engine)
 
     assert await test_tenant_import.seed_data() == 1
     engine.dispose.assert_awaited_once()
@@ -160,6 +158,8 @@ async def test_truncate_cost_data_returns_failure_on_execution_error(
 async def test_seed_dev_data_uses_get_engine_and_disposes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from app.shared.db import session as db_session
+
     result = SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: object()))
     session = SimpleNamespace(
         begin=lambda: _AsyncContextManager(None),
@@ -167,8 +167,8 @@ async def test_seed_dev_data_uses_get_engine_and_disposes(
     )
     engine = SimpleNamespace(dispose=AsyncMock())
 
-    monkeypatch.setattr(seed_dev_data, "async_session_maker", lambda: _AsyncContextManager(session))
-    monkeypatch.setattr(seed_dev_data, "get_engine", lambda: engine)
+    monkeypatch.setattr(db_session, "async_session_maker", lambda: _AsyncContextManager(session))
+    monkeypatch.setattr(db_session, "get_engine", lambda: engine)
 
     assert await seed_dev_data.seed_data() == 0
     engine.dispose.assert_awaited_once()
@@ -179,18 +179,16 @@ async def test_seed_pricing_plans_returns_failure_and_disposes_on_error(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    from app.shared.db import session as db_session
+
     session = SimpleNamespace(
         begin=lambda: _AsyncContextManager(None),
         execute=AsyncMock(side_effect=RuntimeError("pricing failed")),
     )
     engine = SimpleNamespace(dispose=AsyncMock())
 
-    monkeypatch.setattr(
-        seed_pricing_plans,
-        "async_session_maker",
-        lambda: _AsyncContextManager(session),
-    )
-    monkeypatch.setattr(seed_pricing_plans, "get_engine", lambda: engine)
+    monkeypatch.setattr(db_session, "async_session_maker", lambda: _AsyncContextManager(session))
+    monkeypatch.setattr(db_session, "get_engine", lambda: engine)
 
     assert await seed_pricing_plans.seed_data() == 1
     engine.dispose.assert_awaited_once()

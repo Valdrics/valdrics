@@ -246,6 +246,29 @@ def _run_probe(
     return completed.returncode == 0, combined_output
 
 
+def _probe_command_label(command: tuple[str, ...]) -> str:
+    repo_root = _repo_root()
+    rendered: list[str] = []
+    python_executable = Path(sys.executable).resolve()
+    for idx, part in enumerate(command):
+        candidate = Path(part)
+        if idx == 0 and candidate.resolve() == python_executable:
+            rendered.append("python3")
+            continue
+        if candidate.is_absolute():
+            try:
+                rendered.append(candidate.resolve().relative_to(repo_root).as_posix())
+                continue
+            except ValueError:
+                pass
+        rendered.append(str(part))
+    return " ".join(rendered)
+
+
+def _normalize_probe_output_excerpt(output: str) -> str:
+    return str(output).replace(_repo_root().as_posix(), ".")
+
+
 def _collect_probe_results(*, timeout_seconds: float) -> dict[str, dict[str, Any]]:
     results: dict[str, dict[str, Any]] = {}
     for probe in RUNTIME_PROBES:
@@ -255,9 +278,9 @@ def _collect_probe_results(*, timeout_seconds: float) -> dict[str, dict[str, Any
         )
         results[probe.probe_id] = {
             "probe_id": probe.probe_id,
-            "command": " ".join(probe.command),
+            "command": _probe_command_label(probe.command),
             "passed": bool(passed),
-            "output_excerpt": output[:1200],
+            "output_excerpt": _normalize_probe_output_excerpt(output)[:1200],
         }
     return results
 

@@ -10,6 +10,7 @@ from app.shared.core.auth import (
     get_current_user_with_db_context,
 )
 from unittest.mock import patch
+from app.shared.core.pricing import PricingTier
 
 
 @pytest.mark.asyncio
@@ -292,6 +293,51 @@ async def test_update_llm_settings_requires_admin(async_client: AsyncClient, app
         )
         assert response.status_code == 403
         assert "Insufficient permissions" in response.json()["error"]
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_get_llm_settings_requires_tenant_context(async_client: AsyncClient, app):
+    platform_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        email="platform-llm@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.ENTERPRISE,
+    )
+    app.dependency_overrides[get_current_user] = lambda: platform_user
+    try:
+        response = await async_client.get("/api/v1/settings/llm")
+        assert response.status_code == 403
+        assert "tenant context required" in str(response.json()).lower()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_update_llm_settings_requires_tenant_context(async_client: AsyncClient, app):
+    platform_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        email="platform-llm-write@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.ENTERPRISE,
+    )
+    app.dependency_overrides[get_current_user] = lambda: platform_user
+    try:
+        response = await async_client.put(
+            "/api/v1/settings/llm",
+            json={
+                "monthly_limit_usd": 10.0,
+                "alert_threshold_percent": 80,
+                "hard_limit": False,
+                "preferred_provider": "groq",
+                "preferred_model": "llama-3.3-70b-versatile",
+            },
+        )
+        assert response.status_code == 403
+        assert "tenant context required" in str(response.json()).lower()
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 

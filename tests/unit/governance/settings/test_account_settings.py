@@ -230,3 +230,202 @@ async def test_close_account_idempotent_reports_identity_revoked_consistently(
         assert payload["identity_revoked"] is True
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_get_account_status_does_not_count_open_jobs_as_revoked(async_client, db, app):
+    tenant_id = uuid.uuid4()
+    owner_id = uuid.uuid4()
+
+    db.add(Tenant(id=tenant_id, name="Status Tenant", plan="enterprise"))
+    db.add(
+        User(
+            id=owner_id,
+            tenant_id=tenant_id,
+            email="owner-status@valdrics.io",
+            role=UserRole.OWNER.value,
+            is_active=True,
+        )
+    )
+    db.add(
+        BackgroundJob(
+            job_type=JobType.COST_INGESTION.value,
+            tenant_id=tenant_id,
+            status=JobStatus.PENDING.value,
+            scheduled_for=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    await db.commit()
+
+    mock_user = CurrentUser(
+        id=owner_id,
+        tenant_id=tenant_id,
+        email="owner-status@valdrics.io",
+        role=UserRole.OWNER,
+        tier=PricingTier.ENTERPRISE,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.get("/api/v1/settings/account/status")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "active"
+        assert payload["users_revoked"] == 0
+        assert payload["background_jobs_revoked"] == 0
+        assert payload["identity_revoked"] is True
+        assert payload["closed_at"] is None
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_get_account_status_reports_existing_revocations_for_closed_tenant(
+    async_client, db, app
+):
+    tenant_id = uuid.uuid4()
+    owner_id = uuid.uuid4()
+    member_id = uuid.uuid4()
+
+    db.add(
+        Tenant(
+            id=tenant_id,
+            name="Closed Status Tenant",
+            plan="enterprise",
+            is_deleted=True,
+            deleted_at=datetime.now(timezone.utc),
+        )
+    )
+    db.add_all(
+        [
+            User(
+                id=owner_id,
+                tenant_id=tenant_id,
+                email="owner-status-closed@valdrics.io",
+                role=UserRole.OWNER.value,
+                is_active=False,
+            ),
+            User(
+                id=member_id,
+                tenant_id=tenant_id,
+                email="member-status-closed@valdrics.io",
+                role=UserRole.MEMBER.value,
+                is_active=False,
+            ),
+        ]
+    )
+    db.add(
+        BackgroundJob(
+            job_type=JobType.COST_INGESTION.value,
+            tenant_id=tenant_id,
+            status=JobStatus.FAILED.value,
+            scheduled_for=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+            error_message="tenant_closed",
+            is_deleted=True,
+        )
+    )
+    db.add(
+        TenantIdentitySettings(
+            tenant_id=tenant_id,
+            sso_enabled=False,
+            allowed_email_domains=[],
+            sso_federation_enabled=False,
+            scim_enabled=False,
+            scim_bearer_token=None,
+            scim_group_mappings=[],
+        )
+    )
+    await db.commit()
+
+    mock_user = CurrentUser(
+        id=owner_id,
+        tenant_id=tenant_id,
+        email="owner-status-closed@valdrics.io",
+        role=UserRole.OWNER,
+        tier=PricingTier.ENTERPRISE,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.get("/api/v1/settings/account/status")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "closed"
+        assert payload["users_revoked"] == 2
+        assert payload["background_jobs_revoked"] == 1
+        assert payload["identity_revoked"] is True
+        assert payload["closed_at"] is not None
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_close_account_idempotent_reports_existing_revocation_counts(
+    async_client, db, app
+):
+    tenant_id = uuid.uuid4()
+    owner_id = uuid.uuid4()
+    member_id = uuid.uuid4()
+
+    db.add(
+        Tenant(
+            id=tenant_id,
+            name="Already Closed Counts Tenant",
+            plan="enterprise",
+            is_deleted=True,
+            deleted_at=datetime.now(timezone.utc),
+        )
+    )
+    db.add_all(
+        [
+            User(
+                id=owner_id,
+                tenant_id=tenant_id,
+                email="owner-closed-counts@valdrics.io",
+                role=UserRole.OWNER.value,
+                is_active=False,
+            ),
+            User(
+                id=member_id,
+                tenant_id=tenant_id,
+                email="member-closed-counts@valdrics.io",
+                role=UserRole.MEMBER.value,
+                is_active=False,
+            ),
+        ]
+    )
+    db.add(
+        BackgroundJob(
+            job_type=JobType.COST_INGESTION.value,
+            tenant_id=tenant_id,
+            status=JobStatus.FAILED.value,
+            scheduled_for=datetime.now(timezone.utc),
+            created_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+            error_message="tenant_closed",
+            is_deleted=True,
+        )
+    )
+    await db.commit()
+
+    mock_user = CurrentUser(
+        id=owner_id,
+        tenant_id=tenant_id,
+        email="owner-closed-counts@valdrics.io",
+        role=UserRole.OWNER,
+        tier=PricingTier.ENTERPRISE,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.post(
+            "/api/v1/settings/account/close",
+            json={"confirmation": "CLOSE TENANT ACCOUNT"},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["status"] == "already_closed"
+        assert payload["users_revoked"] == 2
+        assert payload["background_jobs_revoked"] == 1
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)

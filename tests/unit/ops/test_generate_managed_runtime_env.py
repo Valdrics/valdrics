@@ -289,6 +289,108 @@ def test_generate_managed_runtime_env_can_satisfy_strict_runtime_validator(
     assert "runtime_env_validation_passed environment=production testing=False" in capsys.readouterr().out
 
 
+def test_generate_managed_runtime_env_preserves_existing_values_on_regeneration(
+    tmp_path: Path,
+) -> None:
+    template = tmp_path / ".env.example"
+    output = tmp_path / "production.env"
+    report_path = tmp_path / "production.report.json"
+    _write(
+        template,
+        "\n".join(
+            [
+                "API_URL=",
+                "FRONTEND_URL=",
+                "CORS_ORIGINS=[]",
+                "DATABASE_URL=",
+                "REDIS_URL=",
+                "SUPABASE_URL=",
+                "SUPABASE_ANON_KEY=",
+                "SUPABASE_JWT_SECRET=",
+                "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=",
+                "CSRF_SECRET_KEY=",
+                "ENCRYPTION_KEY=",
+                "KDF_SALT=",
+                "ADMIN_API_KEY=",
+                "INTERNAL_JOB_SECRET=",
+                "INTERNAL_METRICS_AUTH_TOKEN=",
+                "ENFORCEMENT_APPROVAL_TOKEN_SECRET=",
+                "ENFORCEMENT_EXPORT_SIGNING_SECRET=",
+                "LLM_PROVIDER=groq",
+                "OPENAI_API_KEY=",
+                "PAYSTACK_SECRET_KEY=",
+                "PAYSTACK_PUBLIC_KEY=",
+                "SENTRY_DSN=",
+                "OTEL_EXPORTER_OTLP_ENDPOINT=",
+                "TRUSTED_PROXY_CIDRS=[]",
+            ]
+        ),
+    )
+
+    generate_managed_runtime_env(
+        template_path=template,
+        output_path=output,
+        report_path=report_path,
+        environment="production",
+        api_url="https://api.runtime.example",
+        frontend_url="https://app.runtime.example",
+        database_url="postgresql+asyncpg://postgres:postgres@db.example.com:5432/postgres",
+        redis_url="redis://redis.example.com:6379/0",
+        supabase_url="https://example.supabase.co",
+        supabase_anon_key="anon-key-for-dashboard",
+        supabase_jwt_secret="x" * 40,
+        aws_assume_role_trust_principal_arn=(
+            "arn:aws:iam::123456789012:role/ValdricsControlPlane"
+        ),
+        llm_provider="openai",
+        llm_api_key="sk-test-openai-key",
+        paystack_secret_key="sk_live_test_paystack_key",
+        paystack_public_key="pk_live_test_paystack_key",
+        sentry_dsn="https://key@example.com/1",
+        otel_endpoint="https://otel.example.com:4317",
+        trusted_proxy_cidrs=["203.0.113.10/32"],
+    )
+
+    first_values = _parse_env(output)
+    first_internal = {
+        key: first_values[key]
+        for key in (
+            "CSRF_SECRET_KEY",
+            "ENCRYPTION_KEY",
+            "KDF_SALT",
+            "ADMIN_API_KEY",
+            "INTERNAL_JOB_SECRET",
+            "INTERNAL_METRICS_AUTH_TOKEN",
+            "ENFORCEMENT_APPROVAL_TOKEN_SECRET",
+            "ENFORCEMENT_EXPORT_SIGNING_SECRET",
+        )
+    }
+
+    generate_managed_runtime_env(
+        template_path=template,
+        output_path=output,
+        report_path=report_path,
+        environment="production",
+    )
+
+    second_values = _parse_env(output)
+    second_report = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert second_values["API_URL"] == "https://api.runtime.example"
+    assert second_values["FRONTEND_URL"] == "https://app.runtime.example"
+    assert second_values["SUPABASE_ANON_KEY"] == "anon-key-for-dashboard"
+    assert (
+        second_values["AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN"]
+        == "arn:aws:iam::123456789012:role/ValdricsControlPlane"
+    )
+    assert second_values["LLM_PROVIDER"] == "openai"
+    assert second_values["OPENAI_API_KEY"] == "sk-test-openai-key"
+    assert second_values["TRUSTED_PROXY_CIDRS"] == '["203.0.113.10/32"]'
+    for key, value in first_internal.items():
+        assert second_values[key] == value
+    assert second_report["runtime_validation_blockers"] == []
+
+
 def test_generate_managed_runtime_env_rejects_shared_output_and_report_path(
     tmp_path: Path,
 ) -> None:

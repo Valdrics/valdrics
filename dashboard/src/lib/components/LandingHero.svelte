@@ -3,11 +3,6 @@
 	import { base } from '$app/paths';
 	import { onMount } from 'svelte';
 	import type { LandingExperimentAssignments } from '$lib/landing/landingExperiment';
-	import {
-		resolveInitialLandingCurrency,
-		setLandingCurrencyPreference,
-		type LandingCurrencyCode
-	} from '$lib/landing/currencyPreference';
 	import type { FunnelStage, LandingAttribution } from '$lib/landing/landingFunnel';
 	import {
 		LANDING_CONSENT_KEY,
@@ -19,6 +14,11 @@
 		buildLandingHeroSalesPath,
 		buildLandingHeroSignupPath
 	} from '$lib/landing/landingHeroActions';
+	import {
+		resolveInitialLandingCurrency,
+		setLandingCurrencyPreference,
+		type LandingCurrencyCode
+	} from '$lib/landing/currencyPreference';
 	import { buildLandingPublicPath } from '$lib/landing/landingPublicAttribution';
 	import { LANDING_ROI_DEFAULTS } from '$lib/landing/landingRoiDefaults';
 	import type { LandingTelemetryContext } from '$lib/landing/landingTelemetry';
@@ -320,6 +320,11 @@
 	onMount(() => {
 		let cancelled = false;
 		let teardown: (() => void) | void;
+
+		const storedCurrency = resolveInitialLandingCurrency(localCurrencyCode);
+		if (storedCurrency !== localCurrencyCode) {
+			roiCurrencyOverride = storedCurrency;
+		}
 
 		void ensureSnapshotRuntime().catch(() => {
 			// Decorative snapshot rotation must not block the landing experience.

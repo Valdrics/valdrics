@@ -1,5 +1,4 @@
 import pytest
-import time
 from unittest.mock import MagicMock, patch, AsyncMock
 from app.shared.core.rate_limit import (
     context_aware_key,
@@ -62,6 +61,26 @@ def test_get_analysis_limit_tiers(mock_request):
 
     mock_request.state.tier = "unknown"
     assert get_analysis_limit(mock_request) == "1/hour"
+
+
+def test_get_analysis_limit_tiers_use_configured_settings(mock_request):
+    settings = SimpleNamespace(
+        ANALYSIS_RATE_LIMIT_FREE_PER_HOUR=4,
+        ANALYSIS_RATE_LIMIT_STARTER_PER_HOUR=8,
+        ANALYSIS_RATE_LIMIT_GROWTH_PER_HOUR=12,
+        ANALYSIS_RATE_LIMIT_PRO_PER_HOUR=60,
+        ANALYSIS_RATE_LIMIT_ENTERPRISE_PER_HOUR=240,
+    )
+
+    with patch("app.shared.core.rate_limit.get_settings", return_value=settings):
+        mock_request.state.tier = "pro"
+        assert get_analysis_limit(mock_request) == "60/hour"
+
+        mock_request.state.tier = "growth"
+        assert get_analysis_limit(mock_request) == "12/hour"
+
+        mock_request.state.tier = "free"
+        assert get_analysis_limit(mock_request) == "4/hour"
 
 
 @pytest.mark.asyncio
@@ -208,7 +227,12 @@ def test_setup_rate_limiting():
 @pytest.mark.asyncio
 async def test_get_redis_client_logic():
     """Test redis client lifecycle management."""
-    with patch("app.shared.core.rate_limit.get_settings") as mock_settings:
+    with (
+        patch("app.shared.core.rate_limit._redis_client", None),
+        patch("app.shared.core.rate_limit._redis_client_loop_marker", None),
+        patch("app.shared.core.rate_limit._redis_client_url", None),
+        patch("app.shared.core.rate_limit.get_settings") as mock_settings,
+    ):
         mock_settings.return_value.REDIS_URL = "redis://localhost"
         with patch("app.shared.core.rate_limit.from_url") as mock_from_url:
             mock_from_url.return_value = MagicMock()
@@ -216,9 +240,11 @@ async def test_get_redis_client_logic():
             assert client is not None
 
             # Test reconnect logic if loop changes
-            with patch("asyncio.get_running_loop") as mock_loop:
-                mock_loop.return_value = "new_loop"
-                client._loop = "old_loop"
+            with (
+                patch("app.shared.core.rate_limit._redis_client_loop_marker", 100),
+                patch(
+                    "app.shared.core.rate_limit._current_loop_marker", return_value=200
+                ),
+            ):
                 get_redis_client()
-                # Should have reset and re-created
-                mock_from_url.call_count == 2
+                assert mock_from_url.call_count == 2

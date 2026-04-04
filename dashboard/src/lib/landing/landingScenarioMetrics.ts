@@ -1,23 +1,11 @@
-import { resolveGeoCurrencyHint } from '$lib/landing/landingGeoCurrency';
-import { formatCurrencyAmount, SUPPORTED_CURRENCIES } from '$lib/landing/currencyDisplay';
-
-const SUPPORTED_CURRENCY_CODES = new Set(SUPPORTED_CURRENCIES.map((currency) => currency.code));
-
-type LandingHeroScenarioArgs = {
+type LandingScenarioArgs = {
 	monthlySpendUsd: number;
 	wasteWithoutPct: number;
 	wasteWithPct: number;
 	windowMonths: number;
 };
 
-type LandingHeroCurrencyHintArgs = {
-	requestEndpoint: string;
-	requestOrigin: string;
-	hostname?: string;
-	signal: AbortSignal;
-};
-
-export function calculateLandingHeroScenarioMetrics(args: LandingHeroScenarioArgs) {
+export function calculateLandingScenarioMetrics(args: LandingScenarioArgs) {
 	const normalizedScenarioWasteWithoutPct = Math.min(
 		35,
 		Math.max(4, Math.round(Number(args.wasteWithoutPct) || 0))
@@ -55,21 +43,4 @@ export function calculateLandingHeroScenarioMetrics(args: LandingHeroScenarioArg
 		scenarioWithoutBarPct: (scenarioWasteWithoutUsd / scenarioMaxBarUsd) * 100,
 		scenarioWithBarPct: (scenarioWasteWithUsd / scenarioMaxBarUsd) * 100
 	};
-}
-
-export async function resolveLandingHeroCurrencyCode(
-	args: LandingHeroCurrencyHintArgs
-): Promise<string> {
-	const currencyCode = await resolveGeoCurrencyHint({
-		requestEndpoint: args.requestEndpoint,
-		requestOrigin: args.requestOrigin,
-		hostname: args.hostname,
-		supportedCurrencyCodes: SUPPORTED_CURRENCY_CODES,
-		signal: args.signal
-	});
-	return currencyCode ?? 'USD';
-}
-
-export function formatLandingHeroCurrencyAmount(amount: number, currency: string): string {
-	return formatCurrencyAmount(amount, currency);
 }

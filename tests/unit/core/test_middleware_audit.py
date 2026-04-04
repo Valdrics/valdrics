@@ -64,6 +64,39 @@ async def test_security_headers_prod(mock_settings, mock_call_next):
 
 
 @pytest.mark.asyncio
+async def test_security_headers_normalize_connect_src_origins(
+    mock_settings,
+    mock_call_next,
+):
+    mock_settings.CORS_ORIGINS = [
+        "HTTPS://APP.EXAMPLE.COM/path?ignored=yes",
+        "https://api.example.com:8443/",
+    ]
+    middleware = SecurityHeadersMiddleware(app=MagicMock())
+
+    scope = {
+        "type": "http",
+        "scheme": "https",
+        "server": ("testserver", 443),
+        "method": "GET",
+        "path": "/api/test",
+        "query_string": b"",
+        "headers": [],
+    }
+    request = Request(scope=scope)
+
+    response = await middleware.dispatch(request, mock_call_next)
+
+    csp = response.headers["Content-Security-Policy"]
+    assert (
+        "connect-src 'self' https://app.example.com https://api.example.com:8443;"
+        in csp
+    )
+    assert "/path" not in csp
+    assert "?ignored=yes" not in csp
+
+
+@pytest.mark.asyncio
 async def test_security_headers_debug(mock_settings, mock_call_next):
     mock_settings.DEBUG = True
     middleware = SecurityHeadersMiddleware(app=MagicMock())

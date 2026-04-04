@@ -5,6 +5,7 @@ Provides API rate limiting using slowapi (built on limits library).
 Configurable via environment variables.
 """
 
+import asyncio
 import time
 from typing import Any, Callable, Optional, cast
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -36,6 +37,8 @@ logger = structlog.get_logger()
 
 _limiter: Limiter | None = None
 _redis_client: Redis | None = None
+_redis_client_loop_marker: int | None = None
+_redis_client_url: str | None = None
 _limiter_storage_uri: str | None = None
 _limiter_enabled: bool | None = None
 TOKEN_HASH_FALLBACK_RECOVERABLE_EXCEPTIONS = (RuntimeError, TypeError, ValueError)
@@ -45,11 +48,35 @@ ANALYSIS_TIER_RESOLUTION_RECOVERABLE_EXCEPTIONS = (
     ValueError,
     RuntimeError,
 )
-REMEDIATION_REDIS_RATE_LIMIT_RECOVERABLE_EXCEPTIONS = (RedisError, OSError, RuntimeError)
+REMEDIATION_REDIS_RATE_LIMIT_RECOVERABLE_EXCEPTIONS = (
+    RedisError,
+    OSError,
+    RuntimeError,
+)
 
 
 def _monotonic_time() -> float:
     return time.monotonic()
+
+
+def _current_loop_marker() -> int | None:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+    if loop.is_closed():
+        return None
+    return id(loop)
+
+
+def _analysis_limit_mapping(settings: Any) -> dict[str, str]:
+    return {
+        "free": f"{int(getattr(settings, 'ANALYSIS_RATE_LIMIT_FREE_PER_HOUR', 1) or 1)}/hour",
+        "starter": f"{int(getattr(settings, 'ANALYSIS_RATE_LIMIT_STARTER_PER_HOUR', 2) or 2)}/hour",
+        "growth": f"{int(getattr(settings, 'ANALYSIS_RATE_LIMIT_GROWTH_PER_HOUR', 10) or 10)}/hour",
+        "pro": f"{int(getattr(settings, 'ANALYSIS_RATE_LIMIT_PRO_PER_HOUR', 50) or 50)}/hour",
+        "enterprise": f"{int(getattr(settings, 'ANALYSIS_RATE_LIMIT_ENTERPRISE_PER_HOUR', 200) or 200)}/hour",
+    }
 
 
 def context_aware_key(request: Request) -> str:
@@ -126,7 +153,7 @@ def get_limiter() -> Limiter:
 
 def get_redis_client() -> Redis | None:
     """Lazy initialization of the Redis client for rate limiting and health checks."""
-    global _redis_client
+    global _redis_client, _redis_client_loop_marker, _redis_client_url
     settings = get_settings()
     # Tests should use in-memory fallback by default to avoid external network coupling
     # and unclosed transport warnings from ephemeral event loops.
@@ -137,36 +164,41 @@ def get_redis_client() -> Redis | None:
         return None
     if not settings.REDIS_URL:
         _redis_client = None
+        _redis_client_loop_marker = None
+        _redis_client_url = None
         return None
 
-    # Check if client exists and ensure it is tied to the current running loop
-    if _redis_client is not None:
-        try:
-            import asyncio
+    current_loop_marker = _current_loop_marker()
 
-            loop = asyncio.get_running_loop()
-            # If the client's loop is not the current one, reset it
-            if (
-                getattr(_redis_client, "_loop", None) != loop
-                or getattr(_redis_client, "_valdrics_redis_url", None)
-                != settings.REDIS_URL
-            ):
-                _redis_client = None
-        except (RuntimeError, AttributeError):
+    # Keep lifecycle tracking in module state rather than reading Redis client internals.
+    if _redis_client is not None:
+        loop_mismatch = (
+            current_loop_marker is not None
+            and _redis_client_loop_marker is not None
+            and current_loop_marker != _redis_client_loop_marker
+        )
+        url_mismatch = _redis_client_url != settings.REDIS_URL
+        if loop_mismatch or url_mismatch:
             _redis_client = None
+            _redis_client_loop_marker = None
+            _redis_client_url = None
 
     if _redis_client is None:
         redis_from_url = cast(Callable[..., Redis], from_url)
         _redis_client = redis_from_url(settings.REDIS_URL, decode_responses=True)
-        setattr(_redis_client, "_valdrics_redis_url", settings.REDIS_URL)
+        _redis_client_loop_marker = current_loop_marker
+        _redis_client_url = settings.REDIS_URL
     return _redis_client
 
 
 async def reset_rate_limit_runtime() -> None:
-    global _limiter, _redis_client, _limiter_storage_uri, _limiter_enabled
+    global _limiter, _redis_client, _redis_client_loop_marker, _redis_client_url
+    global _limiter_storage_uri, _limiter_enabled
     redis_client = _redis_client
     _limiter = None
     _redis_client = None
+    _redis_client_loop_marker = None
+    _redis_client_url = None
     _limiter_storage_uri = None
     _limiter_enabled = None
     if redis_client is not None:
@@ -194,8 +226,8 @@ def rate_limit(
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator to apply rate limiting to an endpoint."""
     # Finding #L3: If we bypass the decorator here based on settings.TESTING,
-    # it captures the state at import time. Instead, we always return the 
-    # limiter's decorator, which internally checks its 'enabled' status 
+    # it captures the state at import time. Instead, we always return the
+    # limiter's decorator, which internally checks its 'enabled' status
     # during each request.
     return cast(
         Callable[[Callable[..., Any]], Callable[..., Any]], get_limiter().limit(limit)
@@ -264,14 +296,7 @@ def get_analysis_limit(request: Optional[Request] = None) -> str:
     except ANALYSIS_TIER_RESOLUTION_RECOVERABLE_EXCEPTIONS:
         tier = "starter"
 
-    # Mapping of tier to rate limit (per hour to prevent burst costs)
-    limits = {
-        "free": "1/hour",
-        "starter": "2/hour",
-        "growth": "10/hour",
-        "pro": "50/hour",
-        "enterprise": "200/hour",
-    }
+    limits = _analysis_limit_mapping(get_settings())
 
     return limits.get(tier, "1/hour")
 
@@ -347,7 +372,7 @@ async def check_remediation_rate_limit(
     # Finding #6: Enforce Redis for production/staging to ensure distributed correctness
     settings = get_settings()
     is_prod = settings.ENVIRONMENT.lower() in ("production", "staging")
-    
+
     if redis:
         try:
             # Use Redis for distributed rate limiting
@@ -375,7 +400,9 @@ async def check_remediation_rate_limit(
 
     # Finding #6: Enforce Redis for production/staging
     if is_prod:
-        logger.error("redis_unavailable_in_production", tenant_id=tenant_key, action=action)
+        logger.error(
+            "redis_unavailable_in_production", tenant_id=tenant_key, action=action
+        )
         return False
 
     # Memory fallback for local/single-instance deployments

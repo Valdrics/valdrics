@@ -1,7 +1,17 @@
-# ruff: noqa: F401,F403
 from __future__ import annotations
 
-from tests.unit.enforcement.enforcement_service_cases_common import *  # noqa: F401,F403
+import base64
+import json
+from uuid import uuid4
+
+import pytest
+
+from tests.unit.enforcement.enforcement_service_cases_common import (
+    HTTPException,
+    EnforcementService,
+    _issue_approved_token,
+    _seed_tenant,
+)
 
 
 @pytest.mark.asyncio
@@ -38,7 +48,9 @@ async def test_consume_approval_token_endpoint_rejects_replay_and_tamper(db) -> 
     decoded_payload = json.loads(base64.urlsafe_b64decode(payload + "==").decode())
     decoded_payload["resource_reference"] = "module.hijack.aws_iam_role.admin"
     tampered_payload = (
-        base64.urlsafe_b64encode(json.dumps(decoded_payload).encode()).decode().rstrip("=")
+        base64.urlsafe_b64encode(json.dumps(decoded_payload).encode())
+        .decode()
+        .rstrip("=")
     )
     tampered_token = f"{header}.{tampered_payload}.{signature}"
 

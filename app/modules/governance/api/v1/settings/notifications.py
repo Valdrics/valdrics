@@ -67,6 +67,14 @@ def _raise_http_exception(status_code: int, detail: str) -> None:
     raise HTTPException(status_code=status_code, detail=detail)
 
 
+def _require_tenant_context(current_user: CurrentUser) -> None:
+    if current_user.tenant_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant context required.",
+        )
+
+
 def _build_default_notification_settings(
     *,
     tenant_id: object,
@@ -189,6 +197,7 @@ async def get_notification_settings(
     current_user: CurrentUser = Depends(get_current_user_with_db_context),
     db: AsyncSession = Depends(get_db),
 ) -> NotificationSettingsResponse:
+    _require_tenant_context(current_user)
     result = await db.execute(
         select(NotificationSettings).where(
             NotificationSettings.tenant_id == current_user.tenant_id
@@ -217,6 +226,7 @@ async def update_notification_settings(
     current_user: CurrentUser = Depends(requires_role_with_db_context("admin")),
     db: AsyncSession = Depends(get_db),
 ) -> NotificationSettingsResponse:
+    _require_tenant_context(current_user)
     updates = data.model_dump(exclude_unset=True)
     result = await db.execute(
         select(NotificationSettings).where(
@@ -306,6 +316,7 @@ async def get_policy_notification_diagnostics(
 ) -> PolicyNotificationDiagnosticsResponse:
     from app.shared.core.config import get_settings
 
+    _require_tenant_context(current_user)
     notification_result = await db.execute(
         select(NotificationSettings).where(
             NotificationSettings.tenant_id == current_user.tenant_id

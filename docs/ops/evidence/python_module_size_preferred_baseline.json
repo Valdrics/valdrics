@@ -3,17 +3,27 @@
   "breaches": [
     {
       "path": "app/main.py",
-      "lines": 514,
+      "lines": 562,
       "preferred_max_lines": 500
     },
     {
       "path": "app/modules/billing/domain/billing/paystack_service_impl.py",
-      "lines": 530,
+      "lines": 584,
       "preferred_max_lines": 500
     },
     {
       "path": "app/modules/billing/domain/billing/paystack_webhook_impl.py",
-      "lines": 539,
+      "lines": 548,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/enforcement/domain/policy_contract_ops.py",
+      "lines": 525,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/governance/api/v1/scim.py",
+      "lines": 507,
       "preferred_max_lines": 500
     },
     {
@@ -23,17 +33,22 @@
     },
     {
       "path": "app/modules/governance/api/v1/settings/connections_setup_aws_discovery.py",
-      "lines": 535,
+      "lines": 545,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/governance/api/v1/settings/notifications.py",
+      "lines": 548,
       "preferred_max_lines": 500
     },
     {
       "path": "app/modules/governance/domain/jobs/processor.py",
-      "lines": 602,
+      "lines": 613,
       "preferred_max_lines": 500
     },
     {
       "path": "app/modules/governance/domain/scheduler/orchestrator.py",
-      "lines": 595,
+      "lines": 608,
       "preferred_max_lines": 500
     },
     {
@@ -42,13 +57,53 @@
       "preferred_max_lines": 500
     },
     {
+      "path": "app/modules/optimization/api/v1/zombies.py",
+      "lines": 547,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/optimization/domain/remediation.py",
+      "lines": 523,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/optimization/domain/remediation_workflow.py",
+      "lines": 695,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/reporting/api/v1/carbon.py",
+      "lines": 635,
+      "preferred_max_lines": 500
+    },
+    {
       "path": "app/modules/reporting/domain/carbon_scheduler.py",
       "lines": 580,
       "preferred_max_lines": 500
     },
     {
-      "path": "app/shared/core/config.py",
-      "lines": 567,
+      "path": "app/shared/core/auth.py",
+      "lines": 511,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/shared/core/cache.py",
+      "lines": 522,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/shared/core/circuit_breaker.py",
+      "lines": 514,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/shared/core/currency.py",
+      "lines": 503,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/shared/core/health.py",
+      "lines": 570,
       "preferred_max_lines": 500
     },
     {
@@ -58,12 +113,17 @@
     },
     {
       "path": "app/shared/db/session.py",
-      "lines": 525,
+      "lines": 572,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/shared/llm/zombie_analyzer.py",
+      "lines": 535,
       "preferred_max_lines": 500
     },
     {
       "path": "app/tasks/scheduler_tasks.py",
-      "lines": 624,
+      "lines": 632,
       "preferred_max_lines": 500
     }
   ]

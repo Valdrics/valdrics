@@ -95,6 +95,9 @@ async def get_llm_settings(
     """
     Get LLM budget and selection settings for the current tenant.
     """
+    if current_user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context required.")
+
     result = await db.execute(
         select(LLMBudget).where(LLMBudget.tenant_id == current_user.tenant_id)
     )
@@ -126,6 +129,9 @@ async def update_llm_settings(
     """
     Update LLM budget and selection settings for the current tenant.
     """
+    if current_user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context required.")
+
     byok_key_fields = (
         "openai_api_key",
         "claude_api_key",

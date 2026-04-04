@@ -1,24 +1,16 @@
 <script lang="ts">
 	import { base } from '$app/paths';
 	import type { LandingCurrencyCode } from '$lib/landing/currencyPreference';
+	import { formatCurrencyAmount } from '$lib/landing/currencyDisplay';
+	import { calculateLandingScenarioMetrics } from '$lib/landing/landingScenarioMetrics';
 	import LandingCurrencyToggle from '$lib/components/landing/LandingCurrencyToggle.svelte';
 	import './LandingMarketingShared.css';
 
 	let {
-		normalizedScenarioWasteWithoutPct,
-		normalizedScenarioWasteWithPct,
-		normalizedScenarioWindowMonths,
-		scenarioWithoutBarPct,
-		scenarioWithBarPct,
-		scenarioWasteWithoutUsd,
-		scenarioWasteWithUsd,
-		scenarioWasteRecoveryMonthlyUsd,
-		scenarioWasteRecoveryWindowUsd,
 		monthlySpendUsd,
 		scenarioWasteWithoutPct,
 		scenarioWasteWithPct,
 		scenarioWindowMonths,
-		formatUsd,
 		onTrackScenarioAdjust,
 		onScenarioWasteWithoutChange,
 		onScenarioWasteWithChange,
@@ -29,20 +21,10 @@
 		localCurrencyCode,
 		onCurrencyCodeChange = () => {}
 	}: {
-		normalizedScenarioWasteWithoutPct: number;
-		normalizedScenarioWasteWithPct: number;
-		normalizedScenarioWindowMonths: number;
-		scenarioWithoutBarPct: number;
-		scenarioWithBarPct: number;
-		scenarioWasteWithoutUsd: number;
-		scenarioWasteWithUsd: number;
-		scenarioWasteRecoveryMonthlyUsd: number;
-		scenarioWasteRecoveryWindowUsd: number;
 		monthlySpendUsd: number;
 		scenarioWasteWithoutPct: number;
 		scenarioWasteWithPct: number;
 		scenarioWindowMonths: number;
-		formatUsd: (amount: number, currency?: string) => string;
 		onTrackScenarioAdjust: (control: string) => void;
 		onScenarioWasteWithoutChange: (value: number) => void;
 		onScenarioWasteWithChange: (value: number) => void;
@@ -53,6 +35,17 @@
 		localCurrencyCode: LandingCurrencyCode;
 		onCurrencyCodeChange?: (value: LandingCurrencyCode) => void;
 	} = $props();
+
+	const scenarioMetrics = $derived(
+		calculateLandingScenarioMetrics({
+			monthlySpendUsd,
+			wasteWithoutPct: scenarioWasteWithoutPct,
+			wasteWithPct: scenarioWasteWithPct,
+			windowMonths: scenarioWindowMonths
+		})
+	);
+	const formatUsd = (amount: number, currency: string = String(currencyCode)) =>
+		formatCurrencyAmount(amount, currency);
 
 	function updateWasteWithout(event: Event): void {
 		const value = Number((event.currentTarget as HTMLInputElement).value);
@@ -98,7 +91,7 @@
 			<div class="landing-roi-control">
 				<label for="sim-waste-without" class="landing-roi-label">Reactive waste rate (%)</label>
 				<div class="landing-roi-meta">
-					<span>{normalizedScenarioWasteWithoutPct}%</span>
+					<span>{scenarioMetrics.normalizedScenarioWasteWithoutPct}%</span>
 				</div>
 				<input
 					id="sim-waste-without"
@@ -113,13 +106,13 @@
 			<div class="landing-roi-control">
 				<label for="sim-waste-with" class="landing-roi-label">Managed waste rate (%)</label>
 				<div class="landing-roi-meta">
-					<span>{normalizedScenarioWasteWithPct}%</span>
+					<span>{scenarioMetrics.normalizedScenarioWasteWithPct}%</span>
 				</div>
 				<input
 					id="sim-waste-with"
 					type="range"
 					min="1"
-					max={Math.max(1, normalizedScenarioWasteWithoutPct - 1)}
+					max={Math.max(1, scenarioMetrics.normalizedScenarioWasteWithoutPct - 1)}
 					step="1"
 					value={scenarioWasteWithPct}
 					oninput={updateWasteWith}
@@ -128,7 +121,7 @@
 			<div class="landing-roi-control">
 				<label for="sim-window" class="landing-roi-label">Decision window (months)</label>
 				<div class="landing-roi-meta">
-					<span>{normalizedScenarioWindowMonths} months</span>
+					<span>{scenarioMetrics.normalizedScenarioWindowMonths} months</span>
 				</div>
 				<input
 					id="sim-window"
@@ -147,12 +140,13 @@
 			<div class="landing-sim-metrics">
 				<div class="landing-sim-metric is-highlight is-primary">
 					<p>Potential monthly recovery</p>
-					<strong>{formatUsd(scenarioWasteRecoveryMonthlyUsd, currencyCode)}</strong>
+					<strong>{formatUsd(scenarioMetrics.scenarioWasteRecoveryMonthlyUsd, currencyCode)}</strong
+					>
 					<span>Recoverable waste from reactive versus managed execution.</span>
 				</div>
 				<div class="landing-sim-metric is-highlight">
-					<p>{normalizedScenarioWindowMonths}-month recovery</p>
-					<strong>{formatUsd(scenarioWasteRecoveryWindowUsd, currencyCode)}</strong>
+					<p>{scenarioMetrics.normalizedScenarioWindowMonths}-month recovery</p>
+					<strong>{formatUsd(scenarioMetrics.scenarioWasteRecoveryWindowUsd, currencyCode)}</strong>
 					<span>Directionally modeled over your selected decision window.</span>
 				</div>
 				<div class="landing-sim-metric is-context">
@@ -170,12 +164,12 @@
 					<progress
 						class="landing-sim-bar-meter landing-sim-bar-meter--reactive"
 						max="100"
-						value={scenarioWithoutBarPct}
+						value={scenarioMetrics.scenarioWithoutBarPct}
 					>
-						{scenarioWithoutBarPct}
+						{scenarioMetrics.scenarioWithoutBarPct}
 					</progress>
 					<div class="landing-sim-bar-value">
-						{formatUsd(scenarioWasteWithoutUsd, currencyCode)}
+						{formatUsd(scenarioMetrics.scenarioWasteWithoutUsd, currencyCode)}
 					</div>
 				</div>
 				<div class="landing-sim-bar-row">
@@ -183,11 +177,13 @@
 					<progress
 						class="landing-sim-bar-meter landing-sim-bar-meter--governed"
 						max="100"
-						value={scenarioWithBarPct}
+						value={scenarioMetrics.scenarioWithBarPct}
 					>
-						{scenarioWithBarPct}
+						{scenarioMetrics.scenarioWithBarPct}
 					</progress>
-					<div class="landing-sim-bar-value">{formatUsd(scenarioWasteWithUsd, currencyCode)}</div>
+					<div class="landing-sim-bar-value">
+						{formatUsd(scenarioMetrics.scenarioWasteWithUsd, currencyCode)}
+					</div>
 				</div>
 			</div>
 			<p class="landing-roi-note">

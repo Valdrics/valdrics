@@ -15,3 +15,4 @@
 @source '../../lib/components/identity/IdentityDiagnosticsSection.svelte';
 @source '../../lib/components/identity/IdentityScimSection.svelte';
 @source '../../lib/components/identity/IdentitySsoSection.svelte';
+@source './SettingsWorkflowProviderFields.svelte';

@@ -42,7 +42,7 @@
       "telemetry_gate_window_valid": true
     }
   },
-  "generated_at": "2026-03-01T16:11:26+00:00",
+  "generated_at": "2026-04-02T17:41:15+00:00",
   "remaining_work_items": [
     "Collect >=2 months production_observed telemetry and refresh PKG/FIN policy evidence.",
     "Move approvals.governance_mode to segregated_owners with distinct finance/product/go-to-market owners."

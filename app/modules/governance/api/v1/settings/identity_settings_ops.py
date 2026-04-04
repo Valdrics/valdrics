@@ -93,6 +93,12 @@ async def update_identity_settings_route(
     logger: Any,
     identity_settings_response_model: Any,
 ) -> Any:
+    if getattr(current_user, "tenant_id", None) is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant context required.",
+        )
+
     tier = normalize_tier_fn(getattr(current_user, "tier", pricing_tier.FREE))
     if payload.scim_enabled and not is_feature_enabled_fn(tier, feature_flag.SCIM):
         raise HTTPException(
@@ -298,6 +304,12 @@ async def rotate_scim_token_route(
     logger: Any,
     rotate_scim_token_response_model: Any,
 ) -> Any:
+    if getattr(current_user, "tenant_id", None) is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Tenant context required.",
+        )
+
     tier = normalize_tier_fn(getattr(current_user, "tier", pricing_tier.FREE))
     if not is_feature_enabled_fn(tier, feature_flag.SCIM):
         raise HTTPException(

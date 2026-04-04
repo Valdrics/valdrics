@@ -7,7 +7,6 @@ including databases, caches, external services, and circuit breakers.
 
 import asyncio
 from collections.abc import Awaitable
-import psutil  # noqa: F401 - retained for tests that monkeypatch psutil symbols
 import structlog
 from typing import Any, Dict, List
 from datetime import datetime, timezone, timedelta
@@ -71,7 +70,9 @@ class HealthService:
             "HEALTH_CHECK_EXTERNAL_TIMEOUT_SECONDS",
             min(float(default_timeout or 2.0), 2.0),
         )
-        raw_timeout = external_timeout if component == "external_services" else default_timeout
+        raw_timeout = (
+            external_timeout if component == "external_services" else default_timeout
+        )
         try:
             timeout = float(raw_timeout)
         except (TypeError, ValueError):
@@ -397,7 +398,8 @@ class HealthService:
                 return {
                     "status": "down",
                     "error": str(exc),
-                    "latency_ms": (asyncio.get_running_loop().time() - start_time) * 1000,
+                    "latency_ms": (asyncio.get_running_loop().time() - start_time)
+                    * 1000,
                     "component": "database",
                 }
 
@@ -529,7 +531,9 @@ class HealthService:
             recoverable_errors=HEALTH_RECOVERABLE_ERRORS,
         )
         if result.get("status") == "unknown" and result.get("error"):
-            logger.error("background_jobs_health_check_failed", error=str(result["error"]))
+            logger.error(
+                "background_jobs_health_check_failed", error=str(result["error"])
+            )
         return result
 
     def _calculate_overall_health(self, check_results: List[Dict[str, Any]]) -> str:

@@ -151,6 +151,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env.compose.dev
+.env.compose.dev.*
 .env.dev
 .env.dev.*
 .env.staging

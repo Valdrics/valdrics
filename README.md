@@ -62,8 +62,8 @@ It connects to your cloud, uncovers waste, explains spend behavior, and gives yo
 
 ### Here's how it works:
 
-1. **Connect** → One-click AWS IAM role setup. Read-only. Zero secrets stored.
-2. **Scan** → Our 11 zombie-detection plugins sweep your account every day.
+1. **Connect** → One-click AWS IAM role setup. Read-only. AWS onboarding avoids long-lived credentials in Valdrics.
+2. **Scan** → Our multi-provider zombie-detection coverage sweeps your account every day.
 3. **Reason** → The LLM brain (GPT-4o, Claude 3.5, Groq, Gemini) analyzes context, not just metrics.
 4. **Act** → Get Slack alerts, approve remediations, and watch your bill shrink.
 
@@ -184,7 +184,7 @@ See configuration details in `docs/integrations/workflow_automation.md`.
 
 We're paranoid, so you don't have to be:
 
-- **Zero-Trust Architecture** — We assume IAM roles via STS. No long-lived credentials.
+- **Zero-Trust Architecture** — AWS uses STS assume-role. Azure/GCP prefer workload identity and encrypt stored credentials at rest when secrets are required.
 - **Read-Only by Default** — Our CloudFormation/Terraform templates grant only `Describe*` and `Get*` permissions.
 - **Human-in-the-Loop** — The AI recommends; _you_ approve the action.
 - **GitOps-First Remediation** — Generate professional Terraform plans (`state rm` and `removed` blocks) to decommission resources via your existing CI/CD.
@@ -198,7 +198,7 @@ We're paranoid, so you don't have to be:
 
 - Python 3.12.x
 - `uv` (recommended for local backend workflows)
-- Docker & Docker Compose
+- Docker with Compose v2 (`docker compose`)
 - An AWS account with:
   - AWS CUR configured to deliver Parquet reports to S3
   - Resource Explorer 2 enabled
@@ -221,7 +221,6 @@ We're paranoid, so you don't have to be:
 git clone https://github.com/Valdrics/valdrics.git
 cd valdrics
 uv sync --python 3.12 --dev
-cp .env.example .env
 ```
 
 For fast local sqlite development, generate the local runtime profile and bootstrap the
@@ -234,13 +233,15 @@ make bootstrap-local-db
 
 `.env.dev` is local-only, runs with `TESTING=false`, and must not be used in staging/production.
 
-For the Postgres/Redis docker path, edit `.env` and add:
+For the Postgres/Redis docker compose path, generate the compose-specific local env file:
 
-```env
-DATABASE_URL=postgresql+asyncpg://...
-OPENAI_API_KEY=sk-...  # or GROQ_API_KEY, etc.
-SUPABASE_JWT_SECRET=your-jwt-secret
+```bash
+make env-compose
 ```
+
+`.env.compose.dev` is local-only, ignored by git, and is the expected input for the
+checked-in `docker compose` workflow. If you need provider keys locally, edit the generated
+file and add values such as `OPENAI_API_KEY`, `GROQ_API_KEY`, or `SLACK_BOT_TOKEN`.
 
 ### 2. Start the Stack
 
@@ -256,13 +257,26 @@ starting the API.
 Full dockerized Postgres/Redis path:
 
 ```bash
-docker-compose up -d
+make docker-up
 ```
+
+Optional observability stack:
+
+```bash
+make observability
+```
+
+Local URLs:
+
+- SQLite + Vite dev path: dashboard on `http://localhost:5174`
+- Docker compose path: dashboard on `http://localhost:3000`
+- Grafana when observability is enabled: `http://localhost:3005`
 
 ### 3. Open the Dashboard
 
 - **API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
-- **Dashboard:** [http://localhost:5174](http://localhost:5174)
+- **Dashboard (sqlite + Vite dev):** [http://localhost:5174](http://localhost:5174)
+- **Dashboard (docker compose):** [http://localhost:3000](http://localhost:3000)
 
 ### 4. Connect Your AWS Account
 
@@ -335,7 +349,7 @@ We're in **active development**. Here's where we are:
 ### ✅ Done
 
 - [x] Multi-tenant AWS onboarding (CloudFormation + Terraform)
-- [x] 11 zombie detection plugins
+- [x] Broad zombie detection coverage across providers
 - [x] Multi-LLM analysis (OpenAI, Claude, Gemini, Groq)
 - [x] Carbon footprint calculator with regional intensity
 - [x] Slack integration (alerts, digests, leaderboards)

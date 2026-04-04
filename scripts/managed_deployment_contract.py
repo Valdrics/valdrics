@@ -73,6 +73,7 @@ MIGRATION_BASE_REQUIRED_OPERATOR_INPUT_KEYS = ("DATABASE_URL",)
 
 RUNTIME_BLOCKER_KEYS = RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS
 KOYEB_DASHBOARD_PUBLIC_ENV_KEYS = (
+    "ORIGIN",
     "PUBLIC_API_URL",
     "PUBLIC_SUPABASE_ANON_KEY",
     "PUBLIC_SUPABASE_URL",
@@ -85,7 +86,9 @@ def contains_placeholder(value: str | None) -> bool:
 
 
 def selected_llm_provider(values: Mapping[str, object]) -> str:
-    normalized = str(values.get("LLM_PROVIDER", DEFAULT_LLM_PROVIDER) or "").strip().lower()
+    normalized = (
+        str(values.get("LLM_PROVIDER", DEFAULT_LLM_PROVIDER) or "").strip().lower()
+    )
     if normalized not in LLM_PROVIDER_ENV_KEY:
         raise ValueError(
             "LLM_PROVIDER must be one of: " + ", ".join(sorted(LLM_PROVIDER_ENV_KEY))

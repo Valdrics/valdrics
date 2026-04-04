@@ -31,21 +31,32 @@ def _request(*, tenant_id=None, auth_header=None):
 def test_context_aware_key_falls_back_to_ip_when_hashing_fails() -> None:
     request = _request(auth_header="Bearer abc")
     with (
-        patch("app.shared.core.rate_limit.hashlib.sha256", side_effect=RuntimeError("boom")),
+        patch(
+            "app.shared.core.rate_limit.hashlib.sha256",
+            side_effect=RuntimeError("boom"),
+        ),
         patch("app.shared.core.rate_limit.resolve_client_ip", return_value="10.0.0.7"),
     ):
         assert rl.context_aware_key(request) == "10.0.0.7"
 
 
 def test_global_limit_key_sanitizes_namespace_and_defaults_to_global() -> None:
-    assert rl.global_limit_key("Enforcement Gate/Prod!")(None) == "global:enforcement_gate_prod_"
+    assert (
+        rl.global_limit_key("Enforcement Gate/Prod!")(None)
+        == "global:enforcement_gate_prod_"
+    )
     assert rl.global_limit_key("   ")(None) == "global:global"
 
 
 def test_get_limiter_logs_break_glass_for_production_without_redis() -> None:
     with (
         patch("app.shared.core.rate_limit._limiter", None),
-        patch("app.shared.core.rate_limit.get_settings", return_value=_settings(ENVIRONMENT="production", ALLOW_IN_MEMORY_RATE_LIMITS=True)),
+        patch(
+            "app.shared.core.rate_limit.get_settings",
+            return_value=_settings(
+                ENVIRONMENT="production", ALLOW_IN_MEMORY_RATE_LIMITS=True
+            ),
+        ),
         patch("app.shared.core.rate_limit.logger") as logger,
     ):
         limiter = rl.get_limiter()
@@ -92,46 +103,66 @@ def test_get_limiter_recreates_when_enabled_state_changes() -> None:
 
 
 @pytest.mark.asyncio
-async def test_check_remediation_rate_limit_denies_when_production_without_redis() -> None:
+async def test_check_remediation_rate_limit_denies_when_production_without_redis() -> (
+    None
+):
     with (
         patch("app.shared.core.rate_limit.get_redis_client", return_value=None),
-        patch("app.shared.core.rate_limit.get_settings", return_value=_settings(ENVIRONMENT="production")),
+        patch(
+            "app.shared.core.rate_limit.get_settings",
+            return_value=_settings(ENVIRONMENT="production"),
+        ),
     ):
-        allowed = await rl.check_remediation_rate_limit("tenant-1", "stop_instance", limit=5)
+        allowed = await rl.check_remediation_rate_limit(
+            "tenant-1", "stop_instance", limit=5
+        )
         assert allowed is False
 
 
 @pytest.mark.asyncio
-async def test_check_remediation_rate_limit_denies_on_redis_error_in_production() -> None:
+async def test_check_remediation_rate_limit_denies_on_redis_error_in_production() -> (
+    None
+):
     redis = AsyncMock()
     redis.incr.side_effect = RuntimeError("redis down")
 
     with (
         patch("app.shared.core.rate_limit.get_redis_client", return_value=redis),
-        patch("app.shared.core.rate_limit.get_settings", return_value=_settings(ENVIRONMENT="staging")),
+        patch(
+            "app.shared.core.rate_limit.get_settings",
+            return_value=_settings(ENVIRONMENT="staging"),
+        ),
     ):
-        allowed = await rl.check_remediation_rate_limit("tenant-1", "stop_instance", limit=5)
+        allowed = await rl.check_remediation_rate_limit(
+            "tenant-1", "stop_instance", limit=5
+        )
         assert allowed is False
 
 
 def test_get_redis_client_returns_none_by_default_in_testing() -> None:
     with patch(
         "app.shared.core.rate_limit.get_settings",
-        return_value=_settings(TESTING=True, REDIS_URL="redis://localhost:6379", ALLOW_REDIS_IN_TESTS=False),
+        return_value=_settings(
+            TESTING=True, REDIS_URL="redis://localhost:6379", ALLOW_REDIS_IN_TESTS=False
+        ),
     ):
         assert rl.get_redis_client() is None
 
 
 def test_get_redis_client_recreates_client_when_event_loop_changes() -> None:
     first_client = MagicMock()
-    first_client._loop = "old-loop"
     second_client = MagicMock()
 
     with (
         patch("app.shared.core.rate_limit._redis_client", first_client),
-        patch("app.shared.core.rate_limit.get_settings", return_value=_settings(REDIS_URL="redis://localhost:6379")),
+        patch("app.shared.core.rate_limit._redis_client_loop_marker", 100),
+        patch("app.shared.core.rate_limit._redis_client_url", "redis://localhost:6379"),
+        patch(
+            "app.shared.core.rate_limit.get_settings",
+            return_value=_settings(REDIS_URL="redis://localhost:6379"),
+        ),
         patch("app.shared.core.rate_limit.from_url", side_effect=[second_client]),
-        patch("asyncio.get_running_loop", return_value="new-loop"),
+        patch("app.shared.core.rate_limit._current_loop_marker", return_value=200),
     ):
         client = rl.get_redis_client()
         assert client is second_client
@@ -139,18 +170,18 @@ def test_get_redis_client_recreates_client_when_event_loop_changes() -> None:
 
 def test_get_redis_client_recreates_when_redis_url_changes() -> None:
     first_client = MagicMock()
-    first_client._loop = "same-loop"
-    first_client._valdrics_redis_url = "redis://one"
     second_client = MagicMock()
 
     with (
         patch("app.shared.core.rate_limit._redis_client", first_client),
+        patch("app.shared.core.rate_limit._redis_client_loop_marker", 100),
+        patch("app.shared.core.rate_limit._redis_client_url", "redis://one"),
         patch(
             "app.shared.core.rate_limit.get_settings",
             return_value=_settings(REDIS_URL="redis://two"),
         ),
         patch("app.shared.core.rate_limit.from_url", side_effect=[second_client]),
-        patch("asyncio.get_running_loop", return_value="same-loop"),
+        patch("app.shared.core.rate_limit._current_loop_marker", return_value=100),
     ):
         client = rl.get_redis_client()
 
@@ -164,11 +195,15 @@ async def test_reset_rate_limit_runtime_clears_singletons_and_closes_client() ->
 
     with (
         patch("app.shared.core.rate_limit._redis_client", redis_client),
+        patch("app.shared.core.rate_limit._redis_client_loop_marker", 100),
+        patch("app.shared.core.rate_limit._redis_client_url", "redis://localhost:6379"),
         patch("app.shared.core.rate_limit._limiter", limiter),
     ):
         await rl.reset_rate_limit_runtime()
         assert rl._redis_client is None
         assert rl._limiter is None
+        assert rl._redis_client_loop_marker is None
+        assert rl._redis_client_url is None
 
     redis_client.aclose.assert_awaited_once()
 
@@ -177,7 +212,9 @@ def test_analysis_limit_returns_original_function_during_testing() -> None:
     def sample() -> str:
         return "ok"
 
-    with patch("app.shared.core.rate_limit.get_settings", return_value=_settings(TESTING=True)):
+    with patch(
+        "app.shared.core.rate_limit.get_settings", return_value=_settings(TESTING=True)
+    ):
         decorated = rl.analysis_limit(sample)
     assert decorated is sample
 
@@ -194,7 +231,10 @@ def test_analysis_limit_delegates_to_limiter_when_not_testing() -> None:
     limiter.limit.return_value = _decorator
 
     with (
-        patch("app.shared.core.rate_limit.get_settings", return_value=_settings(TESTING=False)),
+        patch(
+            "app.shared.core.rate_limit.get_settings",
+            return_value=_settings(TESTING=False),
+        ),
         patch("app.shared.core.rate_limit.get_limiter", return_value=limiter),
     ):
         decorated = rl.analysis_limit(sample)

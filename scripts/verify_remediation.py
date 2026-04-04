@@ -1,7 +1,7 @@
 import asyncio
-import sys
 from decimal import Decimal
 from datetime import date
+
 
 # Mock objects since we don't want a full DB env for a simple logic check
 class Record:
@@ -53,6 +53,7 @@ async def verify_precision() -> int:
 def main(argv: list[str] | None = None) -> int:
     del argv
     return asyncio.run(verify_precision())
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

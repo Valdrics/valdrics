@@ -4,22 +4,15 @@
 	import { invalidateAll } from '$app/navigation';
 	import { api } from '$lib/api';
 	import { edgeApiPath } from '$lib/edgeProxy';
-	import { TimeoutError } from '$lib/fetchWithTimeout';
 	import { clientLogger } from '$lib/logging/client';
-	import type { PolicyDiagnostics, SafetyStatus } from './settingsPageModels';
+	import type { SafetyStatus } from './settingsPageModels';
 	import {
 		INITIAL_ACTIVEOPS_SETTINGS,
 		INITIAL_CARBON_SETTINGS,
 		INITIAL_LLM_SETTINGS,
-		INITIAL_NOTIFICATION_SETTINGS,
 		INITIAL_PROVIDER_MODELS
 	} from './settingsPageInitialState';
 	import { formatValidationIssues } from '$lib/validation/formatValidationIssues';
-	import {
-		applyPostSaveNotificationSettings,
-		buildNotificationSavePayload,
-		mergeLoadedNotificationSettings
-	} from './settingsNotificationState';
 	import './SettingsPageViewContent.css';
 
 	function createModuleLoader<T>(loader: () => Promise<T>): () => Promise<T> {
@@ -43,24 +36,16 @@
 	let { data } = $props();
 	const SETTINGS_REQUEST_TIMEOUT_MS = 8000;
 
-	let loading = $state(false),
-		saving = $state(false);
-	let testing = $state(false),
-		testingJira = $state(false),
-		testingTeams = $state(false),
-		testingWorkflow = $state(false);
-	let diagnosticsLoading = $state(false);
+	let loading = $state(false);
 	let error = $state('');
 	let success = $state('');
 
-	let policyDiagnostics = $state<PolicyDiagnostics | null>(null);
 	let safetyStatus = $state<SafetyStatus | null>(null),
 		loadingSafety = $state(true),
 		resettingSafety = $state(false);
 	let safetyError = $state('');
 	let safetySuccess = $state('');
 
-	let settings = $state({ ...INITIAL_NOTIFICATION_SETTINGS });
 	let llmSettings = $state({ ...INITIAL_LLM_SETTINGS });
 	let loadingLLM = $state(true),
 		savingLLM = $state(false);
@@ -99,23 +84,6 @@
 		return payload.detail || payload.message || fallback;
 	}
 
-	async function loadSettings() {
-		try {
-			const headers = await getHeaders();
-			const res = await getWithTimeout(edgeApiPath('/settings/notifications'), headers);
-			if (res.ok) {
-				const loaded = (await res.json()) as Record<string, unknown>;
-				settings = mergeLoadedNotificationSettings(settings, loaded);
-			}
-		} catch (e) {
-			clientLogger.error('Failed to load settings:', e);
-			error =
-				e instanceof TimeoutError
-					? 'Settings request timed out. Defaults are shown until data refresh succeeds.'
-					: 'Failed to connect to backend service.';
-		}
-	}
-
 	async function savePersona() {
 		savingPersona = true;
 		error = '';
@@ -134,104 +102,6 @@
 			error = err.message || 'Failed to save persona.';
 		} finally {
 			savingPersona = false;
-		}
-	}
-
-	async function saveSettings() {
-		saving = true;
-		error = '';
-		success = '';
-		try {
-			const { NotificationSettingsSchema } = await loadSettingsSchemas();
-			const payload = buildNotificationSavePayload(settings);
-			const validated = NotificationSettingsSchema.parse(payload);
-			const headers = await getHeaders();
-			const res = await api.put(edgeApiPath('/settings/notifications'), validated, { headers });
-			if (!res.ok) {
-				throw new Error(await getApiErrorMessage(res, 'Failed to save settings'));
-			}
-			settings = applyPostSaveNotificationSettings(settings, validated);
-			success = 'General settings saved!';
-			setTimeout(() => (success = ''), 3000);
-		} catch (e) {
-			error = formatValidationIssues(e, false);
-		} finally {
-			saving = false;
-		}
-	}
-
-	async function runNotificationTest(
-		path: string,
-		successMessage: string,
-		setLoadingState: (value: boolean) => void,
-		fallbackMessage: string
-	) {
-		setLoadingState(true);
-		error = '';
-		try {
-			const headers = await getHeaders();
-			const res = await api.post(edgeApiPath(path), {}, { headers });
-			if (!res.ok) {
-				throw new Error(await getApiErrorMessage(res, fallbackMessage));
-			}
-			success = successMessage;
-			setTimeout(() => (success = ''), 3000);
-		} catch (e) {
-			const err = e as Error;
-			error = err.message;
-		} finally {
-			setLoadingState(false);
-		}
-	}
-
-	const testSlack = () =>
-		runNotificationTest(
-			'/settings/notifications/test-slack',
-			'Test notification sent to Slack!',
-			(value) => (testing = value),
-			'Failed to send test notification'
-		);
-	const testJira = () =>
-		runNotificationTest(
-			'/settings/notifications/test-jira',
-			'Test issue created in Jira!',
-			(value) => (testingJira = value),
-			'Failed to send Jira test issue'
-		);
-	const testTeams = () =>
-		runNotificationTest(
-			'/settings/notifications/test-teams',
-			'Test notification sent to Teams!',
-			(value) => (testingTeams = value),
-			'Failed to send Teams test notification'
-		);
-	const testWorkflowDispatch = () =>
-		runNotificationTest(
-			'/settings/notifications/test-workflow',
-			'Workflow test event dispatched!',
-			(value) => (testingWorkflow = value),
-			'Failed to dispatch workflow test event'
-		);
-
-	async function runPolicyDiagnostics() {
-		diagnosticsLoading = true;
-		error = '';
-		try {
-			const headers = await getHeaders();
-			const res = await api.get(edgeApiPath('/settings/notifications/policy-diagnostics'), {
-				headers
-			});
-			if (!res.ok) {
-				throw new Error(await getApiErrorMessage(res, 'Failed to run policy diagnostics'));
-			}
-			policyDiagnostics = await res.json();
-			success = 'Policy diagnostics refreshed.';
-			setTimeout(() => (success = ''), 2000);
-		} catch (e) {
-			const err = e as Error;
-			error = err.message;
-		} finally {
-			diagnosticsLoading = false;
 		}
 	}
 
@@ -444,7 +314,6 @@
 
 	onMount(() => {
 		if (data.user) {
-			void loadSettings();
 			void loadCarbonSettings();
 		} else {
 			loading = false;
@@ -479,19 +348,6 @@
 		safetyError,
 		safetySuccess,
 		safetyStatus,
-		testing,
-		testingJira,
-		testingTeams,
-		testingWorkflow,
-		diagnosticsLoading,
-		policyDiagnostics,
-		testSlack,
-		testJira,
-		testTeams,
-		testWorkflowDispatch,
-		runPolicyDiagnostics,
-		saveSettings,
-		saving,
 		onRevealDeferredSections: ensureDeferredSettingsData
 	});
 </script>
@@ -515,6 +371,5 @@
 		bind:carbonSettings
 		bind:llmSettings
 		bind:activeOpsSettings
-		bind:settings
 	/>
 {/await}

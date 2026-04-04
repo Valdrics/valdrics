@@ -24,14 +24,38 @@ def test_local_docs_point_sqlite_users_to_bootstrap_not_alembic_history() -> Non
     ).read_text(encoding="utf-8")
 
     assert "make env-dev" in readme
+    assert "make env-compose" in readme
     assert "make bootstrap-local-db" in readme
+    assert "make docker-up" in readme
     assert "`TESTING=false`" in readme
+    assert ".env.compose.dev" in readme
     assert "cp .env.dev .env" not in readme
+    assert "docker-compose up -d" not in readme
+    assert "Zero secrets stored." not in readme
     assert "historical Alembic chain" in readme
 
     assert "make bootstrap-local-db" in db_overview
     assert "Do not replay the historical Alembic graph" in db_overview
     assert "against sqlite" in db_overview
+
+
+def test_local_compose_targets_require_generated_env_and_compose_v2() -> None:
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+
+    assert "make env-compose" in makefile
+    assert "docker compose --env-file .env.compose.dev up -d" in makefile
+    assert "docker compose --env-file .env.compose.dev down" in makefile
+    assert (
+        "docker compose --env-file .env.compose.dev -f docker-compose.observability.yml up -d"
+        in makefile
+    )
+    assert (
+        "docker compose --env-file .env.compose.dev -f docker-compose.observability.yml down"
+        in makefile
+    )
+    assert "docker-compose -f docker-compose.observability.yml down" not in makefile
+    assert "admin/valdrics" not in makefile
+    assert "GRAFANA_PASSWORD in .env.compose.dev" in makefile
 
 
 def test_sqlite_alembic_replay_is_explicitly_blocked_for_local_sqlite() -> None:
@@ -44,9 +68,9 @@ def test_sqlite_alembic_replay_is_explicitly_blocked_for_local_sqlite() -> None:
 
 
 def test_runtime_config_has_no_branding_compat_normalizer() -> None:
-    config_validation = (
-        REPO_ROOT / "app/shared/core/config_validation.py"
-    ).read_text(encoding="utf-8")
+    config_validation = (REPO_ROOT / "app/shared/core/config_validation.py").read_text(
+        encoding="utf-8"
+    )
     config = (REPO_ROOT / "app/shared/core/config.py").read_text(encoding="utf-8")
 
     assert "normalize_branding" not in config_validation

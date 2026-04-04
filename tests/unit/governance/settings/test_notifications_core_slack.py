@@ -37,6 +37,27 @@ async def test_get_notification_settings_creates_default(
 
 
 @pytest.mark.asyncio
+async def test_get_notification_settings_requires_tenant_context(
+    async_client: AsyncClient,
+    app,
+    make_current_user,
+    override_current_user,
+) -> None:
+    with override_current_user(
+        app,
+        make_current_user(
+            role=UserRole.ADMIN,
+            tier=PricingTier.GROWTH,
+            tenant_id=None,
+        ),
+    ):
+        response = await async_client.get("/api/v1/settings/notifications")
+
+    assert response.status_code == 403
+    assert "Tenant context required" in response.json()["error"]
+
+
+@pytest.mark.asyncio
 async def test_update_notification_settings(
     async_client: AsyncClient,
     db,
@@ -99,6 +120,31 @@ async def test_update_notification_settings_creates_if_missing(
     data = response.json()
     assert data["slack_channel_override"] == "#alerts"
     assert data["digest_schedule"] == "weekly"
+
+
+@pytest.mark.asyncio
+async def test_update_notification_settings_requires_tenant_context(
+    async_client: AsyncClient,
+    app,
+    make_current_user,
+    override_current_user,
+    build_notification_payload,
+) -> None:
+    with override_current_user(
+        app,
+        make_current_user(
+            role=UserRole.ADMIN,
+            tier=PricingTier.GROWTH,
+            tenant_id=None,
+        ),
+    ):
+        response = await async_client.put(
+            "/api/v1/settings/notifications",
+            json=build_notification_payload(),
+        )
+
+    assert response.status_code == 403
+    assert "Tenant context required" in response.json()["error"]
 
 
 @pytest.mark.asyncio

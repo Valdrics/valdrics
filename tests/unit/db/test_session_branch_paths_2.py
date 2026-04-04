@@ -596,12 +596,18 @@ def test_check_rls_policy_additional_branch_paths() -> None:
     conn = MagicMock()
     conn.info = {"rls_context_set": True}
 
-    with patch.object(session_mod, "settings", SimpleNamespace(TESTING=True, ENFORCE_RLS_IN_TESTS=False)):
+    with patch(
+        "app.shared.db.session.get_settings",
+        return_value=SimpleNamespace(TESTING=True, ENFORCE_RLS_IN_TESTS=False),
+    ):
         stmt, params = session_mod.check_rls_policy(conn, None, "SELECT * FROM x", {}, None, False)
         assert stmt == "SELECT * FROM x"
         assert params == {}
 
-    with patch.object(session_mod, "settings", SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True)):
+    with patch(
+        "app.shared.db.session.get_settings",
+        return_value=SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True),
+    ):
         stmt2, _ = session_mod.check_rls_policy(conn, None, "BEGIN", {}, None, False)
         assert stmt2 == "BEGIN"
         stmt3, _ = session_mod.check_rls_policy(conn, None, "SELECT * FROM t", {}, None, False)
@@ -609,12 +615,18 @@ def test_check_rls_policy_additional_branch_paths() -> None:
 
     conn_false = MagicMock()
     conn_false.info = {"rls_context_set": False}
-    with patch.object(session_mod, "settings", SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True)):
+    with patch(
+        "app.shared.db.session.get_settings",
+        return_value=SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True),
+    ):
         with pytest.raises(ValdricsException):
             session_mod.check_rls_policy(conn_false, None, "   ", {}, None, False)
 
     with (
-        patch.object(session_mod, "settings", SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True)),
+        patch(
+            "app.shared.db.session.get_settings",
+            return_value=SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True),
+        ),
         patch.object(session_mod, "RLS_CONTEXT_MISSING") as mock_metric,
         patch("app.shared.db.session.logger") as mock_logger,
     ):
@@ -625,10 +637,9 @@ def test_check_rls_policy_additional_branch_paths() -> None:
 
     conn_ambiguous = MagicMock()
     conn_ambiguous.info = {"rls_context_set": None}
-    with patch.object(
-        session_mod,
-        "settings",
-        SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True),
+    with patch(
+        "app.shared.db.session.get_settings",
+        return_value=SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True),
     ):
         with pytest.raises(ValdricsException):
             session_mod.check_rls_policy(
@@ -637,10 +648,9 @@ def test_check_rls_policy_additional_branch_paths() -> None:
 
     conn_system = MagicMock()
     conn_system.info = {"rls_context_set": None, "rls_system_context": True}
-    with patch.object(
-        session_mod,
-        "settings",
-        SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True),
+    with patch(
+        "app.shared.db.session.get_settings",
+        return_value=SimpleNamespace(TESTING=False, ENFORCE_RLS_IN_TESTS=True),
     ):
         stmt_system, _ = session_mod.check_rls_policy(
             conn_system, None, "SELECT * FROM exchange_rates", {}, None, False

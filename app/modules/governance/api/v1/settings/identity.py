@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import secrets
 from datetime import datetime, timezone
-from typing import cast
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -105,6 +104,15 @@ def _normalize_domains(domains: list[str]) -> list[str]:
 def _generate_scim_token() -> str:
     # URL-safe and long enough to withstand brute force.
     return secrets.token_urlsafe(48)
+
+
+def _require_tenant_id(current_user: CurrentUser) -> UUID:
+    if current_user.tenant_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Tenant context required.",
+        )
+    return current_user.tenant_id
 
 
 async def _get_identity_settings_snapshot(
@@ -277,8 +285,9 @@ async def get_identity_settings(
     """
     Get identity settings for this tenant.
     """
+    tenant_id = _require_tenant_id(current_user)
     identity = await _get_identity_settings_snapshot(
-        db, tenant_id=cast(UUID, current_user.tenant_id)
+        db, tenant_id=tenant_id
     )
     return IdentitySettingsResponse(
         sso_enabled=bool(identity.sso_enabled),
@@ -315,8 +324,9 @@ async def get_identity_diagnostics(
     - Token rotation hygiene signals
     """
     tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
+    tenant_id = _require_tenant_id(current_user)
     identity = await _get_identity_settings_snapshot(
-        db, tenant_id=cast(UUID, current_user.tenant_id)
+        db, tenant_id=tenant_id
     )
     payload = _build_identity_diagnostics_payload_impl(
         identity=identity,
@@ -354,8 +364,9 @@ async def get_sso_federation_validation(
     """
     tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
     settings = get_settings()
+    tenant_id = _require_tenant_id(current_user)
     identity = await _get_identity_settings_snapshot(
-        db, tenant_id=cast(UUID, current_user.tenant_id)
+        db, tenant_id=tenant_id
     )
     payload = _build_sso_federation_validation_payload_impl(
         identity=identity,
@@ -398,11 +409,12 @@ async def test_scim_token(
     This never returns the stored token. It only verifies whether the submitted token matches the tenant-scoped token.
     """
     tier = normalize_tier(getattr(current_user, "tier", PricingTier.FREE))
+    tenant_id = _require_tenant_id(current_user)
     if not is_feature_enabled(tier, FeatureFlag.SCIM):
         raise HTTPException(status_code=403, detail="SCIM requires Enterprise tier.")
 
     stmt = select(TenantIdentitySettings).where(
-        TenantIdentitySettings.tenant_id == current_user.tenant_id
+        TenantIdentitySettings.tenant_id == tenant_id
     )
     identity = (await db.execute(stmt)).scalar_one_or_none()
     if not identity or not bool(identity.scim_enabled):

@@ -196,3 +196,48 @@ async def test_update_carbon_settings_requires_recipients_when_enabled(
         assert response.status_code == 422
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_get_carbon_settings_requires_tenant_context(async_client: AsyncClient, app):
+    mock_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        email="platform-carbon@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.ENTERPRISE,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.get("/api/v1/settings/carbon")
+        assert response.status_code == 403
+        assert "tenant context required" in str(response.json()).lower()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_update_carbon_settings_requires_tenant_context(
+    async_client: AsyncClient, app
+):
+    mock_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        email="platform-carbon-write@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.ENTERPRISE,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.put(
+            "/api/v1/settings/carbon",
+            json={
+                "carbon_budget_kg": 150.0,
+                "alert_threshold_percent": 75,
+                "default_region": "global",
+            },
+        )
+        assert response.status_code == 403
+        assert "tenant context required" in str(response.json()).lower()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { load } from './+page';
+import { load } from './+page.server';
 import { DEFAULT_PRICING_PLANS } from './plans';
 
 vi.mock('$env/static/public', () => ({

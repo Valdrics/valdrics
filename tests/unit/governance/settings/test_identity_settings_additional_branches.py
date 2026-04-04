@@ -10,6 +10,7 @@ from app.models.tenant import Tenant, User, UserRole
 from app.models.tenant_identity_settings import TenantIdentitySettings
 from app.shared.core.auth import create_access_token
 from app.shared.core.security import generate_secret_blind_index
+from app.shared.core.pricing import PricingTier
 
 
 async def _seed_admin(
@@ -99,6 +100,51 @@ async def test_identity_sso_validation_default_non_federated_path(
     assert checks["sso.federation_enabled"]["severity"] == "info"
     assert checks["supabase.expected_redirect_url_computed"]["passed"] is True
     assert checks["valdrics.discovery_endpoint_computed"]["passed"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/api/v1/settings/identity"),
+        ("get", "/api/v1/settings/identity/diagnostics"),
+        ("get", "/api/v1/settings/identity/sso/validation"),
+        ("put", "/api/v1/settings/identity"),
+        ("post", "/api/v1/settings/identity/rotate-scim-token"),
+        ("post", "/api/v1/settings/identity/scim/test-token"),
+    ],
+)
+async def test_identity_routes_require_tenant_context(
+    async_client,
+    app,
+    make_current_user,
+    override_current_user,
+    method: str,
+    path: str,
+) -> None:
+    user = make_current_user(
+        role=UserRole.ADMIN,
+        tier=PricingTier.ENTERPRISE,
+        tenant_id=None,
+        email="platform-identity@valdrics.io",
+    )
+
+    request_json = None
+    if method == "put":
+        request_json = {
+            "sso_enabled": False,
+            "allowed_email_domains": [],
+            "scim_enabled": False,
+        }
+    elif path.endswith("/scim/test-token"):
+        request_json = {"scim_token": "tenant-scim-super-secret"}
+
+    with override_current_user(app, user):
+        request_kwargs = {"json": request_json} if request_json is not None else {}
+        response = await getattr(async_client, method)(path, **request_kwargs)
+
+    assert response.status_code == 403
+    assert "tenant context required" in str(response.json()).lower()
 
 
 @pytest.mark.asyncio

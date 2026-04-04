@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
 import math
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
@@ -72,7 +71,9 @@ def _window_bounds(
         raise ValueError("end date must be >= start date")
     start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
     # Exclusive upper bound for robust range predicates.
-    end_dt = datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=timezone.utc)
+    end_dt = datetime.combine(
+        end_date + timedelta(days=1), time.min, tzinfo=timezone.utc
+    )
     return start_dt, end_dt
 
 
@@ -127,7 +128,7 @@ def _percentile(values: list[float], percentile: float) -> float:
     if percentile >= 100.0:
         return float(max(values))
     ordered = sorted(float(v) for v in values)
-    rank = ((percentile / 100.0) * (len(ordered) - 1))
+    rank = (percentile / 100.0) * (len(ordered) - 1)
     lower = int(math.floor(rank))
     upper = int(math.ceil(rank))
     if lower == upper:
@@ -274,7 +275,9 @@ def _build_snapshot_payload(
             free_cost_pct_of_starter_mrr <= FREE_TIER_MAX_COST_PCT_OF_STARTER_MRR
         )
     else:
-        free_cost_pct_of_starter_mrr = 0.0 if free_total_llm_cost_usd <= 0.0 else float("inf")
+        free_cost_pct_of_starter_mrr = (
+            0.0 if free_total_llm_cost_usd <= 0.0 else float("inf")
+        )
         free_tier_margin_guarded = free_total_llm_cost_usd <= 0.0
     free_cost_pct_payload: float | None = None
     if math.isfinite(free_cost_pct_of_starter_mrr):
@@ -297,12 +300,16 @@ def _build_snapshot_payload(
         "tier_llm_usage": tier_llm_rows,
         "free_tier_compute_guardrails": free_tier_guardrails,
         "free_tier_margin_watch": {
-            "free_total_tenants": _to_non_negative_int(free_subscription["total_tenants"]),
+            "free_total_tenants": _to_non_negative_int(
+                free_subscription["total_tenants"]
+            ),
             "free_active_subscriptions": _to_non_negative_int(
                 free_subscription["active_subscriptions"]
             ),
             "free_total_llm_cost_usd": round(free_total_llm_cost_usd, 6),
-            "free_p95_tenant_monthly_cost_usd": round(_to_float(free_llm.get("p95")), 6),
+            "free_p95_tenant_monthly_cost_usd": round(
+                _to_float(free_llm.get("p95")), 6
+            ),
             "starter_gross_mrr_usd": round(starter_gross_mrr_usd, 6),
             "free_llm_cost_pct_of_starter_gross_mrr": free_cost_pct_payload,
             "max_allowed_pct_of_starter_gross_mrr": FREE_TIER_MAX_COST_PCT_OF_STARTER_MRR,

@@ -4,7 +4,7 @@ Carbon Settings API
 Manages carbon budget and sustainability settings for tenants.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import (
     BaseModel,
     Field,
@@ -111,6 +111,9 @@ async def get_carbon_settings(
 
     Returns default settings if none exist.
     """
+    if current_user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context required.")
+
     result = await db.execute(
         select(CarbonSettings).where(CarbonSettings.tenant_id == current_user.tenant_id)
     )
@@ -139,6 +142,9 @@ async def update_carbon_settings(
 
     Creates settings if none exist.
     """
+    if current_user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context required.")
+
     result = await db.execute(
         select(CarbonSettings).where(CarbonSettings.tenant_id == current_user.tenant_id)
     )

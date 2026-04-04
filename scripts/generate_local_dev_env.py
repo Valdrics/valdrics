@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import base64
-import hashlib
 from pathlib import Path
 import sys
 
@@ -21,6 +19,11 @@ from scripts.env_generation_common import (
     resolve_default_path_from_root as _resolve_default_path_from_root,
     ensure_parent_dir as _ensure_parent_dir_shared,
     stage_text_file as _stage_text_file,
+)
+from scripts.local_env_generation_shared import (
+    derive_b64,
+    derive_hex,
+    derive_urlsafe_b64,
 )
 
 DEFAULT_TEMPLATE_PATH = Path(".env.example")
@@ -64,25 +67,6 @@ def _stage_output_file(output_path: Path, rendered: str) -> Path:
     return _stage_text_file(output_path, rendered)
 
 
-def _derive_digest(seed: str, key: str) -> bytes:
-    return hashlib.sha256(f"{seed}:{key}".encode("utf-8")).digest()
-
-
-def _derive_hex(seed: str, key: str, *, length: int = 64) -> str:
-    material = hashlib.sha512(f"{seed}:{key}".encode("utf-8")).hexdigest()
-    while len(material) < length:
-        material += hashlib.sha512(material.encode("utf-8")).hexdigest()
-    return material[:length]
-
-
-def _derive_urlsafe_b64(seed: str, key: str) -> str:
-    return base64.urlsafe_b64encode(_derive_digest(seed, key)).decode("utf-8")
-
-
-def _derive_b64(seed: str, key: str) -> str:
-    return base64.b64encode(_derive_digest(seed, key)).decode("utf-8")
-
-
 def _build_overrides(seed: str) -> dict[str, str]:
     return {
         "APP_NAME": "Valdrics",
@@ -99,20 +83,23 @@ def _build_overrides(seed: str) -> dict[str, str]:
         "LOCAL_SQLITE_BOOTSTRAP": "true",
         "ENABLE_SCHEDULER": "false",
         "REDIS_URL": "",
-        "CSRF_SECRET_KEY": _derive_hex(seed, "CSRF_SECRET_KEY"),
-        "ENCRYPTION_KEY": _derive_urlsafe_b64(seed, "ENCRYPTION_KEY"),
-        "SUPABASE_JWT_SECRET": _derive_hex(seed, "SUPABASE_JWT_SECRET"),
-        "KDF_SALT": _derive_b64(seed, "KDF_SALT"),
-        "ADMIN_API_KEY": _derive_hex(seed, "ADMIN_API_KEY"),
-        "INTERNAL_JOB_SECRET": _derive_hex(seed, "INTERNAL_JOB_SECRET"),
-        "ENFORCEMENT_APPROVAL_TOKEN_SECRET": _derive_hex(
+        "POSTGRES_PASSWORD": "",
+        "GRAFANA_PASSWORD": "",
+        "CSRF_SECRET_KEY": derive_hex(seed, "CSRF_SECRET_KEY"),
+        "ENCRYPTION_KEY": derive_urlsafe_b64(seed, "ENCRYPTION_KEY"),
+        "SUPABASE_JWT_SECRET": derive_hex(seed, "SUPABASE_JWT_SECRET"),
+        "KDF_SALT": derive_b64(seed, "KDF_SALT"),
+        "ADMIN_API_KEY": derive_hex(seed, "ADMIN_API_KEY"),
+        "INTERNAL_JOB_SECRET": derive_hex(seed, "INTERNAL_JOB_SECRET"),
+        "ENFORCEMENT_APPROVAL_TOKEN_SECRET": derive_hex(
             seed, "ENFORCEMENT_APPROVAL_TOKEN_SECRET"
         ),
-        "ENFORCEMENT_EXPORT_SIGNING_SECRET": _derive_hex(
+        "ENFORCEMENT_EXPORT_SIGNING_SECRET": derive_hex(
             seed, "ENFORCEMENT_EXPORT_SIGNING_SECRET"
         ),
         "SUPABASE_URL": "https://local-dev.supabase.co",
     }
+
 
 def _render_env(template_lines: list[str], overrides: dict[str, str]) -> str:
     rendered = render_env(template_lines, overrides)
@@ -139,7 +126,9 @@ def generate_local_dev_env(
             "output_path must not overwrite local-dev source or tracked template files"
         )
     if not template_path.exists():
-        raise FileNotFoundError(f"Template file does not exist: {template_path.as_posix()}")
+        raise FileNotFoundError(
+            f"Template file does not exist: {template_path.as_posix()}"
+        )
     if not template_path.is_file():
         raise ValueError(f"template_path must be a file: {template_path.as_posix()}")
     if output_path.exists() and not output_path.is_file():

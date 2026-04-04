@@ -16,6 +16,16 @@ def test_valdrics_disposition_pack_contains_register_and_template() -> None:
     assert TEMPLATE_PATH.exists(), str(TEMPLATE_PATH)
 
 
+def test_valdrics_disposition_pack_avoids_machine_specific_paths() -> None:
+    register_raw = REGISTER_PATH.read_text(encoding="utf-8")
+    template_raw = TEMPLATE_PATH.read_text(encoding="utf-8")
+
+    assert "/home/" not in register_raw
+    assert "/home/" not in template_raw
+    assert ".venv/bin/python3" not in register_raw
+    assert ".venv/bin/python3" not in template_raw
+
+
 def test_valdrics_disposition_register_pack_verifies() -> None:
     assert (
         verify_disposition_register(

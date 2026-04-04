@@ -44,6 +44,11 @@ def test_verify_operational_readiness_returns_expected_prelaunch_summary() -> No
     assert len(remaining) == 2
     assert any("production_observed telemetry" in item for item in remaining)
     assert any("segregated_owners" in item for item in remaining)
+    assert summary["artifacts"] == {
+        "policy_decisions_path": "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json",
+        "finance_guardrails_path": "docs/ops/evidence/finance_guardrails_2026-02-27.json",
+        "telemetry_snapshot_path": "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json",
+    }
 
 
 def test_verify_operational_readiness_can_fail_on_required_production_telemetry() -> None:
