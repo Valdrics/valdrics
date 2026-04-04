@@ -9,7 +9,7 @@
 	} from '$lib/entitlements';
 	import OpsStatusBanners from './OpsStatusBanners.svelte';
 	import { buildOpsOperationalInitialState } from './opsOperationalState';
-	import { createOpsOperationalCoreActions } from './opsOperationalCoreActions';
+	import { createOpsOperationalUnitActions } from './opsOperationalUnitActions';
 	import {
 		acceptanceBadgeClass,
 		closeStatusBadgeClass,
@@ -101,6 +101,12 @@
 		downloadRestatementCsv: () => Promise<void>;
 	};
 
+	type OpsReliabilityActions = {
+		loadReliabilityData: (options?: { silent?: boolean }) => Promise<void>;
+		refreshIngestionSla: () => Promise<void>;
+		refreshJobSlo: () => Promise<void>;
+	};
+
 	let { data } = $props();
 	const opsState = $state(buildOpsOperationalInitialState());
 	let reliabilityAnchor: HTMLDivElement | null = $state(null);
@@ -108,28 +114,29 @@
 	let reliabilityVisible = $state(false);
 	let advancedEvidenceVisible = $state(false);
 	let reliabilityLoaded = $state(false);
-	let advancedEvidenceLoaded = $state(false);
 	let acceptanceActions = $state<OpsAcceptanceActions | null>(null);
 	let closeActions = $state<OpsCloseActions | null>(null);
+	let reliabilityActions = $state<OpsReliabilityActions | null>(null);
 	let advancedActionsPromise: Promise<void> | null = null;
+	let reliabilityActionsPromise: Promise<OpsReliabilityActions> | null = null;
 	let opsAcceptanceActionsModulePromise: Promise<
 		typeof import('./opsOperationalAcceptanceActions')
 	> | null = null;
 	let opsCloseActionsModulePromise: Promise<typeof import('./opsOperationalCloseActions')> | null =
 		null;
+	let opsReliabilityActionsModulePromise: Promise<
+		typeof import('./opsOperationalReliabilityActions')
+	> | null = null;
 	const canAccessJobSlo = () => canAccessOpsJobSlo(data.subscription?.tier, data.profile?.role);
 	const canAccessAcceptanceKpis = () =>
 		canAccessOpsAcceptanceEvidence(data.subscription?.tier, data.profile?.role);
 	const canAccessCloseWorkflow = () =>
 		canAccessOpsCloseWorkflow(data.subscription?.tier, data.profile?.role);
 
-	const coreActions = createOpsOperationalCoreActions({
+	const unitActions = createOpsOperationalUnitActions({
 		getData: () => data,
 		state: opsState,
-		requestTimeoutMs: OPS_REQUEST_TIMEOUT_MS,
-		access: {
-			jobSlo: canAccessJobSlo
-		}
+		requestTimeoutMs: OPS_REQUEST_TIMEOUT_MS
 	});
 
 	const formatUsdSafe = (value: number | null | undefined): string => formatUsd(Number(value ?? 0));
@@ -157,6 +164,14 @@
 		}
 
 		return opsCloseActionsModulePromise;
+	}
+
+	function loadOpsReliabilityActionsModule() {
+		if (!opsReliabilityActionsModulePromise) {
+			opsReliabilityActionsModulePromise = import('./opsOperationalReliabilityActions');
+		}
+
+		return opsReliabilityActionsModulePromise;
 	}
 
 	async function ensureAdvancedActionModules(): Promise<void> {
@@ -188,15 +203,56 @@
 		await advancedActionsPromise;
 	}
 
+	async function ensureReliabilityActions(): Promise<OpsReliabilityActions> {
+		if (reliabilityActions) {
+			return reliabilityActions;
+		}
+
+		if (!reliabilityActionsPromise) {
+			reliabilityActionsPromise = loadOpsReliabilityActionsModule()
+				.then((module) =>
+					module.createOpsOperationalReliabilityActions({
+						getData: () => data,
+						state: opsState,
+						requestTimeoutMs: OPS_REQUEST_TIMEOUT_MS,
+						access: {
+							jobSlo: canAccessJobSlo
+						}
+					})
+				)
+				.then((actions) => {
+					reliabilityActions = actions;
+					return actions;
+				})
+				.catch((error) => {
+					reliabilityActionsPromise = null;
+					throw error;
+				});
+		}
+
+		return reliabilityActionsPromise;
+	}
+
+	async function refreshIngestionSla() {
+		const actions = await ensureReliabilityActions();
+		await actions.refreshIngestionSla();
+	}
+
+	async function refreshJobSlo() {
+		const actions = await ensureReliabilityActions();
+		await actions.refreshJobSlo();
+	}
+
 	$effect(() => {
 		if (!reliabilityVisible || reliabilityLoaded) return;
 		reliabilityLoaded = true;
-		void coreActions.loadReliabilityData({ silent: true });
+		void ensureReliabilityActions().then((actions) =>
+			actions.loadReliabilityData({ silent: true })
+		);
 	});
 
 	$effect(() => {
-		if (!advancedEvidenceVisible || advancedEvidenceLoaded) return;
-		advancedEvidenceLoaded = true;
+		if (!advancedEvidenceVisible) return;
 		void ensureAdvancedActionModules()
 			.then(() => {
 				void acceptanceActions?.preloadAcceptanceEvidence({
@@ -208,7 +264,7 @@
 				}
 			})
 			.catch(() => {
-				advancedEvidenceLoaded = false;
+				advancedActionsPromise = null;
 			});
 	});
 
@@ -216,8 +272,7 @@
 		if (import.meta.env.MODE === 'test' || typeof IntersectionObserver === 'undefined') {
 			reliabilityVisible = true;
 			advancedEvidenceVisible = true;
-			void ensureAdvancedActionModules();
-			void coreActions.loadPrimaryOperationalData();
+			void unitActions.loadPrimaryOperationalData();
 			return;
 		}
 
@@ -249,7 +304,7 @@
 			advancedObserver.observe(advancedEvidenceAnchor);
 		}
 
-		void coreActions.loadPrimaryOperationalData();
+		void unitActions.loadPrimaryOperationalData();
 		return () => {
 			reliabilityObserver.disconnect();
 			advancedObserver.disconnect();
@@ -270,9 +325,9 @@
 		<OpsUnitEconomicsSection
 			{...{
 				refreshingUnitEconomics: opsState.refreshingUnitEconomics,
-				refreshUnitEconomics: coreActions.refreshUnitEconomics,
+				refreshUnitEconomics: unitActions.refreshUnitEconomics,
 				unitEconomics: opsState.unitEconomics,
-				saveUnitEconomicsSettings: coreActions.saveUnitEconomicsSettings,
+				saveUnitEconomicsSettings: unitActions.saveUnitEconomicsSettings,
 				savingUnitSettings: opsState.savingUnitSettings,
 				formatUsd: formatUsdSafe,
 				formatNumber: formatNumberSafe,
@@ -298,7 +353,7 @@
 				<OpsIngestionSlaSection
 					{...{
 						refreshingIngestionSla: opsState.refreshingIngestionSla,
-						refreshIngestionSla: coreActions.refreshIngestionSla,
+						refreshIngestionSla,
 						ingestionSla: opsState.ingestionSla,
 						ingestionSlaBadgeClass,
 						formatNumber: formatNumberSafe,
@@ -324,7 +379,7 @@
 					<OpsJobSloSection
 						{...{
 							refreshingJobSlo: opsState.refreshingJobSlo,
-							refreshJobSlo: coreActions.refreshJobSlo,
+							refreshJobSlo,
 							jobSlo: opsState.jobSlo,
 							jobSloBadgeClass,
 							jobSloMetricBadgeClass,
@@ -500,6 +555,16 @@
 				<div class="skeleton h-8 w-56 mb-4"></div>
 				<div class="skeleton h-56 rounded-2xl"></div>
 			</div>
+			<div class="card">
+				<div class="skeleton h-8 w-64 mb-4"></div>
+				<div class="skeleton h-56 rounded-2xl"></div>
+			</div>
+			{#if canAccessCloseWorkflow()}
+				<div class="card">
+					<div class="skeleton h-8 w-64 mb-4"></div>
+					<div class="skeleton h-56 rounded-2xl"></div>
+				</div>
+			{/if}
 		{/if}
 	</div>
 </div>

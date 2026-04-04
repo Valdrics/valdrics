@@ -72,6 +72,14 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _artifact_label(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(_repo_root()).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
 def _ensure_output_parent_dir(output_path: Path) -> None:
     current = output_path.parent
     while True:
@@ -200,9 +208,9 @@ def verify_operational_readiness(
     summary: dict[str, Any] = {
         "generated_at": _utc_now_iso(),
         "artifacts": {
-            "policy_decisions_path": str(policy_decisions_path),
-            "finance_guardrails_path": str(finance_guardrails_path),
-            "telemetry_snapshot_path": str(telemetry_snapshot_path),
+            "policy_decisions_path": _artifact_label(policy_decisions_path),
+            "finance_guardrails_path": _artifact_label(finance_guardrails_path),
+            "telemetry_snapshot_path": _artifact_label(telemetry_snapshot_path),
         },
         "gates": {
             "policy": policy_gates,

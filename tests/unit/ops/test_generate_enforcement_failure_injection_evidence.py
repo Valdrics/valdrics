@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 import subprocess
 from unittest.mock import MagicMock
@@ -65,8 +64,12 @@ def test_generate_evidence_rejects_protected_output_collisions(
     repo_root = Path(__file__).resolve().parents[3]
     output = repo_root / relative_output
 
-    def _unexpected_run_scenario(*args: object, **kwargs: object) -> tuple[dict[str, object], bool]:
-        raise AssertionError("scenario execution should not run for protected output paths")
+    def _unexpected_run_scenario(
+        *args: object, **kwargs: object
+    ) -> tuple[dict[str, object], bool]:
+        raise AssertionError(
+            "scenario execution should not run for protected output paths"
+        )
 
     monkeypatch.setattr(generator, "_run_scenario", _unexpected_run_scenario)
 
@@ -88,7 +91,11 @@ def test_generate_evidence_rejects_relative_protected_output_from_outside_repo(
     repo_root = tmp_path / "repo"
     repo_root.mkdir(parents=True, exist_ok=True)
     protected_output = (
-        repo_root / "docs" / "ops" / "evidence" / "enforcement_failure_injection_2026-02-27.json"
+        repo_root
+        / "docs"
+        / "ops"
+        / "evidence"
+        / "enforcement_failure_injection_2026-02-27.json"
     )
     protected_output.parent.mkdir(parents=True, exist_ok=True)
     protected_output.write_text("{}", encoding="utf-8")
@@ -100,13 +107,17 @@ def test_generate_evidence_rejects_relative_protected_output_from_outside_repo(
         generator,
         "_run_scenario",
         lambda *_, **__: (_ for _ in ()).throw(
-            AssertionError("scenario execution should not run for protected output paths")
+            AssertionError(
+                "scenario execution should not run for protected output paths"
+            )
         ),
     )
 
     with pytest.raises(ValueError, match="output must not overwrite failure-injection"):
         generator.generate_evidence(
-            output=Path("docs/ops/evidence/enforcement_failure_injection_2026-02-27.json"),
+            output=Path(
+                "docs/ops/evidence/enforcement_failure_injection_2026-02-27.json"
+            ),
             executed_by="exec@valdrics.local",
             approved_by="approver@valdrics.local",
             profile="enforcement_failure_injection",
@@ -129,7 +140,9 @@ def test_generate_evidence_rejects_relative_output_that_escapes_repo_root(
         generator,
         "_run_scenario",
         lambda *_, **__: (_ for _ in ()).throw(
-            AssertionError("scenario execution should not run for escaping output paths")
+            AssertionError(
+                "scenario execution should not run for escaping output paths"
+            )
         ),
     )
 
@@ -272,7 +285,9 @@ def test_generate_evidence_does_not_leave_output_when_verification_fails(
     monkeypatch.setattr(
         generator,
         "verify_evidence",
-        lambda **_: (_ for _ in ()).throw(ValueError("failure injection verification failed")),
+        lambda **_: (_ for _ in ()).throw(
+            ValueError("failure injection verification failed")
+        ),
     )
 
     output = tmp_path / "evidence.json"
@@ -494,7 +509,9 @@ def test_main_rejects_invalid_profile_before_generation(
     monkeypatch.setattr(
         generator,
         "_run_scenario",
-        lambda *_, **__: (_ for _ in ()).throw(AssertionError("scenario execution should not run")),
+        lambda *_, **__: (_ for _ in ()).throw(
+            AssertionError("scenario execution should not run")
+        ),
     )
 
     with pytest.raises(ValueError, match="profile must equal"):
@@ -532,7 +549,9 @@ def test_run_scenario_uses_isolated_pytest_env(monkeypatch: pytest.MonkeyPatch) 
     scenario = generator.FailureScenario(
         scenario_id="FI-TEST",
         checks=("isolated env",),
-        selectors=("tests/unit/enforcement/test_enforcement_api.py::test_gate_failsafe_timeout_and_error_modes",),
+        selectors=(
+            "tests/unit/enforcement/test_enforcement_api.py::test_gate_failsafe_timeout_and_error_modes",
+        ),
     )
     payload, passed = generator._run_scenario(
         scenario,
@@ -561,7 +580,9 @@ def test_run_scenario_marks_timeout_as_failed(monkeypatch: pytest.MonkeyPatch) -
     scenario = generator.FailureScenario(
         scenario_id="FI-TEST",
         checks=("timeout",),
-        selectors=("tests/unit/enforcement/test_enforcement_api.py::test_gate_failsafe_timeout_and_error_modes",),
+        selectors=(
+            "tests/unit/enforcement/test_enforcement_api.py::test_gate_failsafe_timeout_and_error_modes",
+        ),
     )
 
     payload, passed = generator._run_scenario(

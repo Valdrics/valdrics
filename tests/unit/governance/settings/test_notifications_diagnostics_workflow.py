@@ -44,6 +44,25 @@ async def test_policy_notification_diagnostics_missing_config(
 
 
 @pytest.mark.asyncio
+async def test_policy_notification_diagnostics_requires_tenant_context(
+    async_client: AsyncClient,
+    app,
+    make_current_user,
+    override_current_user,
+) -> None:
+    with override_current_user(
+        app,
+        make_current_user(tier=PricingTier.PRO, tenant_id=None),
+    ):
+        response = await async_client.get(
+            "/api/v1/settings/notifications/policy-diagnostics"
+        )
+
+    assert response.status_code == 403
+    assert "Tenant context required" in response.json()["error"]
+
+
+@pytest.mark.asyncio
 async def test_policy_notification_diagnostics_missing_rows_fail_closed_even_with_env_defaults(
     async_client: AsyncClient,
     app,

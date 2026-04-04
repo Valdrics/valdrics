@@ -104,32 +104,32 @@
   ],
   "runtime_probe_results": [
     {
-      "command": "/home/daretechie/DevProject/GitHub/CloudSentinel-AI/.venv/bin/python3 scripts/verify_adapter_test_coverage.py",
+      "command": "python3 scripts/verify_adapter_test_coverage.py",
       "output_excerpt": "[adapter-test-coverage] ok adapters_root=app/shared/adapters tests_root=tests",
       "passed": true,
       "probe_id": "adapter_coverage"
     },
     {
-      "command": "/home/daretechie/DevProject/GitHub/CloudSentinel-AI/.venv/bin/python3 scripts/verify_audit_report_resolved.py --skip-report-check",
+      "command": "python3 scripts/verify_audit_report_resolved.py --skip-report-check",
       "output_excerpt": "[audit-report] FAILED\n- [H-02] catch-all handlers must be zero; found 1 (app/modules/optimization/domain/actions/base.py:136:exception)\n- [M-06] missing CVE scanning token: aquasecurity/trivy-action\n[audit-report] summary passed=25 failed=2 checked=27",
       "passed": false,
       "probe_id": "audit_controls"
     },
     {
-      "command": "/home/daretechie/DevProject/GitHub/CloudSentinel-AI/.venv/bin/python3 scripts/verify_dependency_locking.py",
-      "output_excerpt": "[dependency-locking] ok repo_root=/home/daretechie/DevProject/GitHub/CloudSentinel-AI lock_path=uv.lock",
+      "command": "python3 scripts/verify_dependency_locking.py",
+      "output_excerpt": "[dependency-locking] ok repo_root=. lock_path=uv.lock",
       "passed": true,
       "probe_id": "dependency_locking"
     },
     {
-      "command": "/home/daretechie/DevProject/GitHub/CloudSentinel-AI/.venv/bin/python3 scripts/verify_env_hygiene.py",
-      "output_excerpt": "[env-hygiene] ok repo_root=/home/daretechie/DevProject/GitHub/CloudSentinel-AI template_path=.env.example",
+      "command": "python3 scripts/verify_env_hygiene.py",
+      "output_excerpt": "[env-hygiene] ok repo_root=. template_path=.env.example",
       "passed": true,
       "probe_id": "env_hygiene"
     },
     {
-      "command": "/home/daretechie/DevProject/GitHub/CloudSentinel-AI/.venv/bin/python3 scripts/verify_python_module_size_budget.py --enforcement-mode strict",
-      "output_excerpt": "[python-module-size-budget] root=/home/daretechie/DevProject/GitHub/CloudSentinel-AI mode=strict default_max_lines=700 preferred_max_lines=500 emit_preferred_signals=False\n[python-module-size-budget] ok no module exceeded hard budget.",
+      "command": "python3 scripts/verify_python_module_size_budget.py --enforcement-mode strict",
+      "output_excerpt": "[python-module-size-budget] root=. mode=strict default_max_lines=700 preferred_max_lines=500 emit_preferred_signals=False\n[python-module-size-budget] ok no module exceeded hard budget.",
       "passed": true,
       "probe_id": "module_size_budget"
     }

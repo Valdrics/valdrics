@@ -1,9 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { base } from '$app/paths';
 	import type { LandingCurrencyCode } from '$lib/landing/currencyPreference';
-	import { formatCurrencyAmount } from '$lib/landing/currencyDisplay';
-	import { calculateLandingHeroScenarioMetrics } from '$lib/landing/landingHeroScenario';
 	import { createLazyComponent } from '$lib/lazyComponent';
 	import LandingHeroRoiPlaceholder from '$lib/components/landing/LandingHeroRoiPlaceholder.svelte';
 	import type {
@@ -38,20 +35,10 @@
 	] as const;
 
 	type LandingRoiSimulatorProps = {
-		normalizedScenarioWasteWithoutPct: number;
-		normalizedScenarioWasteWithPct: number;
-		normalizedScenarioWindowMonths: number;
-		scenarioWithoutBarPct: number;
-		scenarioWithBarPct: number;
-		scenarioWasteWithoutUsd: number;
-		scenarioWasteWithUsd: number;
-		scenarioWasteRecoveryMonthlyUsd: number;
-		scenarioWasteRecoveryWindowUsd: number;
 		monthlySpendUsd: number;
 		scenarioWasteWithoutPct: number;
 		scenarioWasteWithPct: number;
 		scenarioWindowMonths: number;
-		formatUsd: (amount: number, currency?: string) => string;
 		currencyCode: LandingCurrencyCode | string;
 		localCurrencyCode: LandingCurrencyCode;
 		onCurrencyCodeChange?: (value: LandingCurrencyCode) => void;
@@ -130,17 +117,6 @@
 		onePagerHref: string;
 		onTrackCta: (action: string, section: string, value: string) => void;
 	} = $props();
-
-	let scenarioMetrics = $derived(
-		calculateLandingHeroScenarioMetrics({
-			monthlySpendUsd: roiMonthlySpendUsd,
-			wasteWithoutPct: scenarioWasteWithoutPct,
-			wasteWithPct: scenarioWasteWithPct,
-			windowMonths: scenarioWindowMonths
-		})
-	);
-	const formatUsd = (amount: number, currency: string = String(currencyCode)) =>
-		formatCurrencyAmount(amount, currency);
 
 	let simulatorAnchor: HTMLDivElement | null = $state(null);
 	let simulatorVisible = $state(import.meta.env.MODE === 'test');
@@ -244,20 +220,10 @@
 		{#await loadLandingRoiSimulator() then module}
 			{@const LandingRoiSimulator = module.default}
 			<LandingRoiSimulator
-				normalizedScenarioWasteWithoutPct={scenarioMetrics.normalizedScenarioWasteWithoutPct}
-				normalizedScenarioWasteWithPct={scenarioMetrics.normalizedScenarioWasteWithPct}
-				normalizedScenarioWindowMonths={scenarioMetrics.normalizedScenarioWindowMonths}
-				scenarioWithoutBarPct={scenarioMetrics.scenarioWithoutBarPct}
-				scenarioWithBarPct={scenarioMetrics.scenarioWithBarPct}
-				scenarioWasteWithoutUsd={scenarioMetrics.scenarioWasteWithoutUsd}
-				scenarioWasteWithUsd={scenarioMetrics.scenarioWasteWithUsd}
-				scenarioWasteRecoveryMonthlyUsd={scenarioMetrics.scenarioWasteRecoveryMonthlyUsd}
-				scenarioWasteRecoveryWindowUsd={scenarioMetrics.scenarioWasteRecoveryWindowUsd}
 				monthlySpendUsd={roiMonthlySpendUsd}
 				{scenarioWasteWithoutPct}
 				{scenarioWasteWithPct}
 				{scenarioWindowMonths}
-				{formatUsd}
 				{currencyCode}
 				{localCurrencyCode}
 				{onCurrencyCodeChange}

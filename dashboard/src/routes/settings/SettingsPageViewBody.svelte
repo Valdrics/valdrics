@@ -8,13 +8,11 @@
 		INITIAL_ACTIVEOPS_SETTINGS,
 		INITIAL_CARBON_SETTINGS,
 		INITIAL_LLM_SETTINGS,
-		INITIAL_NOTIFICATION_SETTINGS,
 		INITIAL_PROVIDER_MODELS
 	} from './settingsPageInitialState';
-	import type { PolicyDiagnostics, SafetyStatus } from './settingsPageModels';
+	import type { SafetyStatus } from './settingsPageModels';
 
 	type AsyncAction = () => void | Promise<void>;
-	type NotificationSettingsState = typeof INITIAL_NOTIFICATION_SETTINGS;
 	type CarbonSettingsState = typeof INITIAL_CARBON_SETTINGS;
 	type LlmSettingsState = typeof INITIAL_LLM_SETTINGS;
 	type ActiveOpsSettingsState = typeof INITIAL_ACTIVEOPS_SETTINGS;
@@ -42,20 +40,6 @@
 		safetyError: string;
 		safetySuccess: string;
 		safetyStatus: SafetyStatus | null;
-		settings: NotificationSettingsState;
-		testing: boolean;
-		testingJira: boolean;
-		testingTeams: boolean;
-		testingWorkflow: boolean;
-		diagnosticsLoading: boolean;
-		policyDiagnostics: PolicyDiagnostics | null;
-		testSlack: AsyncAction;
-		testJira: AsyncAction;
-		testTeams: AsyncAction;
-		testWorkflowDispatch: AsyncAction;
-		runPolicyDiagnostics: AsyncAction;
-		saveSettings: AsyncAction;
-		saving: boolean;
 	};
 
 	let {
@@ -86,20 +70,6 @@
 		safetyError,
 		safetySuccess,
 		safetyStatus,
-		settings = $bindable(),
-		testing,
-		testingJira,
-		testingTeams,
-		testingWorkflow,
-		diagnosticsLoading,
-		policyDiagnostics,
-		testSlack,
-		testJira,
-		testTeams,
-		testWorkflowDispatch,
-		runPolicyDiagnostics,
-		saveSettings,
-		saving,
 		onRevealDeferredSections = async () => {}
 	}: {
 		data: {
@@ -134,20 +104,6 @@
 		safetyError: string;
 		safetySuccess: string;
 		safetyStatus: SafetyStatus | null;
-		settings: NotificationSettingsState;
-		testing: boolean;
-		testingJira: boolean;
-		testingTeams: boolean;
-		testingWorkflow: boolean;
-		diagnosticsLoading: boolean;
-		policyDiagnostics: PolicyDiagnostics | null;
-		testSlack: AsyncAction;
-		testJira: AsyncAction;
-		testTeams: AsyncAction;
-		testWorkflowDispatch: AsyncAction;
-		runPolicyDiagnostics: AsyncAction;
-		saveSettings: AsyncAction;
-		saving: boolean;
 		onRevealDeferredSections?: AsyncAction;
 	} = $props();
 
@@ -414,20 +370,6 @@
 							{safetyError}
 							{safetySuccess}
 							{safetyStatus}
-							bind:settings
-							{testing}
-							{testingJira}
-							{testingTeams}
-							{testingWorkflow}
-							{diagnosticsLoading}
-							{policyDiagnostics}
-							{testSlack}
-							{testJira}
-							{testTeams}
-							{testWorkflowDispatch}
-							{runPolicyDiagnostics}
-							{saveSettings}
-							{saving}
 						/>
 					{:catch}
 						<div class="space-y-8">

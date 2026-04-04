@@ -126,6 +126,9 @@ async def get_activeops_settings(
     """
     Get ActiveOps (Autonomous Remediation) settings for the current tenant.
     """
+    if current_user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context required.")
+
     result = await db.execute(
         select(RemediationSettings).where(
             RemediationSettings.tenant_id == current_user.tenant_id
@@ -187,6 +190,9 @@ async def update_activeops_settings(
     """
     Update ActiveOps settings for the current tenant.
     """
+    if current_user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context required.")
+
     result = await db.execute(
         select(RemediationSettings).where(
             RemediationSettings.tenant_id == current_user.tenant_id

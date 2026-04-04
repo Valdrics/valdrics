@@ -1,6 +1,10 @@
 from unittest.mock import patch
 
 from app.shared.core.config import Settings, get_settings
+from app.shared.core.config_sections_core import CoreRuntimeSettings
+from app.shared.core.config_sections_governance import GovernanceSettings
+from app.shared.core.config_sections_integrations import IntegrationSettings
+from app.shared.core.config_sections_security import SecuritySettings
 
 FAKE_KDF_SALT = "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="
 
@@ -52,3 +56,41 @@ def test_get_settings_caches_singleton():
         first = get_settings()
         second = get_settings()
         assert first is second
+
+
+def test_config_section_fields_are_unique() -> None:
+    field_owners: dict[str, str] = {}
+    duplicates: dict[str, list[str]] = {}
+
+    for section in (
+        CoreRuntimeSettings,
+        SecuritySettings,
+        IntegrationSettings,
+        GovernanceSettings,
+    ):
+        for field_name in getattr(section, "__annotations__", {}):
+            owner = field_owners.get(field_name)
+            if owner is None:
+                field_owners[field_name] = section.__name__
+                continue
+            duplicates.setdefault(field_name, [owner]).append(section.__name__)
+
+    assert duplicates == {}
+
+
+def test_list_backed_settings_fields_use_default_factories() -> None:
+    list_fields = (
+        "WEBHOOK_ALLOWED_DOMAINS",
+        "TRUSTED_PROXY_CIDRS",
+        "CORS_ORIGINS",
+        "ENCRYPTION_FALLBACK_KEYS",
+        "JIRA_ALLOWED_DOMAINS",
+        "TEAMS_WEBHOOK_ALLOWED_DOMAINS",
+        "PAYSTACK_WEBHOOK_ALLOWED_IPS",
+        "ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS",
+        "SUPPORTED_CURRENCIES",
+        "AWS_SUPPORTED_REGIONS",
+    )
+
+    for field_name in list_fields:
+        assert Settings.model_fields[field_name].default_factory is not None

@@ -47,6 +47,22 @@ async def test_get_queue_status(async_client: AsyncClient, db_session, mock_user
 
 
 @pytest.mark.asyncio
+async def test_get_queue_status_requires_tenant_context(async_client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: MagicMock(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        role="admin",
+        tier="pro",
+    )
+    try:
+        response = await async_client.get("/api/v1/jobs/status")
+        assert response.status_code == 403
+        assert "tenant context required" in str(response.json()).lower()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
 async def test_get_job_slo(async_client: AsyncClient, db_session, mock_user):
     """Test GET /api/v1/jobs/slo returns per-job-type reliability metrics."""
     now = datetime.now(timezone.utc)
@@ -260,6 +276,22 @@ async def test_stream_jobs_sse_rejects_when_tenant_connection_limit_reached(
 
 
 @pytest.mark.asyncio
+async def test_stream_jobs_sse_requires_tenant_context(async_client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: MagicMock(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        role="member",
+        tier="pro",
+    )
+    try:
+        response = await async_client.get("/api/v1/jobs/stream")
+        assert response.status_code == 403
+        assert "tenant context required" in str(response.json()).lower()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
 async def test_enqueue_new_job_rejects_internal_job_type(async_client: AsyncClient):
     response = await async_client.post(
         "/api/v1/jobs/enqueue",
@@ -370,3 +402,19 @@ async def test_list_jobs_filters_status_and_sanitizes_error(
     assert len(jobs) == 1
     assert jobs[0]["id"] == str(failed_job.id)
     assert jobs[0]["error_message"] == "traceback"
+
+
+@pytest.mark.asyncio
+async def test_list_jobs_requires_tenant_context(async_client: AsyncClient):
+    app.dependency_overrides[get_current_user] = lambda: MagicMock(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        role="member",
+        tier="pro",
+    )
+    try:
+        response = await async_client.get("/api/v1/jobs/list")
+        assert response.status_code == 403
+        assert "tenant context required" in str(response.json()).lower()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)

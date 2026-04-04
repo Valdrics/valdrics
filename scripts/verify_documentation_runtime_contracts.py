@@ -20,6 +20,34 @@ class DocumentationContract:
 DEFAULT_ROOT = repo_root_for(__file__)
 DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
     DocumentationContract(
+        path="README.md",
+        required_phrases=(
+            "Valdrics",
+            "Optimize Cloud Value, Not Just Cost",
+            "Python 3.12",
+        ),
+        forbidden_phrases=(
+            "11 zombie-detection plugins",
+            "11 zombie detection plugins",
+        ),
+    ),
+    DocumentationContract(
+        path="docs/FULL_CODEBASE_AUDIT.md",
+        required_phrases=(
+            "time-bound snapshot",
+            "first-party Python, TypeScript, and Svelte source",
+            "live verification scripts remain the source of truth",
+            "mixed secret model",
+            "RLS enforcement plus documented exemptions",
+        ),
+        forbidden_phrases=(
+            "Entire repository (every directory, every file type, all source code)",
+            "5358 tests collected",
+            "No TODO/FIXME/XXX/HACK in app",
+            "No issues.",
+        ),
+    ),
+    DocumentationContract(
         path="docs/architecture/overview.md",
         required_phrases=(
             "boundary target",
@@ -35,9 +63,12 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
             "Koyeb managed services with immutable image promotion",
             "Future Scale Profile",
             ".github/workflows/publish-release-images.yml",
+            "verify_dashboard_runtime_contract.py",
+            "render_managed_release_blocker_summary.py",
             "digest-pinned `promotion_ref` values",
             "koyeb-release.json",
             "koyeb-dashboard-env.json",
+            "managed-release-blockers.md",
         ),
         forbidden_phrases=("Vercel", "Cloudflare Pages + Koyeb"),
     ),
@@ -159,6 +190,8 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
             "generate_managed_migration_env.py",
             "generate_managed_deployment_artifacts.py",
             "verify_managed_deployment_bundle.py",
+            "verify_dashboard_runtime_contract.py",
+            "render_managed_release_blocker_summary.py",
             "publish-release-images.yml",
             "--api-image-digest <sha256:...>",
             "--dashboard-image-digest <sha256:...>",
@@ -166,6 +199,7 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
             "deployment.report.json",
             "koyeb-dashboard-env.json",
             "koyeb-release.json",
+            "managed-release-blockers.md",
             "--env-file .runtime/production.env",
             "--env-file .runtime/production.migrate.env",
             "set -a && source .runtime/production.migrate.env && uv run alembic upgrade head",
@@ -174,13 +208,16 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
     ),
     DocumentationContract(
         path="docs/runbooks/koyeb_release_promotion.md",
-        required_phrases=(
-            "publish-release-images.yml",
-            "ghcr-release.env",
-            "promotion_ref",
-            "GHCR_NAMESPACE=valdrics",
+            required_phrases=(
+                "publish-release-images.yml",
+                "ghcr-release.env",
+                "promotion_ref",
+                "GHCR_NAMESPACE=valdrics",
+                "verify_dashboard_runtime_contract.py",
+                "render_managed_release_blocker_summary.py",
+                "managed-release-blockers.md",
+            ),
         ),
-    ),
     DocumentationContract(
         path="docs/integrations/workflow_automation.md",
         required_phrases=(

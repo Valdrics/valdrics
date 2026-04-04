@@ -4,6 +4,11 @@ export interface PublicNavLink {
 	external?: boolean;
 }
 
+export interface PublicNavLinkGroup {
+	heading: string;
+	links: readonly PublicNavLink[];
+}
+
 export interface PublicContactChannel {
 	label: string;
 	email: string;
@@ -38,17 +43,36 @@ export const PUBLIC_MOBILE_LINKS: readonly PublicNavLink[] = Object.freeze([
 	{ href: '/resources', label: 'Resources' }
 ]);
 
-export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze([
-	{ href: '/about', label: 'About' },
-	{ href: '/pricing', label: 'Pricing' },
-	{ href: '/enterprise', label: 'Enterprise' },
-	{ href: '/proof', label: 'Proof Pack' },
-	{ href: '/docs', label: 'Documentation' },
-	{ href: '/talk-to-sales', label: 'Talk to Sales' },
-	{ href: '/privacy', label: 'Privacy' },
-	{ href: '/terms', label: 'Terms' },
-	{ href: '/status', label: 'Status' }
+export const PUBLIC_FOOTER_LINK_GROUPS: readonly PublicNavLinkGroup[] = Object.freeze([
+	{
+		heading: 'Product',
+		links: Object.freeze([
+			{ href: '/pricing', label: 'Pricing' },
+			{ href: '/enterprise', label: 'Enterprise' },
+			{ href: '/proof', label: 'Proof Pack' },
+			{ href: '/docs', label: 'Documentation' }
+		])
+	},
+	{
+		heading: 'Company',
+		links: Object.freeze([
+			{ href: '/about', label: 'About' },
+			{ href: '/talk-to-sales', label: 'Talk to Sales' },
+			{ href: '/status', label: 'Status' }
+		])
+	},
+	{
+		heading: 'Legal',
+		links: Object.freeze([
+			{ href: '/privacy', label: 'Privacy' },
+			{ href: '/terms', label: 'Terms' }
+		])
+	}
 ]);
+
+export const PUBLIC_FOOTER_LINKS: readonly PublicNavLink[] = Object.freeze(
+	PUBLIC_FOOTER_LINK_GROUPS.flatMap((group) => group.links)
+);
 
 export const PUBLIC_SIGNAL_STRIP: readonly string[] = Object.freeze([
 	'Turn alerts into governed action',

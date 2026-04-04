@@ -12,6 +12,8 @@ from app.shared.core.rate_limit import (
     setup_rate_limiting,
     get_redis_client,
 )
+
+
 def mock_request(headers=None, state_attrs=None):
     req = MagicMock()
     req.headers = Headers(headers or {})
@@ -48,9 +50,7 @@ def test_context_aware_key():
 
     # 3. IP Fallback
     req3 = mock_request(headers={})
-    with patch(
-        "app.shared.core.rate_limit.resolve_client_ip", return_value="10.0.0.1"
-    ):
+    with patch("app.shared.core.rate_limit.resolve_client_ip", return_value="10.0.0.1"):
         assert context_aware_key(req3) == "10.0.0.1"
 
 
@@ -75,9 +75,44 @@ def test_get_analysis_limit():
     assert get_analysis_limit(None) == "1/hour"
 
 
+def test_get_analysis_limit_uses_settings_overrides() -> None:
+    settings = SimpleNamespace(
+        ANALYSIS_RATE_LIMIT_FREE_PER_HOUR=3,
+        ANALYSIS_RATE_LIMIT_STARTER_PER_HOUR=7,
+        ANALYSIS_RATE_LIMIT_GROWTH_PER_HOUR=11,
+        ANALYSIS_RATE_LIMIT_PRO_PER_HOUR=21,
+        ANALYSIS_RATE_LIMIT_ENTERPRISE_PER_HOUR=99,
+    )
+
+    with patch("app.shared.core.rate_limit.get_settings", return_value=settings):
+        assert (
+            get_analysis_limit(mock_request(state_attrs={"tier": "free"})) == "3/hour"
+        )
+        assert (
+            get_analysis_limit(mock_request(state_attrs={"tier": "starter"}))
+            == "7/hour"
+        )
+        assert (
+            get_analysis_limit(mock_request(state_attrs={"tier": "growth"}))
+            == "11/hour"
+        )
+        assert (
+            get_analysis_limit(mock_request(state_attrs={"tier": "pro"})) == "21/hour"
+        )
+        assert (
+            get_analysis_limit(mock_request(state_attrs={"tier": "enterprise"}))
+            == "99/hour"
+        )
+
+
 def test_redis_client_lazy_init():
     """Test lazy loading of redis client."""
-    with patch("app.shared.core.rate_limit.get_settings") as mock_settings:
+    with (
+        patch("app.shared.core.rate_limit._redis_client", None),
+        patch("app.shared.core.rate_limit._redis_client_loop_marker", None),
+        patch("app.shared.core.rate_limit._redis_client_url", None),
+        patch("app.shared.core.rate_limit.get_settings") as mock_settings,
+    ):
         mock_settings.return_value.REDIS_URL = "redis://localhost:6379"
 
         with patch("app.shared.core.rate_limit.from_url") as mock_from_url:

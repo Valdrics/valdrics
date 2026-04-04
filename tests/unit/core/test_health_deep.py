@@ -77,7 +77,8 @@ async def test_check_circuit_breakers_open():
 async def test_check_circuit_breakers_exception():
     service = HealthService()
     with patch(
-        "app.shared.core.health.get_all_circuit_breakers", side_effect=RuntimeError("oops")
+        "app.shared.core.health.get_all_circuit_breakers",
+        side_effect=RuntimeError("oops"),
     ):
         result = await service._check_circuit_breakers()
 
@@ -110,7 +111,7 @@ async def test_check_system_resources_degraded():
 async def test_check_system_resources_exception():
     service = HealthService()
     with patch(
-        "app.shared.core.health.psutil.virtual_memory",
+        "app.shared.core.health.safe_virtual_memory",
         side_effect=RuntimeError("psutil fail"),
     ):
         result = await service._check_system_resources()
@@ -142,7 +143,11 @@ async def test_check_background_jobs_stuck_jobs():
     with patch(
         "app.shared.core.health_check_ops._probe_worker_health",
         new=AsyncMock(
-            return_value={"status": "healthy", "worker_count": 1, "workers": ["worker@a"]}
+            return_value={
+                "status": "healthy",
+                "worker_count": 1,
+                "workers": ["worker@a"],
+            }
         ),
     ):
         result = await service._check_background_jobs()
@@ -168,7 +173,11 @@ async def test_check_background_jobs_queue_stats():
     with patch(
         "app.shared.core.health_check_ops._probe_worker_health",
         new=AsyncMock(
-            return_value={"status": "healthy", "worker_count": 1, "workers": ["worker@a"]}
+            return_value={
+                "status": "healthy",
+                "worker_count": 1,
+                "workers": ["worker@a"],
+            }
         ),
     ):
         result = await service._check_background_jobs()
@@ -401,7 +410,10 @@ async def test_comprehensive_health_check_disables_networked_checks_in_testing()
     assert result["status"] == "healthy"
     assert result["checks"]["cache"]["status"] == "disabled"
     assert result["checks"]["external_services"]["status"] == "disabled"
-    assert result["checks"]["external_services"]["services"]["aws_sts"]["status"] == "disabled"
+    assert (
+        result["checks"]["external_services"]["services"]["aws_sts"]["status"]
+        == "disabled"
+    )
 
 
 @pytest.mark.asyncio
@@ -410,7 +422,9 @@ async def test_check_database_prefers_injected_session_over_global_probe():
     db.execute = AsyncMock(return_value=MagicMock())
     service = HealthService(db=db)
 
-    with patch("app.shared.core.health.db_health_check", new=AsyncMock()) as global_check:
+    with patch(
+        "app.shared.core.health.db_health_check", new=AsyncMock()
+    ) as global_check:
         result = await service._check_database()
 
     assert result["status"] == "up"
@@ -495,8 +509,12 @@ async def test_comprehensive_health_check_uses_live_version_and_environment():
 
     with (
         patch("app.shared.core.health.get_settings", return_value=settings_obj),
-        patch.object(service, "_check_database", AsyncMock(return_value={"status": "up"})),
-        patch.object(service, "_check_cache", AsyncMock(return_value={"status": "healthy"})),
+        patch.object(
+            service, "_check_database", AsyncMock(return_value={"status": "up"})
+        ),
+        patch.object(
+            service, "_check_cache", AsyncMock(return_value={"status": "healthy"})
+        ),
         patch.object(
             service,
             "_check_external_services",

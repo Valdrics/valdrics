@@ -137,7 +137,7 @@ def write_baseline(
     _ensure_baseline_parent_dir(baseline_path)
     payload = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
-        "roots": [root.as_posix() for root in roots],
+        "roots": [_normalize_site_path(root) for root in roots],
         "sites": [asdict(site) for site in sites],
     }
     baseline_path.parent.mkdir(parents=True, exist_ok=True)

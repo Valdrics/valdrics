@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.models.remediation_settings import RemediationSettings
 from app.models.tenant import UserRole
 from app.shared.core.auth import CurrentUser, get_current_user
+from app.shared.core.pricing import PricingTier
 
 
 
@@ -168,5 +169,74 @@ async def test_reactivate_hard_cap_endpoint_returns_not_found(
         if detail is None:
             detail = str(payload)
         assert "No hard-cap snapshot available for tenant" in detail
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_get_activeops_settings_requires_tenant_context(
+    async_client: AsyncClient, app
+):
+    mock_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        email="platform-activeops@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.ENTERPRISE,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.get("/api/v1/settings/activeops")
+        assert response.status_code == 403
+        assert "tenant context required" in str(response.json()).lower()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_update_activeops_settings_requires_tenant_context(
+    async_client: AsyncClient, app
+):
+    mock_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        email="platform-activeops-write@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.ENTERPRISE,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.put(
+            "/api/v1/settings/activeops",
+            json={"auto_pilot_enabled": True, "min_confidence_threshold": 0.9},
+        )
+        assert response.status_code == 403
+        assert "tenant context required" in str(response.json()).lower()
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_reactivate_hard_cap_requires_tenant_context(
+    async_client: AsyncClient, app
+):
+    mock_user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=None,
+        email="platform-activeops-reactivate@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.ENTERPRISE,
+    )
+
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.post(
+            "/api/v1/settings/activeops/hard-cap/reactivate",
+            json={"reason": "tenantless operator must be rejected"},
+        )
+        assert response.status_code == 403
+        assert "tenant context required" in str(response.json()).lower()
     finally:
         app.dependency_overrides.pop(get_current_user, None)

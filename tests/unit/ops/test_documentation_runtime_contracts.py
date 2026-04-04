@@ -12,6 +12,16 @@ def test_codeowners_exists_and_assigns_default_owner() -> None:
     assert "* @daretechie" in codeowners
 
 
+def test_readme_avoids_stale_hardcoded_platform_counts() -> None:
+    text = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert "Valdrics" in text
+    assert "Optimize Cloud Value, Not Just Cost" in text
+    assert "Python 3.12" in text
+    assert "11 zombie-detection plugins" not in text
+    assert "11 zombie detection plugins" not in text
+
+
 def test_soc2_controls_reference_current_artifacts() -> None:
     text = (REPO_ROOT / "docs/SOC2_CONTROLS.md").read_text(encoding="utf-8")
 
@@ -24,10 +34,25 @@ def test_soc2_controls_reference_current_artifacts() -> None:
     assert "`technical_due_diligence.md`" not in text
 
 
-def test_retention_policy_matches_supported_erasure_controls() -> None:
-    text = (REPO_ROOT / "docs/policies/data_retention.md").read_text(
-        encoding="utf-8"
+def test_full_codebase_audit_doc_is_time_bound_and_does_not_overclaim() -> None:
+    text = (REPO_ROOT / "docs/FULL_CODEBASE_AUDIT.md").read_text(encoding="utf-8")
+
+    assert "time-bound snapshot" in text
+    assert "first-party Python, TypeScript, and Svelte source" in text
+    assert "live verification scripts remain the source of truth" in text
+    assert "mixed secret model" in text
+    assert "RLS enforcement plus documented exemptions" in text
+    assert "5358 tests collected" not in text
+    assert "No TODO/FIXME/XXX/HACK in app" not in text
+    assert "No issues." not in text
+    assert (
+        "Entire repository (every directory, every file type, all source code)"
+        not in text
     )
+
+
+def test_retention_policy_matches_supported_erasure_controls() -> None:
+    text = (REPO_ROOT / "docs/policies/data_retention.md").read_text(encoding="utf-8")
 
     assert "/api/v1/audit/data-erasure-request" in text
     assert "background job retention" in text.lower()
@@ -43,15 +68,13 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     recovery = (REPO_ROOT / "docs/runbooks/disaster_recovery.md").read_text(
         encoding="utf-8"
     )
-    failover = (REPO_ROOT / "docs/architecture/failover.md").read_text(
-        encoding="utf-8"
-    )
+    failover = (REPO_ROOT / "docs/architecture/failover.md").read_text(encoding="utf-8")
     deployment = (REPO_ROOT / "docs/DEPLOYMENT.md").read_text(encoding="utf-8")
     capacity = (REPO_ROOT / "docs/CAPACITY_PLAN.md").read_text(encoding="utf-8")
     roadmap = (REPO_ROOT / "docs/roadmap.md").read_text(encoding="utf-8")
-    tiering = (
-        REPO_ROOT / "docs/architecture/tiering-2026.md"
-    ).read_text(encoding="utf-8")
+    tiering = (REPO_ROOT / "docs/architecture/tiering-2026.md").read_text(
+        encoding="utf-8"
+    )
     db_overview = (
         REPO_ROOT / "docs/architecture/database_schema_overview.md"
     ).read_text(encoding="utf-8")
@@ -60,7 +83,10 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     assert "backup/restore" in rollback.lower()
     assert "Koyeb Rollback" in rollback
     assert "Koyeb/Vercel" not in rollback
-    assert "Current supported production: Koyeb-managed API, worker, and dashboard services" in recovery
+    assert (
+        "Current supported production: Koyeb-managed API, worker, and dashboard services"
+        in recovery
+    )
     assert "AWS RDS" in recovery
     assert "disaster-recovery-drill.yml" in recovery
     assert "regional-failover.yml" in recovery
@@ -135,7 +161,10 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     assert 'ENVIRONMENT: "staging"' in dr_workflow
     assert "postgres:16.13-alpine" in dr_workflow
     assert "uv run alembic upgrade head" in dr_workflow
-    assert "uv run celery -A app.shared.core.celery_app:celery_app worker -l info" in dr_workflow
+    assert (
+        "uv run celery -A app.shared.core.celery_app:celery_app worker -l info"
+        in dr_workflow
+    )
     assert "scripts/run_regional_failover.py" in regional_failover_workflow
     assert "CLOUDFLARE_API_TOKEN" in regional_failover_workflow
     assert "secondary_db_instance_id" in regional_failover_workflow
@@ -146,9 +175,7 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
 
 
 def test_architecture_overview_does_not_overclaim_domain_purity_or_raw_k8s() -> None:
-    text = (REPO_ROOT / "docs/architecture/overview.md").read_text(
-        encoding="utf-8"
-    )
+    text = (REPO_ROOT / "docs/architecture/overview.md").read_text(encoding="utf-8")
 
     assert "Zero external dependencies" not in text
     assert "`k8s/`" not in text
@@ -157,13 +184,15 @@ def test_architecture_overview_does_not_overclaim_domain_purity_or_raw_k8s() -> 
     assert "Koyeb-managed services" in text
 
 
-def test_incident_and_production_runbooks_match_strict_saas_observability_contract() -> None:
+def test_incident_and_production_runbooks_match_strict_saas_observability_contract() -> (
+    None
+):
     incident = (REPO_ROOT / "docs/runbooks/incident_response.md").read_text(
         encoding="utf-8"
     )
-    production = (
-        REPO_ROOT / "docs/runbooks/production_env_checklist.md"
-    ).read_text(encoding="utf-8")
+    production = (REPO_ROOT / "docs/runbooks/production_env_checklist.md").read_text(
+        encoding="utf-8"
+    )
     workflow = (REPO_ROOT / "docs/integrations/workflow_automation.md").read_text(
         encoding="utf-8"
     )
@@ -191,7 +220,10 @@ def test_incident_and_production_runbooks_match_strict_saas_observability_contra
     assert "koyeb-release.json" in production
     assert "--env-file .runtime/production.env" in production
     assert "--env-file .runtime/production.migrate.env" in production
-    assert "set -a && source .runtime/production.migrate.env && uv run alembic upgrade head" in production
+    assert (
+        "set -a && source .runtime/production.migrate.env && uv run alembic upgrade head"
+        in production
+    )
     assert "Optional but recommended: `SENTRY_DSN" not in production
     assert "env channel routing (`SLACK_CHANNEL_ID`) is blocked" in workflow
     assert "self-host or break-glass-only paths" in workflow
@@ -222,6 +254,7 @@ def test_runbooks_with_high_operational_risk_are_covered_by_contract_guard() -> 
         REPO_ROOT / "scripts/verify_documentation_runtime_contracts.py"
     ).read_text(encoding="utf-8")
 
+    assert "docs/FULL_CODEBASE_AUDIT.md" in script_text
     assert "docs/SOC2_CONTROLS.md" in script_text
     assert "docs/policies/data_retention.md" in script_text
     assert "docs/runbooks/enforcement_preprovision_integrations.md" in script_text

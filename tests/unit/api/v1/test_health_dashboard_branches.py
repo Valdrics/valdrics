@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 
 import app.modules.governance.api.v1.health_dashboard as hd
 from app.models.azure_connection import AzureConnection
@@ -559,7 +560,7 @@ async def test_fair_use_runtime_tier_lookup_failure_and_cache_set() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fair_use_runtime_global_scope_skips_tier_lookup() -> None:
+async def test_fair_use_runtime_requires_tenant_context() -> None:
     user = MagicMock()
     user.tenant_id = None
     db = AsyncMock()
@@ -578,8 +579,9 @@ async def test_fair_use_runtime_global_scope_skips_tier_lookup() -> None:
         patch.object(hd, "get_settings", return_value=settings),
         patch.object(hd, "get_tenant_tier", new=AsyncMock()) as tier_mock,
     ):
-        payload = await hd.get_llm_fair_use_runtime(user, db)
+        with pytest.raises(HTTPException) as exc_info:
+            await hd.get_llm_fair_use_runtime(user, db)
 
-    assert payload.tenant_tier == PricingTier.FREE.value
-    assert payload.active_for_tenant is False
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Tenant context required."
     tier_mock.assert_not_awaited()

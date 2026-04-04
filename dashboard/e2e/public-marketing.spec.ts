@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { enableAuthenticatedSession } from './support/e2eAuth';
 
 const BASE_URL = process.env.DASHBOARD_URL || 'http://localhost:4173';
 
@@ -87,6 +86,33 @@ async function assertDownloadEndpoint(
 async function goToLanding(page: Parameters<typeof test>[0]['page']) {
 	await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
 	await expect(page.locator('#hero')).toBeVisible();
+}
+
+async function ensureInteractiveSimulator(page: Parameters<typeof test>[0]['page']) {
+	const simulator = page.locator('#simulator');
+	await simulator.scrollIntoViewIfNeeded();
+	await expect(
+		simulator.getByRole('heading', { name: /model the savings case in minutes/i })
+	).toBeVisible();
+	await expect(simulator.getByRole('group', { name: /display currency/i })).toBeVisible();
+	return simulator;
+}
+
+async function ensureInteractivePlans(page: Parameters<typeof test>[0]['page']) {
+	await ensureInteractiveSimulator(page);
+	await page.evaluate(() => {
+		window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
+	});
+	const plans = page.locator('#plans');
+	await expect(plans.getByRole('link', { name: /start free workspace/i })).toBeVisible();
+	return plans;
+}
+
+async function ensureInteractiveTrust(page: Parameters<typeof test>[0]['page']) {
+	await ensureInteractivePlans(page);
+	const trust = page.locator('#trust');
+	await expect(trust.getByRole('link', { name: /open proof pack/i })).toBeVisible();
+	return trust;
 }
 
 async function openResourcesMenu(page: Parameters<typeof test>[0]['page']) {
@@ -207,10 +233,14 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await expect(page).toHaveURL(/\/docs$/);
 		await expect(page.getByRole('heading', { level: 1, name: /documentation/i })).toBeVisible();
 
-		await page
+		const apiDocsHref = await page
 			.getByRole('link', { name: /open api docs/i })
 			.first()
-			.click();
+			.getAttribute('href');
+		expect(apiDocsHref || '').toMatch(/\/docs\/api$/);
+		if (apiDocsHref) {
+			await page.goto(new URL(apiDocsHref, BASE_URL).toString(), { waitUntil: 'domcontentloaded' });
+		}
 		await expect(page).toHaveURL(/\/docs\/api$/);
 		await expect(page.getByRole('heading', { level: 1, name: /api reference/i })).toBeVisible();
 
@@ -234,30 +264,45 @@ test.describe('Public marketing smoke (desktop)', () => {
 		});
 	});
 
-	test('uses a local-vs-USD currency toggle and persists an explicit USD choice into the ROI planner', async ({
+	test('uses a local-vs-USD currency toggle and preserves an explicit USD choice before ROI auth', async ({
 		page,
 		context
 	}) => {
+		await context.setExtraHTTPHeaders({
+			'x-vercel-ip-country': 'GB'
+		});
 		await goToLanding(page);
 
-		const simulatorCurrency = page
-			.locator('#simulator')
-			.getByRole('group', { name: /display currency/i });
+		const simulatorCurrency = (await ensureInteractiveSimulator(page)).getByRole('group', {
+			name: /display currency/i
+		});
 		await expect(simulatorCurrency).toBeVisible();
+		await expect(simulatorCurrency.getByRole('button', { name: /local gbp/i })).toBeVisible();
 		const usdButton = simulatorCurrency.getByRole('button', { name: /usd/i });
 		await expect(usdButton).toBeVisible();
 		await expect(page.locator('#hero')).toContainText(/first workflow typically live/i);
 
 		await usdButton.click();
 		await expect(usdButton).toHaveAttribute('aria-pressed', 'true');
-		await enableAuthenticatedSession(context);
+
+		await expect
+			.poll(
+				() =>
+					page.evaluate(() => {
+						return window.localStorage.getItem('valdrics_landing_currency');
+					}),
+				{ message: 'expected USD landing currency preference to persist in localStorage' }
+			)
+			.toBe('USD');
+
 		await page.goto(`${BASE_URL}/roi-planner`, { waitUntil: 'domcontentloaded' });
-		await expect(
-			page.getByRole('heading', { level: 1, name: /roi planner workspace/i })
-		).toBeVisible();
-		await expect(
-			page.locator('#roi-planner').getByRole('button', { name: /usd/i })
-		).toHaveAttribute('aria-pressed', 'true');
+		await expect(page).toHaveURL(/\/auth\/login$/);
+		await expect(page).toHaveTitle(/sign in/i);
+		await expect(page.getByRole('heading', { level: 1, name: /welcome back/i })).toBeVisible();
+		await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
+			'content',
+			'noindex,nofollow'
+		);
 	});
 
 	test('keeps public header, resources, and hero CTAs on working destinations', async ({
@@ -303,7 +348,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await goToLanding(page);
 		await header
 			.locator('.public-nav-secondary')
-			.getByRole('link', { name: /^enterprise path$/i })
+			.getByRole('link', { name: /^enterprise review$/i })
 			.click();
 		await assertPublicRoute(page, '/enterprise', /enterprise review that stays clear/i);
 
@@ -324,8 +369,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await expect(page).toHaveURL(/\/auth\/login(\?.*)?$/);
 
 		await goToLanding(page);
-		await page
-			.locator('#simulator')
+		await (await ensureInteractiveSimulator(page))
 			.getByRole('link', { name: /open full roi planner/i })
 			.click();
 		await expect(page).toHaveURL(/\/auth\/login(\?.*intent=roi_assessment.*)?$/);
@@ -334,7 +378,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 	test('keeps proof, pricing, trust, and footer CTAs on working destinations', async ({ page }) => {
 		const security = await attachSecurityGuards(page);
 		await goToLanding(page);
-		const simulator = page.locator('#simulator');
+		const simulator = await ensureInteractiveSimulator(page);
 		await simulator.getByRole('link', { name: /review methodology/i }).click();
 		await assertPublicRoute(
 			page,
@@ -343,8 +387,9 @@ test.describe('Public marketing smoke (desktop)', () => {
 		);
 
 		await goToLanding(page);
-		const assumptionsHref = await simulator
-			.getByRole('link', { name: /open assumptions csv/i })
+		const simulatorAgain = await ensureInteractiveSimulator(page);
+		const assumptionsHref = await simulatorAgain
+			.locator('a[href$="valdrics-roi-assumptions.csv"]')
 			.getAttribute('href');
 		expect(assumptionsHref || '').toMatch(/resources\/valdrics-roi-assumptions\.csv$/);
 		if (assumptionsHref) {
@@ -352,40 +397,42 @@ test.describe('Public marketing smoke (desktop)', () => {
 		}
 
 		await goToLanding(page);
-		const plans = page.locator('#plans');
+		const plans = await ensureInteractivePlans(page);
 		await plans.getByRole('link', { name: /start free workspace/i }).click();
 		await expect(page).toHaveURL(/\/auth\/login(\?.*plan=free.*)?$/);
 
 		await goToLanding(page);
-		await page
-			.locator('#plans')
+		await (await ensureInteractivePlans(page))
 			.getByRole('link', { name: /see growth on pricing/i })
 			.click();
 		await assertPublicRoute(page, '/pricing', /pricing that stays simple/i);
 
 		await goToLanding(page);
-		await page
-			.locator('#plans')
+		await (await ensureInteractivePlans(page))
 			.getByRole('link', { name: /review pro details/i })
 			.click();
 		await assertPublicRoute(page, '/pricing', /pricing that stays simple/i);
 
 		await goToLanding(page);
-		await plans.getByRole('link', { name: /see detailed pricing/i }).click();
+		await (await ensureInteractivePlans(page))
+			.getByRole('link', { name: /see detailed pricing/i })
+			.click();
 		await assertPublicRoute(page, '/pricing', /pricing that stays simple/i);
 
 		await goToLanding(page);
-		await plans.getByRole('link', { name: /enterprise review/i }).click();
+		await (await ensureInteractivePlans(page))
+			.getByRole('link', { name: /enterprise review/i })
+			.click();
 		await assertPublicRoute(page, '/enterprise', /enterprise review that stays clear/i);
 
 		await goToLanding(page);
-		const trust = page.locator('#trust');
-		await trust.getByRole('link', { name: /^open enterprise path$/i }).click();
+		const trust = await ensureInteractiveTrust(page);
+		await trust.getByRole('link', { name: /^enterprise review$/i }).click();
 		await assertPublicRoute(page, '/enterprise', /enterprise review that stays clear/i);
 
 		await goToLanding(page);
-		const onePagerHref = await trust
-			.getByRole('link', { name: /download executive one-pager/i })
+		const onePagerHref = await (await ensureInteractiveTrust(page))
+			.getByRole('link', { name: /download one-pager/i })
 			.getAttribute('href');
 		expect(onePagerHref || '').toMatch(/resources\/valdrics-enterprise-one-pager\.md$/);
 		if (onePagerHref) {
@@ -393,7 +440,9 @@ test.describe('Public marketing smoke (desktop)', () => {
 		}
 
 		await goToLanding(page);
-		await trust.getByRole('link', { name: /request validation briefing/i }).click();
+		await (await ensureInteractiveTrust(page))
+			.getByRole('link', { name: /request validation briefing/i })
+			.click();
 		await expect(page).toHaveURL(/\/talk-to-sales(\?.*)?$/);
 		await expect(page).toHaveURL(/source=trust_validation/);
 		await expect(page).toHaveURL(/intent=request_validation_briefing/);
@@ -479,7 +528,10 @@ test.describe('Public marketing smoke (desktop)', () => {
 		);
 
 		await page.goto(`${BASE_URL}/enterprise`);
-		await page.getByRole('link', { name: /request enterprise briefing/i }).click();
+		await page
+			.getByRole('link', { name: /request enterprise briefing/i })
+			.first()
+			.click();
 		await expect(page).toHaveURL(/\/talk-to-sales(\?.*)?$/);
 		await expect(page.getByRole('heading', { level: 1, name: /talk to sales/i })).toBeVisible();
 		await expect(page).toHaveURL(/intent=enterprise_briefing/);
@@ -568,7 +620,7 @@ test.describe('Public marketing smoke (mobile)', () => {
 
 	test('mobile menu links resolve key landing and route destinations', async ({ page }) => {
 		await goToLanding(page);
-		await (await openMobileMenu(page)).getByRole('link', { name: /^enterprise path$/i }).click();
+		await (await openMobileMenu(page)).getByRole('link', { name: /^enterprise review$/i }).click();
 		await assertPublicRoute(page, '/enterprise', /enterprise review that stays clear/i);
 
 		await goToLanding(page);

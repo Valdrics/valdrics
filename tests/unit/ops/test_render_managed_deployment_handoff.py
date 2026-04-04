@@ -157,6 +157,12 @@ def test_render_managed_deployment_handoff_renders_blocked_bundle_summary(
     assert "Managed Deployment Handoff: staging" in content
     assert "Runtime env validation: BLOCKED" in content
     assert "Current supported profile (`Koyeb managed services with immutable image promotion`): BLOCKED" in content
+    assert "verify_managed_release_readiness.py" in content
+    assert "verify_dashboard_runtime_contract.py" in content
+    assert "render_managed_release_blocker_summary.py" in content
+    assert "run_public_frontend_quality_gate.py" in content
+    assert "--reuse-built-dashboard-runtime" in content
+    assert "managed-release-blockers.md" in content
     assert "`API_URL`" in content
     assert "`DATABASE_URL`" in content
     assert "`PUBLIC_API_URL`" in content
@@ -189,6 +195,10 @@ def test_render_managed_deployment_handoff_marks_koyeb_release_ready(
     assert "Current supported profile (`Koyeb managed services with immutable image promotion`): READY" in content
     assert "Koyeb immutable release contract: READY" in content
     assert "Future scale profile (`Helm + Terraform (AWS/EKS)`): BLOCKED" in content
+    assert "verify_managed_release_readiness.py" in content
+    assert "render_managed_release_blocker_summary.py" in content
+    assert "--reuse-built-dashboard-runtime" in content
+    assert "managed-release-blockers.md" in content
     assert "`secret_rotation_lambda_arn`" in content
 
 

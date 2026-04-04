@@ -12,6 +12,7 @@ from scripts.verify_exception_governance import (
     collect_exception_sites,
     main,
     verify_against_baseline,
+    write_baseline,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -106,6 +107,34 @@ def test_main_write_baseline_and_verify_roundtrip(tmp_path: Path) -> None:
         ]
     )
     assert verify_exit == 0
+
+
+def test_write_baseline_serializes_repo_roots_relative(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    root = repo_root / "app"
+    baseline_path = repo_root / "docs" / "ops" / "evidence" / "baseline.json"
+    _write(
+        root / "sample.py",
+        "\n".join(
+            [
+                "def f():",
+                "    try:",
+                "        return 1",
+                "    except Exception as exc:",
+                "        return str(exc)",
+            ]
+        ),
+    )
+    monkeypatch.setattr(exception_governance_verifier, "_repo_root", lambda: repo_root)
+
+    sites = collect_exception_sites(roots=(root,))
+    write_baseline(baseline_path=baseline_path, roots=(root,), sites=sites)
+
+    payload = json.loads(baseline_path.read_text(encoding="utf-8"))
+    assert payload["roots"] == ["app"]
 
 
 def test_repo_baseline_matches_current_exception_sites() -> None:

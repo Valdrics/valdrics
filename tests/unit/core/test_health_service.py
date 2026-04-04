@@ -32,9 +32,9 @@ async def test_check_system_resources_degraded():
     disk = MagicMock(percent=95, free=10 * 1024**3)
 
     with (
-        patch("app.shared.core.health.psutil.virtual_memory", return_value=mem),
-        patch("app.shared.core.health.psutil.cpu_percent", return_value=92),
-        patch("app.shared.core.health.psutil.disk_usage", return_value=disk),
+        patch("app.shared.core.health.safe_virtual_memory", return_value=mem),
+        patch("app.shared.core.health.safe_cpu_percent", return_value=92),
+        patch("app.shared.core.health.safe_disk_usage", return_value=disk),
     ):
         result = await service._check_system_resources()
 
@@ -114,7 +114,11 @@ async def test_check_background_jobs_stuck():
     with patch(
         "app.shared.core.health_check_ops._probe_worker_health",
         new=AsyncMock(
-            return_value={"status": "healthy", "worker_count": 1, "workers": ["worker@a"]}
+            return_value={
+                "status": "healthy",
+                "worker_count": 1,
+                "workers": ["worker@a"],
+            }
         ),
     ):
         result = await service._check_background_jobs()
@@ -140,7 +144,11 @@ async def test_check_background_jobs_stats():
     with patch(
         "app.shared.core.health_check_ops._probe_worker_health",
         new=AsyncMock(
-            return_value={"status": "healthy", "worker_count": 1, "workers": ["worker@a"]}
+            return_value={
+                "status": "healthy",
+                "worker_count": 1,
+                "workers": ["worker@a"],
+            }
         ),
     ):
         result = await service._check_background_jobs()

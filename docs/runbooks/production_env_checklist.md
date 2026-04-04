@@ -73,6 +73,7 @@ Contract source of truth:
 - Runtime env authority: `.runtime/<environment>.report.json`
 - Migration env authority: `.runtime/<environment>.migrate.report.json`
 - Deployment env authority: `.runtime/deploy/<environment>/deployment.report.json`
+- Cross-environment blocker rollup: `.runtime/deploy/managed-release-blockers.md`
 
 Inspect the exact required keys from the generated reports instead of copying lists by hand:
 
@@ -211,6 +212,9 @@ You can source `release/ghcr-release.env` directly before running `make deploy`.
 ```bash
 uv run python scripts/generate_managed_deployment_artifacts.py --environment staging --runtime-env-file .runtime/staging.env --release-tag <release-tag> --api-image-digest <sha256:...> --dashboard-image-digest <sha256:...>
 uv run python scripts/generate_managed_deployment_artifacts.py --environment production --runtime-env-file .runtime/production.env --release-tag <release-tag> --api-image-digest <sha256:...> --dashboard-image-digest <sha256:...>
+uv run python scripts/verify_dashboard_runtime_contract.py --build
+uv run python scripts/verify_managed_release_readiness.py --environment production --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver
+uv run python scripts/render_managed_release_blocker_summary.py
 ```
 
 Default outputs:
@@ -224,6 +228,7 @@ Default outputs:
 - `.runtime/deploy/<environment>/aws-runtime-secret.json`
 - `.runtime/deploy/<environment>/terraform.runtime.auto.tfvars.json`
 - `.runtime/deploy/<environment>/deployment.report.json`
+- `.runtime/deploy/managed-release-blockers.md`
 
 Public dashboard contract notes:
 
@@ -313,16 +318,20 @@ All tokens/secrets are stored in tenant notification settings.
 1. Generate or refresh `.runtime/production.env` and `.runtime/production.migrate.env`.
 2. Publish immutable images with `.github/workflows/publish-release-images.yml`.
 3. Generate `.runtime/deploy/production/deployment.report.json` with `--release-tag`, `--api-image-digest`, and `--dashboard-image-digest`.
-4. Verify the bundle: `uv run python scripts/verify_managed_deployment_bundle.py --environment production`
-5. Render the operator handoff: `uv run python scripts/render_managed_deployment_handoff.py --environment production`
-6. Validate the migration env: `uv run python scripts/validate_migration_env.py --env-file .runtime/production.migrate.env`
-7. Run migrations with the migration env:
+4. Verify the dashboard runtime path: `uv run python scripts/verify_dashboard_runtime_contract.py --build`
+5. Verify the bundle: `uv run python scripts/verify_managed_deployment_bundle.py --environment production`
+6. Run the consolidated readiness gate against the target dashboard URL:
+   `uv run python scripts/verify_managed_release_readiness.py --environment production --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver`
+7. Render the operator handoff: `uv run python scripts/render_managed_deployment_handoff.py --environment production`
+8. Refresh the cross-environment blocker rollup: `uv run python scripts/render_managed_release_blocker_summary.py`
+8. Validate the migration env: `uv run python scripts/validate_migration_env.py --env-file .runtime/production.migrate.env`
+9. Run migrations with the migration env:
    `set -a && source .runtime/production.migrate.env && uv run alembic upgrade head`
-8. Validate the full runtime env:
+10. Validate the full runtime env:
    `uv run python scripts/validate_runtime_env.py --environment production --env-file .runtime/production.env`
-9. Apply the generated Koyeb secrets and dashboard public env.
-10. Promote API, worker, and dashboard using the digest-pinned `promotion_ref` values recorded in `.runtime/deploy/production/koyeb-release.json`.
-11. Validate health and notification paths.
+11. Apply the generated Koyeb secrets and dashboard public env.
+12. Promote API, worker, and dashboard using the digest-pinned `promotion_ref` values recorded in `.runtime/deploy/production/koyeb-release.json`.
+13. Validate health and notification paths.
 
 ## 6. Smoke tests after deploy
 

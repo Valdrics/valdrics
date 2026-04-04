@@ -14,7 +14,6 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-# from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from app.shared.db.base import Base
 from app.shared.core.security import generate_blind_index
 
@@ -147,12 +146,12 @@ class User(Base):
 
 
 # SQLAlchemy Listeners to keep Blind Indexes in sync
-# Finding #6: Generate blind indexes efficiently. 
-# In 2026, we keep these synchronous for data integrity during transactions, 
+# Finding #6: Generate blind indexes efficiently.
+# In 2026, we keep these synchronous for data integrity during transactions,
 # but ensure the underlying 'generate_blind_index' is extremely fast (HMAC using optimized C-extensions).
 @event.listens_for(Tenant.name, "set")
 def on_tenant_name_set(target: Tenant, value: str, _old: str, _init: Any) -> None:
-    if value != _old: # Only regenerate if changed
+    if value != _old:  # Only regenerate if changed
         # Salt with own ID for cross-tenant isolation (Phase 7 Hardening)
         target.name_bidx = generate_blind_index(value, tenant_id=target.id)
 

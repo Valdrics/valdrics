@@ -1,8 +1,8 @@
 {
-  "generated_at_utc": "2026-03-21T13:49:42.904783+00:00",
+  "generated_at_utc": "2026-04-02T17:47:56.098502+00:00",
   "roots": [
-    "/home/daretechie/DevProject/GitHub/CloudSentinel-AI/app",
-    "/home/daretechie/DevProject/GitHub/CloudSentinel-AI/scripts"
+    "app",
+    "scripts"
   ],
   "sites": [
     {
@@ -21,18 +21,8 @@
       "kind": "exception"
     },
     {
-      "path": "scripts/generate_enforcement_stress_evidence.py",
-      "line": 698,
-      "kind": "exception"
-    },
-    {
       "path": "scripts/generate_feature_enforceability_matrix.py",
       "line": 200,
-      "kind": "exception"
-    },
-    {
-      "path": "scripts/generate_finance_telemetry_snapshot.py",
-      "line": 119,
       "kind": "exception"
     },
     {
@@ -52,12 +42,7 @@
     },
     {
       "path": "scripts/generate_valdrics_disposition_register.py",
-      "line": 280,
-      "kind": "exception"
-    },
-    {
-      "path": "scripts/verify_api_auth_coverage.py",
-      "line": 130,
+      "line": 303,
       "kind": "exception"
     }
   ]

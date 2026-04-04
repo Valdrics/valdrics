@@ -43,6 +43,12 @@ SSE_STREAM_RECOVERABLE_EXCEPTIONS = (
 )
 
 
+def _require_tenant_id(user: CurrentUser) -> uuid.UUID:
+    if user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context required")
+    return user.tenant_id
+
+
 async def require_internal_job_secret(
     secret: str = Header(
         ...,
@@ -138,10 +144,11 @@ async def get_job_queue_status(
 
     Requires admin role.
     """
+    tenant_id = _require_tenant_id(user)
     # Count jobs by status
     result = await db.execute(
         select(BackgroundJob.status, func.count(BackgroundJob.id))
-        .where(BackgroundJob.tenant_id == user.tenant_id)
+        .where(BackgroundJob.tenant_id == tenant_id)
         .where(sa.not_(BackgroundJob.is_deleted))
         .group_by(BackgroundJob.status)
     )
@@ -241,13 +248,12 @@ async def enqueue_new_job(
             status_code=403,
             detail=f"Unauthorized job type. Users can only enqueue: {[t.value for t in USER_CREATABLE_JOBS]}",
         )
-    if user.tenant_id is None:
-        raise HTTPException(status_code=403, detail="Tenant context required")
+    tenant_id = _require_tenant_id(user)
 
     job = await enqueue_job(
         db=db,
         job_type=request.job_type,
-        tenant_id=user.tenant_id,
+        tenant_id=tenant_id,
         payload=request.payload,
         scheduled_for=request.scheduled_for or datetime.now(timezone.utc),
     )
@@ -272,12 +278,13 @@ async def list_jobs(
     order: Literal["asc", "desc"] = Query(default="desc"),
 ) -> List[JobResponse]:
     """List recent jobs for the tenant."""
+    tenant_id = _require_tenant_id(user)
     sort_column = getattr(BackgroundJob, sort_by)
     order_func = desc if order == "desc" else asc
 
     query = (
         select(BackgroundJob)
-        .where(BackgroundJob.tenant_id == user.tenant_id)
+        .where(BackgroundJob.tenant_id == tenant_id)
         .where(sa.not_(BackgroundJob.is_deleted))
     )
 
@@ -318,8 +325,9 @@ async def stream_job_updates(
     """
     from app.shared.core.config import get_settings
 
+    tenant_id = _require_tenant_id(user)
     settings = get_settings()
-    tenant_key = str(user.tenant_id)
+    tenant_key = str(tenant_id)
     max_connections = max(1, int(settings.SSE_MAX_CONNECTIONS_PER_TENANT))
     poll_interval = max(1, int(settings.SSE_POLL_INTERVAL_SECONDS))
 
@@ -343,7 +351,7 @@ async def stream_job_updates(
                         # Fetch active jobs (pending, running) and recently finished ones
                         query = (
                             select(BackgroundJob)
-                            .where(BackgroundJob.tenant_id == user.tenant_id)
+                            .where(BackgroundJob.tenant_id == tenant_id)
                             .where(sa.not_(BackgroundJob.is_deleted))
                             .where(
                                 sa.or_(

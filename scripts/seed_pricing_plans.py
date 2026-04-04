@@ -3,18 +3,14 @@ from __future__ import annotations
 import asyncio
 import sys
 
+from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
+
 from scripts.env_generation_common import repo_root_for
 
 _REPO_ROOT = repo_root_for(__file__)
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
-
-from sqlalchemy import select
-from sqlalchemy.exc import SQLAlchemyError
-
-from app.models.pricing import ExchangeRate, PricingPlan
-from app.shared.core.pricing import PricingTier, TIER_CONFIG
-from app.shared.db.session import async_session_maker, get_engine
 
 
 def _resolve_monthly_price_usd(raw_price: object) -> float:
@@ -29,6 +25,10 @@ def _resolve_monthly_price_usd(raw_price: object) -> float:
 
 async def seed_data() -> int:
     """Seed initial plans and exchange rates."""
+    from app.models.pricing import ExchangeRate, PricingPlan
+    from app.shared.core.pricing import PricingTier, TIER_CONFIG
+    from app.shared.db.session import async_session_maker, get_engine
+
     print("🌱 Seeding pricing plans...")
     engine = get_engine()
     try:
@@ -53,7 +53,9 @@ async def seed_data() -> int:
                             id=tier.value,
                             name=config.get("name", tier.value.capitalize()),
                             description=config.get("description", ""),
-                            price_usd=_resolve_monthly_price_usd(config.get("price_usd")),
+                            price_usd=_resolve_monthly_price_usd(
+                                config.get("price_usd")
+                            ),
                             features=features,
                             limits=config.get("limits", {}),
                             display_features=config.get("display_features", []),

@@ -9,7 +9,6 @@ Tests:
 """
 
 import pytest
-from unittest.mock import patch
 
 from app.shared.remediation.circuit_breaker import (
     CircuitBreakerConfig,
@@ -49,45 +48,41 @@ class TestCircuitBreakerState:
     @pytest.mark.asyncio
     async def test_memory_fallback_get(self):
         """State should fallback to memory when no Redis."""
-        with patch("app.shared.remediation.circuit_breaker.settings.REDIS_URL", None):
-            state = CircuitBreakerState("tenant-123", redis_client=None)
+        state = CircuitBreakerState("tenant-123", redis_client=None)
 
-            # Get default
-            result = await state.get("missing_key", "default")
-            assert result == "default"
+        # Get default
+        result = await state.get("missing_key", "default")
+        assert result == "default"
 
     @pytest.mark.asyncio
     async def test_memory_fallback_set_get(self):
         """State should store in memory when no Redis."""
-        with patch("app.shared.remediation.circuit_breaker.settings.REDIS_URL", None):
-            state = CircuitBreakerState("tenant-123", redis_client=None)
+        state = CircuitBreakerState("tenant-123", redis_client=None)
 
-            await state.set("test_key", "test_value")
-            result = await state.get("test_key")
-            assert result == "test_value"
+        await state.set("test_key", "test_value")
+        result = await state.get("test_key")
+        assert result == "test_value"
 
     @pytest.mark.asyncio
     async def test_memory_fallback_incr(self):
         """State should increment in memory when no Redis."""
-        with patch("app.shared.remediation.circuit_breaker.settings.REDIS_URL", None):
-            state = CircuitBreakerState("tenant-fallback-incr", redis_client=None)
+        state = CircuitBreakerState("tenant-fallback-incr", redis_client=None)
 
-            result1 = await state.incr("counter")
-            result2 = await state.incr("counter")
+        result1 = await state.incr("counter")
+        result2 = await state.incr("counter")
 
-            assert result1 == 1
-            assert result2 == 2
+        assert result1 == 1
+        assert result2 == 2
 
     @pytest.mark.asyncio
     async def test_memory_fallback_incr_float(self):
-        with patch("app.shared.remediation.circuit_breaker.settings.REDIS_URL", None):
-            state = CircuitBreakerState("tenant-fallback-incr-float", redis_client=None)
+        state = CircuitBreakerState("tenant-fallback-incr-float", redis_client=None)
 
-            result1 = await state.incr_float("daily_savings_usd", 1.5)
-            result2 = await state.incr_float("daily_savings_usd", 2.25)
+        result1 = await state.incr_float("daily_savings_usd", 1.5)
+        result2 = await state.incr_float("daily_savings_usd", 2.25)
 
-            assert result1 == 1.5
-            assert result2 == 3.75
+        assert result1 == 1.5
+        assert result2 == 3.75
 
 
 class TestCircuitBreaker:

@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -181,8 +181,11 @@ async def get_llm_fair_use_runtime(
 
     This endpoint is intended for operations visibility in admin health.
     """
+    if _user.tenant_id is None:
+        raise HTTPException(status_code=403, detail="Tenant context required.")
+
     now = datetime.now(timezone.utc)
-    tenant_scope = str(_user.tenant_id) if _user.tenant_id else "global"
+    tenant_scope = str(_user.tenant_id)
     cache_key = f"api:health-dashboard:fair-use:{tenant_scope}"
     cache = get_cache_service()
     if cache.enabled:
@@ -197,15 +200,14 @@ async def get_llm_fair_use_runtime(
 
     settings = get_settings()
     tenant_tier = PricingTier.FREE
-    if _user.tenant_id:
-        try:
-            tenant_tier = await get_tenant_tier(_user.tenant_id, db)
-        except HEALTH_DASHBOARD_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS as exc:
-            logger.warning(
-                "health_dashboard_fair_use_tier_lookup_failed",
-                tenant_id=str(_user.tenant_id),
-                error=str(exc),
-            )
+    try:
+        tenant_tier = await get_tenant_tier(_user.tenant_id, db)
+    except HEALTH_DASHBOARD_TIER_LOOKUP_RECOVERABLE_EXCEPTIONS as exc:
+        logger.warning(
+            "health_dashboard_fair_use_tier_lookup_failed",
+            tenant_id=str(_user.tenant_id),
+            error=str(exc),
+        )
 
     guards_enabled = bool(settings.LLM_FAIR_USE_GUARDS_ENABLED)
     tier_eligible = tenant_tier in {PricingTier.PRO, PricingTier.ENTERPRISE}

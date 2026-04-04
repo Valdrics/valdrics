@@ -40,6 +40,7 @@ Machine-readable source of truth:
 - `.runtime/<environment>.migrate.report.json` is the authoritative migration env blocker inventory.
 - `.runtime/deploy/<environment>/deployment.report.json` is the authoritative deployment artifact blocker inventory.
 - `.runtime/deploy/<environment>/operator-handoff.md` is the derived human handoff rendered from those verified reports.
+- `.runtime/deploy/managed-release-blockers.md` is the derived cross-environment blocker rollup rendered from the verified staging and production bundles.
 - `docs/runbooks/production_env_checklist.md` is the operator runbook; the generated reports remain the canonical key-level contract.
 
 ## Profile A: Koyeb Managed Services
@@ -53,6 +54,8 @@ Repository evidence:
   - `scripts/verify_managed_deployment_bundle.py`
 - immutable image publish workflow:
   - `.github/workflows/publish-release-images.yml`
+- dashboard runtime verifier:
+  - `scripts/verify_dashboard_runtime_contract.py`
 - generated Koyeb artifacts:
   - `.runtime/deploy/<environment>/koyeb-api.yaml`
   - `.runtime/deploy/<environment>/koyeb-worker.yaml`
@@ -70,17 +73,25 @@ Expected posture:
 - Koyeb deploys from immutable digest refs, not Git branch tracking
 - production promotion reuses the exact tested release image digests from staging
 - dashboard public configuration remains runtime-driven through `koyeb-dashboard-env.json`, so the same dashboard image can be promoted between environments
+- the dashboard image is built from `Dockerfile.dashboard`, which packages the SvelteKit build output and serves it through `dashboard/server.node.mjs` for the managed Node runtime
 
 Core operator steps:
 
 1. Generate or refresh the runtime and migration bundles.
 2. Publish immutable API and dashboard images with `.github/workflows/publish-release-images.yml`.
 3. Capture the published `sha256:...` digests from `ghcr-release.json` / `ghcr-release.env`.
-4. Generate the deployment bundle with `--release-tag`, `--api-image-digest`, and `--dashboard-image-digest`.
-5. Apply migrations with the environment-specific migration env.
-6. Deploy API, worker, and dashboard in Koyeb using the digest-pinned `promotion_ref` values in `koyeb-release.json`.
-7. Apply dashboard public env from `koyeb-dashboard-env.json`.
-8. Validate `/health/live`, `/health`, worker connectivity, dashboard-to-API connectivity, and `/_internal/metrics`.
+4. Run the consolidated readiness gate:
+   `uv run python scripts/verify_managed_release_readiness.py --environment <staging|production> --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver`
+   If you are reusing a local `vite preview` instance instead of a deployed domain, add
+   `--reuse-built-dashboard-runtime` so the gate verifies the existing build instead of
+   rebuilding underneath the live preview server.
+5. Render the cross-environment blocker rollup:
+   `uv run python scripts/render_managed_release_blocker_summary.py`
+6. Generate the deployment bundle with `--release-tag`, `--api-image-digest`, and `--dashboard-image-digest`.
+7. Apply migrations with the environment-specific migration env.
+8. Deploy API, worker, and dashboard in Koyeb using the digest-pinned `promotion_ref` values in `koyeb-release.json`.
+9. Apply dashboard public env from `koyeb-dashboard-env.json`.
+10. Validate `/health/live`, `/health`, worker connectivity, dashboard-to-API connectivity, and `/_internal/metrics`.
 
 ## Profile B: Helm + Terraform (AWS/EKS) Future Scale
 

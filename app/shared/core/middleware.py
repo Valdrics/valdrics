@@ -7,6 +7,7 @@ from fastapi import Request
 import uuid
 import structlog
 from app.shared.core.config import get_settings
+from app.shared.core.cors_policy import resolve_cors_allowed_origins
 from app.shared.core.proxy_headers import apply_trusted_proxy_headers
 from app.shared.core.tracing import set_correlation_id
 
@@ -16,16 +17,13 @@ REQUEST_ID_ALLOWED_CHARS = frozenset(
 REQUEST_ID_MIN_LENGTH = 8
 REQUEST_ID_MAX_LENGTH = 128
 INTERNAL_METRICS_PATH = "/_internal/metrics"
-INTERNAL_METRICS_TOKEN_HEADER = (
-    "x-internal-metrics-token"  # nosec B105 - header name, not a secret value
-)
+INTERNAL_METRICS_TOKEN_HEADER = "x-internal-metrics-token"  # nosec B105 - header name, not a secret value
 
 
 def _normalize_request_id(value: str | None) -> str:
     candidate = str(value or "").strip()
-    if (
-        REQUEST_ID_MIN_LENGTH <= len(candidate) <= REQUEST_ID_MAX_LENGTH
-        and all(char in REQUEST_ID_ALLOWED_CHARS for char in candidate)
+    if REQUEST_ID_MIN_LENGTH <= len(candidate) <= REQUEST_ID_MAX_LENGTH and all(
+        char in REQUEST_ID_ALLOWED_CHARS for char in candidate
     ):
         return candidate
     return str(uuid.uuid4())
@@ -59,10 +57,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if request.url.path in ["/docs", "/redoc", "/openapi.json"]:
             return response
 
-        # CSP connect-src: Restrict based on allowed origins from config
-        # Convert CORS_ORIGINS list to a space-separated string for CSP
-        allowed_origins = " ".join(settings.CORS_ORIGINS)
-        connect_src = f"'self' {allowed_origins}"
+        normalized_origins = resolve_cors_allowed_origins(
+            list(getattr(settings, "CORS_ORIGINS", []) or []),
+            allow_credentials=True,
+        )
+        connect_src = " ".join(dict.fromkeys(["'self'", *normalized_origins]))
 
         csp_policy = (
             "default-src 'self'; "
@@ -123,7 +122,9 @@ class InternalMetricsAccessMiddleware(BaseHTTPMiddleware):
         configured_token = str(
             getattr(settings, "INTERNAL_METRICS_AUTH_TOKEN", "") or ""
         ).strip()
-        supplied_token = str(request.headers.get(INTERNAL_METRICS_TOKEN_HEADER, "") or "").strip()
+        supplied_token = str(
+            request.headers.get(INTERNAL_METRICS_TOKEN_HEADER, "") or ""
+        ).strip()
         if configured_token:
             if supplied_token and secrets.compare_digest(
                 supplied_token,
@@ -175,9 +176,7 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
         existing_context = structlog.contextvars.get_contextvars()
         structlog.contextvars.clear_contextvars()
         preserved_context = {
-            key: value
-            for key, value in existing_context.items()
-            if key != "request_id"
+            key: value for key, value in existing_context.items() if key != "request_id"
         }
         if preserved_context:
             structlog.contextvars.bind_contextvars(**preserved_context)

@@ -13,11 +13,12 @@ _REPO_ROOT = repo_root_for(__file__)
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from app.models.tenant import Tenant, User, UserRole, UserPersona
-from app.shared.db.session import async_session_maker, get_engine
 
 async def seed_data() -> int:
     """Seed initial development data (Tenant + User)."""
+    from app.models.tenant import Tenant, User, UserPersona, UserRole
+    from app.shared.db.session import async_session_maker, get_engine
+
     print("🌱 Seeding development data...", flush=True)
     engine = get_engine()
     try:
@@ -52,8 +53,13 @@ async def seed_data() -> int:
                     db.add(user)
 
                     print(f"  + Created Tenant: Valdrics Dev ({tenant_id})", flush=True)
-                    print(f"  + Created User: admin@valdrics.com ({user_id})", flush=True)
-                    print("  ! NOTE: Create this user in Supabase Auth with this UUID!", flush=True)
+                    print(
+                        f"  + Created User: admin@valdrics.com ({user_id})", flush=True
+                    )
+                    print(
+                        "  ! NOTE: Create this user in Supabase Auth with this UUID!",
+                        flush=True,
+                    )
                     print(f"  ! User ID: {user_id}", flush=True)
                 else:
                     print("  ~ Users already exist, skipping seed.", flush=True)
@@ -70,6 +76,7 @@ async def seed_data() -> int:
 def main(argv: list[str] | None = None) -> int:
     del argv
     return asyncio.run(seed_data())
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

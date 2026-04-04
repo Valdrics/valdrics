@@ -9,7 +9,9 @@ import os
 import sys
 
 import structlog
-from app.shared.core.config_validation_placeholders import require_no_managed_placeholder
+from app.shared.core.config_validation_placeholders import (
+    require_no_managed_placeholder,
+)
 from app.shared.core.config_validation_runtime import (
     validate_enforcement_guardrails,
     validate_environment_safety,
@@ -31,7 +33,9 @@ def validate_app_identity(settings_obj: object) -> None:
     """Require the canonical public product name in runtime settings."""
     app_name = str(getattr(settings_obj, "APP_NAME", "") or "").strip()
     if app_name != "Valdrics":
-        raise ValueError("APP_NAME must be set to the canonical product name 'Valdrics'.")
+        raise ValueError(
+            "APP_NAME must be set to the canonical product name 'Valdrics'."
+        )
 
 
 def validate_core_secrets(settings_obj: object) -> None:
@@ -164,7 +168,9 @@ def validate_llm_config(settings_obj: object, *, is_production: bool) -> None:
             raise ValueError(
                 f"LLM_PROVIDER is '{llm_provider}' but its API key is missing."
             )
-        environment = str(getattr(settings_obj, "ENVIRONMENT", "") or "").strip().lower()
+        environment = (
+            str(getattr(settings_obj, "ENVIRONMENT", "") or "").strip().lower()
+        )
         logger = structlog.get_logger()
         if environment in {"local", "development"}:
             logger.debug(
@@ -191,26 +197,52 @@ def validate_llm_config(settings_obj: object, *, is_production: bool) -> None:
     if getattr(settings_obj, "LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD", 0) < 1:
         raise ValueError("LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD must be >= 1.")
     if getattr(settings_obj, "LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD", 0) > 10000:
-        raise ValueError(
-            "LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD must be <= 10000."
-        )
+        raise ValueError("LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD must be <= 10000.")
     if getattr(settings_obj, "LLM_GLOBAL_ABUSE_BLOCK_SECONDS", 0) < 30:
         raise ValueError("LLM_GLOBAL_ABUSE_BLOCK_SECONDS must be >= 30.")
     if getattr(settings_obj, "LLM_GLOBAL_ABUSE_BLOCK_SECONDS", 0) > 86400:
         raise ValueError("LLM_GLOBAL_ABUSE_BLOCK_SECONDS must be <= 86400.")
 
+    analysis_rate_limits = (
+        ("ANALYSIS_RATE_LIMIT_FREE_PER_HOUR", "free"),
+        ("ANALYSIS_RATE_LIMIT_STARTER_PER_HOUR", "starter"),
+        ("ANALYSIS_RATE_LIMIT_GROWTH_PER_HOUR", "growth"),
+        ("ANALYSIS_RATE_LIMIT_PRO_PER_HOUR", "pro"),
+        ("ANALYSIS_RATE_LIMIT_ENTERPRISE_PER_HOUR", "enterprise"),
+    )
+    last_limit = 0
+    last_tier = "none"
+    for setting_name, tier in analysis_rate_limits:
+        value = int(getattr(settings_obj, setting_name, 0) or 0)
+        if value < 1:
+            raise ValueError(f"{setting_name} must be >= 1.")
+        if value > 100000:
+            raise ValueError(f"{setting_name} must be <= 100000.")
+        if value < last_limit:
+            raise ValueError(
+                f"{setting_name} must be >= {last_tier} tier analysis limit."
+            )
+        last_limit = value
+        last_tier = tier
+
 
 def validate_billing_config(settings_obj: object, *, is_production: bool) -> None:
     """Validate Paystack credentials and webhook allowlist configuration."""
-    default_currency = str(
-        getattr(settings_obj, "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY", "NGN") or "NGN"
-    ).strip().upper()
+    default_currency = (
+        str(getattr(settings_obj, "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY", "NGN") or "NGN")
+        .strip()
+        .upper()
+    )
     if default_currency not in {"NGN", "USD"}:
         raise ValueError("PAYSTACK_DEFAULT_CHECKOUT_CURRENCY must be one of: NGN, USD.")
 
     if is_production:
-        paystack_secret = str(getattr(settings_obj, "PAYSTACK_SECRET_KEY", "") or "").strip()
-        paystack_public = str(getattr(settings_obj, "PAYSTACK_PUBLIC_KEY", "") or "").strip()
+        paystack_secret = str(
+            getattr(settings_obj, "PAYSTACK_SECRET_KEY", "") or ""
+        ).strip()
+        paystack_public = str(
+            getattr(settings_obj, "PAYSTACK_PUBLIC_KEY", "") or ""
+        ).strip()
         allow_synthetic = bool(
             getattr(settings_obj, "ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION", False)
         )
@@ -276,8 +308,7 @@ def validate_billing_config(settings_obj: object, *, is_production: bool) -> Non
             ipaddress.ip_address(ip_value)
         except ValueError as exc:
             raise ValueError(
-                "PAYSTACK_WEBHOOK_ALLOWED_IPS contains invalid IP address: "
-                f"{ip_value}"
+                f"PAYSTACK_WEBHOOK_ALLOWED_IPS contains invalid IP address: {ip_value}"
             ) from exc
 
 

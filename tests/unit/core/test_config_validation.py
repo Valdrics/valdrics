@@ -48,8 +48,9 @@ class TestSettingsValidation:
                     DB_SSL_MODE="disable",
                     _env_file=None,
                 )
-            assert "APP_NAME must be set to the canonical product name 'Valdrics'." in str(
-                exc.value
+            assert (
+                "APP_NAME must be set to the canonical product name 'Valdrics'."
+                in str(exc.value)
             )
 
     def test_settings_rejects_weak_blind_index_kdf_iterations(self):
@@ -65,6 +66,26 @@ class TestSettingsValidation:
                     _env_file=None,
                 )
             assert "BLIND_INDEX_KDF_ITERATIONS must be >= 10000" in str(exc.value)
+
+    def test_settings_rejects_non_monotonic_analysis_rate_limits(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    DATABASE_URL="sqlite+aiosqlite:///:memory:",
+                    SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
+                    ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
+                    CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
+                    KDF_SALT=FAKE_KDF_SALT,
+                    ANALYSIS_RATE_LIMIT_FREE_PER_HOUR=5,
+                    ANALYSIS_RATE_LIMIT_STARTER_PER_HOUR=4,
+                    DB_SSL_MODE="disable",
+                    _env_file=None,
+                )
+
+            assert (
+                "ANALYSIS_RATE_LIMIT_STARTER_PER_HOUR must be >= free tier analysis limit."
+                in str(exc.value)
+            )
 
     def test_settings_invalid_ssl_mode(self):
         """Test validation with invalid SSL mode."""
@@ -316,7 +337,9 @@ class TestSettingsValidation:
 
             assert "REMEDIATION_KILL_SWITCH_SCOPE must be one of" in str(exc.value)
 
-    def test_settings_blocks_global_kill_switch_scope_in_production_without_override(self):
+    def test_settings_blocks_global_kill_switch_scope_in_production_without_override(
+        self,
+    ):
         """Production/staging must not use global scope unless explicitly overridden."""
         with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ValidationError) as exc:
@@ -728,8 +751,9 @@ class TestSettingsValidation:
                     ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS=["short-key"],
                     _env_file=None,
                 )
-            assert "ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS key must be >= 32" in str(
-                exc.value
+            assert (
+                "ENFORCEMENT_APPROVAL_TOKEN_FALLBACK_SECRETS key must be >= 32"
+                in str(exc.value)
             )
 
     def test_settings_rejects_short_enforcement_approval_token_secret(self):

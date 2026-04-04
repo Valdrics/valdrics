@@ -20,6 +20,7 @@ def test_runtime_contract_sets_are_stable() -> None:
     assert "API_URL" in DECLARED_EXTERNAL_VALUE_KEYS
     assert "SUPABASE_JWT_SECRET" in RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS
     assert KOYEB_DASHBOARD_PUBLIC_ENV_KEYS == (
+        "ORIGIN",
         "PUBLIC_API_URL",
         "PUBLIC_SUPABASE_ANON_KEY",
         "PUBLIC_SUPABASE_URL",
@@ -44,7 +45,9 @@ def test_runtime_required_operator_input_keys_include_selected_provider() -> Non
     assert "TRUSTED_PROXY_CIDRS" in required
 
 
-def test_identify_runtime_unresolved_keys_respects_placeholders_and_provider_key() -> None:
+def test_identify_runtime_unresolved_keys_respects_placeholders_and_provider_key() -> (
+    None
+):
     values = {
         "LLM_PROVIDER": "google",
         "API_URL": "https://api.example.com",
@@ -61,7 +64,9 @@ def test_identify_runtime_unresolved_keys_respects_placeholders_and_provider_key
         "GOOGLE_API_KEY": "REPLACE_WITH_GOOGLE_API_KEY",
     }
 
-    unresolved = identify_runtime_unresolved_keys(values, RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS)
+    unresolved = identify_runtime_unresolved_keys(
+        values, RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS
+    )
 
     assert unresolved == ["GOOGLE_API_KEY", "SUPABASE_JWT_SECRET"]
 

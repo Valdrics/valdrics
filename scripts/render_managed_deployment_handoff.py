@@ -125,6 +125,8 @@ def _render_handoff_markdown(
         f"- Runtime report: `{runtime_report_path}`",
         f"- Migration report: `{migration_report_path}`",
         f"- Deployment report: `{deployment_report_path}`",
+        "- Cross-environment blocker rollup: "
+        "`.runtime/deploy/managed-release-blockers.md`",
         "",
         "## Root Operator Gaps",
         "",
@@ -161,11 +163,21 @@ def _render_handoff_markdown(
         "",
         "## Verification Commands",
         "",
+        "- Consolidated readiness gate: "
+        f"`uv run python scripts/verify_managed_release_readiness.py --environment {environment} --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver`",
+        "- Local preview note: "
+        "add `--reuse-built-dashboard-runtime` when the dashboard URL points to a live local `vite preview` server.",
+        "- Dashboard runtime contract: "
+        "`uv run python scripts/verify_dashboard_runtime_contract.py --build`",
         f"- Runtime validation: `{runtime_report.get('validation_command', '')}`",
         f"- Migration validation: `{migration_report.get('validation_command', '')}`",
         f"- Migration apply: `{migration_report.get('migration_command', '')}`",
         "- Bundle verification: "
         f"`uv run python scripts/verify_managed_deployment_bundle.py --environment {environment}`",
+        "- Cross-environment blocker rollup: "
+        "`uv run python scripts/render_managed_release_blocker_summary.py`",
+        "- Public browser gate: "
+        "`uv run python scripts/run_public_frontend_quality_gate.py --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver`",
         "",
         "Regenerate this handoff after any runtime env, migration env, or deployment artifact change.",
         "",

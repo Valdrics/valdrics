@@ -17,12 +17,20 @@ def _write(path: Path, content: str) -> None:
 
 def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     _write(
+        tmp_path / "README.md",
+        "Valdrics\nOptimize Cloud Value, Not Just Cost\nPython 3.12\n",
+    )
+    _write(
+        tmp_path / "docs/FULL_CODEBASE_AUDIT.md",
+        "time-bound snapshot\nfirst-party Python, TypeScript, and Svelte source\nlive verification scripts remain the source of truth\nmixed secret model\nRLS enforcement plus documented exemptions\n",
+    )
+    _write(
         tmp_path / "docs/architecture/overview.md",
         "boundary target\nHelm chart\nKoyeb-managed services\n",
     )
     _write(
         tmp_path / "docs/DEPLOYMENT.md",
-        "Current supported production deployment profile\nKoyeb managed services with immutable image promotion\nFuture Scale Profile\n.github/workflows/publish-release-images.yml\ndigest-pinned `promotion_ref` values\nkoyeb-release.json\nkoyeb-dashboard-env.json\n",
+        "Current supported production deployment profile\nKoyeb managed services with immutable image promotion\nFuture Scale Profile\n.github/workflows/publish-release-images.yml\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\ndigest-pinned `promotion_ref` values\nkoyeb-release.json\nkoyeb-dashboard-env.json\nmanaged-release-blockers.md\n",
     )
     _write(
         tmp_path / "docs/CAPACITY_PLAN.md",
@@ -58,11 +66,11 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     )
     _write(
         tmp_path / "docs/runbooks/production_env_checklist.md",
-        "Python 3.12.x\n.python-version\nAPI_URL=https://api.example.com\nFRONTEND_URL=https://app.example.com\nSUPABASE_ANON_KEY=...\nSENTRY_DSN=https://...\nOTEL_EXPORTER_OTLP_ENDPOINT=https://collector:4317\nENFORCEMENT_APPROVAL_TOKEN_SECRET=...\nENFORCEMENT_EXPORT_SIGNING_SECRET=...\nINTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>\nEXPOSE_API_DOCUMENTATION_PUBLICLY=false\ngenerate_managed_runtime_env.py\ngenerate_managed_migration_env.py\ngenerate_managed_deployment_artifacts.py\nverify_managed_deployment_bundle.py\npublish-release-images.yml\n--api-image-digest <sha256:...>\n--dashboard-image-digest <sha256:...>\nrun_public_frontend_quality_gate.py\ndeployment.report.json\nkoyeb-dashboard-env.json\nkoyeb-release.json\n--env-file .runtime/production.env\n--env-file .runtime/production.migrate.env\nset -a && source .runtime/production.migrate.env && uv run alembic upgrade head\n",
+        "Python 3.12.x\n.python-version\nAPI_URL=https://api.example.com\nFRONTEND_URL=https://app.example.com\nSUPABASE_ANON_KEY=...\nSENTRY_DSN=https://...\nOTEL_EXPORTER_OTLP_ENDPOINT=https://collector:4317\nENFORCEMENT_APPROVAL_TOKEN_SECRET=...\nENFORCEMENT_EXPORT_SIGNING_SECRET=...\nINTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>\nEXPOSE_API_DOCUMENTATION_PUBLICLY=false\ngenerate_managed_runtime_env.py\ngenerate_managed_migration_env.py\ngenerate_managed_deployment_artifacts.py\nverify_managed_deployment_bundle.py\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\npublish-release-images.yml\n--api-image-digest <sha256:...>\n--dashboard-image-digest <sha256:...>\nrun_public_frontend_quality_gate.py\ndeployment.report.json\nkoyeb-dashboard-env.json\nkoyeb-release.json\nmanaged-release-blockers.md\n--env-file .runtime/production.env\n--env-file .runtime/production.migrate.env\nset -a && source .runtime/production.migrate.env && uv run alembic upgrade head\n",
     )
     _write(
         tmp_path / "docs/runbooks/koyeb_release_promotion.md",
-        "publish-release-images.yml\nghcr-release.env\npromotion_ref\nGHCR_NAMESPACE=valdrics\n",
+        "publish-release-images.yml\nghcr-release.env\npromotion_ref\nGHCR_NAMESPACE=valdrics\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\nmanaged-release-blockers.md\n",
     )
     _write(
         tmp_path / "docs/integrations/workflow_automation.md",
@@ -91,13 +99,23 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
 def test_verify_contracts_reports_missing_and_forbidden_phrases(tmp_path: Path) -> None:
     for contract in (
         DocumentationContract(
+            path="README.md",
+            required_phrases=("Valdrics",),
+            forbidden_phrases=("11 zombie-detection plugins",),
+        ),
+        DocumentationContract(
+            path="docs/FULL_CODEBASE_AUDIT.md",
+            required_phrases=("time-bound snapshot",),
+            forbidden_phrases=("5358 tests collected",),
+        ),
+        DocumentationContract(
             path="docs/architecture/overview.md",
             required_phrases=("boundary target",),
             forbidden_phrases=("Zero external dependencies",),
         ),
         DocumentationContract(
             path="docs/DEPLOYMENT.md",
-            required_phrases=("Supported production deployment profile",),
+            required_phrases=("Supported production deployment profile", "verify_dashboard_runtime_contract.py"),
         ),
         DocumentationContract(
             path="docs/CAPACITY_PLAN.md",
@@ -143,10 +161,13 @@ def test_verify_contracts_reports_missing_and_forbidden_phrases(tmp_path: Path) 
                 "generate_managed_migration_env.py",
                 "generate_managed_deployment_artifacts.py",
                 "verify_managed_deployment_bundle.py",
+                "verify_dashboard_runtime_contract.py",
+                "render_managed_release_blocker_summary.py",
                 "publish-release-images.yml",
                 "--api-image-digest <sha256:...>",
                 "--dashboard-image-digest <sha256:...>",
                 "run_public_frontend_quality_gate.py",
+                "managed-release-blockers.md",
             ),
         ),
         DocumentationContract(
@@ -156,6 +177,9 @@ def test_verify_contracts_reports_missing_and_forbidden_phrases(tmp_path: Path) 
                 "ghcr-release.env",
                 "promotion_ref",
                 "GHCR_NAMESPACE=valdrics",
+                "verify_dashboard_runtime_contract.py",
+                "render_managed_release_blocker_summary.py",
+                "managed-release-blockers.md",
             ),
         ),
         DocumentationContract(
@@ -183,12 +207,41 @@ def test_verify_contracts_reports_missing_and_forbidden_phrases(tmp_path: Path) 
         _write(tmp_path / contract.path, "placeholder\n")
 
     _write(
+        tmp_path / "README.md",
+        "11 zombie-detection plugins\n",
+    )
+
+    _write(
+        tmp_path / "docs/FULL_CODEBASE_AUDIT.md",
+        "5358 tests collected\n",
+    )
+
+    _write(
         tmp_path / "docs/architecture/overview.md",
         "Zero external dependencies\n",
     )
 
     errors = verify_contracts(root=tmp_path)
-    assert "docs/architecture/overview.md: missing required phrase 'boundary target'" in errors
+    assert (
+        "README.md: missing required phrase 'Valdrics'"
+        in errors
+    )
+    assert (
+        "README.md: forbidden phrase present '11 zombie-detection plugins'"
+        in errors
+    )
+    assert (
+        "docs/FULL_CODEBASE_AUDIT.md: missing required phrase 'time-bound snapshot'"
+        in errors
+    )
+    assert (
+        "docs/FULL_CODEBASE_AUDIT.md: forbidden phrase present '5358 tests collected'"
+        in errors
+    )
+    assert (
+        "docs/architecture/overview.md: missing required phrase 'boundary target'"
+        in errors
+    )
     assert (
         "docs/architecture/overview.md: forbidden phrase present 'Zero external dependencies'"
         in errors
@@ -203,7 +256,9 @@ def test_verify_contracts_rejects_missing_root(tmp_path: Path) -> None:
 def test_verify_contracts_rejects_non_directory_root(tmp_path: Path) -> None:
     root_file = tmp_path / "root.txt"
     root_file.write_text("not-a-directory\n", encoding="utf-8")
-    assert verify_contracts(root=root_file) == [f"root must be a directory: {root_file}"]
+    assert verify_contracts(root=root_file) == [
+        f"root must be a directory: {root_file}"
+    ]
 
 
 def test_verify_contracts_rejects_directory_target(tmp_path: Path) -> None:
@@ -220,7 +275,9 @@ def test_main_accepts_root_override(monkeypatch) -> None:
         seen.append(root)
         return []
 
-    monkeypatch.setattr(documentation_runtime_contracts, "verify_contracts", _fake_verify_contracts)
+    monkeypatch.setattr(
+        documentation_runtime_contracts, "verify_contracts", _fake_verify_contracts
+    )
 
     assert main(["--root", "docs"]) == 0
     assert seen == [documentation_runtime_contracts.DEFAULT_ROOT / "docs"]

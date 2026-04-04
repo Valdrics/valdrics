@@ -76,13 +76,19 @@ def test_generate_managed_deployment_artifacts_outputs_platform_ready_bundle(
 
     api_manifest = _load_yaml(output_dir / "koyeb-api.yaml")
     worker_manifest = _load_yaml(output_dir / "koyeb-worker.yaml")
-    koyeb_secrets = json.loads((output_dir / "koyeb-secrets.json").read_text(encoding="utf-8"))
+    koyeb_secrets = json.loads(
+        (output_dir / "koyeb-secrets.json").read_text(encoding="utf-8")
+    )
     koyeb_dashboard_env = json.loads(
         (output_dir / "koyeb-dashboard-env.json").read_text(encoding="utf-8")
     )
-    koyeb_release = json.loads((output_dir / "koyeb-release.json").read_text(encoding="utf-8"))
+    koyeb_release = json.loads(
+        (output_dir / "koyeb-release.json").read_text(encoding="utf-8")
+    )
     helm_values = _load_yaml(output_dir / "helm-values.yaml")
-    helm_secret = json.loads((output_dir / "aws-runtime-secret.json").read_text(encoding="utf-8"))
+    helm_secret = json.loads(
+        (output_dir / "aws-runtime-secret.json").read_text(encoding="utf-8")
+    )
     terraform_tfvars = json.loads(
         (output_dir / "terraform.runtime.auto.tfvars.json").read_text(encoding="utf-8")
     )
@@ -93,16 +99,28 @@ def test_generate_managed_deployment_artifacts_outputs_platform_ready_bundle(
     assert report["runtime_validation_blockers"] == []
     assert api_manifest["name"] == "valdrics-api"
     assert worker_manifest["name"] == "valdrics-worker"
-    assert api_manifest["definition"]["git"]["repository"] == "github.com/Valdrics/valdrics"
-    assert worker_manifest["definition"]["git"]["repository"] == "github.com/Valdrics/valdrics"
+    assert (
+        api_manifest["definition"]["git"]["repository"]
+        == "github.com/Valdrics/valdrics"
+    )
+    assert (
+        worker_manifest["definition"]["git"]["repository"]
+        == "github.com/Valdrics/valdrics"
+    )
     assert worker_manifest["definition"]["command"][0:3] == [
         "celery",
         "-A",
         "app.shared.core.celery_app:celery_app",
     ]
 
-    api_env = {item["name"]: item.get("secret") or item.get("value") for item in api_manifest["definition"]["env"]}
-    worker_env = {item["name"]: item.get("secret") or item.get("value") for item in worker_manifest["definition"]["env"]}
+    api_env = {
+        item["name"]: item.get("secret") or item.get("value")
+        for item in api_manifest["definition"]["env"]
+    }
+    worker_env = {
+        item["name"]: item.get("secret") or item.get("value")
+        for item in worker_manifest["definition"]["env"]
+    }
     assert api_env["INTERNAL_JOB_SECRET"] == "valdrics-internal-job-secret"
     assert api_env["OPENAI_API_KEY"] == "valdrics-openai-key"
     assert (
@@ -117,7 +135,10 @@ def test_generate_managed_deployment_artifacts_outputs_platform_ready_bundle(
     assert worker_env["ENABLE_SCHEDULER"] == "false"
     assert "INTERNAL_METRICS_AUTH_TOKEN" not in worker_env
 
-    assert koyeb_secrets["valdrics-internal-job-secret"] == "ci-internal-job-secret-32-chars-min-000"
+    assert (
+        koyeb_secrets["valdrics-internal-job-secret"]
+        == "ci-internal-job-secret-32-chars-min-000"
+    )
     assert koyeb_secrets["valdrics-openai-key"] == "sk-openai-live-key"
     assert (
         koyeb_secrets["valdrics-aws-trust-principal-arn"]
@@ -126,14 +147,20 @@ def test_generate_managed_deployment_artifacts_outputs_platform_ready_bundle(
     assert "valdrics-forecaster-break-glass-enabled" not in koyeb_secrets
     assert "valdrics-outbound-tls-break-glass-enabled" not in koyeb_secrets
     assert koyeb_dashboard_env["PUBLIC_API_URL"] == "https://api.runtime.example/api/v1"
+    assert koyeb_dashboard_env["ORIGIN"] == "https://console.other-example.com"
     assert koyeb_dashboard_env["PUBLIC_SUPABASE_URL"] == "https://example.supabase.co"
     assert (
-        koyeb_dashboard_env["PUBLIC_SUPABASE_ANON_KEY"]
-        == "ci-public-supabase-anon-key"
+        koyeb_dashboard_env["PUBLIC_SUPABASE_ANON_KEY"] == "ci-public-supabase-anon-key"
     )
     assert koyeb_release["strategy"] == "immutable_image_promotion"
-    assert koyeb_release["services"]["api"]["repository"] == "ghcr.io/valdrics/valdrics-api"
-    assert koyeb_release["services"]["api"]["image"] == "ghcr.io/valdrics/valdrics-api:2026.03.18"
+    assert (
+        koyeb_release["services"]["api"]["repository"]
+        == "ghcr.io/valdrics/valdrics-api"
+    )
+    assert (
+        koyeb_release["services"]["api"]["image"]
+        == "ghcr.io/valdrics/valdrics-api:2026.03.18"
+    )
     assert (
         koyeb_release["services"]["api"]["image_digest"]
         == "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -156,9 +183,14 @@ def test_generate_managed_deployment_artifacts_outputs_platform_ready_bundle(
     )
     assert helm_values["global"]["apiHostOverride"] == "api.runtime.example"
     assert helm_values["global"]["frontendHostOverride"] == "console.other-example.com"
-    assert helm_values["externalSecrets"]["remoteSecretKey"] == "/valdrics/prod/app-runtime"
+    assert (
+        helm_values["externalSecrets"]["remoteSecretKey"]
+        == "/valdrics/prod/app-runtime"
+    )
     assert helm_secret["DATABASE_URL"].startswith("postgresql+asyncpg://postgres:")
-    assert helm_secret["INTERNAL_JOB_SECRET"] == "ci-internal-job-secret-32-chars-min-000"
+    assert (
+        helm_secret["INTERNAL_JOB_SECRET"] == "ci-internal-job-secret-32-chars-min-000"
+    )
     assert "API_URL" not in helm_secret
     assert "SUPABASE_URL" not in helm_secret
     assert terraform_tfvars["environment"] == "prod"
@@ -221,14 +253,23 @@ def test_generate_managed_deployment_artifacts_reports_placeholder_blockers_for_
     assert report["ready_for_koyeb"] is False
     assert report["ready_for_koyeb_release"] is False
     assert report["ready_for_helm"] is False
+    assert "ORIGIN" in report["koyeb_dashboard_public_env_blockers"]
     assert "DATABASE_URL" in report["runtime_validation_blockers"]
-    assert "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN" in report["runtime_validation_blockers"]
+    assert (
+        "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN" in report["runtime_validation_blockers"]
+    )
     assert "valdrics-groq-key-staging" in report["koyeb_secret_names"]
     assert "valdrics-aws-trust-principal-arn-staging" in report["koyeb_secret_names"]
-    assert "valdrics-forecaster-break-glass-enabled-staging" not in report["koyeb_secret_names"]
+    assert (
+        "valdrics-forecaster-break-glass-enabled-staging"
+        not in report["koyeb_secret_names"]
+    )
     assert report["helm_external_secret_remote_key"] == "/valdrics/staging/app-runtime"
     assert api_manifest["name"] == "valdrics-api-staging"
-    assert api_manifest["definition"]["git"]["repository"] == "github.com/Valdrics/valdrics"
+    assert (
+        api_manifest["definition"]["git"]["repository"]
+        == "github.com/Valdrics/valdrics"
+    )
     assert "PUBLIC_SUPABASE_ANON_KEY" in report["koyeb_dashboard_public_env_blockers"]
     assert "release_tag" in report["koyeb_release_value_blockers"]
     assert "services.api.image_digest" in report["koyeb_release_value_blockers"]
@@ -289,10 +330,16 @@ def test_generate_managed_deployment_artifacts_flags_invalid_public_urls_as_bloc
 @pytest.mark.parametrize(
     ("env_line", "expected_blocker"),
     [
-        ("OTEL_EXPORTER_OTLP_ENDPOINT=otel.example.com:4317", "OTEL_EXPORTER_OTLP_ENDPOINT"),
+        (
+            "OTEL_EXPORTER_OTLP_ENDPOINT=otel.example.com:4317",
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+        ),
         ("SENTRY_DSN=not-a-url", "SENTRY_DSN"),
         ("TRUSTED_PROXY_CIDRS='[\"not-a-cidr\"]'", "TRUSTED_PROXY_CIDRS"),
-        ("AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=not-an-arn", "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN"),
+        (
+            "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN=not-an-arn",
+            "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN",
+        ),
         ("ADMIN_API_KEY=too-short", "ADMIN_API_KEY"),
         ("INTERNAL_METRICS_AUTH_TOKEN=short-token", "INTERNAL_METRICS_AUTH_TOKEN"),
         ("PAYSTACK_SECRET_KEY=sk_test_runtime_paystack_key", "PAYSTACK_SECRET_KEY"),
@@ -419,7 +466,9 @@ def test_generate_managed_deployment_artifacts_rejects_invalid_image_digest(
         ],
     )
 
-    with pytest.raises(ValueError, match="api_image_digest must be a sha256:<64-hex> digest"):
+    with pytest.raises(
+        ValueError, match="api_image_digest must be a sha256:<64-hex> digest"
+    ):
         generate_managed_deployment_artifacts(
             environment="production",
             runtime_env_file=runtime_env,
@@ -492,7 +541,9 @@ def test_main_resolves_default_paths_from_repo_root(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_generate_managed_deployment_artifacts(**kwargs: object) -> dict[str, object]:
+    def _fake_generate_managed_deployment_artifacts(
+        **kwargs: object,
+    ) -> dict[str, object]:
         captured.update(kwargs)
         output_dir = kwargs["output_dir"]
         return {
@@ -512,14 +563,20 @@ def test_main_resolves_default_paths_from_repo_root(
     )
 
     assert managed_deployment_generator.main(["--environment", "staging"]) == 0
-    assert captured["runtime_env_file"] == (
-        managed_deployment_generator._repo_root() / ".runtime" / "staging.env"
-    ).resolve()
-    assert captured["output_dir"] == (
-        managed_deployment_generator._repo_root()
-        / managed_deployment_generator.DEFAULT_OUTPUT_ROOT
-        / "staging"
-    ).resolve()
+    assert (
+        captured["runtime_env_file"]
+        == (
+            managed_deployment_generator._repo_root() / ".runtime" / "staging.env"
+        ).resolve()
+    )
+    assert (
+        captured["output_dir"]
+        == (
+            managed_deployment_generator._repo_root()
+            / managed_deployment_generator.DEFAULT_OUTPUT_ROOT
+            / "staging"
+        ).resolve()
+    )
 
 
 def test_main_resolves_explicit_relative_paths_from_repo_root(
@@ -532,7 +589,9 @@ def test_main_resolves_explicit_relative_paths_from_repo_root(
     outside_cwd.mkdir(parents=True, exist_ok=True)
     captured: dict[str, object] = {}
 
-    def _fake_generate_managed_deployment_artifacts(**kwargs: object) -> dict[str, object]:
+    def _fake_generate_managed_deployment_artifacts(
+        **kwargs: object,
+    ) -> dict[str, object]:
         captured.update(kwargs)
         return {
             "environment": kwargs["environment"],
@@ -564,10 +623,14 @@ def test_main_resolves_explicit_relative_paths_from_repo_root(
         )
         == 0
     )
-    assert captured["runtime_env_file"] == (repo_root / ".runtime" / "staging.env").resolve()
-    assert captured["output_dir"] == (
-        repo_root / ".runtime" / "deploy" / "staging"
-    ).resolve()
+    assert (
+        captured["runtime_env_file"]
+        == (repo_root / ".runtime" / "staging.env").resolve()
+    )
+    assert (
+        captured["output_dir"]
+        == (repo_root / ".runtime" / "deploy" / "staging").resolve()
+    )
 
 
 def test_main_rejects_relative_paths_that_escape_repo_root(
@@ -582,7 +645,9 @@ def test_main_rejects_relative_paths_that_escape_repo_root(
     monkeypatch.chdir(outside_cwd)
     monkeypatch.setattr(managed_deployment_generator, "_repo_root", lambda: repo_root)
 
-    with pytest.raises(ValueError, match="runtime_env_file must stay within repo root when relative"):
+    with pytest.raises(
+        ValueError, match="runtime_env_file must stay within repo root when relative"
+    ):
         managed_deployment_generator.main(
             [
                 "--environment",
@@ -717,5 +782,7 @@ def test_generate_managed_deployment_artifacts_does_not_leave_outputs_when_repor
             dashboard_image_digest="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         )
 
-    for artifact_path in managed_deployment_generator._artifact_output_paths(output_dir):
+    for artifact_path in managed_deployment_generator._artifact_output_paths(
+        output_dir
+    ):
         assert not artifact_path.exists()

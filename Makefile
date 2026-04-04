@@ -1,7 +1,7 @@
 # Valdrics Makefile
 # Developer convenience commands using uv
 
-.PHONY: help install dev test lint format security clean docker-build docker-up helm-install env-dev bootstrap-local-db clean-local-db smoke-local-db verify-managed-bundle public-quality docs-hygiene
+.PHONY: help install dev test lint format security clean docker-build docker-up docker-down observability observability-down helm-install env-dev env-compose bootstrap-local-db clean-local-db smoke-local-db verify-managed-bundle public-quality docs-hygiene
 
 # Default target
 help:
@@ -9,6 +9,7 @@ help:
 	@echo ""
 	@echo "  make install     - Install dependencies with uv"
 	@echo "  make env-dev     - Generate deterministic .env.dev for local sqlite development"
+	@echo "  make env-compose - Generate deterministic .env.compose.dev for local docker compose development"
 	@echo "  make bootstrap-local-db - Bootstrap current ORM schema into local sqlite without replaying legacy migrations"
 	@echo "  make clean-local-db - Remove local sqlite bootstrap artifacts from the repo root"
 	@echo "  make smoke-local-db - Prove the local sqlite bootstrap path reaches a healthy app state"
@@ -24,8 +25,8 @@ help:
 	@echo ""
 	@echo "Docker Commands:"
 	@echo "  make docker-build  - Build Docker image"
-	@echo "  make docker-up     - Start with docker-compose"
-	@echo "  make observability - Start Prometheus/Grafana stack"
+	@echo "  make docker-up     - Start the local docker compose stack"
+	@echo "  make observability - Start Prometheus/Grafana stack for local compose"
 	@echo ""
 	@echo "Deployment:"
 	@echo "  make helm-install  - Install to Kubernetes with Helm"
@@ -39,6 +40,9 @@ install:
 
 env-dev:
 	uv run python3 scripts/generate_local_dev_env.py
+
+env-compose:
+	uv run python3 scripts/generate_local_compose_env.py
 
 bootstrap-local-db:
 	@/bin/bash -lc 'if [ ! -f .env.dev ]; then echo "Missing .env.dev. Run '\''make env-dev'\'' first."; exit 1; fi; set -a && source .env.dev && set +a && uv run python3 scripts/bootstrap_local_sqlite_schema.py'
@@ -106,19 +110,19 @@ docker-build:
 	docker build -t valdrics:latest .
 
 docker-up:
-	docker-compose up -d
+	@/bin/bash -lc 'if [ ! -f .env.compose.dev ]; then echo "Missing .env.compose.dev. Run '\''make env-compose'\'' first."; exit 1; fi; docker compose --env-file .env.compose.dev up -d'
 
 docker-down:
-	docker-compose down
+	@/bin/bash -lc 'if [ ! -f .env.compose.dev ]; then echo "Missing .env.compose.dev. Run '\''make env-compose'\'' first."; exit 1; fi; docker compose --env-file .env.compose.dev down'
 
 observability:
-	docker-compose -f docker-compose.observability.yml up -d
+	@/bin/bash -lc 'if [ ! -f .env.compose.dev ]; then echo "Missing .env.compose.dev. Run '\''make env-compose'\'' first."; exit 1; fi; docker compose --env-file .env.compose.dev -f docker-compose.observability.yml up -d'
 	@echo "Prometheus: http://localhost:9090"
-	@echo "Grafana: http://localhost:3000 (admin/valdrics)"
+	@echo "Grafana: http://localhost:3005 (admin / see GRAFANA_PASSWORD in .env.compose.dev)"
 	@echo "Alertmanager: http://localhost:9093"
 
 observability-down:
-	docker-compose -f docker-compose.observability.yml down
+	@/bin/bash -lc 'if [ ! -f .env.compose.dev ]; then echo "Missing .env.compose.dev. Run '\''make env-compose'\'' first."; exit 1; fi; docker compose --env-file .env.compose.dev -f docker-compose.observability.yml down'
 
 # Database
 migrate:

@@ -20,6 +20,7 @@ from app.shared.db.session import get_db
 router = APIRouter(tags=["Settings"])
 
 ACCOUNT_CLOSURE_CONFIRMATION = "CLOSE TENANT ACCOUNT"
+TENANT_CLOSED_JOB_ERROR = "tenant_closed"
 
 
 class AccountClosureRequest(BaseModel):
@@ -47,6 +48,29 @@ def _identity_revoked(identity: TenantIdentitySettings | None) -> bool:
     )
 
 
+async def _count_revoked_users(*, db: AsyncSession, tenant_id: object) -> int:
+    count = await db.scalar(
+        select(func.count())
+        .select_from(User)
+        .where(User.tenant_id == tenant_id, User.is_active.is_(False))
+    )
+    return int(count or 0)
+
+
+async def _count_revoked_background_jobs(*, db: AsyncSession, tenant_id: object) -> int:
+    count = await db.scalar(
+        select(func.count())
+        .select_from(BackgroundJob)
+        .where(
+            BackgroundJob.tenant_id == tenant_id,
+            BackgroundJob.status == JobStatus.FAILED.value,
+            BackgroundJob.is_deleted.is_(True),
+            BackgroundJob.error_message == TENANT_CLOSED_JOB_ERROR,
+        )
+    )
+    return int(count or 0)
+
+
 @router.get("/account/status", response_model=AccountClosureResponse)
 async def get_account_status(
     current_user: Annotated[CurrentUser, Depends(requires_role("owner"))],
@@ -62,19 +86,8 @@ async def get_account_status(
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
 
-    inactive_users = await db.scalar(
-        select(func.count())
-        .select_from(User)
-        .where(User.tenant_id == tenant_id, User.is_active.is_(False))
-    )
-    open_jobs = (
-        await db.execute(
-            select(BackgroundJob.id).where(
-                BackgroundJob.tenant_id == tenant_id,
-                BackgroundJob.status.in_([JobStatus.PENDING.value, JobStatus.RUNNING.value]),
-            )
-        )
-    ).scalars().all()
+    inactive_users = await _count_revoked_users(db=db, tenant_id=tenant_id)
+    revoked_jobs = await _count_revoked_background_jobs(db=db, tenant_id=tenant_id)
     identity = (
         await db.execute(
             select(TenantIdentitySettings).where(
@@ -85,8 +98,8 @@ async def get_account_status(
     return AccountClosureResponse(
         status="closed" if tenant.is_deleted else "active",
         tenant_id=str(tenant_id),
-        users_revoked=int(inactive_users or 0),
-        background_jobs_revoked=len(open_jobs),
+        users_revoked=inactive_users,
+        background_jobs_revoked=revoked_jobs,
         identity_revoked=_identity_revoked(identity),
         closed_at=tenant.deleted_at.isoformat() if tenant.deleted_at else None,
     )
@@ -129,21 +142,16 @@ async def close_account(
 
     now = datetime.now(timezone.utc)
     if tenant.is_deleted:
-        open_jobs = (
-            await db.execute(
-                select(BackgroundJob.id).where(
-                    BackgroundJob.tenant_id == tenant_id,
-                    BackgroundJob.status.in_(
-                        [JobStatus.PENDING.value, JobStatus.RUNNING.value]
-                    ),
-                )
-            )
-        ).scalars().all()
+        users_revoked = await _count_revoked_users(db=db, tenant_id=tenant_id)
+        background_jobs_revoked = await _count_revoked_background_jobs(
+            db=db,
+            tenant_id=tenant_id,
+        )
         return AccountClosureResponse(
             status="already_closed",
             tenant_id=str(tenant_id),
-            users_revoked=0,
-            background_jobs_revoked=len(open_jobs),
+            users_revoked=users_revoked,
+            background_jobs_revoked=background_jobs_revoked,
             identity_revoked=_identity_revoked(identity),
             closed_at=tenant.deleted_at.isoformat() if tenant.deleted_at else now.isoformat(),
         )
@@ -161,7 +169,7 @@ async def close_account(
         )
         .values(
             status=JobStatus.FAILED.value,
-            error_message="tenant_closed",
+            error_message=TENANT_CLOSED_JOB_ERROR,
             completed_at=now,
             is_deleted=True,
         )

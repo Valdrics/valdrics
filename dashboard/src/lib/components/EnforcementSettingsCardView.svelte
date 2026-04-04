@@ -2,24 +2,7 @@
 	import { onMount } from 'svelte';
 	import { createLazyComponent } from '$lib/lazyComponent';
 	import { getUpgradePrompt } from '$lib/pricing/upgradePrompt';
-	import type {
-		EnforcementBudget,
-		EnforcementCredit,
-		EnforcementPolicy
-	} from './enforcementSettingsModel';
-
-	type EnforcementBudgetForm = {
-		scope_key: string;
-		monthly_limit_usd: number;
-		active: boolean;
-	};
-
-	type EnforcementCreditForm = {
-		scope_key: string;
-		total_amount_usd: number;
-		expires_at: string;
-		reason: string;
-	};
+	import type { EnforcementPolicy } from './enforcementSettingsModel';
 
 	let {
 		accessToken,

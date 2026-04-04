@@ -1160,6 +1160,35 @@ def test_generate_valdrics_disposition_register_resolves_relative_paths_from_rep
     assert verify_calls[0]["register_path"] != expected_output
 
 
+def test_generate_valdrics_disposition_register_normalizes_probe_command_labels_and_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(valdrics_generator, "_repo_root", lambda: repo_root)
+
+    def _fake_run_probe(*, command: tuple[str, ...], timeout_seconds: float) -> tuple[bool, str]:
+        del timeout_seconds
+        if command[-1] == "scripts/verify_dependency_locking.py":
+            return True, f"[dependency-locking] ok repo_root={repo_root.as_posix()} lock_path=uv.lock"
+        return True, "ok"
+
+    monkeypatch.setattr(
+        "scripts.generate_valdrics_disposition_register._run_probe",
+        _fake_run_probe,
+    )
+
+    probe_results = valdrics_generator._collect_probe_results(timeout_seconds=1.0)
+
+    assert (
+        probe_results["dependency_locking"]["command"]
+        == "python3 scripts/verify_dependency_locking.py"
+    )
+    assert "repo_root=." in probe_results["dependency_locking"]["output_excerpt"]
+    assert repo_root.as_posix() not in probe_results["dependency_locking"]["output_excerpt"]
+
+
 def test_generate_valdrics_disposition_register_does_not_leave_output_when_verification_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

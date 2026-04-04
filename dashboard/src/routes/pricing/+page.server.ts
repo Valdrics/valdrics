@@ -1,11 +1,11 @@
 import { edgeApiPath } from '$lib/edgeProxy';
 import { fetchWithTimeout } from '$lib/fetchWithTimeout';
 import { DEFAULT_PRICING_PLANS, isPricingPlanArray } from './plans';
-import type { PageLoad } from './$types';
+import type { PageServerLoad } from './$types';
 
 const PRICING_REQUEST_TIMEOUT_MS = 5000;
 
-export const load: PageLoad = async ({ fetch }) => {
+export const load: PageServerLoad = async ({ fetch }) => {
 	try {
 		const response = await fetchWithTimeout(
 			fetch,

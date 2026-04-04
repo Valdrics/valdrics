@@ -19,6 +19,7 @@ if __package__ in {None, ""}:
 
 from scripts.env_generation_common import (
     ensure_parent_dir as _ensure_parent_dir,
+    parse_env_file,
     protected_output_paths_from_root as _protected_output_paths_from_root,
     render_env,
     repo_root_for as _repo_root_for,
@@ -273,9 +274,40 @@ def _build_llm_overrides(provider: str, provider_api_key: str | None) -> dict[st
     return overrides
 
 
+def _existing_value(existing_values: dict[str, str] | None, key: str) -> str | None:
+    if not existing_values:
+        return None
+    candidate = str(existing_values.get(key, "") or "").strip()
+    return candidate or None
+
+
+def _existing_or_default(
+    existing_values: dict[str, str] | None,
+    key: str,
+    default: str,
+) -> str:
+    return _existing_value(existing_values, key) or default
+
+
+def _existing_trusted_proxy_cidrs(
+    existing_values: dict[str, str] | None,
+) -> list[str] | None:
+    candidate = _existing_value(existing_values, "TRUSTED_PROXY_CIDRS")
+    if candidate is None or PLACEHOLDER_PREFIX in candidate:
+        return None
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(parsed, list):
+        return None
+    return [str(item) for item in parsed]
+
+
 def _build_overrides(
     *,
     environment: str,
+    existing_values: dict[str, str] | None,
     api_url: str | None,
     frontend_url: str | None,
     database_url: str | None,
@@ -284,7 +316,7 @@ def _build_overrides(
     supabase_anon_key: str | None,
     supabase_jwt_secret: str | None,
     aws_assume_role_trust_principal_arn: str | None,
-    llm_provider: str,
+    llm_provider: str | None,
     llm_api_key: str | None,
     paystack_secret_key: str | None,
     paystack_public_key: str | None,
@@ -292,34 +324,59 @@ def _build_overrides(
     otel_endpoint: str | None,
     trusted_proxy_cidrs: list[str] | None,
 ) -> dict[str, str]:
-    normalized_trusted_proxy_cidrs = _normalize_trusted_proxy_cidrs(trusted_proxy_cidrs)
-    resolved_api_url = _normalize_strict_public_url(api_url, field_name="API_URL") or _default_api_url()
+    normalized_trusted_proxy_cidrs = _normalize_trusted_proxy_cidrs(
+        trusted_proxy_cidrs
+        if trusted_proxy_cidrs is not None
+        else _existing_trusted_proxy_cidrs(existing_values)
+    )
+    resolved_api_url = _normalize_strict_public_url(
+        api_url or _existing_value(existing_values, "API_URL"),
+        field_name="API_URL",
+    ) or _default_api_url()
     resolved_frontend_url = (
-        _normalize_strict_public_url(frontend_url, field_name="FRONTEND_URL")
+        _normalize_strict_public_url(
+            frontend_url or _existing_value(existing_values, "FRONTEND_URL"),
+            field_name="FRONTEND_URL",
+        )
         or _default_frontend_url()
     )
     normalized_sentry_dsn = _normalize_optional_http_url(
-        sentry_dsn,
+        sentry_dsn or _existing_value(existing_values, "SENTRY_DSN"),
         field_name="SENTRY_DSN",
     )
     normalized_otel_endpoint = _normalize_optional_http_url(
-        otel_endpoint,
+        otel_endpoint or _existing_value(existing_values, "OTEL_EXPORTER_OTLP_ENDPOINT"),
         field_name="OTEL_EXPORTER_OTLP_ENDPOINT",
     )
     normalized_paystack_secret_key = _normalize_paystack_key(
-        paystack_secret_key,
+        paystack_secret_key or _existing_value(existing_values, "PAYSTACK_SECRET_KEY"),
         field_name="PAYSTACK_SECRET_KEY",
         environment=environment,
         required_prefix="sk_live_",
     )
     normalized_paystack_public_key = _normalize_paystack_key(
-        paystack_public_key,
+        paystack_public_key or _existing_value(existing_values, "PAYSTACK_PUBLIC_KEY"),
         field_name="PAYSTACK_PUBLIC_KEY",
         environment=environment,
         required_prefix="pk_live_",
     )
     normalized_aws_assume_role_trust_principal_arn = _normalize_aws_principal_arn(
         aws_assume_role_trust_principal_arn
+        or _existing_value(existing_values, "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN")
+    )
+    normalized_llm_provider = str(
+        llm_provider
+        or _existing_value(existing_values, "LLM_PROVIDER")
+        or DEFAULT_LLM_PROVIDER
+    ).strip().lower()
+    llm_provider_key_name = {
+        "groq": "GROQ_API_KEY",
+        "openai": "OPENAI_API_KEY",
+        "claude": "CLAUDE_API_KEY",
+        "google": "GOOGLE_API_KEY",
+    }.get(normalized_llm_provider, "GROQ_API_KEY")
+    resolved_llm_api_key = llm_api_key or _existing_value(
+        existing_values, llm_provider_key_name
     )
 
     overrides: dict[str, str] = {
@@ -333,26 +390,49 @@ def _build_overrides(
         "API_URL": resolved_api_url,
         "FRONTEND_URL": resolved_frontend_url,
         "CORS_ORIGINS": _render_cors_origins(resolved_frontend_url),
-        "DATABASE_URL": database_url or _default_database_url(),
+        "DATABASE_URL": database_url
+        or _existing_or_default(existing_values, "DATABASE_URL", _default_database_url()),
         "DB_SSL_MODE": "require",
         "DB_USE_NULL_POOL": "false",
         "DB_EXTERNAL_POOLER": "false",
-        "REDIS_URL": redis_url or _default_redis_url(),
-        "SUPABASE_URL": supabase_url or _default_supabase_url(),
-        "SUPABASE_ANON_KEY": supabase_anon_key or _default_supabase_anon_key(),
-        "SUPABASE_JWT_SECRET": supabase_jwt_secret or _default_supabase_jwt_secret(),
+        "REDIS_URL": redis_url
+        or _existing_or_default(existing_values, "REDIS_URL", _default_redis_url()),
+        "SUPABASE_URL": supabase_url
+        or _existing_or_default(existing_values, "SUPABASE_URL", _default_supabase_url()),
+        "SUPABASE_ANON_KEY": supabase_anon_key
+        or _existing_or_default(
+            existing_values, "SUPABASE_ANON_KEY", _default_supabase_anon_key()
+        ),
+        "SUPABASE_JWT_SECRET": supabase_jwt_secret
+        or _existing_or_default(
+            existing_values, "SUPABASE_JWT_SECRET", _default_supabase_jwt_secret()
+        ),
         "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN": (
             normalized_aws_assume_role_trust_principal_arn
             or _default_aws_assume_role_trust_principal_arn()
         ),
-        "CSRF_SECRET_KEY": _generate_hex(64),
-        "ENCRYPTION_KEY": _generate_urlsafe_b64(32),
-        "KDF_SALT": _generate_b64(32),
-        "ADMIN_API_KEY": _generate_hex(64),
-        "INTERNAL_JOB_SECRET": _generate_hex(64),
-        "INTERNAL_METRICS_AUTH_TOKEN": _generate_hex(64),
-        "ENFORCEMENT_APPROVAL_TOKEN_SECRET": _generate_hex(64),
-        "ENFORCEMENT_EXPORT_SIGNING_SECRET": _generate_hex(64),
+        "CSRF_SECRET_KEY": _existing_or_default(
+            existing_values, "CSRF_SECRET_KEY", _generate_hex(64)
+        ),
+        "ENCRYPTION_KEY": _existing_or_default(
+            existing_values, "ENCRYPTION_KEY", _generate_urlsafe_b64(32)
+        ),
+        "KDF_SALT": _existing_or_default(existing_values, "KDF_SALT", _generate_b64(32)),
+        "ADMIN_API_KEY": _existing_or_default(
+            existing_values, "ADMIN_API_KEY", _generate_hex(64)
+        ),
+        "INTERNAL_JOB_SECRET": _existing_or_default(
+            existing_values, "INTERNAL_JOB_SECRET", _generate_hex(64)
+        ),
+        "INTERNAL_METRICS_AUTH_TOKEN": _existing_or_default(
+            existing_values, "INTERNAL_METRICS_AUTH_TOKEN", _generate_hex(64)
+        ),
+        "ENFORCEMENT_APPROVAL_TOKEN_SECRET": _existing_or_default(
+            existing_values, "ENFORCEMENT_APPROVAL_TOKEN_SECRET", _generate_hex(64)
+        ),
+        "ENFORCEMENT_EXPORT_SIGNING_SECRET": _existing_or_default(
+            existing_values, "ENFORCEMENT_EXPORT_SIGNING_SECRET", _generate_hex(64)
+        ),
         "PAYSTACK_SECRET_KEY": normalized_paystack_secret_key or _default_paystack_secret_key(),
         "PAYSTACK_PUBLIC_KEY": normalized_paystack_public_key or _default_paystack_public_key(),
         "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY": "NGN",
@@ -390,7 +470,7 @@ def _build_overrides(
         "GENERIC_CI_WEBHOOK_BEARER_TOKEN": "",
         "GENERIC_CI_WEBHOOK_ENABLED": "",
     }
-    overrides.update(_build_llm_overrides(llm_provider, llm_api_key))
+    overrides.update(_build_llm_overrides(normalized_llm_provider, resolved_llm_api_key))
     return overrides
 
 
@@ -399,7 +479,7 @@ def _render_output(template_lines: list[str], overrides: dict[str, str]) -> str:
     header = [
         "# Managed runtime environment scaffold.",
         "# Generated by scripts/generate_managed_runtime_env.py.",
-        "# Internal application secrets in this file are freshly generated.",
+        "# Existing values are preserved on regeneration unless you explicitly override them.",
         "# Values containing REPLACE_WITH_ must be replaced with live operator/provider values before deployment.",
         "",
     ]
@@ -420,7 +500,7 @@ def generate_managed_runtime_env(
     supabase_anon_key: str | None = None,
     supabase_jwt_secret: str | None = None,
     aws_assume_role_trust_principal_arn: str | None = None,
-    llm_provider: str = DEFAULT_LLM_PROVIDER,
+    llm_provider: str | None = None,
     llm_api_key: str | None = None,
     paystack_secret_key: str | None = None,
     paystack_public_key: str | None = None,
@@ -457,8 +537,11 @@ def generate_managed_runtime_env(
     _ensure_parent_dir(output_path, field_name="output_path")
     _ensure_parent_dir(report_path, field_name="report_path")
 
+    existing_values = parse_env_file(output_path) if output_path.exists() else {}
+
     overrides = _build_overrides(
         environment=normalized_environment,
+        existing_values=existing_values,
         api_url=api_url,
         frontend_url=frontend_url,
         database_url=database_url,
@@ -530,7 +613,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
             "Generate a managed-runtime env scaffold for staging or production. "
-            "Internal secrets are generated; external provider values remain explicit placeholders unless provided."
+            "Existing values are preserved on regeneration; unresolved provider inputs remain explicit placeholders unless provided."
         )
     )
     parser.add_argument(
@@ -567,7 +650,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--aws-assume-role-trust-principal-arn", default=None)
     parser.add_argument(
         "--llm-provider",
-        default=DEFAULT_LLM_PROVIDER,
+        default=None,
         choices=SUPPORTED_LLM_PROVIDERS,
     )
     parser.add_argument("--llm-api-key", default=None)
@@ -615,7 +698,7 @@ def main(argv: list[str] | None = None) -> int:
         supabase_anon_key=args.supabase_anon_key,
         supabase_jwt_secret=args.supabase_jwt_secret,
         aws_assume_role_trust_principal_arn=args.aws_assume_role_trust_principal_arn,
-        llm_provider=str(args.llm_provider),
+        llm_provider=args.llm_provider,
         llm_api_key=args.llm_api_key,
         paystack_secret_key=args.paystack_secret_key,
         paystack_public_key=args.paystack_public_key,
