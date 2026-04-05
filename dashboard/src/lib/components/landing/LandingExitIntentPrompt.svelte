@@ -13,14 +13,38 @@
 		onTrackCta: (action: string, section: string, value: string) => void;
 	} = $props();
 
-	const DISMISS_KEY = 'valdrics.landing.exit_prompt.dismissed.v2';
+	const DISMISS_KEY = 'valdrics.landing.exit_prompt.dismissed.v3';
+	const SESSION_SEEN_KEY = 'valdrics.landing.exit_prompt.seen.v1';
 	const DISMISS_SUPPRESSION_MS = 1000 * 60 * 60 * 24 * 14;
 	const SUBSCRIBED_SUPPRESSION_MS = 1000 * 60 * 60 * 24 * 180;
+	const DEEP_SCROLL_TRIGGER_RATIO = 0.82;
 
 	let open = $state(false);
 	let email = $state('');
 	let submitting = $state(false);
 	let status = $state<'idle' | 'success' | 'error'>('idle');
+
+	function hasActiveSuppression(): boolean {
+		if (typeof window === 'undefined') return true;
+		const dismissedUntil = Number(window.localStorage.getItem(DISMISS_KEY) ?? '0');
+		if (Number.isFinite(dismissedUntil) && dismissedUntil > Date.now()) return true;
+		if (dismissedUntil > 0) {
+			window.localStorage.removeItem(DISMISS_KEY);
+		}
+		return window.sessionStorage.getItem(SESSION_SEEN_KEY) === '1';
+	}
+
+	function markSeen(): void {
+		if (typeof window === 'undefined') return;
+		window.sessionStorage.setItem(SESSION_SEEN_KEY, '1');
+	}
+
+	function openPrompt(reason: 'desktop_exit_intent' | 'deep_scroll_prompt'): void {
+		if (open || hasActiveSuppression()) return;
+		open = true;
+		markSeen();
+		onTrackCta('cta_view', 'exit_prompt', reason);
+	}
 
 	function persistDismissal(durationMs: number): void {
 		if (typeof window === 'undefined') return;
@@ -62,24 +86,40 @@
 
 	onMount(() => {
 		if (typeof window === 'undefined') return;
-		if (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 1023px)').matches)
-			return;
-		const dismissedUntil = Number(window.localStorage.getItem(DISMISS_KEY) ?? '0');
-		if (Number.isFinite(dismissedUntil) && dismissedUntil > Date.now()) return;
-		if (dismissedUntil > 0) {
-			window.localStorage.removeItem(DISMISS_KEY);
-		}
+		if (hasActiveSuppression()) return;
+
+		const supportsDesktopExitIntent = () =>
+			!(
+				typeof window.matchMedia === 'function' &&
+				window.matchMedia('(max-width: 1023px)').matches
+			);
 
 		const handleMouseOut = (event: MouseEvent) => {
-			if (open) return;
+			if (open || hasActiveSuppression()) return;
+			if (!supportsDesktopExitIntent()) return;
 			if (event.relatedTarget !== null) return;
 			if (event.clientY > 10) return;
-			open = true;
-			onTrackCta('cta_view', 'exit_prompt', 'desktop_exit_intent');
+			openPrompt('desktop_exit_intent');
+		};
+
+		const handleScroll = () => {
+			if (open || hasActiveSuppression()) return;
+			const scrollRoot = document.documentElement;
+			const scrollHeight = Math.max(scrollRoot.scrollHeight, document.body.scrollHeight);
+			const scrollableHeight = scrollHeight - window.innerHeight;
+			if (scrollableHeight <= 0) return;
+			const scrollTop = Math.max(window.scrollY, scrollRoot.scrollTop, document.body.scrollTop);
+			if (scrollTop / scrollableHeight < DEEP_SCROLL_TRIGGER_RATIO) return;
+			openPrompt('deep_scroll_prompt');
 		};
 
 		window.addEventListener('mouseout', handleMouseOut);
-		return () => window.removeEventListener('mouseout', handleMouseOut);
+		window.addEventListener('scroll', handleScroll, { passive: true });
+		handleScroll();
+		return () => {
+			window.removeEventListener('mouseout', handleMouseOut);
+			window.removeEventListener('scroll', handleScroll);
+		};
 	});
 </script>
 

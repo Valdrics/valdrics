@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import subprocess
+import sys
 
 import scripts.verify_codebase_audit_report as codebase_audit_report
 from scripts.verify_codebase_audit_report import (
@@ -363,6 +365,38 @@ def test_main_accepts_root_override(monkeypatch) -> None:
             True,
         )
     ]
+
+
+def test_script_entrypoint_bootstraps_repo_imports_for_plain_python(tmp_path: Path) -> None:
+    payload = _valid_report_payload()
+    report_path = tmp_path / ".runtime/staging.audit.report.json"
+    _write_json(report_path, payload)
+    (tmp_path / "pyproject.toml").write_text(
+        "[project]\nrequires-python='>=3.12,<3.13'\ndependencies=['fastapi ~=0.128.0']\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "dashboard").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "dashboard/svelte.config.js").write_text(
+        "export default {};\n", encoding="utf-8"
+    )
+    _seed_dashboard_package_json(tmp_path)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(codebase_audit_report.DEFAULT_ROOT / "scripts/verify_codebase_audit_report.py"),
+            "--root",
+            str(tmp_path),
+            "--report",
+            str(report_path),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0
+    assert "audit report verified" in completed.stdout
 
 
 def test_main_rejects_relative_root_escape(capsys) -> None:
