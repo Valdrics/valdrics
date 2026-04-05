@@ -14,6 +14,9 @@ import sys
 import tomllib
 from typing import Any
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from scripts.env_generation_common import (
     repo_root_for,
     resolve_cli_path_from_root,

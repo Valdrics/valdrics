@@ -175,8 +175,9 @@ class TestHybridAnalysisScheduler:
         scheduler = HybridAnalysisScheduler(mock_db)
         
         # Setup: Not Sunday, Not 1st, Cached full analysis exists
-        scheduler.cache = MagicMock()
-        scheduler.cache.get = AsyncMock(return_value={"some": "analysis"})
+        cache = MagicMock()
+        cache.get = AsyncMock(return_value={"some": "analysis"})
+        scheduler._cache_service_getter = lambda: cache
         
         with patch("app.shared.llm.hybrid_scheduler.date") as mock_date:
             mock_date.today.return_value.weekday.return_value = 0
@@ -196,8 +197,9 @@ class TestHybridAnalysisScheduler:
         
         # Mock internal methods
         scheduler._run_full_analysis = AsyncMock(return_value={"analysis_type": "full"})
-        scheduler.cache = MagicMock()
-        scheduler.cache.set = AsyncMock()
+        cache = MagicMock()
+        cache.set = AsyncMock()
+        scheduler._cache_service_getter = lambda: cache
         
         result = await scheduler.run_analysis(tenant_id, [{"cost": 10}], force_full=True)
         
