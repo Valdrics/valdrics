@@ -322,6 +322,14 @@ All tokens/secrets are stored in tenant notification settings.
 5. Verify the bundle: `uv run python scripts/verify_managed_deployment_bundle.py --environment production`
 6. Run the consolidated readiness gate against the target dashboard URL:
    `uv run python scripts/verify_managed_release_readiness.py --environment production --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver`
+   This includes the checked-in codebase audit report verification in addition to the
+   runtime, bundle, and public browser gates.
+   If `.runtime/production.env` already contains a live `FRONTEND_URL`, the wrapper can
+   derive the dashboard URL and `--dashboard-url` is optional.
+   The direct audit verification command is:
+   `uv run python scripts/verify_codebase_audit_report.py --report .runtime/staging.audit.report.json`
+   If the audit artifact has drifted after real repo changes, refresh it with:
+   `uv run python scripts/refresh_codebase_audit_report.py --report .runtime/staging.audit.report.json`
 7. Render the operator handoff: `uv run python scripts/render_managed_deployment_handoff.py --environment production`
 8. Refresh the cross-environment blocker rollup: `uv run python scripts/render_managed_release_blocker_summary.py`
 8. Validate the migration env: `uv run python scripts/validate_migration_env.py --env-file .runtime/production.migrate.env`

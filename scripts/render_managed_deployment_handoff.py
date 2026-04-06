@@ -165,6 +165,13 @@ def _render_handoff_markdown(
         "",
         "- Consolidated readiness gate: "
         f"`uv run python scripts/verify_managed_release_readiness.py --environment {environment} --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver`",
+        "- Dashboard URL derivation: "
+        "if the managed runtime env already contains a live `FRONTEND_URL`, the readiness wrapper can derive the dashboard URL automatically.",
+        "- Codebase audit verification: "
+        "`uv run python scripts/verify_codebase_audit_report.py --report .runtime/staging.audit.report.json`",
+        "- Codebase audit refresh: "
+        "`uv run python scripts/refresh_codebase_audit_report.py --report .runtime/staging.audit.report.json` "
+        "(use this only when the verifier reports live-fact drift after intentional repo changes).",
         "- Local preview note: "
         "add `--reuse-built-dashboard-runtime` when the dashboard URL points to a live local `vite preview` server.",
         "- Dashboard runtime contract: "

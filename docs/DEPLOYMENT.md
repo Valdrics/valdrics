@@ -85,6 +85,14 @@ Core operator steps:
    If you are reusing a local `vite preview` instance instead of a deployed domain, add
    `--reuse-built-dashboard-runtime` so the gate verifies the existing build instead of
    rebuilding underneath the live preview server.
+   If the managed runtime env already contains a live `FRONTEND_URL`, the wrapper can
+   derive the dashboard URL automatically and `--dashboard-url` becomes optional.
+   This wrapper now verifies the checked-in codebase audit report as well, so the
+   release gate fails if `.runtime/staging.audit.report.json` drifts from live repo facts.
+   The underlying audit command is `uv run python scripts/verify_codebase_audit_report.py --report .runtime/staging.audit.report.json`.
+   If that audit artifact drifts after real repo changes, refresh it with
+   `uv run python scripts/refresh_codebase_audit_report.py --report .runtime/staging.audit.report.json`
+   and commit the updated snapshot before promotion.
 5. Render the cross-environment blocker rollup:
    `uv run python scripts/render_managed_release_blocker_summary.py`
 6. Generate the deployment bundle with `--release-tag`, `--api-image-digest`, and `--dashboard-image-digest`.

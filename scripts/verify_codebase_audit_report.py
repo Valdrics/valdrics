@@ -9,8 +9,10 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import tomllib
 from typing import Any
 
@@ -320,26 +322,43 @@ def collect_live_measured_facts(*, root: Path) -> dict[str, Any]:
 
 
 def _collect_backend_tests_count(*, root: Path) -> int:
-    command = [sys.executable, "-m", "pytest", "--collect-only", "-q"]
-    env = {**os.environ, "DEBUG": "false"}
-    completed = subprocess.run(
-        command,
-        cwd=root,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=180,
-        check=False,
-    )
-    output = "\n".join(
-        chunk for chunk in (completed.stdout.strip(), completed.stderr.strip()) if chunk
-    )
-    match = re.search(r"(\d+)\s+tests\s+collected", output)
-    if completed.returncode != 0 or match is None:
-        raise ValueError(
-            "could not determine backend_tests_collected from pytest collection output"
+    env = {
+        **os.environ,
+        "DEBUG": "false",
+        "UV_CACHE_DIR": os.environ.get(
+            "UV_CACHE_DIR", str(Path(tempfile.gettempdir()) / "uv-cache")
+        ),
+    }
+    commands: list[list[str]] = []
+    if shutil.which("uv"):
+        commands.append(["uv", "run", "pytest", "--collect-only", "-q"])
+    commands.append([sys.executable, "-m", "pytest", "--collect-only", "-q"])
+
+    failures: list[str] = []
+    for command in commands:
+        completed = subprocess.run(
+            command,
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
         )
-    return int(match.group(1))
+        output = "\n".join(
+            chunk for chunk in (completed.stdout.strip(), completed.stderr.strip()) if chunk
+        )
+        match = re.search(r"(\d+)\s+tests\s+collected", output)
+        if completed.returncode == 0 and match is not None:
+            return int(match.group(1))
+        failures.append(
+            f"{' '.join(command)} exited {completed.returncode}"
+        )
+
+    raise ValueError(
+        "could not determine backend_tests_collected from pytest collection output: "
+        + "; ".join(failures)
+    )
 
 
 def _count_test_and_spec_files(*, root: Path) -> int:

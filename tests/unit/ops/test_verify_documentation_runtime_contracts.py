@@ -30,7 +30,7 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     )
     _write(
         tmp_path / "docs/DEPLOYMENT.md",
-        "Current supported production deployment profile\nKoyeb managed services with immutable image promotion\nFuture Scale Profile\n.github/workflows/publish-release-images.yml\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\ndigest-pinned `promotion_ref` values\nkoyeb-release.json\nkoyeb-dashboard-env.json\nmanaged-release-blockers.md\n",
+        "Current supported production deployment profile\nKoyeb managed services with immutable image promotion\nFuture Scale Profile\n.github/workflows/publish-release-images.yml\nverify_codebase_audit_report.py\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\ndigest-pinned `promotion_ref` values\nkoyeb-release.json\nkoyeb-dashboard-env.json\nmanaged-release-blockers.md\n",
     )
     _write(
         tmp_path / "docs/CAPACITY_PLAN.md",
@@ -66,11 +66,11 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     )
     _write(
         tmp_path / "docs/runbooks/production_env_checklist.md",
-        "Python 3.12.x\n.python-version\nAPI_URL=https://api.example.com\nFRONTEND_URL=https://app.example.com\nSUPABASE_ANON_KEY=...\nSENTRY_DSN=https://...\nOTEL_EXPORTER_OTLP_ENDPOINT=https://collector:4317\nENFORCEMENT_APPROVAL_TOKEN_SECRET=...\nENFORCEMENT_EXPORT_SIGNING_SECRET=...\nINTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>\nEXPOSE_API_DOCUMENTATION_PUBLICLY=false\ngenerate_managed_runtime_env.py\ngenerate_managed_migration_env.py\ngenerate_managed_deployment_artifacts.py\nverify_managed_deployment_bundle.py\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\npublish-release-images.yml\n--api-image-digest <sha256:...>\n--dashboard-image-digest <sha256:...>\nrun_public_frontend_quality_gate.py\ndeployment.report.json\nkoyeb-dashboard-env.json\nkoyeb-release.json\nmanaged-release-blockers.md\n--env-file .runtime/production.env\n--env-file .runtime/production.migrate.env\nset -a && source .runtime/production.migrate.env && uv run alembic upgrade head\n",
+        "Python 3.12.x\n.python-version\nAPI_URL=https://api.example.com\nFRONTEND_URL=https://app.example.com\nSUPABASE_ANON_KEY=...\nSENTRY_DSN=https://...\nOTEL_EXPORTER_OTLP_ENDPOINT=https://collector:4317\nENFORCEMENT_APPROVAL_TOKEN_SECRET=...\nENFORCEMENT_EXPORT_SIGNING_SECRET=...\nINTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>\nEXPOSE_API_DOCUMENTATION_PUBLICLY=false\ngenerate_managed_runtime_env.py\ngenerate_managed_migration_env.py\ngenerate_managed_deployment_artifacts.py\nverify_codebase_audit_report.py\nverify_managed_deployment_bundle.py\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\npublish-release-images.yml\n--api-image-digest <sha256:...>\n--dashboard-image-digest <sha256:...>\nrun_public_frontend_quality_gate.py\ndeployment.report.json\nkoyeb-dashboard-env.json\nkoyeb-release.json\nmanaged-release-blockers.md\n--env-file .runtime/production.env\n--env-file .runtime/production.migrate.env\nset -a && source .runtime/production.migrate.env && uv run alembic upgrade head\n",
     )
     _write(
         tmp_path / "docs/runbooks/koyeb_release_promotion.md",
-        "publish-release-images.yml\nghcr-release.env\npromotion_ref\nGHCR_NAMESPACE=valdrics\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\nmanaged-release-blockers.md\n",
+        "publish-release-images.yml\nghcr-release.env\npromotion_ref\nGHCR_NAMESPACE=valdrics\nverify_codebase_audit_report.py\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\nmanaged-release-blockers.md\n",
     )
     _write(
         tmp_path / "docs/integrations/workflow_automation.md",
