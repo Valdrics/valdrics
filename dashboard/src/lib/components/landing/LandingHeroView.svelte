@@ -366,7 +366,7 @@
 		</button>
 	{/if}
 
-	{#if exitPromptReady && !cookieBannerVisible}
+	{#if exitPromptReady}
 		{#await loadLandingExitIntentPrompt() then { default: LandingExitIntentPrompt }}
 			<LandingExitIntentPrompt
 				enabled={!cookieBannerVisible}

@@ -246,11 +246,15 @@
 		z-index: 1;
 		width: min(32rem, 100%);
 		border-radius: var(--radius-xl);
-		border: 1px solid rgb(255 255 255 / 0.15);
+		border: 1px solid rgb(8 126 164 / 0.16);
 		padding: 1rem;
-		background: rgb(6 12 18 / 0.94);
+		background:
+			linear-gradient(180deg, rgb(255 255 255 / 0.98), rgb(246 250 252 / 0.96)),
+			radial-gradient(420px 160px at 14% 0%, rgb(8 126 164 / 0.08), transparent 72%);
 		display: grid;
 		gap: 0.75rem;
+		color: var(--color-ink-900);
+		box-shadow: 0 24px 52px rgb(15 23 42 / 0.2);
 	}
 
 	.landing-exit-close {
@@ -260,11 +264,21 @@
 		width: 2rem;
 		height: 2rem;
 		border-radius: 9999px;
-		border: 1px solid rgb(255 255 255 / 0.16);
-		background: rgb(255 255 255 / 0.06);
-		color: var(--color-ink-100);
+		border: 1px solid rgb(8 126 164 / 0.14);
+		background: rgb(255 255 255 / 0.82);
+		color: var(--color-ink-900);
 		font-size: 1.35rem;
 		line-height: 1;
+	}
+
+	.landing-exit-panel :global(.landing-proof-k) {
+		color: var(--color-brand-700);
+	}
+
+	.landing-exit-panel :global(.landing-p),
+	.landing-exit-panel :global(.landing-h3),
+	.landing-exit-panel :global(.landing-roi-label) {
+		color: var(--color-ink-900);
 	}
 
 	.landing-exit-close:focus-visible {
@@ -281,5 +295,25 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.5rem;
+	}
+
+	:global(.public-site-shell[data-public-theme='dark']) .landing-exit-panel {
+		border-color: rgb(255 255 255 / 0.15);
+		background: rgb(6 12 18 / 0.94);
+		color: var(--color-ink-100);
+		box-shadow: 0 24px 52px rgb(2 8 14 / 0.34);
+	}
+
+	:global(.public-site-shell[data-public-theme='dark']) .landing-exit-close {
+		border-color: rgb(255 255 255 / 0.16);
+		background: rgb(255 255 255 / 0.06);
+		color: var(--color-ink-100);
+	}
+
+	:global(.public-site-shell[data-public-theme='dark']) .landing-exit-panel :global(.landing-proof-k),
+	:global(.public-site-shell[data-public-theme='dark']) .landing-exit-panel :global(.landing-p),
+	:global(.public-site-shell[data-public-theme='dark']) .landing-exit-panel :global(.landing-h3),
+	:global(.public-site-shell[data-public-theme='dark']) .landing-exit-panel :global(.landing-roi-label) {
+		color: var(--color-ink-100);
 	}
 </style>

@@ -52,13 +52,17 @@
 		z-index: 95;
 		width: min(26rem, calc(100vw - 1.4rem));
 		border-radius: var(--radius-xl);
-		border: 1px solid rgb(255 255 255 / 0.18);
+		border: 1px solid rgb(8 126 164 / 0.16);
 		padding: 0.9rem 0.95rem;
-		background: rgb(5 10 16 / 0.96);
+		background:
+			linear-gradient(180deg, rgb(255 255 255 / 0.97), rgb(246 250 252 / 0.95)),
+			radial-gradient(360px 140px at 12% 0%, rgb(8 126 164 / 0.08), transparent 72%);
 		backdrop-filter: blur(10px);
 		-webkit-backdrop-filter: blur(10px);
 		display: grid;
 		gap: 0.6rem;
+		color: var(--color-ink-900);
+		box-shadow: 0 18px 42px rgb(15 23 42 / 0.16);
 	}
 
 	.landing-cookie-banner__close {
@@ -68,11 +72,19 @@
 		width: 1.8rem;
 		height: 1.8rem;
 		border-radius: 9999px;
-		border: 1px solid rgb(255 255 255 / 0.14);
-		background: rgb(255 255 255 / 0.05);
-		color: var(--color-ink-100);
+		border: 1px solid rgb(8 126 164 / 0.14);
+		background: rgb(255 255 255 / 0.78);
+		color: var(--color-ink-900);
 		font-size: 1.1rem;
 		line-height: 1;
+	}
+
+	.landing-cookie-banner :global(.landing-proof-k) {
+		color: var(--color-brand-700);
+	}
+
+	.landing-cookie-banner :global(.landing-p) {
+		color: var(--color-ink-800);
 	}
 
 	.landing-cookie-banner__close:focus-visible {
@@ -96,5 +108,34 @@
 	.landing-cookie-banner__legal a {
 		color: var(--color-accent-300);
 		text-decoration: underline;
+	}
+
+	:global(.public-site-shell[data-public-theme='dark']) .landing-cookie-banner {
+		border-color: rgb(255 255 255 / 0.18);
+		background: rgb(5 10 16 / 0.96);
+		color: var(--color-ink-100);
+		box-shadow: 0 22px 48px rgb(2 8 14 / 0.34);
+	}
+
+	:global(.public-site-shell[data-public-theme='dark']) .landing-cookie-banner__close {
+		border-color: rgb(255 255 255 / 0.14);
+		background: rgb(255 255 255 / 0.05);
+		color: var(--color-ink-100);
+	}
+
+	:global(.public-site-shell[data-public-theme='dark']) .landing-cookie-banner :global(.landing-proof-k) {
+		color: var(--color-ink-100);
+	}
+
+	:global(.public-site-shell[data-public-theme='dark']) .landing-cookie-banner :global(.landing-p) {
+		color: var(--color-ink-100);
+	}
+
+	:global(.public-site-shell[data-public-theme='dark']) .landing-cookie-banner__legal {
+		color: var(--color-ink-300);
+	}
+
+	:global(.public-site-shell[data-public-theme='dark']) .landing-cookie-banner__legal a {
+		color: var(--color-accent-300);
 	}
 </style>
