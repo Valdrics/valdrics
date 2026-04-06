@@ -106,6 +106,11 @@ def test_generate_managed_runtime_env_generates_internal_secrets_and_reports_unr
     assert len(values["ENCRYPTION_KEY"]) >= 32
 
     assert report["environment"] == "production"
+    assert report_payload["resolved_public_runtime_values"]["API_URL"] == "https://REPLACE_WITH_API_DOMAIN"
+    assert (
+        report_payload["resolved_public_runtime_values"]["FRONTEND_URL"]
+        == "https://REPLACE_WITH_FRONTEND_DOMAIN"
+    )
     assert report_payload["validation_ready"] is False
     assert "API_URL" in report_payload["required_operator_input_keys"]
     assert "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN" in report_payload["required_operator_input_keys"]
@@ -192,6 +197,14 @@ def test_generate_managed_runtime_env_respects_overrides_and_is_shell_source_saf
     report_payload = json.loads(report_path.read_text(encoding="utf-8"))
 
     assert values["LLM_PROVIDER"] == "openai"
+    assert (
+        report_payload["resolved_public_runtime_values"]["FRONTEND_URL"]
+        == "https://app.staging.example.com"
+    )
+    assert (
+        report_payload["resolved_public_runtime_values"]["API_URL"]
+        == "https://api.staging.example.com"
+    )
     assert values["SUPABASE_ANON_KEY"] == "anon-key-for-dashboard"
     assert values["OPENAI_API_KEY"] == "sk-test-openai-key"
     assert (

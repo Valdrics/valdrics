@@ -2,11 +2,13 @@
 	import { onMount } from 'svelte';
 
 	let {
+		enabled = true,
 		selfServeHref,
 		resourcesHref,
 		subscribeApiPath,
 		onTrackCta
 	}: {
+		enabled?: boolean;
 		selfServeHref: string;
 		resourcesHref: string;
 		subscribeApiPath: string;
@@ -18,11 +20,32 @@
 	const DISMISS_SUPPRESSION_MS = 1000 * 60 * 60 * 24 * 14;
 	const SUBSCRIBED_SUPPRESSION_MS = 1000 * 60 * 60 * 24 * 180;
 	const DEEP_SCROLL_TRIGGER_RATIO = 0.82;
+	const REARM_SCROLL_DELTA_PX = 48;
 
 	let open = $state(false);
 	let email = $state('');
 	let submitting = $state(false);
 	let status = $state<'idle' | 'success' | 'error'>('idle');
+	let deepScrollRequiresRearm = $state(false);
+	let deepScrollArmScrollTop = $state(0);
+	let previousEnabled = $state<boolean | null>(null);
+
+	$effect(() => {
+		if (!enabled) {
+			open = false;
+		}
+
+		if (typeof window !== 'undefined' && previousEnabled !== null && enabled && !previousEnabled) {
+			deepScrollRequiresRearm = true;
+			deepScrollArmScrollTop = Math.max(
+				window.scrollY,
+				document.documentElement.scrollTop,
+				document.body.scrollTop
+			);
+		}
+
+		previousEnabled = enabled;
+	});
 
 	function hasActiveSuppression(): boolean {
 		if (typeof window === 'undefined') return true;
@@ -95,6 +118,7 @@
 			);
 
 		const handleMouseOut = (event: MouseEvent) => {
+			if (!enabled) return;
 			if (open || hasActiveSuppression()) return;
 			if (!supportsDesktopExitIntent()) return;
 			if (event.relatedTarget !== null) return;
@@ -103,19 +127,28 @@
 		};
 
 		const handleScroll = () => {
+			if (!enabled) return;
 			if (open || hasActiveSuppression()) return;
 			const scrollRoot = document.documentElement;
 			const scrollHeight = Math.max(scrollRoot.scrollHeight, document.body.scrollHeight);
 			const scrollableHeight = scrollHeight - window.innerHeight;
 			if (scrollableHeight <= 0) return;
 			const scrollTop = Math.max(window.scrollY, scrollRoot.scrollTop, document.body.scrollTop);
+			if (deepScrollRequiresRearm) {
+				if (Math.abs(scrollTop - deepScrollArmScrollTop) < REARM_SCROLL_DELTA_PX) {
+					return;
+				}
+				deepScrollRequiresRearm = false;
+			}
 			if (scrollTop / scrollableHeight < DEEP_SCROLL_TRIGGER_RATIO) return;
 			openPrompt('deep_scroll_prompt');
 		};
 
 		window.addEventListener('mouseout', handleMouseOut);
 		window.addEventListener('scroll', handleScroll, { passive: true });
-		handleScroll();
+		if (enabled) {
+			handleScroll();
+		}
 		return () => {
 			window.removeEventListener('mouseout', handleMouseOut);
 			window.removeEventListener('scroll', handleScroll);
@@ -187,3 +220,66 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	.landing-exit-prompt {
+		position: fixed;
+		inset: 0;
+		z-index: 90;
+		display: grid;
+		place-items: center;
+		padding: 1rem;
+	}
+
+	.landing-exit-backdrop {
+		position: absolute;
+		inset: 0;
+		border: 0;
+		padding: 0;
+		background: rgb(2 6 11 / 0.72);
+		backdrop-filter: blur(4px);
+		-webkit-backdrop-filter: blur(4px);
+	}
+
+	.landing-exit-panel {
+		position: relative;
+		z-index: 1;
+		width: min(32rem, 100%);
+		border-radius: var(--radius-xl);
+		border: 1px solid rgb(255 255 255 / 0.15);
+		padding: 1rem;
+		background: rgb(6 12 18 / 0.94);
+		display: grid;
+		gap: 0.75rem;
+	}
+
+	.landing-exit-close {
+		position: absolute;
+		top: 0.5rem;
+		right: 0.5rem;
+		width: 2rem;
+		height: 2rem;
+		border-radius: 9999px;
+		border: 1px solid rgb(255 255 255 / 0.16);
+		background: rgb(255 255 255 / 0.06);
+		color: var(--color-ink-100);
+		font-size: 1.35rem;
+		line-height: 1;
+	}
+
+	.landing-exit-close:focus-visible {
+		outline: 2px solid var(--color-accent-500);
+		outline-offset: 2px;
+	}
+
+	.landing-exit-form {
+		display: grid;
+		gap: 0.6rem;
+	}
+
+	.landing-exit-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+</style>

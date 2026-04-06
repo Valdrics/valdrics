@@ -194,4 +194,121 @@ describe('Landing decomposition lead capture and exit intent', () => {
 			'desktop_exit_intent'
 		);
 	});
+
+	it('stays suppressed while disabled for cookie consent priority', async () => {
+		Object.defineProperty(window, 'matchMedia', {
+			writable: true,
+			value: vi.fn().mockReturnValue({ matches: false })
+		});
+		Object.defineProperty(window, 'innerHeight', {
+			configurable: true,
+			value: 900
+		});
+		Object.defineProperty(window, 'scrollY', {
+			configurable: true,
+			value: 980
+		});
+		Object.defineProperty(document.documentElement, 'scrollHeight', {
+			configurable: true,
+			value: 2000
+		});
+		Object.defineProperty(document.body, 'scrollHeight', {
+			configurable: true,
+			value: 2000
+		});
+		localStorage.clear();
+		sessionStorage.clear();
+		const onTrackCta = vi.fn();
+
+		render(LandingExitIntentPrompt, {
+			props: {
+				enabled: false,
+				selfServeHref: '/auth/login?intent=free_tier&plan=free',
+				resourcesHref: '/resources',
+				subscribeApiPath: '/api/marketing/subscribe',
+				onTrackCta
+			}
+		});
+
+		window.dispatchEvent(
+			new MouseEvent('mouseout', {
+				clientY: 0,
+				relatedTarget: null
+			})
+		);
+		window.dispatchEvent(new Event('scroll'));
+
+		expect(
+			screen.queryByRole('heading', {
+				name: /want a weekly spend-control brief instead/i
+			})
+		).toBeNull();
+		expect(onTrackCta).not.toHaveBeenCalled();
+	});
+
+	it('requires a fresh follow-up scroll after being re-enabled', async () => {
+		Object.defineProperty(window, 'matchMedia', {
+			writable: true,
+			value: vi.fn().mockReturnValue({ matches: false })
+		});
+		Object.defineProperty(window, 'innerHeight', {
+			configurable: true,
+			value: 900
+		});
+		Object.defineProperty(window, 'scrollY', {
+			configurable: true,
+			writable: true,
+			value: 980
+		});
+		Object.defineProperty(document.documentElement, 'scrollHeight', {
+			configurable: true,
+			value: 2000
+		});
+		Object.defineProperty(document.body, 'scrollHeight', {
+			configurable: true,
+			value: 2000
+		});
+		localStorage.clear();
+		sessionStorage.clear();
+		const onTrackCta = vi.fn();
+
+		const view = render(LandingExitIntentPrompt, {
+			props: {
+				enabled: false,
+				selfServeHref: '/auth/login?intent=free_tier&plan=free',
+				resourcesHref: '/resources',
+				subscribeApiPath: '/api/marketing/subscribe',
+				onTrackCta
+			}
+		});
+
+		await view.rerender({
+			enabled: true,
+			selfServeHref: '/auth/login?intent=free_tier&plan=free',
+			resourcesHref: '/resources',
+			subscribeApiPath: '/api/marketing/subscribe',
+			onTrackCta
+		});
+
+		window.dispatchEvent(new Event('scroll'));
+		expect(
+			screen.queryByRole('heading', {
+				name: /want a weekly spend-control brief instead/i
+			})
+		).toBeNull();
+
+		Object.defineProperty(window, 'scrollY', {
+			configurable: true,
+			writable: true,
+			value: 1040
+		});
+		window.dispatchEvent(new Event('scroll'));
+
+		expect(
+			await screen.findByRole('heading', {
+				name: /want a weekly spend-control brief instead/i
+			})
+		).toBeTruthy();
+		expect(onTrackCta).toHaveBeenCalledWith('cta_view', 'exit_prompt', 'deep_scroll_prompt');
+	});
 });

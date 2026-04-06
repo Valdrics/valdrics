@@ -8,6 +8,7 @@ import sys
 import scripts.verify_codebase_audit_report as codebase_audit_report
 from scripts.verify_codebase_audit_report import (
     DEFAULT_REPORT,
+    _collect_backend_tests_count,
     main,
     verify_audit_report,
 )
@@ -368,27 +369,14 @@ def test_main_accepts_root_override(monkeypatch) -> None:
 
 
 def test_script_entrypoint_bootstraps_repo_imports_for_plain_python(tmp_path: Path) -> None:
-    payload = _valid_report_payload()
-    report_path = tmp_path / ".runtime/staging.audit.report.json"
-    _write_json(report_path, payload)
-    (tmp_path / "pyproject.toml").write_text(
-        "[project]\nrequires-python='>=3.12,<3.13'\ndependencies=['fastapi ~=0.128.0']\n",
-        encoding="utf-8",
-    )
-    (tmp_path / "dashboard").mkdir(parents=True, exist_ok=True)
-    (tmp_path / "dashboard/svelte.config.js").write_text(
-        "export default {};\n", encoding="utf-8"
-    )
-    _seed_dashboard_package_json(tmp_path)
-
     completed = subprocess.run(
         [
             sys.executable,
             str(codebase_audit_report.DEFAULT_ROOT / "scripts/verify_codebase_audit_report.py"),
             "--root",
-            str(tmp_path),
+            str(codebase_audit_report.DEFAULT_ROOT),
             "--report",
-            str(report_path),
+            str(codebase_audit_report.DEFAULT_ROOT / DEFAULT_REPORT),
         ],
         check=False,
         capture_output=True,
@@ -397,6 +385,66 @@ def test_script_entrypoint_bootstraps_repo_imports_for_plain_python(tmp_path: Pa
 
     assert completed.returncode == 0
     assert "audit report verified" in completed.stdout
+
+
+def test_collect_backend_tests_count_prefers_uv_when_available(monkeypatch, tmp_path: Path) -> None:
+    seen_commands: list[list[str]] = []
+
+    def _fake_run(command, **kwargs):
+        seen_commands.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="6361 tests collected in 5.00s\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        codebase_audit_report.shutil,
+        "which",
+        lambda binary: "/usr/bin/uv" if binary == "uv" else None,
+    )
+    monkeypatch.setattr(codebase_audit_report.subprocess, "run", _fake_run)
+
+    collected = _collect_backend_tests_count(root=tmp_path)
+
+    assert collected == 6361
+    assert seen_commands == [["uv", "run", "pytest", "--collect-only", "-q"]]
+
+
+def test_collect_backend_tests_count_falls_back_to_python_pytest(monkeypatch, tmp_path: Path) -> None:
+    seen_commands: list[list[str]] = []
+
+    def _fake_run(command, **kwargs):
+        seen_commands.append(command)
+        if command[:2] == ["uv", "run"]:
+            return subprocess.CompletedProcess(
+                command,
+                4,
+                stdout="",
+                stderr="uv failed",
+            )
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="12 tests collected in 0.10s\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        codebase_audit_report.shutil,
+        "which",
+        lambda binary: "/usr/bin/uv" if binary == "uv" else None,
+    )
+    monkeypatch.setattr(codebase_audit_report.subprocess, "run", _fake_run)
+
+    collected = _collect_backend_tests_count(root=tmp_path)
+
+    assert collected == 12
+    assert seen_commands == [
+        ["uv", "run", "pytest", "--collect-only", "-q"],
+        [sys.executable, "-m", "pytest", "--collect-only", "-q"],
+    ]
 
 
 def test_main_rejects_relative_root_escape(capsys) -> None:

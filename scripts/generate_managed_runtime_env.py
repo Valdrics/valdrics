@@ -574,6 +574,10 @@ def generate_managed_runtime_env(
     report = {
         "environment": normalized_environment,
         "output_path": output_path.as_posix(),
+        "resolved_public_runtime_values": {
+            "API_URL": overrides["API_URL"],
+            "FRONTEND_URL": overrides["FRONTEND_URL"],
+        },
         "generated_internal_secret_keys": list(INTERNAL_SECRET_KEYS),
         "required_operator_input_keys": _required_operator_input_keys(overrides),
         "unresolved_external_keys": declared_external_placeholders,

@@ -12,9 +12,11 @@
 	import { createLazyComponent } from '$lib/lazyComponent';
 	import LandingHeroCopy from '$lib/components/landing/LandingHeroCopy.svelte';
 	import './LandingMarketingShared.css';
+	import '../LandingHero.footer.css';
 	import './LandingHeroView.public.css';
 
 	type LandingExitIntentPromptProps = {
+		enabled?: boolean;
 		selfServeHref: string;
 		resourcesHref: string;
 		subscribeApiPath: string;
@@ -364,9 +366,10 @@
 		</button>
 	{/if}
 
-	{#if exitPromptReady}
+	{#if exitPromptReady && !cookieBannerVisible}
 		{#await loadLandingExitIntentPrompt() then { default: LandingExitIntentPrompt }}
 			<LandingExitIntentPrompt
+				enabled={!cookieBannerVisible}
 				selfServeHref={freeTierCtaHref}
 				{resourcesHref}
 				{subscribeApiPath}

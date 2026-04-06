@@ -276,6 +276,7 @@ reports/acceptance/**
 
 # Local scratch/image dump folders
 khafdee/
+.codex
 
 # Root accidental npm artifacts
 /node_modules/

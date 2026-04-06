@@ -73,8 +73,11 @@ Dashboard container contract:
 
 - `Dockerfile.dashboard` packages the built SvelteKit output
 - `dashboard/server.node.mjs` serves that build under the managed Node runtime
+- `uv run python scripts/verify_codebase_audit_report.py --report .runtime/staging.audit.report.json` must pass before promotion so the checked-in audit artifact stays aligned to live repo facts
+- if the audit verifier fails due to live-fact drift, refresh the staged artifact with `uv run python scripts/refresh_codebase_audit_report.py --report .runtime/staging.audit.report.json` and commit the updated snapshot before promotion
 - `uv run python scripts/verify_dashboard_runtime_contract.py --build` must pass before promotion
-- `uv run python scripts/verify_managed_release_readiness.py --environment <environment> --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver` is the operator-facing wrapper that runs the dashboard runtime contract, bundle verifier, and public browser gate together
+- `uv run python scripts/verify_managed_release_readiness.py --environment <environment> --dashboard-url https://REPLACE_WITH_FRONTEND_DOMAIN --skip-webserver` is the operator-facing wrapper that runs codebase audit verification, the dashboard runtime contract, the bundle verifier, and the public browser gate together
+- if `.runtime/<environment>.env` already contains a live `FRONTEND_URL`, the wrapper can derive the dashboard URL and `--dashboard-url` is optional
 - when reusing a local `vite preview` URL with `--skip-webserver`, add `--reuse-built-dashboard-runtime` so the readiness gate does not rebuild and invalidate the live preview assets
 
 ## Promotion Rules
