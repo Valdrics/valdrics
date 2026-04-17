@@ -105,7 +105,6 @@ def test_generate_managed_runtime_env_generates_internal_secrets_and_reports_unr
     assert values["PUBLIC_API_RATE_LIMITING_BACKEND"] == "cloudflare"
     assert values["RATELIMIT_ENABLED"] == "false"
     assert "WEB_CONCURRENCY" not in values
-    assert values["CIRCUIT_BREAKER_DISTRIBUTED_STATE"] == "false"
     assert values["DB_SSL_MODE"] == "require"
     assert values["SAAS_STRICT_INTEGRATIONS"] == "true"
     assert values["EXPOSE_API_DOCUMENTATION_PUBLICLY"] == "false"
@@ -218,7 +217,6 @@ def test_generate_managed_runtime_env_respects_overrides_and_is_shell_source_saf
     assert "WEB_CONCURRENCY" not in values
     assert values["PUBLIC_API_RATE_LIMITING_BACKEND"] == "cloudflare"
     assert values["RATELIMIT_ENABLED"] == "false"
-    assert values["CIRCUIT_BREAKER_DISTRIBUTED_STATE"] == "false"
     assert values["GCP_PROJECT_ID"] == "valdrics-prod"
     assert values["GCP_REGION"] == "us-central1"
     assert values["GCP_CLOUD_TASKS_QUEUE"] == "valdrics-managed-work"
@@ -409,7 +407,6 @@ def test_generate_managed_runtime_env_preserves_existing_values_on_regeneration(
     assert second_values["OBSERVABILITY_BACKEND"] == "gcp"
     assert second_values["PUBLIC_API_RATE_LIMITING_BACKEND"] == "cloudflare"
     assert second_values["RATELIMIT_ENABLED"] == "false"
-    assert second_values["CIRCUIT_BREAKER_DISTRIBUTED_STATE"] == "false"
     assert second_values["GCP_PROJECT_ID"] == "valdrics-prod"
     assert second_values["GCP_REGION"] == "us-central1"
     assert second_values["SUPABASE_ANON_KEY"] == "anon-key-for-dashboard"

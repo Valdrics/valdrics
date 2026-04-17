@@ -161,7 +161,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--matrix-path",
-        default="docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        default="docs/ops/feature_enforceability_matrix.json",
         help="Feature enforceability matrix JSON path.",
     )
     return parser.parse_args(argv)

@@ -171,7 +171,7 @@ def test_main_rejects_scanned_source_root_output() -> None:
     "output",
     [
         "scripts/verify_feature_enforceability_matrix.py",
-        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/feature_enforceability_matrix.json",
         "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
         "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
         "docs/ops/key-rotation-drill-2026-02-27.md",
@@ -194,7 +194,7 @@ def test_main_rejects_protected_artifact_output() -> None:
         ValueError,
         match="out must not overwrite feature-enforceability source, verifier, or checked-in artifact files",
     ):
-        main(["--out", "docs/ops/feature_enforceability_matrix_2026-02-27.json"])
+        main(["--out", "docs/ops/feature_enforceability_matrix.json"])
 
 
 def test_main_rejects_output_parent_file(

@@ -138,6 +138,42 @@ async def test_get_cost_anomalies_skips_dispatch_when_alert_disabled() -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_cost_anomalies_preserves_response_model_payload() -> None:
+    payload = costs_api.CostAnomalyResponse(
+        target_date="2026-01-31",
+        lookback_days=28,
+        provider="aws",
+        min_abs_usd=25.0,
+        min_percent=30.0,
+        min_severity="medium",
+        count=0,
+        alerted_count=0,
+        anomalies=[],
+    )
+
+    with patch.object(
+        costs_api,
+        "get_cost_anomalies_impl",
+        new=AsyncMock(return_value=payload),
+    ) as mock_impl:
+        response = await costs_api.get_cost_anomalies(
+            target_date=date(2026, 1, 31),
+            lookback_days=28,
+            provider="aws",
+            min_abs_usd=25.0,
+            min_percent=30.0,
+            min_severity="medium",
+            alert=False,
+            suppression_hours=24,
+            user=user(),
+            db=FakeDB(),  # type: ignore[arg-type]
+        )
+
+    assert response is payload
+    mock_impl.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_get_unit_economics_skips_alert_when_flag_disabled_with_anomaly() -> None:
     db = FakeDB()
     anomaly_metric = costs_api.UnitEconomicsMetric(

@@ -318,6 +318,24 @@ class TestCURUsageAnalyzer:
         assert cluster["monthly_cost"] == 0.32
         assert cluster["confidence_score"] == 0.80
 
+    def test_find_idle_elasticache_clusters_missing_engine_defaults_to_unknown(self):
+        cur_records = [
+            {
+                "line_item_resource_id": "test-cluster-unknown",
+                "line_item_usage_type": "NodeUsage:cache.t3.micro",
+                "line_item_usage_amount": "16.0",
+                "line_item_product_code": "AmazonElastiCache",
+                "line_item_unblended_cost": "0.32",
+                "product_instance_type": "cache.t3.micro",
+            }
+        ]
+
+        analyzer = CURUsageAnalyzer(cur_records)
+        idle_clusters = analyzer.find_idle_elasticache_clusters(days=7)
+
+        assert len(idle_clusters) == 1
+        assert idle_clusters[0]["engine"] == "unknown"
+
     def test_find_idle_eks_clusters(self):
         """Test detection of EKS clusters."""
         cur_records = [

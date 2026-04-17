@@ -136,7 +136,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--out",
-        default="docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        default="docs/ops/feature_enforceability_matrix.json",
         help="Output path for generated matrix JSON.",
     )
     return parser.parse_args(argv)
@@ -158,7 +158,7 @@ def _resolve_output_path(*, repo_root: Path, output: str) -> Path:
         repo_root,
         __file__,
         "scripts/verify_feature_enforceability_matrix.py",
-        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/feature_enforceability_matrix.json",
         "docs/ops/key-rotation-drill-2026-02-27.md",
         "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
         "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",

@@ -14,6 +14,7 @@ class BaseAdapter(ABC):
     - Resource Discovery
     - Connection Verification
     """
+
     last_error: Optional[str] = None
 
     def _clear_last_error(self) -> None:
@@ -40,14 +41,14 @@ class BaseAdapter(ABC):
     @abstractmethod
     async def verify_connection(self) -> bool:
         """Verify that the stored credentials are valid."""
-        raise NotImplementedError()
+        ...
 
     @abstractmethod
     async def get_cost_and_usage(
         self, start_date: datetime, end_date: datetime, granularity: str = "DAILY"
     ) -> List[Dict[str, Any]]:
         """Fetch normalized cost data as a materialized list."""
-        raise NotImplementedError()
+        ...
 
     @abstractmethod
     def stream_cost_and_usage(
@@ -57,14 +58,14 @@ class BaseAdapter(ABC):
         Stream cost data normalized to the standard Valdrics format.
         Used for memory-efficient ingestion.
         """
-        raise NotImplementedError()
+        ...
 
     @abstractmethod
     async def discover_resources(
         self, resource_type: str, region: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """Discover active resources of a specific type (for Zombie detection)."""
-        raise NotImplementedError()
+        ...
 
     @abstractmethod
     async def get_resource_usage(
@@ -74,7 +75,7 @@ class BaseAdapter(ABC):
         Return normalized resource-level usage rows for the requested service/resource.
         Implementations may return an empty list when the provider does not expose this data.
         """
-        raise NotImplementedError()
+        ...
 
 
 CostAdapter = BaseAdapter

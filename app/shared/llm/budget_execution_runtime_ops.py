@@ -332,11 +332,11 @@ async def check_budget_state(
     import app.shared.llm.budget_manager as manager_module
 
     cache = manager_module.get_cache_service()
-    if cache.enabled and cache.client is not None:
+    if cache.enabled:
         try:
-            if await cache.client.get(f"budget_blocked:{tenant_id}"):
+            if await cache.get_raw(f"budget_blocked:{tenant_id}"):
                 return manager_module.BudgetStatus.HARD_LIMIT
-            if await cache.client.get(f"budget_soft:{tenant_id}"):
+            if await cache.get_raw(f"budget_soft:{tenant_id}"):
                 return manager_module.BudgetStatus.SOFT_LIMIT
         except cache_recoverable_errors as exc:
             manager_module.logger.error(
@@ -378,8 +378,8 @@ async def check_budget_state(
 
     if current_usage >= limit:
         if hard_limit:
-            if cache.enabled and cache.client is not None:
-                await cache.client.set(f"budget_blocked:{tenant_id}", "1", ex=600)
+            if cache.enabled:
+                await cache.set_raw(f"budget_blocked:{tenant_id}", "1", ex=600)
             raise manager_module.BudgetExceededError(
                 f"LLM budget of ${limit:.2f} exceeded.",
                 details={"usage": float(current_usage), "limit": float(limit)},
@@ -387,8 +387,8 @@ async def check_budget_state(
         return manager_module.BudgetStatus.SOFT_LIMIT
 
     if current_usage >= (limit * threshold):
-        if cache.enabled and cache.client is not None:
-            await cache.client.set(f"budget_soft:{tenant_id}", "1", ex=300)
+        if cache.enabled:
+            await cache.set_raw(f"budget_soft:{tenant_id}", "1", ex=300)
         return manager_module.BudgetStatus.SOFT_LIMIT
 
     return manager_module.BudgetStatus.OK

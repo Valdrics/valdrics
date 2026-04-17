@@ -47,8 +47,8 @@ class TestCircuitBreakerState:
 
     @pytest.mark.asyncio
     async def test_memory_fallback_get(self):
-        """State should fallback to memory when no Redis."""
-        state = CircuitBreakerState("tenant-123", redis_client=None)
+        """State should return defaults from memory when missing."""
+        state = CircuitBreakerState("tenant-123")
 
         # Get default
         result = await state.get("missing_key", "default")
@@ -56,8 +56,8 @@ class TestCircuitBreakerState:
 
     @pytest.mark.asyncio
     async def test_memory_fallback_set_get(self):
-        """State should store in memory when no Redis."""
-        state = CircuitBreakerState("tenant-123", redis_client=None)
+        """State should store values in memory."""
+        state = CircuitBreakerState("tenant-123")
 
         await state.set("test_key", "test_value")
         result = await state.get("test_key")
@@ -65,8 +65,8 @@ class TestCircuitBreakerState:
 
     @pytest.mark.asyncio
     async def test_memory_fallback_incr(self):
-        """State should increment in memory when no Redis."""
-        state = CircuitBreakerState("tenant-fallback-incr", redis_client=None)
+        """State should increment counters in memory."""
+        state = CircuitBreakerState("tenant-fallback-incr")
 
         result1 = await state.incr("counter")
         result2 = await state.incr("counter")
@@ -76,7 +76,7 @@ class TestCircuitBreakerState:
 
     @pytest.mark.asyncio
     async def test_memory_fallback_incr_float(self):
-        state = CircuitBreakerState("tenant-fallback-incr-float", redis_client=None)
+        state = CircuitBreakerState("tenant-fallback-incr-float")
 
         result1 = await state.incr_float("daily_savings_usd", 1.5)
         result2 = await state.incr_float("daily_savings_usd", 2.25)

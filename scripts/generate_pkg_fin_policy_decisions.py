@@ -65,7 +65,7 @@ def _protected_output_paths() -> set[Path]:
         _repo_root(),
         __file__,
         "scripts/verify_pkg_fin_policy_decisions.py",
-        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/feature_enforceability_matrix.json",
         "docs/ops/key-rotation-drill-2026-02-27.md",
     )
 

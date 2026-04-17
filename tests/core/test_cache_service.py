@@ -1,31 +1,30 @@
 """
-Tests for CacheService with Upstash Redis
+Tests for CacheService with the optional remote cache backend.
 
 Tests behavior when:
-1. Redis is not configured (graceful fallback)
-2. Redis is configured (mocked operations)
+1. The backend is not configured (graceful fallback)
+2. The backend is configured (mocked operations)
 """
 
 import pytest
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 import json
-from upstash_redis.errors import UpstashError
 
-from app.shared.cache import CacheService, get_cache_service
+from app.shared.core.cache import CacheService, get_cache_service, reset_cache_service_state
 
 
 class TestCacheServiceDisabled:
-    """Tests for cache service when Redis is not configured."""
+    """Tests for cache service when the managed profile disables caching."""
 
-    def test_disabled_when_no_credentials(self):
-        """Cache is disabled when UPSTASH credentials are missing."""
-        with patch("app.shared.cache.get_settings") as mock_settings:
-            mock_settings.return_value.UPSTASH_REDIS_URL = None
-            mock_settings.return_value.UPSTASH_REDIS_TOKEN = None
+    def test_disabled_for_managed_profile(self):
+        """Cache is disabled for the supported managed GCP runtime profile."""
+        with patch("app.shared.core.cache.get_settings") as mock_settings:
+            mock_settings.return_value.ENVIRONMENT = "production"
+            mock_settings.return_value.PLATFORM_RUNTIME_PROFILE = "gcp"
 
             # Reset singleton
-            import app.shared.cache as cache_module
+            import app.shared.core.cache as cache_module
 
             cache_module._async_client = None
             cache_module._cache_service = None
@@ -36,11 +35,11 @@ class TestCacheServiceDisabled:
     @pytest.mark.asyncio
     async def test_get_analysis_returns_none_when_disabled(self):
         """get_analysis returns None when cache is disabled."""
-        with patch("app.shared.cache.get_settings") as mock_settings:
-            mock_settings.return_value.UPSTASH_REDIS_URL = None
-            mock_settings.return_value.UPSTASH_REDIS_TOKEN = None
+        with patch("app.shared.core.cache.get_settings") as mock_settings:
+            mock_settings.return_value.ENVIRONMENT = "production"
+            mock_settings.return_value.PLATFORM_RUNTIME_PROFILE = "gcp"
 
-            import app.shared.cache as cache_module
+            import app.shared.core.cache as cache_module
 
             cache_module._async_client = None
             cache_module._cache_service = None
@@ -52,11 +51,11 @@ class TestCacheServiceDisabled:
     @pytest.mark.asyncio
     async def test_set_analysis_returns_false_when_disabled(self):
         """set_analysis returns False when cache is disabled."""
-        with patch("app.shared.cache.get_settings") as mock_settings:
-            mock_settings.return_value.UPSTASH_REDIS_URL = None
-            mock_settings.return_value.UPSTASH_REDIS_TOKEN = None
+        with patch("app.shared.core.cache.get_settings") as mock_settings:
+            mock_settings.return_value.ENVIRONMENT = "production"
+            mock_settings.return_value.PLATFORM_RUNTIME_PROFILE = "gcp"
 
-            import app.shared.cache as cache_module
+            import app.shared.core.cache as cache_module
 
             cache_module._async_client = None
             cache_module._cache_service = None
@@ -67,38 +66,20 @@ class TestCacheServiceDisabled:
 
 
 class TestCacheServiceEnabled:
-    """Tests for cache service when Redis is configured (mocked)."""
+    """Tests for cache service when the remote backend is configured (mocked)."""
 
     @pytest.mark.asyncio
     async def test_get_analysis_returns_cached_data(self):
         """get_analysis returns parsed JSON when data exists."""
         tenant_id = uuid4()
         cached_data = {"anomalies": [], "recommendations": []}
+        mock_client = AsyncMock()
+        mock_client.get = AsyncMock(return_value=json.dumps(cached_data))
+        service = CacheService(client=mock_client)
 
-        with (
-            patch("app.shared.cache.get_settings") as mock_settings,
-            patch("app.shared.cache.AsyncRedis") as MockRedis,
-        ):
-            mock_settings.return_value.UPSTASH_REDIS_URL = "https://test.upstash.io"
-            mock_settings.return_value.UPSTASH_REDIS_TOKEN = "test_token"
-
-            # Setup mock Redis client
-            mock_client = AsyncMock()
-            mock_client.get = AsyncMock(return_value=json.dumps(cached_data))
-            MockRedis.return_value = mock_client
-
-            import app.shared.cache as cache_module
-
-            cache_module._async_client = None
-            cache_module._cache_service = None
-
-            service = CacheService()
-            service.client = mock_client
-            service.enabled = True
-
-            result = await service.get_analysis(tenant_id)
-            assert result == cached_data
-            mock_client.get.assert_called_once_with(f"analysis:{tenant_id}")
+        result = await service.get_analysis(tenant_id)
+        assert result == cached_data
+        mock_client.get.assert_called_once_with(f"analysis:{tenant_id}")
 
     @pytest.mark.asyncio
     async def test_set_analysis_stores_data_with_ttl(self):
@@ -112,9 +93,7 @@ class TestCacheServiceEnabled:
         mock_client = AsyncMock()
         mock_client.set = AsyncMock(return_value=True)
 
-        service = CacheService()
-        service.client = mock_client
-        service.enabled = True
+        service = CacheService(client=mock_client)
 
         result = await service.set_analysis(tenant_id, analysis_data)
 
@@ -127,15 +106,13 @@ class TestCacheServiceEnabled:
 
     @pytest.mark.asyncio
     async def test_get_analysis_handles_errors_gracefully(self):
-        """get_analysis returns None on Redis errors."""
+        """get_analysis returns None on backend errors."""
         tenant_id = uuid4()
 
         mock_client = AsyncMock()
-        mock_client.get = AsyncMock(side_effect=UpstashError("Connection failed"))
+        mock_client.get = AsyncMock(side_effect=RuntimeError("Connection failed"))
 
-        service = CacheService()
-        service.client = mock_client
-        service.enabled = True
+        service = CacheService(client=mock_client)
 
         result = await service.get_analysis(tenant_id)
         assert result is None  # Graceful fallback on error
@@ -146,11 +123,11 @@ class TestCacheServiceSingleton:
 
     def test_get_cache_service_returns_same_instance(self):
         """get_cache_service returns the same instance."""
-        with patch("app.shared.cache.get_settings") as mock_settings:
-            mock_settings.return_value.UPSTASH_REDIS_URL = None
-            mock_settings.return_value.UPSTASH_REDIS_TOKEN = None
+        with patch("app.shared.core.cache.get_settings") as mock_settings:
+            mock_settings.return_value.ENVIRONMENT = "production"
+            mock_settings.return_value.PLATFORM_RUNTIME_PROFILE = "gcp"
 
-            import app.shared.cache as cache_module
+            import app.shared.core.cache as cache_module
 
             cache_module._cache_service = None
 
@@ -158,3 +135,26 @@ class TestCacheServiceSingleton:
             service2 = get_cache_service()
 
             assert service1 is service2
+
+    @pytest.mark.asyncio
+    async def test_reset_cache_service_state_clears_process_local_singletons(self):
+        """Reset helper drops the singleton and clears in-memory cached payloads."""
+        with patch("app.shared.core.cache.get_settings") as mock_settings:
+            mock_settings.return_value.ENVIRONMENT = "development"
+            mock_settings.return_value.PLATFORM_RUNTIME_PROFILE = "gcp"
+
+            import app.shared.core.cache as cache_module
+
+            reset_cache_service_state()
+            service = get_cache_service()
+            assert service.enabled is True
+
+            assert await service.set("test-key", {"ok": True}) is True
+            assert await service.get("test-key") == {"ok": True}
+
+            reset_cache_service_state()
+
+            assert cache_module._cache_service is None
+            assert cache_module._async_client is None
+            fresh_service = get_cache_service()
+            assert await fresh_service.get("test-key") is None

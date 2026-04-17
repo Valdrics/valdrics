@@ -38,7 +38,7 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
             "ValdricsEnforcementErrorBudgetBurnFast",
         ),
         EvidenceToken(
-            "docs/ops/alert-evidence-2026-02-25.md",
+            "docs/ops/alert-evidence.md",
             "Release Hold Criteria (BSAFE-016)",
         ),
         EvidenceToken(
@@ -98,11 +98,11 @@ DIMENSION_TOKENS: dict[str, tuple[EvidenceToken, ...]] = {
     ),
     "failure_modes": (
         EvidenceToken(
-            "docs/ops/enforcement_failure_injection_matrix_2026-02-25.md",
+            "docs/ops/enforcement_failure_injection_matrix.md",
             "FI-001",
         ),
         EvidenceToken(
-            "docs/ops/enforcement_failure_injection_matrix_2026-02-25.md",
+            "docs/ops/enforcement_failure_injection_matrix.md",
             "FI-005",
         ),
         EvidenceToken(
@@ -156,7 +156,7 @@ GAP_REGISTER_REQUIRED_TOKENS: tuple[str, ...] = (
     "Binary Artifact Closure Checklist (release packet)",
     "docs/ops/evidence/enforcement_stress_artifact_YYYY-MM-DD.json",
     "docs/ops/evidence/enforcement_failure_injection_YYYY-MM-DD.json",
-    "docs/evidence/ci-green-YYYY-MM-DD.md",
+    "docs/archive/evidence/<quarter>/ci-green-YYYY-MM-DD.md",
 )
 
 GAP_REGISTER_FORBIDDEN_TOKENS: tuple[str, ...] = (
@@ -280,7 +280,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--doc-path",
-        default="docs/ops/enforcement_post_closure_sanity_2026-02-26.md",
+        default="docs/ops/enforcement_post_closure_sanity.md",
         help="Post-closure sanity policy document path.",
     )
     parser.add_argument(

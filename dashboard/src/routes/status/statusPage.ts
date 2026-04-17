@@ -32,7 +32,7 @@ export type BackendHealthPayload = {
 	status?: string;
 	timestamp?: string;
 	database?: BackendStatusComponent;
-	redis?: BackendStatusComponent;
+	cache?: BackendStatusComponent;
 	aws?: BackendStatusComponent;
 	system?: BackendStatusComponent;
 	checks?: {
@@ -133,6 +133,7 @@ function statusDetail(
 function buildLiveComponents(payload: BackendHealthPayload): StatusComponent[] {
 	const externalServices = payload.checks?.external_services;
 	const awsStatus = payload.aws ?? externalServices?.services?.aws_sts;
+	const cacheStatus = payload.cache ?? payload.checks?.cache;
 	const systemStatus = payload.system ?? payload.checks?.system_resources;
 
 	return [
@@ -154,8 +155,8 @@ function buildLiveComponents(payload: BackendHealthPayload): StatusComponent[] {
 		),
 		buildComponent(
 			'Cache',
-			normalizeState(payload.redis?.status),
-			statusDetail(payload.redis, {
+			normalizeState(cacheStatus?.status),
+			statusDetail(cacheStatus, {
 				operational: 'Cache health check completed successfully.',
 				degraded: 'Cache is reachable, but the health check reported degraded behavior.',
 				unavailable: 'Cache health check failed.',

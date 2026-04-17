@@ -10,30 +10,32 @@ async def test_delete_pattern_no_keys():
         if False:
             yield match  # pragma: no cover
 
-    mock_redis = AsyncMock()
-    mock_redis.scan_iter = MagicMock(side_effect=empty_scan_iter)
+    mock_cache_client = AsyncMock()
+    mock_cache_client.scan_iter = MagicMock(side_effect=empty_scan_iter)
 
-    with patch("app.shared.core.cache._get_async_client", return_value=mock_redis):
+    with patch(
+        "app.shared.core.cache._get_async_client", return_value=mock_cache_client
+    ):
         service = CacheService()
         result = await service.delete_pattern("missing:*")
 
     assert result is True
-    mock_redis.delete.assert_not_called()
+    mock_cache_client.delete.assert_not_called()
 
 
-def test_get_sync_client_returns_none_without_config():
+def test_get_async_client_returns_none_for_managed_profile():
     with patch("app.shared.core.cache.get_settings") as mock_settings:
-        mock_settings.return_value.UPSTASH_REDIS_URL = None
-        mock_settings.return_value.UPSTASH_REDIS_TOKEN = None
-        from app.shared.core.cache import _get_sync_client
+        mock_settings.return_value.ENVIRONMENT = "production"
+        mock_settings.return_value.PLATFORM_RUNTIME_PROFILE = "gcp"
+        from app.shared.core.cache import _get_async_client
 
-        assert _get_sync_client() is None
+        assert _get_async_client() is None
 
 
 @pytest.mark.asyncio
 async def test_cached_query_tenant_aware_false_does_not_use_tenant():
-    redis = AsyncMock()
-    cache = QueryCache(redis_client=redis)
+    cache_client = AsyncMock()
+    cache = QueryCache(backend_client=cache_client)
 
     async def handler(db, tenant_id, extra=None):
         return {"ok": True, "extra": extra}

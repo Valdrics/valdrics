@@ -41,7 +41,7 @@ describe('status server load', () => {
 				status: 'healthy',
 				timestamp: '2026-03-09T10:00:00Z',
 				database: { status: 'up' },
-				redis: { status: 'healthy' },
+				cache: { status: 'healthy' },
 				aws: { status: 'healthy', response_code: 403 },
 				system: { status: 'healthy' },
 				checks: {
@@ -72,7 +72,7 @@ describe('status server load', () => {
 					status: 'unhealthy',
 					timestamp: '2026-03-09T11:00:00Z',
 					database: { status: 'down', error: 'database unavailable' },
-					redis: { status: 'healthy' },
+					cache: { status: 'healthy' },
 					aws: { status: 'healthy' },
 					system: { status: 'healthy' },
 					checks: {

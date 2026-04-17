@@ -74,6 +74,7 @@ def _render_handoff_markdown(
     migration_report: dict[str, Any],
     deployment_report: dict[str, Any],
 ) -> str:
+    audit_report_relative_path = Path(".runtime") / f"{environment}.audit.report.json"
     runtime_blockers = _normalize_strings(runtime_report.get("runtime_validation_blockers"))
     migration_blockers = _normalize_strings(
         migration_report.get("migration_validation_blockers")
@@ -120,8 +121,8 @@ def _render_handoff_markdown(
         f"- Runtime report: `{runtime_report_path}`",
         f"- Migration report: `{migration_report_path}`",
         f"- Deployment report: `{deployment_report_path}`",
-        "- Cross-environment blocker rollup: "
-        "`.runtime/deploy/managed-release-blockers.md`",
+        "- Cross-environment blocker rollup target: "
+        "`.runtime/deploy/managed-release-blockers.md` (rendered after both staging and production bundles are available)",
         "",
         "## Root Operator Gaps",
         "",
@@ -159,9 +160,9 @@ def _render_handoff_markdown(
         "- Dashboard URL derivation: "
         "if the managed runtime env already contains a live `FRONTEND_URL`, the readiness wrapper can derive the dashboard URL automatically.",
         "- Codebase audit verification: "
-        "`uv run python scripts/verify_codebase_audit_report.py --report .runtime/staging.audit.report.json`",
+        f"`uv run python scripts/verify_codebase_audit_report.py --report {audit_report_relative_path.as_posix()}`",
         "- Codebase audit refresh: "
-        "`uv run python scripts/refresh_codebase_audit_report.py --report .runtime/staging.audit.report.json` "
+        f"`uv run python scripts/refresh_codebase_audit_report.py --report {audit_report_relative_path.as_posix()}` "
         "(use this only when the verifier reports live-fact drift after intentional repo changes).",
         "- Local preview note: "
         "add `--reuse-built-dashboard-runtime` when the dashboard URL points to a live local `vite preview` server.",
@@ -173,7 +174,8 @@ def _render_handoff_markdown(
         "- Bundle verification: "
         f"`uv run python scripts/verify_managed_deployment_bundle.py --environment {environment}`",
         "- Cross-environment blocker rollup: "
-        "`uv run python scripts/render_managed_release_blocker_summary.py`",
+        "`uv run python scripts/render_managed_release_blocker_summary.py --non-secret-deployment-bundle` "
+        "(run this after both staging and production non-secret bundles are present locally, or use the release workflow when `promote_production=true`)",
         "- Unified release runbook: "
         "`docs/runbooks/unified_platform_release.md`",
         "- Operator release workflow: "

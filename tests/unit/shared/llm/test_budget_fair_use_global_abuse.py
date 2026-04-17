@@ -101,9 +101,9 @@ async def test_enforce_global_abuse_guard_disabled_and_temporal_block() -> None:
         LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD=999,
         LLM_GLOBAL_ABUSE_BLOCK_SECONDS=90,
     )
-    DummyManager._local_global_abuse_block_until = datetime.now(timezone.utc) + timedelta(
-        seconds=120
-    )
+    DummyManager._local_global_abuse_block_until = datetime.now(
+        timezone.utc
+    ) + timedelta(seconds=120)
     with (
         patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
         patch("app.shared.llm.budget_manager.LLM_PRE_AUTH_DENIALS", metric),
@@ -132,11 +132,14 @@ async def test_enforce_global_abuse_guard_cache_get_and_result_fallbacks() -> No
 
     cache_blocking = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(get=AsyncMock(return_value="1")),
+        get_raw=AsyncMock(return_value="1"),
     )
     with (
         patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
-        patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache_blocking),
+        patch(
+            "app.shared.llm.budget_manager.get_cache_service",
+            return_value=cache_blocking,
+        ),
         patch("app.shared.llm.budget_manager.LLM_PRE_AUTH_DENIALS", metric),
         patch("app.shared.llm.budget_manager.LLM_FAIR_USE_DENIALS", metric),
         patch("app.shared.llm.budget_manager.LLM_FAIR_USE_EVALUATIONS", metric),
@@ -151,11 +154,14 @@ async def test_enforce_global_abuse_guard_cache_get_and_result_fallbacks() -> No
     db.execute = AsyncMock(return_value=result)
     cache_erroring = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(get=AsyncMock(side_effect=RuntimeError("redis-get-error"))),
+        get_raw=AsyncMock(side_effect=RuntimeError("cache-get-error")),
     )
     with (
         patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
-        patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache_erroring),
+        patch(
+            "app.shared.llm.budget_manager.get_cache_service",
+            return_value=cache_erroring,
+        ),
         patch("app.shared.llm.budget_manager.LLM_FAIR_USE_OBSERVED", metric),
         patch("app.shared.llm.budget_manager.LLM_FAIR_USE_EVALUATIONS", metric),
     ):
@@ -181,10 +187,8 @@ async def test_enforce_global_abuse_guard_trigger_with_cache_set_failure() -> No
     db.execute = AsyncMock(return_value=result)
     cache = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(
-            get=AsyncMock(return_value=None),
-            set=AsyncMock(side_effect=RuntimeError("redis-set-error")),
-        ),
+        get_raw=AsyncMock(return_value=None),
+        set_raw=AsyncMock(side_effect=RuntimeError("cache-set-error")),
     )
 
     with (
@@ -234,7 +238,8 @@ async def test_global_abuse_guard_row_parsing_and_cache_set_non_callable() -> No
     db.execute = AsyncMock(return_value=result_triggered)
     cache_non_callable_set = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(get=AsyncMock(return_value=None), set=None),
+        get_raw=AsyncMock(return_value=None),
+        set_raw=None,
     )
     with (
         patch("app.shared.llm.budget_manager.get_settings", return_value=settings),

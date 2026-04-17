@@ -30,7 +30,6 @@ def _build_local_env(database_path: Path) -> dict[str, str]:
         "DATABASE_URL": f"sqlite+aiosqlite:///{database_path.as_posix()}",
         "DB_SSL_MODE": "disable",
         "LOCAL_SQLITE_BOOTSTRAP": "true",
-        "REDIS_URL": "",
         "CSRF_SECRET_KEY": "c" * 64,
         "SUPABASE_JWT_SECRET": "s" * 64,
         "ENCRYPTION_KEY": base64.urlsafe_b64encode(b"x" * 32).decode("utf-8"),

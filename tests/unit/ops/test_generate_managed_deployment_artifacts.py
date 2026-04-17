@@ -25,11 +25,9 @@ def _base_runtime_lines() -> list[str]:
         "OBSERVABILITY_BACKEND=gcp",
         "PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare",
         "RATELIMIT_ENABLED=false",
-        "CIRCUIT_BREAKER_DISTRIBUTED_STATE=false",
         "LLM_PROVIDER=openai",
         "OPENAI_API_KEY=sk-openai-live-key",
         "EXPOSE_API_DOCUMENTATION_PUBLICLY=false",
-        "OTEL_LOGS_EXPORT_ENABLED=true",
         "SAAS_STRICT_INTEGRATIONS=true",
         "TRUST_PROXY_HEADERS=true",
         "CORS_ORIGINS='[\"https://console.runtime.example\"]'",
@@ -110,6 +108,7 @@ def test_generate_managed_deployment_artifacts_outputs_unified_platform_bundle(
     terraform_tfvars = json.loads(
         (output_dir / "terraform.runtime.auto.tfvars.json").read_text(encoding="utf-8")
     )
+    operator_handoff = output_dir / "operator-handoff.md"
 
     assert report["ready_for_unified_platform"] is True
     assert report["ready_for_release_promotion"] is True
@@ -174,6 +173,11 @@ def test_generate_managed_deployment_artifacts_outputs_unified_platform_bundle(
     assert terraform_tfvars["gcp_project_id"] == "valdrics-prod"
     assert terraform_tfvars["cloudflare_zone_id"] == "cf-zone-prod"
     assert terraform_tfvars["supabase_project_name"] == "valdrics"
+    assert (
+        report["artifacts"]["operator_handoff_markdown"]
+        == operator_handoff.as_posix()
+    )
+    assert not operator_handoff.exists()
 
 
 def test_generate_managed_deployment_artifacts_reports_placeholder_blockers_for_staging(
@@ -192,7 +196,6 @@ def test_generate_managed_deployment_artifacts_reports_placeholder_blockers_for_
             "OBSERVABILITY_BACKEND=gcp",
             "PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare",
             "RATELIMIT_ENABLED=false",
-            "CIRCUIT_BREAKER_DISTRIBUTED_STATE=false",
             "LLM_PROVIDER=groq",
             "GROQ_API_KEY=REPLACE_WITH_GROQ_API_KEY",
             "DATABASE_URL=postgresql+asyncpg://REPLACE_WITH_DB_USER:REPLACE_WITH_DB_PASSWORD@REPLACE_WITH_DB_HOST:5432/postgres",
@@ -268,6 +271,48 @@ def test_generate_managed_deployment_artifacts_strips_legacy_internal_job_secret
 
     assert "INTERNAL_JOB_SECRET" not in secret_payload
     assert "INTERNAL_JOB_SECRET" not in report["secret_manager_secret_keys"]
+
+
+def test_generate_managed_deployment_artifacts_prunes_unmanaged_bundle_outputs(
+    tmp_path: Path,
+) -> None:
+    runtime_env = tmp_path / "production.env"
+    output_dir = tmp_path / "deploy" / "production"
+    _write_env(runtime_env, _base_runtime_lines())
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for stale_name in (
+        "aws-runtime-secret.json",
+        "helm-values.yaml",
+        "koyeb-api.yaml",
+        "koyeb-dashboard-env.json",
+        "koyeb-release.json",
+        "koyeb-secrets.json",
+        "koyeb-worker.yaml",
+        "random-operator-note.txt",
+    ):
+        (output_dir / stale_name).write_text("legacy\n", encoding="utf-8")
+    preserved_handoff = output_dir / "operator-handoff.md"
+    preserved_handoff.write_text("keep me\n", encoding="utf-8")
+
+    generate_managed_deployment_artifacts(
+        environment="production",
+        runtime_env_file=runtime_env,
+        output_dir=output_dir,
+        **_resolved_terraform_inputs(),
+    )
+
+    for stale_name in (
+        "aws-runtime-secret.json",
+        "helm-values.yaml",
+        "koyeb-api.yaml",
+        "koyeb-dashboard-env.json",
+        "koyeb-release.json",
+        "koyeb-secrets.json",
+        "koyeb-worker.yaml",
+        "random-operator-note.txt",
+    ):
+        assert not (output_dir / stale_name).exists()
+    assert preserved_handoff.exists()
 
 
 @pytest.mark.parametrize(

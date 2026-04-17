@@ -8,6 +8,11 @@ import subprocess  # nosec B404 - controlled local git invocation only
 from pathlib import Path
 
 from scripts.verify_exception_governance import collect_exception_sites
+from scripts.verify_exception_governance import (
+    DEFAULT_BASELINE_PATH as EXCEPTION_GOVERNANCE_BASELINE_PATH,
+    load_baseline as load_exception_governance_baseline,
+    verify_against_baseline,
+)
 from scripts.verify_python_module_size_budget import DEFAULT_MAX_LINES
 from scripts.verify_test_to_production_ratio import (
     DEFAULT_MAX_TEST_TO_PRODUCTION_RATIO,
@@ -119,7 +124,9 @@ def check_root_hygiene(repo_root: Path) -> tuple[str, ...]:
             continue
         for pattern in ROOT_PROHIBITED_PATTERNS:
             if fnmatch.fnmatch(child.name, pattern):
-                errors.append(f"prohibited root artifact: {child.name} (pattern={pattern})")
+                errors.append(
+                    f"prohibited root artifact: {child.name} (pattern={pattern})"
+                )
                 break
     return tuple(errors)
 
@@ -149,7 +156,9 @@ def check_c02(repo_root: Path) -> tuple[str, ...]:
         if "@" in smtp_user:
             domain = smtp_user.rsplit("@", 1)[-1].lower()
             if domain in PERSONAL_EMAIL_DOMAINS:
-                errors.append(f"personal email domain forbidden for SMTP_USER: {domain}")
+                errors.append(
+                    f"personal email domain forbidden for SMTP_USER: {domain}"
+                )
     return tuple(errors)
 
 
@@ -173,11 +182,28 @@ def check_h02(repo_root: Path) -> tuple[str, ...]:
     scan_roots = tuple(
         path for path in (repo_root / "app", repo_root / "scripts") if path.exists()
     )
-    sites = collect_exception_sites(roots=scan_roots)
-    if not sites:
+    baseline_path = repo_root / EXCEPTION_GOVERNANCE_BASELINE_PATH
+    if not baseline_path.exists():
+        return (f"missing exception-governance baseline: {baseline_path.as_posix()}",)
+    current = collect_exception_sites(roots=scan_roots)
+    baseline = load_exception_governance_baseline(baseline_path)
+    added, _removed, bare = verify_against_baseline(
+        current=current,
+        baseline=baseline,
+    )
+    errors: list[str] = []
+    if added:
+        preview = ", ".join(site.key() for site in added[:5])
+        errors.append(
+            "new catch-all handlers detected; reconcile code or baseline: "
+            f"{len(added)} ({preview})"
+        )
+    if bare:
+        preview = ", ".join(site.key() for site in bare[:5])
+        errors.append(f"bare except handlers are forbidden: {preview}")
+    if not errors:
         return ()
-    preview = ", ".join(site.key() for site in sites[:5])
-    return (f"catch-all handlers must be zero; found {len(sites)} ({preview})",)
+    return tuple(errors)
 
 
 def check_h03(repo_root: Path) -> tuple[str, ...]:
@@ -272,10 +298,22 @@ def check_h07(repo_root: Path) -> tuple[str, ...]:
 
 
 def check_h08(repo_root: Path) -> tuple[str, ...]:
-    target = repo_root / "app/tasks/scheduler_tasks.py"
-    if not target.exists():
-        return (f"missing file: {target.as_posix()}",)
-    lines = line_count(target)
-    if lines > DEFAULT_MAX_LINES:
-        return (f"{target.as_posix()} is {lines} lines (budget={DEFAULT_MAX_LINES})",)
-    return ()
+    errors: list[str] = []
+    legacy_target = repo_root / "app/tasks/scheduler_tasks.py"
+    replacement_target = repo_root / "app/shared/orchestration/managed_work_runners.py"
+    sequence_doc = repo_root / "docs/architecture/scheduler_orchestration_sequence.md"
+    if legacy_target.exists():
+        errors.append(
+            "legacy scheduler_tasks module must remain removed: "
+            f"{legacy_target.as_posix()}"
+        )
+    if not replacement_target.exists():
+        errors.append(
+            f"missing managed work runner module: {replacement_target.as_posix()}"
+        )
+    if not sequence_doc.exists():
+        errors.append(
+            "missing managed scheduler sequence documentation: "
+            f"{sequence_doc.as_posix()}"
+        )
+    return tuple(errors)

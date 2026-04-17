@@ -109,7 +109,9 @@ def check_m01(repo_root: Path) -> tuple[str, ...]:
             "module-size overrides must be floor-aware (cannot enforce lower-than-default budgets)."
         )
     if "MODULE_LINE_BUDGET_OVERRIDES: dict[str, int] = {}" not in text:
-        errors.append("module-size override table must be empty unless a current hard-budget exception is required.")
+        errors.append(
+            "module-size override table must be empty unless a current hard-budget exception is required."
+        )
     if 'default="strict"' not in text:
         errors.append(
             "module-size governance must default to strict mode so hard-budget drift blocks merges."
@@ -119,7 +121,9 @@ def check_m01(repo_root: Path) -> tuple[str, ...]:
     if ci_path.exists():
         ci_text = read_text(ci_path)
         if "--select C901" not in ci_text:
-            errors.append("python complexity governance step (ruff C901) must remain enabled.")
+            errors.append(
+                "python complexity governance step (ruff C901) must remain enabled."
+            )
 
     source_files = _optimization_source_files(repo_root)
     if len(source_files) > OPTIMIZATION_MAX_SOURCE_FILES:
@@ -129,7 +133,9 @@ def check_m01(repo_root: Path) -> tuple[str, ...]:
         )
     for wrapper_path in OPTIMIZATION_WRAPPER_FILES:
         if (repo_root / wrapper_path).exists():
-            errors.append(f"legacy optimization wrapper must be removed: {wrapper_path}")
+            errors.append(
+                f"legacy optimization wrapper must be removed: {wrapper_path}"
+            )
     return tuple(errors)
 
 
@@ -144,7 +150,9 @@ def check_m02(repo_root: Path) -> tuple[str, ...]:
 
 
 def check_m03(repo_root: Path) -> tuple[str, ...]:
-    target = repo_root / "app/modules/governance/domain/security/compliance_pack_bundle.py"
+    target = (
+        repo_root / "app/modules/governance/domain/security/compliance_pack_bundle.py"
+    )
     if not target.exists():
         return (f"missing file: {target.as_posix()}",)
     lines = line_count(target)
@@ -165,13 +173,30 @@ def check_m05(repo_root: Path) -> tuple[str, ...]:
 
 
 def check_m06(repo_root: Path) -> tuple[str, ...]:
-    workflow_path = repo_root / ".github/workflows/ci.yml"
-    if not workflow_path.exists():
-        return ("missing CI workflow .github/workflows/ci.yml",)
-    workflow = read_text(workflow_path).lower()
-    required_tokens = ("aquasecurity/trivy-action", "trivy")
-    missing = [token for token in required_tokens if token not in workflow]
-    return tuple(f"missing CVE scanning token: {token}" for token in missing)
+    workflow_candidates = (
+        repo_root / ".github/workflows/ci.yml",
+        repo_root / ".github/workflows/security-scan.yml",
+    )
+    available_workflows = tuple(path for path in workflow_candidates if path.exists())
+    if not available_workflows:
+        return (
+            "missing CVE scan workflow; expected one of: "
+            ".github/workflows/ci.yml, .github/workflows/security-scan.yml",
+        )
+
+    for workflow_path in available_workflows:
+        workflow = read_text(workflow_path).lower()
+        if "trivy" not in workflow:
+            continue
+        if (
+            "aquasecurity/trivy-action" in workflow
+            or "docker.io/aquasec/trivy" in workflow
+        ):
+            return ()
+
+    return (
+        "missing Trivy-backed image CVE scan implementation in active CI/security workflows",
+    )
 
 
 def check_m07(repo_root: Path) -> tuple[str, ...]:
@@ -181,7 +206,9 @@ def check_m07(repo_root: Path) -> tuple[str, ...]:
 def check_m08(repo_root: Path) -> tuple[str, ...]:
     target = repo_root / "docs/architecture/database_schema_overview.md"
     if not target.exists():
-        return ("missing schema documentation: docs/architecture/database_schema_overview.md",)
+        return (
+            "missing schema documentation: docs/architecture/database_schema_overview.md",
+        )
     return ()
 
 
@@ -226,9 +253,13 @@ def check_l02(repo_root: Path) -> tuple[str, ...]:
     errors: list[str] = []
     for duplicate in duplicates:
         if (repo_root / duplicate).exists():
-            errors.append(f"duplicate DB diagnostic script must be removed: {duplicate}")
+            errors.append(
+                f"duplicate DB diagnostic script must be removed: {duplicate}"
+            )
     if not (repo_root / "scripts/db_diagnostics.py").exists():
-        errors.append("missing canonical DB diagnostics entrypoint: scripts/db_diagnostics.py")
+        errors.append(
+            "missing canonical DB diagnostics entrypoint: scripts/db_diagnostics.py"
+        )
     return tuple(errors)
 
 

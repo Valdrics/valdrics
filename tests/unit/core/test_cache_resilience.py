@@ -1,19 +1,19 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
-from upstash_redis.errors import UpstashError
 from app.shared.core.cache import CacheService
 
 
 @pytest.mark.asyncio
 async def test_cache_service_graceful_failure():
-    """Verify that CacheService doesn't crash if Redis operations fail."""
-    # Mock the Redis client to throw an exception on get
-    mock_redis = AsyncMock()
-    mock_redis.get.side_effect = UpstashError("Redis Connection Refused")
-    mock_redis.set.side_effect = UpstashError("Redis Write Error")
+    """Verify that CacheService doesn't crash if cache operations fail."""
+    mock_cache_client = AsyncMock()
+    mock_cache_client.get.side_effect = RuntimeError("cache read failed")
+    mock_cache_client.set.side_effect = RuntimeError("cache write failed")
 
-    with patch("app.shared.core.cache._get_async_client", return_value=mock_redis):
+    with patch(
+        "app.shared.core.cache._get_async_client", return_value=mock_cache_client
+    ):
         service = CacheService()
         tenant_id = uuid4()
 
@@ -28,7 +28,7 @@ async def test_cache_service_graceful_failure():
 
 @pytest.mark.asyncio
 async def test_cache_service_disabled_logic():
-    """Verify behavior when Redis is not configured."""
+    """Verify behavior when caching is disabled."""
     with patch("app.shared.core.cache._get_async_client", return_value=None):
         service = CacheService()
         assert service.enabled is False

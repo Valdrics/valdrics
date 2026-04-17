@@ -188,7 +188,7 @@ def _protected_output_paths() -> set[Path]:
         __file__,
         "scripts/verify_key_rotation_drill_evidence.py",
         "docs/ops/key-rotation-drill-2026-02-27.md",
-        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/feature_enforceability_matrix.json",
         "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
         "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
         "docs/ops/evidence/README.md",

@@ -33,43 +33,13 @@ class IdleEksPlugin(ZombiePlugin):
         return "idle_eks_clusters"
 
     async def scan(
-
-
-    
-
-    self,
-
-
-    
-
-    session: Any,
-
-
-    
-
-    region: str,
-
-
-    
-
-    credentials: Dict[str, Any] | None = None,
-
-
-    
-
-    config: Any = None,
-
-
-    
-
-    inventory: Any = None,
-
-
-    
-
-    **kwargs: Any,
-
-
+        self,
+        session: Any,
+        region: str,
+        credentials: Dict[str, Any] | None = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         zombies = []
 
@@ -148,43 +118,13 @@ class IdleElastiCachePlugin(ZombiePlugin):
         return "idle_elasticache_clusters"
 
     async def scan(
-
-
-    
-
-    self,
-
-
-    
-
-    session: Any,
-
-
-    
-
-    region: str,
-
-
-    
-
-    credentials: Dict[str, Any] | None = None,
-
-
-    
-
-    config: Any = None,
-
-
-    
-
-    inventory: Any = None,
-
-
-    
-
-    **kwargs: Any,
-
-
+        self,
+        session: Any,
+        region: str,
+        credentials: Dict[str, Any] | None = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         zombies = []
         days = 7
@@ -210,7 +150,7 @@ class IdleElastiCachePlugin(ZombiePlugin):
                         for cluster in page.get("CacheClusters", []):
                             cluster_id = cluster["CacheClusterId"]
                             node_type = cluster.get("CacheNodeType", "unknown")
-                            engine = cluster.get("Engine", "redis")
+                            engine = cluster.get("Engine", "unknown")
 
                             try:
                                 end_time = datetime.now(timezone.utc)
@@ -283,43 +223,13 @@ class IdleSageMakerNotebooksPlugin(ZombiePlugin):
         return "idle_sagemaker_notebooks"
 
     async def scan(
-
-
-    
-
-    self,
-
-
-    
-
-    session: Any,
-
-
-    
-
-    region: str,
-
-
-    
-
-    credentials: Dict[str, Any] | None = None,
-
-
-    
-
-    config: Any = None,
-
-
-    
-
-    inventory: Any = None,
-
-
-    
-
-    **kwargs: Any,
-
-
+        self,
+        session: Any,
+        region: str,
+        credentials: Dict[str, Any] | None = None,
+        config: Any = None,
+        inventory: Any = None,
+        **kwargs: Any,
     ) -> List[Dict[str, Any]]:
         zombies = []
         days_idle_threshold = 7

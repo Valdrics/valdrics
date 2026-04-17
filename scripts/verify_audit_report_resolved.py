@@ -145,11 +145,10 @@ def main(argv: list[str] | None = None) -> int:
                     "(pass --allow-missing-report to continue without heading validation)."
                 )
                 return 2
-            report_errors.append(
-                f"report not found (skipped heading validation): {report_path.as_posix()}"
-            )
         elif not report_path.is_file():
-            print(f"[audit-report] report path must be a file: {report_path.as_posix()}")
+            print(
+                f"[audit-report] report path must be a file: {report_path.as_posix()}"
+            )
             return 2
         else:
             report_findings = parse_report_findings(report_path)

@@ -36,8 +36,3 @@ scrape_configs:
       - targets: ['worker:8001']
     metrics_path: /metrics
     scrape_interval: 30s
-
-  # Redis
-  - job_name: 'redis'
-    static_configs:
-      - targets: ['redis:6379']

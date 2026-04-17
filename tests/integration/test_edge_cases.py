@@ -307,7 +307,7 @@ class TestHealthServiceIntegration:
 
         mock_cache = MagicMock()
         mock_cache.enabled = True
-        mock_cache.set = AsyncMock(side_effect=Exception("Redis connection failed"))
+        mock_cache.set = AsyncMock(side_effect=Exception("Cache connection failed"))
         mock_cache.get = AsyncMock(return_value=None)
 
         with (
@@ -568,7 +568,6 @@ class TestMultiTenantEdgeCases:
         mock_settings = MagicMock()
         mock_settings.TESTING = False
         with patch("app.shared.db.session.get_settings", return_value=mock_settings):
-
             # Mock connection without RLS context
             mock_conn = MagicMock()
             mock_conn.info = {"rls_context_set": False}

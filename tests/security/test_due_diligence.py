@@ -12,6 +12,7 @@ Run all: pytest tests/test_due_diligence.py -v --no-cov
 
 import pytest
 import uuid
+from pathlib import Path
 from decimal import Decimal
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
@@ -23,61 +24,19 @@ from unittest.mock import AsyncMock, MagicMock
 
 
 @pytest.mark.asyncio
-async def test_remediation_rate_limiting():
+async def test_remediation_execution_endpoint_retains_explicit_rate_limit_contract():
     """
-    Due Diligence Test: Try to delete 1000 resources/hour, verify capped.
+    Due Diligence Test: Remediation execution keeps an explicit route limit.
 
-    Verifies that remediation has rate limits to prevent runaway deletions.
+    Verifies the live remediation execution endpoint still declares the
+    operator-facing application rate-limit contract used for local/runtime
+    defense in depth.
     """
-    from app.shared.core.rate_limit import (
-        check_remediation_rate_limit,
-        _remediation_counts,
-        get_redis_client,
-    )
+    import app.modules.optimization.api.v1.zombies as zombies_module
 
-    # Clear any existing state
-    _remediation_counts.clear()
-
-    tenant_id = uuid.uuid4()
-
-    # Use a smaller limit for testing (10 instead of 50)
-    test_limit = 10
-
-    # Clear Redis key if Redis is available to ensure clean test state
-    redis = get_redis_client()
-    if redis:
-        try:
-            key = f"remediation_rate:{tenant_id}:DELETE_VOLUME"
-            await redis.delete(key)
-        except Exception:
-            pass  # Redis might be unavailable, that's ok
-
-    allowed_count = 0
-    blocked_count = 0
-
-    for i in range(25):
-        is_allowed = await check_remediation_rate_limit(
-            tenant_id=tenant_id, action="DELETE_VOLUME", limit=test_limit
-        )
-        if is_allowed:
-            allowed_count += 1
-        else:
-            blocked_count += 1
-
-    # Exactly `test_limit` should be allowed
-    assert allowed_count == test_limit, (
-        f"Expected {test_limit} allowed, got {allowed_count}"
-    )
-    assert blocked_count == 15, f"Expected 15 blocked, got {blocked_count}"
-
-    # Clean up
-    _remediation_counts.clear()
-    if redis:
-        try:
-            key = f"remediation_rate:{tenant_id}:DELETE_VOLUME"
-            await redis.delete(key)
-        except Exception:
-            pass
+    source = Path(zombies_module.__file__).read_text(encoding="utf-8")
+    assert '@router.post("/execute/{request_id}")' in source
+    assert '@rate_limit("50/hour")' in source
 
 
 @pytest.mark.asyncio

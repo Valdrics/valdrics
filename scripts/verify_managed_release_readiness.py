@@ -21,10 +21,7 @@ from scripts.env_generation_common import (
     resolve_contained_repo_path_from_root,
 )
 from scripts.run_public_frontend_quality_gate import run_public_frontend_quality_gate
-from scripts.verify_codebase_audit_report import (
-    DEFAULT_REPORT as DEFAULT_AUDIT_REPORT,
-    verify_audit_report,
-)
+from scripts.verify_codebase_audit_report import verify_audit_report
 from scripts.verify_dashboard_runtime_contract import verify_dashboard_runtime_contract
 from scripts.verify_managed_deployment_bundle import verify_managed_deployment_bundle
 
@@ -36,6 +33,13 @@ DashboardRuntimeVerifier = Callable[..., list[str]]
 BundleVerifier = Callable[..., list[str]]
 PublicQualityRunner = Callable[..., None]
 AuditReportVerifier = Callable[..., list[str]]
+MANAGED_RELEASE_GATE_ERRORS = (
+    OSError,
+    RuntimeError,
+    TypeError,
+    ValueError,
+    subprocess.SubprocessError,
+)
 
 
 def _run_list_gate(
@@ -45,11 +49,13 @@ def _run_list_gate(
 ) -> list[str]:
     try:
         return runner(**kwargs)
-    except Exception as exc:  # pragma: no cover - defensive boundary
+    except MANAGED_RELEASE_GATE_ERRORS as exc:  # pragma: no cover - defensive boundary
         return [f"{gate_name} failed unexpectedly: {exc}"]
 
 
 def _default_report_path(environment: str, kind: str) -> Path:
+    if kind == "audit":
+        return Path(".runtime") / f"{environment}.audit.report.json"
     if kind == "runtime":
         return Path(".runtime") / f"{environment}.report.json"
     if kind == "migration":
@@ -78,7 +84,9 @@ def _derive_dashboard_url_from_runtime_report(
 
     resolved_public_runtime_values = payload.get("resolved_public_runtime_values")
     if isinstance(resolved_public_runtime_values, dict):
-        frontend_url = str(resolved_public_runtime_values.get("FRONTEND_URL", "")).strip()
+        frontend_url = str(
+            resolved_public_runtime_values.get("FRONTEND_URL", "")
+        ).strip()
         if not _is_placeholder_value(frontend_url):
             parsed = urlparse(frontend_url)
             if parsed.scheme in {"http", "https"} and parsed.netloc:
@@ -122,6 +130,7 @@ def verify_managed_release_readiness(
     reuse_built_dashboard_runtime: bool = False,
     skip_public_browser: bool = False,
     skip_webserver: bool = False,
+    allow_non_secret_artifact_bundle: bool = False,
     audit_report_verifier: AuditReportVerifier = verify_audit_report,
     dashboard_runtime_verifier: DashboardRuntimeVerifier = verify_dashboard_runtime_contract,
     bundle_verifier: BundleVerifier = verify_managed_deployment_bundle,
@@ -136,7 +145,7 @@ def verify_managed_release_readiness(
     repo_root = Path(root)
     audit_report = resolve_cli_path_from_root(
         repo_root,
-        audit_report_path or DEFAULT_AUDIT_REPORT,
+        audit_report_path or _default_report_path(normalized_environment, "audit"),
         field_name="audit_report_path",
     )
     runtime_report = resolve_cli_path_from_root(
@@ -146,12 +155,14 @@ def verify_managed_release_readiness(
     )
     migration_report = resolve_cli_path_from_root(
         repo_root,
-        migration_report_path or _default_report_path(normalized_environment, "migration"),
+        migration_report_path
+        or _default_report_path(normalized_environment, "migration"),
         field_name="migration_report_path",
     )
     deployment_report = resolve_cli_path_from_root(
         repo_root,
-        deployment_report_path or _default_report_path(normalized_environment, "deployment"),
+        deployment_report_path
+        or _default_report_path(normalized_environment, "deployment"),
         field_name="deployment_report_path",
     )
 
@@ -175,8 +186,14 @@ def verify_managed_release_readiness(
         )
         if derived_dashboard_url:
             normalized_dashboard_url = derived_dashboard_url
-    parsed_dashboard_url = urlparse(normalized_dashboard_url) if normalized_dashboard_url else None
-    dashboard_host = (parsed_dashboard_url.hostname or "").strip().lower() if parsed_dashboard_url else ""
+    parsed_dashboard_url = (
+        urlparse(normalized_dashboard_url) if normalized_dashboard_url else None
+    )
+    dashboard_host = (
+        (parsed_dashboard_url.hostname or "").strip().lower()
+        if parsed_dashboard_url
+        else ""
+    )
 
     if (
         not skip_dashboard_runtime
@@ -208,6 +225,7 @@ def verify_managed_release_readiness(
             runtime_report_path=runtime_report,
             migration_report_path=migration_report,
             deployment_report_path=deployment_report,
+            allow_non_secret_artifact_bundle=allow_non_secret_artifact_bundle,
         )
     )
 
@@ -309,6 +327,14 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Pass through to the public browser gate to reuse an existing dashboard URL.",
     )
+    parser.add_argument(
+        "--non-secret-deployment-bundle",
+        action="store_true",
+        help=(
+            "Verify the downloaded non-secret deployment artifact bundle instead of "
+            "requiring the full secret-bearing deploy workspace."
+        ),
+    )
     return parser
 
 
@@ -327,6 +353,7 @@ def main(argv: list[str] | None = None) -> int:
         reuse_built_dashboard_runtime=bool(args.reuse_built_dashboard_runtime),
         skip_public_browser=bool(args.skip_public_browser),
         skip_webserver=bool(args.skip_webserver),
+        allow_non_secret_artifact_bundle=bool(args.non_secret_deployment_bundle),
     )
     if errors:
         print("[managed-release-readiness] FAILED")

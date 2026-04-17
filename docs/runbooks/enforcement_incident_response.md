@@ -153,4 +153,4 @@ Release-gate rule:
 - Alert timeline and metric snapshots.
 - API/test execution traces for mitigation validation.
 - Policy or config changes applied during incident.
-- Post-incident summary linked from `docs/ops/incident_response_runbook.md`.
+- Post-incident summary linked from `docs/runbooks/incident_response.md`.

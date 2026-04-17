@@ -10,8 +10,6 @@ class PlatformRuntimeProfile(str, Enum):
 
 
 class ObservabilityBackend(str, Enum):
-    AUTO = "auto"
-    OTLP = "otlp"
     GCP = "gcp"
 
 
@@ -126,19 +124,19 @@ def observability_backend(settings_obj: object) -> ObservabilityBackend:
             getattr(
                 settings_obj,
                 "OBSERVABILITY_BACKEND",
-                ObservabilityBackend.AUTO.value,
+                ObservabilityBackend.GCP.value,
             )
-            or ObservabilityBackend.AUTO.value
+            or ObservabilityBackend.GCP.value
         )
         .strip()
         .lower()
     )
     selected = ObservabilityBackend(raw_value)
-    if selected is not ObservabilityBackend.AUTO:
-        return selected
-    if platform_runtime_profile(settings_obj) is PlatformRuntimeProfile.GCP:
-        return ObservabilityBackend.GCP
-    return ObservabilityBackend.OTLP
+    if platform_runtime_profile(settings_obj) is not PlatformRuntimeProfile.GCP:
+        raise ValueError(
+            "Only the managed GCP runtime profile is supported for observability."
+        )
+    return selected
 
 
 @dataclass(frozen=True)

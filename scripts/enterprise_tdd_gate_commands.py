@@ -70,6 +70,12 @@ def build_gate_commands() -> list[list[str]]:
             "uv",
             "run",
             "python3",
+            "scripts/verify_reports_archive_hygiene.py",
+        ],
+        [
+            "uv",
+            "run",
+            "python3",
             "scripts/verify_audit_report_resolved.py",
             "--allow-missing-report",
         ],
@@ -115,7 +121,7 @@ def build_gate_commands() -> list[list[str]]:
             "python3",
             "scripts/verify_jwt_bcp_checklist.py",
             "--checklist-path",
-            "docs/security/jwt_bcp_checklist_2026-02-27.json",
+            "docs/security/jwt_bcp_checklist.json",
         ],
         [
             "uv",
@@ -123,7 +129,7 @@ def build_gate_commands() -> list[list[str]]:
             "python3",
             "scripts/verify_ssdf_traceability_matrix.py",
             "--matrix-path",
-            "docs/security/ssdf_traceability_matrix_2026-02-25.json",
+            "docs/security/ssdf_traceability_matrix.json",
         ],
         [
             "uv",
@@ -131,7 +137,7 @@ def build_gate_commands() -> list[list[str]]:
             "python3",
             "scripts/verify_enforcement_post_closure_sanity.py",
             "--doc-path",
-            "docs/ops/enforcement_post_closure_sanity_2026-02-26.md",
+            "docs/ops/enforcement_post_closure_sanity.md",
             "--gap-register",
             "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md",
         ],
@@ -141,7 +147,7 @@ def build_gate_commands() -> list[list[str]]:
             "python3",
             "scripts/verify_feature_enforceability_matrix.py",
             "--matrix-path",
-            "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+            "docs/ops/feature_enforceability_matrix.json",
         ],
         [
             "uv",
@@ -159,7 +165,7 @@ def build_gate_commands() -> list[list[str]]:
             "--gap-register",
             "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md",
             "--matrix-path",
-            "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+            "docs/ops/feature_enforceability_matrix.json",
         ],
     ]
 

@@ -4,9 +4,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-PACK_PATH = (
-    REPO_ROOT / "docs" / "ops" / "enforcement_failure_injection_matrix_2026-02-25.md"
-)
+PACK_PATH = REPO_ROOT / "docs" / "ops" / "enforcement_failure_injection_matrix.md"
 
 
 def test_failure_injection_pack_contains_required_scenarios_and_references() -> None:

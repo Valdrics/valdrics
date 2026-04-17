@@ -30,7 +30,7 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     )
     _write(
         tmp_path / "docs/DEPLOYMENT.md",
-        "Current supported production deployment profile\nGoogle Cloud Run + Cloudflare Pages + Supabase\n.github/workflows/release-unified-platform.yml\n.github/workflows/publish-artifact-registry-images.yml\n.github/workflows/deploy-unified-platform.yml\nverify_codebase_audit_report.py\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\nArtifact Registry\nartifact-registry-release.json\ncloudflare-pages-env.json\nunified-platform-manifest.json\nmanaged-release-blockers.md\nCloudflare edge rate limiting\nGCP external HTTPS load balancer\nPUBLIC_API_RATE_LIMITING_BACKEND=cloudflare\nCloud Run custom audiences\n",
+        "Current supported production deployment profile\nGoogle Cloud Run + Cloudflare Pages + Supabase\n.github/workflows/release-unified-platform.yml\n.github/workflows/publish-artifact-registry-images.yml\n.github/workflows/deploy-unified-platform.yml\nverify_codebase_audit_report.py\nverify_dashboard_runtime_contract.py\nverify_managed_release_readiness.py\nrender_managed_release_blocker_summary.py\nArtifact Registry\nartifact-registry-release.json\ncloudflare-pages-env.json\nunified-platform-manifest.json\ndeployment.report.json\noperator-handoff.md\nmanaged-release-blockers.md\nmanaged-release-blocker-summary-<release-tag>\nnon-secret deployment evidence bundle\nCloudflare WAF rate limiting rules\nGCP external HTTPS load balancer\nPUBLIC_API_RATE_LIMITING_BACKEND=cloudflare\nCloud Run custom audiences\n",
     )
     _write(
         tmp_path / "docs/CAPACITY_PLAN.md",
@@ -39,6 +39,10 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     _write(
         tmp_path / "docs/roadmap.md",
         "active planning document\nreports/roadmap/\nCurrent Focus\nbootstrap-only sqlite dev\nmanaged bundle verification\n",
+    )
+    _write(
+        tmp_path / "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md",
+        "terraform/main.tf\ngoogle_project_iam_member\ngoogle_service_account_iam_member\n",
     )
     _write(
         tmp_path / "docs/architecture/tiering-2026.md",
@@ -62,19 +66,19 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     )
     _write(
         tmp_path / "docs/runbooks/incident_response.md",
-        "Settings -> Notifications\nstrict SaaS mode\nCloudflare edge rate limiting is healthy\nlocal drill or explicit break-glass shared-state cache backend\n",
+        "Settings -> Notifications\nstrict SaaS mode\nCloudflare WAF rate limiting rules are healthy\napplication-level throttling fallbacks are not tripping unexpectedly\n",
     )
     _write(
         tmp_path / "docs/runbooks/secret_rotation_emergency.md",
-        "ENFORCEMENT_APPROVAL_TOKEN_SECRET\nPAYSTACK_SECRET_KEY=sk_live_...\n`REDIS_URL` credentials only if an explicit local drill or break-glass shared-state backend is enabled\n",
+        "ENFORCEMENT_APPROVAL_TOKEN_SECRET\nPAYSTACK_SECRET_KEY=sk_live_...\nGoogle Secret Manager or other provider-managed secret store\n",
     )
     _write(
         tmp_path / "docs/runbooks/production_env_checklist.md",
-        "Python 3.12.x\n.python-version\nAPI_URL=https://api.example.com\nFRONTEND_URL=https://app.example.com\nPUBLIC_API_RATE_LIMITING_BACKEND=cloudflare\nRATELIMIT_ENABLED=false\nCIRCUIT_BREAKER_DISTRIBUTED_STATE=false\nSUPABASE_ANON_KEY=...\nPLATFORM_RUNTIME_PROFILE=gcp\nOBSERVABILITY_BACKEND=gcp\nENFORCEMENT_APPROVAL_TOKEN_SECRET=...\nPAYSTACK_SECRET_KEY=sk_live_...\nINTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>\nEXPOSE_API_DOCUMENTATION_PUBLICLY=false\nCLOUDFLARE_ZONE_ID\ngenerate_managed_runtime_env.py\ngenerate_managed_migration_env.py\ngenerate_managed_deployment_artifacts.py\nverify_codebase_audit_report.py\nverify_managed_deployment_bundle.py\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\nrelease-unified-platform.yml\npublish-artifact-registry-images.yml\ndeploy-unified-platform.yml\n--api-promotion-ref <repo@sha256:...>\nrun_public_frontend_quality_gate.py\ndeployment.report.json\ncloudflare-pages-env.json\nartifact-registry-release.json\nunified-platform-manifest.json\nmanaged-release-blockers.md\nCloud Run custom audiences\n--env-file .runtime/production.env\n--env-file .runtime/production.migrate.env\nreusable deploy workflow migration step succeeds from `.runtime/production.migrate.env`\n",
+        "Python 3.12.x\n.python-version\nAPI_URL=https://api.example.com\nFRONTEND_URL=https://app.example.com\nPUBLIC_API_RATE_LIMITING_BACKEND=cloudflare\nRATELIMIT_ENABLED=false\nSUPABASE_ANON_KEY=...\nPLATFORM_RUNTIME_PROFILE=gcp\nOBSERVABILITY_BACKEND=gcp\nENFORCEMENT_APPROVAL_TOKEN_SECRET=...\nPAYSTACK_SECRET_KEY=sk_live_...\nINTERNAL_METRICS_AUTH_TOKEN=<32+ char secret>\nEXPOSE_API_DOCUMENTATION_PUBLICLY=false\nCLOUDFLARE_ZONE_ID\ngenerate_managed_runtime_env.py\ngenerate_managed_migration_env.py\ngenerate_managed_deployment_artifacts.py\nverify_codebase_audit_report.py\nverify_managed_deployment_bundle.py\nverify_managed_release_readiness.py\nverify_dashboard_runtime_contract.py\nrender_managed_release_blocker_summary.py\nrelease-unified-platform.yml\npublish-artifact-registry-images.yml\ndeploy-unified-platform.yml\n--api-promotion-ref <repo@sha256:...>\n--batch-promotion-ref <repo@sha256:...>\nrun_public_frontend_quality_gate.py\nscripts/verify_managed_release_readiness.py\ndeployment.report.json\ncloudflare-pages-env.json\nartifact-registry-release.json\nunified-platform-manifest.json\noperator-handoff.md\nmanaged-release-blockers.md\nmanaged-release-blocker-summary-<release-tag>\nmake render-managed-release-blockers\nnon-secret deployment evidence bundle\nCloud Run custom audiences\n--env-file .runtime/production.env\n--env-file .runtime/production.migrate.env\nreusable deploy workflow migration step succeeds from `.runtime/production.migrate.env`\n",
     )
     _write(
         tmp_path / "docs/runbooks/unified_platform_release.md",
-        "Google Cloud Run\nCloud Tasks\nCloud Scheduler\nCloud Run Jobs\nArtifact Registry\nCloudflare Pages\nSupabase\nCloudflare Pages/DNS/WAF\nGCP runtime + API load balancer\nrelease-unified-platform.yml\npublish-artifact-registry-images.yml\ndeploy-unified-platform.yml\n",
+        "Google Cloud Run\nCloud Tasks\nCloud Scheduler\nCloud Run Jobs\nArtifact Registry\nCloudflare Pages\nSupabase\nCloudflare Pages/DNS/WAF\nGCP runtime + API load balancer\nrelease-unified-platform.yml\npublish-artifact-registry-images.yml\ndeploy-unified-platform.yml\nmanaged-release-blocker-summary-<release-tag>\npromote_production=true\nREPLACE_WITH_REAL_STAGING_FRONTEND\nmake render-managed-release-blockers NON_SECRET_BUNDLE=true\napi_promotion_ref\nbatch_promotion_ref\nverify_managed_release_readiness.py\n",
     )
     _write(
         tmp_path / "docs/integrations/workflow_automation.md",
@@ -93,7 +97,7 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
         "failurePolicy: Fail\n`failurePolicy: Fail` requires API HA\nArchived self-managed Helm reference\nKeep webhook timeout low (`<= 2s`)\n",
     )
     _write(
-        tmp_path / "docs/ops/benchmark_alignment_profiles_2026-02-27.md",
+        tmp_path / "docs/ops/benchmark_alignment_profiles.md",
         "Kubernetes AdmissionReview guidance profile\n"
         "Archived self-managed Helm reference remains outside the supported deployment contract.\n"
         "tests/unit/enforcement/enforcement_api_cases_part01.py\n"
@@ -201,7 +205,7 @@ def test_verify_contracts_reports_missing_and_forbidden_phrases(tmp_path: Path) 
             forbidden_phrases=("Helm deployment profile (recommended)",),
         ),
         DocumentationContract(
-            path="docs/ops/benchmark_alignment_profiles_2026-02-27.md",
+            path="docs/ops/benchmark_alignment_profiles.md",
             required_phrases=("Kubernetes AdmissionReview guidance profile",),
             forbidden_phrases=("tests/unit/ops/",),
         ),
@@ -238,7 +242,7 @@ def test_verify_contracts_reports_missing_and_forbidden_phrases(tmp_path: Path) 
     )
 
 
-def test_verify_contracts_rejects_local_redis_wording_in_managed_deployment_docs(
+def test_verify_contracts_rejects_local_cache_wording_in_managed_deployment_docs(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -249,19 +253,18 @@ def test_verify_contracts_rejects_local_redis_wording_in_managed_deployment_docs
             DocumentationContract(
                 path="docs/DEPLOYMENT.md",
                 required_phrases=("Current supported production deployment profile",),
-                forbidden_phrases=("Redis-backed local cache infrastructure",),
+                forbidden_phrases=("local cache infrastructure",),
             ),
         ),
     )
     _write(
         tmp_path / "docs/DEPLOYMENT.md",
-        "Current supported production deployment profile\n"
-        "Redis-backed local cache infrastructure\n",
+        "Current supported production deployment profile\nlocal cache infrastructure\n",
     )
 
     errors = verify_contracts(root=tmp_path)
     assert (
-        "docs/DEPLOYMENT.md: forbidden phrase present 'Redis-backed local cache infrastructure'"
+        "docs/DEPLOYMENT.md: forbidden phrase present 'local cache infrastructure'"
         in errors
     )
 
@@ -333,7 +336,9 @@ def test_verify_contracts_rejects_legacy_regional_failover_wording(
         (
             DocumentationContract(
                 path="docs/architecture/failover.md",
-                required_phrases=("regional_recovery_mode=manual_restore_redeploy_reroute",),
+                required_phrases=(
+                    "regional_recovery_mode=manual_restore_redeploy_reroute",
+                ),
                 forbidden_phrases=(
                     "regional-failover",
                     "automated_secondary_region_failover",
@@ -449,21 +454,21 @@ def test_verify_contracts_rejects_stale_helm_test_reference_in_benchmark_profile
         "DOCUMENTATION_CONTRACTS",
         (
             DocumentationContract(
-                path="docs/ops/benchmark_alignment_profiles_2026-02-27.md",
+                path="docs/ops/benchmark_alignment_profiles.md",
                 required_phrases=("Kubernetes AdmissionReview guidance profile",),
                 forbidden_phrases=("tests/unit/ops/",),
             ),
         ),
     )
     _write(
-        tmp_path / "docs/ops/benchmark_alignment_profiles_2026-02-27.md",
+        tmp_path / "docs/ops/benchmark_alignment_profiles.md",
         "Kubernetes AdmissionReview guidance profile\n"
         "tests/unit/ops/legacy_contract_test.py\n",
     )
 
     errors = verify_contracts(root=tmp_path)
     assert (
-        "docs/ops/benchmark_alignment_profiles_2026-02-27.md: forbidden phrase present 'tests/unit/ops/'"
+        "docs/ops/benchmark_alignment_profiles.md: forbidden phrase present 'tests/unit/ops/'"
         in errors
     )
 
@@ -479,7 +484,9 @@ def test_verify_contracts_rejects_live_deployment_doc_research_wording(
             DocumentationContract(
                 path="docs/DEPLOYMENT.md",
                 required_phrases=("Current supported production deployment profile",),
-                forbidden_phrases=("Helm/Terraform material for future scale research",),
+                forbidden_phrases=(
+                    "Helm/Terraform material for future scale research",
+                ),
             ),
         ),
     )

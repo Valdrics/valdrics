@@ -43,13 +43,7 @@ fail-closed
     token_map: dict[str, str] = {
         "ADR-0005-paystack-over-stripe.md": "Paystack and Stripe evaluation",
         "ADR-0006-supabase-managed-auth-platform.md": "Supabase over self-hosted auth",
-        "ADR-0007-redis-backed-circuit-breakers.md": (
-            "Superseded Redis breakers in Cloud Run managed runtime"
-        ),
         "ADR-0008-codecarbon-emissions-observability.md": "CodeCarbon emissions telemetry",
-        "ADR-0009-celery-redis-job-orchestration.md": (
-            "Superseded Celery with Cloud Tasks Cloud Scheduler Cloud Run Jobs"
-        ),
     }
     payload = token_map[path]
     return (
@@ -126,12 +120,18 @@ def test_main_rejects_non_directory_docs_root(tmp_path: Path) -> None:
     assert main(["--docs-root", str(docs_root_file)]) == 2
 
 
-def test_resolve_docs_root_rejects_relative_escape(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_resolve_docs_root_rejects_relative_escape(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     repo_root = tmp_path / "repo"
     repo_root.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setattr("scripts.verify_architecture_decision_records._repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        "scripts.verify_architecture_decision_records._repo_root", lambda: repo_root
+    )
 
-    with pytest.raises(ValueError, match="docs_root must stay within repo root when relative"):
+    with pytest.raises(
+        ValueError, match="docs_root must stay within repo root when relative"
+    ):
         _resolve_docs_root("../escape/docs")
 
 
@@ -145,6 +145,8 @@ def test_main_resolves_relative_docs_root_from_repo_root_when_run_outside_repo(
     outside_cwd.mkdir(parents=True, exist_ok=True)
     _write_all_required_docs(docs_root)
     monkeypatch.chdir(outside_cwd)
-    monkeypatch.setattr("scripts.verify_architecture_decision_records._repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        "scripts.verify_architecture_decision_records._repo_root", lambda: repo_root
+    )
 
     assert main(["--docs-root", "docs/architecture"]) == 0

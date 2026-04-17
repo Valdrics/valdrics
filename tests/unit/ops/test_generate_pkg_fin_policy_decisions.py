@@ -70,7 +70,7 @@ def test_generate_pkg_fin_policy_decisions_rejects_input_output_collision(
         "docs/ops/evidence/finance_telemetry_snapshot_TEMPLATE.json",
         "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json",
         "docs/ops/evidence/enforcement_stress_artifact_TEMPLATE.json",
-        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/feature_enforceability_matrix.json",
         "docs/ops/evidence/README.md",
     ],
 )

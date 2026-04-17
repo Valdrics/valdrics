@@ -8,6 +8,7 @@ import sys
 import time
 
 from app.shared.orchestration.managed_work_runners import (
+    SCHEDULER_RECOVERABLE_ERRORS,
     run_background_job_processing,
     run_background_job_stuck_detection,
 )
@@ -102,12 +103,12 @@ async def _run_async(argv: list[str]) -> int:
             continue
         try:
             loop.add_signal_handler(sig, worker.request_stop)
-        except NotImplementedError:
+        except (RuntimeError, ValueError):
             signal.signal(sig, lambda *_args: worker.request_stop())
 
     try:
         return await worker.run()
-    except Exception as exc:
+    except SCHEDULER_RECOVERABLE_ERRORS as exc:
         print(f"managed worker loop failed: {exc}", file=sys.stderr, flush=True)
         return 1
 

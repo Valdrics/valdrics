@@ -49,8 +49,6 @@ def _settings() -> Settings:
     s.TRUSTED_PROXY_HOPS = 1
     s.TRUSTED_PROXY_CIDRS = []
     s.ADMIN_API_KEY = "a" * 32
-    s.CIRCUIT_BREAKER_DISTRIBUTED_STATE = False
-    s.REDIS_URL = "redis://localhost:6379"
     s.RATELIMIT_ENABLED = True
     s.ALLOW_IN_MEMORY_RATE_LIMITS = False
     s.GCP_PROJECT_ID = "valdrics-test"
@@ -130,7 +128,9 @@ def test_reload_settings_from_environment_success_and_cache_warm() -> None:
     logger.debug.assert_any_call("settings_reload_completed")
 
 
-def test_reload_settings_from_environment_logs_warning_when_cache_refresh_fails() -> None:
+def test_reload_settings_from_environment_logs_warning_when_cache_refresh_fails() -> (
+    None
+):
     current = types.SimpleNamespace(APP_NAME="old-name")
     refreshed = MagicMock()
     refreshed.APP_NAME = "new-name"
@@ -168,19 +168,19 @@ def test_reload_settings_from_environment_logs_warning_when_cache_refresh_fails(
     logger.warning.assert_called_once()
 
 
-def test_reload_settings_from_environment_does_not_refresh_removed_celery_config() -> None:
+def test_reload_settings_from_environment_refreshes_supported_runtime_fields() -> None:
     current = types.SimpleNamespace(
         APP_NAME="old-name",
-        REDIS_URL="redis://old",
+        APP_RUNTIME_DATA_DIR="/tmp/old",
         PLATFORM_RUNTIME_PROFILE="gcp",
     )
     refreshed = MagicMock()
     refreshed.APP_NAME = "new-name"
-    refreshed.REDIS_URL = "redis://new"
+    refreshed.APP_RUNTIME_DATA_DIR = "/tmp/new"
     refreshed.PLATFORM_RUNTIME_PROFILE = "gcp"
     refreshed.model_dump.return_value = {
         "APP_NAME": refreshed.APP_NAME,
-        "REDIS_URL": refreshed.REDIS_URL,
+        "APP_RUNTIME_DATA_DIR": refreshed.APP_RUNTIME_DATA_DIR,
         "PLATFORM_RUNTIME_PROFILE": refreshed.PLATFORM_RUNTIME_PROFILE,
     }
     logger = MagicMock()
@@ -211,7 +211,7 @@ def test_reload_settings_from_environment_does_not_refresh_removed_celery_config
         result = reload_settings_from_environment()
 
     assert result is current
-    assert current.REDIS_URL == "redis://new"
+    assert current.APP_RUNTIME_DATA_DIR == "/tmp/new"
 
 
 def test_reload_settings_from_environment_refreshes_loaded_fastapi_metadata() -> None:
@@ -259,12 +259,12 @@ def test_reload_settings_from_environment_refreshes_loaded_fastapi_metadata() ->
         patch("app.shared.core.config.structlog.get_logger", return_value=logger),
         patch.dict(
             "sys.modules",
-                {
-                    "app.shared.core.security": fake_security_module,
-                    "app.models._encryption": fake_encryption_module,
-                    "app.main": fake_app_main_module,
-                },
-            ),
+            {
+                "app.shared.core.security": fake_security_module,
+                "app.models._encryption": fake_encryption_module,
+                "app.main": fake_app_main_module,
+            },
+        ),
     ):
         result = reload_settings_from_environment()
 
@@ -304,7 +304,9 @@ def test_config_core_secret_validator_branch_paths() -> None:
 
     s = _settings()
     s.ENCRYPTION_KEY_CACHE_TTL_SECONDS = 59
-    with pytest.raises(ValueError, match="ENCRYPTION_KEY_CACHE_TTL_SECONDS must be >= 60"):
+    with pytest.raises(
+        ValueError, match="ENCRYPTION_KEY_CACHE_TTL_SECONDS must be >= 60"
+    ):
         s._validate_core_secrets()
 
     s = _settings()
@@ -317,7 +319,9 @@ def test_config_database_validator_branch_paths() -> None:
     s = _settings()
     s.ENVIRONMENT = ENV_PRODUCTION
     s.DATABASE_URL = None
-    with pytest.raises(ValueError, match="DATABASE_URL is required in staging/production"):
+    with pytest.raises(
+        ValueError, match="DATABASE_URL is required in staging/production"
+    ):
         s._validate_database_config()
 
     s = _settings()
@@ -329,8 +333,16 @@ def test_config_database_validator_branch_paths() -> None:
 @pytest.mark.parametrize(
     ("field_name", "value", "expected"),
     [
-        ("LLM_GLOBAL_ABUSE_PER_MINUTE_CAP", 0, "LLM_GLOBAL_ABUSE_PER_MINUTE_CAP must be >= 1"),
-        ("LLM_GLOBAL_ABUSE_PER_MINUTE_CAP", 100001, "LLM_GLOBAL_ABUSE_PER_MINUTE_CAP must be <= 100000"),
+        (
+            "LLM_GLOBAL_ABUSE_PER_MINUTE_CAP",
+            0,
+            "LLM_GLOBAL_ABUSE_PER_MINUTE_CAP must be >= 1",
+        ),
+        (
+            "LLM_GLOBAL_ABUSE_PER_MINUTE_CAP",
+            100001,
+            "LLM_GLOBAL_ABUSE_PER_MINUTE_CAP must be <= 100000",
+        ),
         (
             "LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD",
             0,
@@ -341,11 +353,21 @@ def test_config_database_validator_branch_paths() -> None:
             10001,
             "LLM_GLOBAL_ABUSE_UNIQUE_TENANTS_THRESHOLD must be <= 10000",
         ),
-        ("LLM_GLOBAL_ABUSE_BLOCK_SECONDS", 29, "LLM_GLOBAL_ABUSE_BLOCK_SECONDS must be >= 30"),
-        ("LLM_GLOBAL_ABUSE_BLOCK_SECONDS", 86401, "LLM_GLOBAL_ABUSE_BLOCK_SECONDS must be <= 86400"),
+        (
+            "LLM_GLOBAL_ABUSE_BLOCK_SECONDS",
+            29,
+            "LLM_GLOBAL_ABUSE_BLOCK_SECONDS must be >= 30",
+        ),
+        (
+            "LLM_GLOBAL_ABUSE_BLOCK_SECONDS",
+            86401,
+            "LLM_GLOBAL_ABUSE_BLOCK_SECONDS must be <= 86400",
+        ),
     ],
 )
-def test_config_llm_guardrail_bounds(field_name: str, value: int, expected: str) -> None:
+def test_config_llm_guardrail_bounds(
+    field_name: str, value: int, expected: str
+) -> None:
     s = _settings()
     setattr(s, field_name, value)
     with pytest.raises(ValueError, match=expected):
@@ -402,12 +424,16 @@ def test_config_billing_validator_branch_paths() -> None:
 
     s = _settings()
     s.PAYSTACK_WEBHOOK_ALLOWED_IPS = []
-    with pytest.raises(ValueError, match="PAYSTACK_WEBHOOK_ALLOWED_IPS must contain at least one IP"):
+    with pytest.raises(
+        ValueError, match="PAYSTACK_WEBHOOK_ALLOWED_IPS must contain at least one IP"
+    ):
         s._validate_billing_config()
 
     s = _settings()
     s.PAYSTACK_WEBHOOK_ALLOWED_IPS = ["bad-ip"]
-    with pytest.raises(ValueError, match="PAYSTACK_WEBHOOK_ALLOWED_IPS contains invalid IP address"):
+    with pytest.raises(
+        ValueError, match="PAYSTACK_WEBHOOK_ALLOWED_IPS contains invalid IP address"
+    ):
         s._validate_billing_config()
 
 
@@ -417,7 +443,9 @@ def test_config_llm_missing_key_logs_debug_in_local_dev_only() -> None:
     s.GROQ_API_KEY = None
     logger = MagicMock()
 
-    with patch("app.shared.core.config_validation.structlog.get_logger", return_value=logger):
+    with patch(
+        "app.shared.core.config_validation.structlog.get_logger", return_value=logger
+    ):
         s._validate_llm_config()
 
     logger.debug.assert_called_once()
@@ -472,7 +500,6 @@ def test_config_environment_safety_branch_paths() -> None:
     s = _settings()
     s.ENVIRONMENT = ENV_STAGING
     s.ADMIN_API_KEY = "a" * 32
-    s.REDIS_URL = "redis://localhost:6379"
     s.RATELIMIT_ENABLED = False
     s.CORS_ORIGINS = ["https://app.example.com"]
     s.API_URL = "https://api.example.com"
@@ -488,9 +515,12 @@ def test_config_environment_safety_branch_paths() -> None:
 
     s = _settings()
     s.ENVIRONMENT = ENV_STAGING
+    s.RATELIMIT_ENABLED = False
     s.CORS_ORIGINS = ["https://app.example.com"]
     s.API_URL = "https://REPLACE_WITH_API_DOMAIN"
-    with pytest.raises(ValueError, match="API_URL contains unresolved placeholder values."):
+    with pytest.raises(
+        ValueError, match="API_URL contains unresolved placeholder values."
+    ):
         s._validate_environment_safety()
 
     s = _settings()
@@ -509,7 +539,9 @@ def test_config_environment_safety_branch_paths() -> None:
         "postgresql+asyncpg://REPLACE_WITH_DB_USER:"
         "REPLACE_WITH_DB_PASSWORD@REPLACE_WITH_DB_HOST:5432/postgres"
     )
-    with pytest.raises(ValueError, match="DATABASE_URL contains unresolved placeholder values."):
+    with pytest.raises(
+        ValueError, match="DATABASE_URL contains unresolved placeholder values."
+    ):
         s._validate_database_config()
 
     s = _settings()
@@ -533,31 +565,36 @@ def test_config_environment_safety_branch_paths() -> None:
 
     s = _settings()
     s.ENVIRONMENT = ENV_PRODUCTION
-    s.OTEL_EXPORTER_OTLP_ENDPOINT = "https://REPLACE_WITH_OTEL_COLLECTOR:4317"
-    with pytest.raises(
-        ValueError,
-        match="OTEL_EXPORTER_OTLP_ENDPOINT contains unresolved placeholder values.",
-    ):
-        s._validate_observability_config()
-
-    s = _settings()
-    s.ENVIRONMENT = ENV_PRODUCTION
     s.GROQ_API_KEY = "REPLACE_WITH_GROQ_API_KEY"
-    with pytest.raises(ValueError, match="GROQ_API_KEY contains unresolved placeholder values."):
+    with pytest.raises(
+        ValueError, match="GROQ_API_KEY contains unresolved placeholder values."
+    ):
         s._validate_llm_config()
 
 
 @pytest.mark.parametrize(
     ("field_name", "value", "expected"),
     [
-        ("ENFORCEMENT_GATE_TIMEOUT_SECONDS", 0, "ENFORCEMENT_GATE_TIMEOUT_SECONDS must be > 0"),
-        ("ENFORCEMENT_GATE_TIMEOUT_SECONDS", 31, "ENFORCEMENT_GATE_TIMEOUT_SECONDS must be <= 30"),
+        (
+            "ENFORCEMENT_GATE_TIMEOUT_SECONDS",
+            0,
+            "ENFORCEMENT_GATE_TIMEOUT_SECONDS must be > 0",
+        ),
+        (
+            "ENFORCEMENT_GATE_TIMEOUT_SECONDS",
+            31,
+            "ENFORCEMENT_GATE_TIMEOUT_SECONDS must be <= 30",
+        ),
         (
             "ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP",
             100001,
             "ENFORCEMENT_GLOBAL_GATE_PER_MINUTE_CAP must be <= 100000",
         ),
-        ("ENFORCEMENT_EXPORT_SIGNING_KID", "k" * 65, "ENFORCEMENT_EXPORT_SIGNING_KID must be <= 64"),
+        (
+            "ENFORCEMENT_EXPORT_SIGNING_KID",
+            "k" * 65,
+            "ENFORCEMENT_EXPORT_SIGNING_KID must be <= 64",
+        ),
         (
             "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS",
             59,
@@ -599,12 +636,22 @@ def test_config_environment_safety_branch_paths() -> None:
             "ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_EXCEPTION_COUNT must be >= 1",
         ),
         ("ENFORCEMENT_EXPORT_MAX_DAYS", 0, "ENFORCEMENT_EXPORT_MAX_DAYS must be >= 1"),
-        ("ENFORCEMENT_EXPORT_MAX_DAYS", 3651, "ENFORCEMENT_EXPORT_MAX_DAYS must be <= 3650"),
+        (
+            "ENFORCEMENT_EXPORT_MAX_DAYS",
+            3651,
+            "ENFORCEMENT_EXPORT_MAX_DAYS must be <= 3650",
+        ),
         ("ENFORCEMENT_EXPORT_MAX_ROWS", 0, "ENFORCEMENT_EXPORT_MAX_ROWS must be >= 1"),
-        ("ENFORCEMENT_EXPORT_MAX_ROWS", 50001, "ENFORCEMENT_EXPORT_MAX_ROWS must be <= 50000"),
+        (
+            "ENFORCEMENT_EXPORT_MAX_ROWS",
+            50001,
+            "ENFORCEMENT_EXPORT_MAX_ROWS must be <= 50000",
+        ),
     ],
 )
-def test_config_enforcement_guardrail_bounds(field_name: str, value: object, expected: str) -> None:
+def test_config_enforcement_guardrail_bounds(
+    field_name: str, value: object, expected: str
+) -> None:
     s = _settings()
     setattr(s, field_name, value)
     with pytest.raises(ValueError, match=expected):

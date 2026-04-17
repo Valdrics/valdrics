@@ -17,11 +17,12 @@ PATTERNS: dict[str, re.Pattern[str]] = {
     "PAYSTACK_PUBLIC_KEY": re.compile(r"^pk_live_[A-Za-z0-9_]+$"),
     "SLACK_BOT_TOKEN": re.compile(r"^xox[baprs]-[A-Za-z0-9-]+$"),
     "GROQ_API_KEY": re.compile(r"^gsk_[A-Za-z0-9]+$"),
-    "OPENAI_API_KEY": re.compile(r"^(?:sk-[A-Za-z0-9]{20,}|sk-(?:proj|svcacct)-[A-Za-z0-9_-]{6,})$"),
+    "OPENAI_API_KEY": re.compile(
+        r"^(?:sk-[A-Za-z0-9]{20,}|sk-(?:proj|svcacct)-[A-Za-z0-9_-]{6,})$"
+    ),
     "AWS_ACCESS_KEY_ID": re.compile(r"^(?:AKIA|ASIA)[0-9A-Z]{16}$"),
     "AWS_SECRET_ACCESS_KEY": re.compile(r"^[A-Za-z0-9/+=]{40}$"),
     "DATABASE_URL": re.compile(r"^postgres(?:ql(?:\+asyncpg)?)://[^:]+:[^@]+@.+$"),
-    "REDIS_URL": re.compile(r"^rediss?://.+$"),
 }
 
 
@@ -59,7 +60,9 @@ def _resolve_env_path(path: Path) -> Path:
         try:
             resolved.relative_to(repo_root)
         except ValueError as exc:
-            raise ValueError("--env-file must stay within repo root when relative") from exc
+            raise ValueError(
+                "--env-file must stay within repo root when relative"
+            ) from exc
 
     if resolved.exists() and not resolved.is_file():
         raise ValueError(f"--env-file must be a file path: {resolved.as_posix()}")

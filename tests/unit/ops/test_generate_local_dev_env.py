@@ -79,7 +79,6 @@ def test_generate_local_dev_env_derives_required_key_shapes(tmp_path: Path) -> N
     assert values["ENVIRONMENT"] == "local"
     assert values["LOCAL_SQLITE_BOOTSTRAP"] == "true"
     assert values["DB_SSL_MODE"] == "disable"
-    assert values["REDIS_URL"] == ""
     assert "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN" not in values
     assert len(values["CSRF_SECRET_KEY"]) >= 32
     assert len(values["SUPABASE_JWT_SECRET"]) >= 32
@@ -105,7 +104,9 @@ def test_generate_local_dev_env_changes_with_seed(tmp_path: Path) -> None:
     assert values_a["ENCRYPTION_KEY"] != values_b["ENCRYPTION_KEY"]
 
 
-def test_generate_local_dev_env_is_shell_source_safe_for_json_values(tmp_path: Path) -> None:
+def test_generate_local_dev_env_is_shell_source_safe_for_json_values(
+    tmp_path: Path,
+) -> None:
     template = tmp_path / ".env.example"
     output = tmp_path / ".env.dev"
     _write(
@@ -138,7 +139,9 @@ def test_generate_local_dev_env_creates_parent_directories(tmp_path: Path) -> No
     output = tmp_path / "nested" / "local" / ".env.dev"
     _write(template, "CSRF_SECRET_KEY=\nENCRYPTION_KEY=\n")
 
-    result = generate_local_dev_env(template_path=template, output_path=output, seed="seed-4")
+    result = generate_local_dev_env(
+        template_path=template, output_path=output, seed="seed-4"
+    )
 
     assert result == output
     assert output.exists()
@@ -152,8 +155,12 @@ def test_generate_local_dev_env_rejects_template_output_path_collision(
 
     import pytest
 
-    with pytest.raises(ValueError, match="template_path and output_path must be different files"):
-        generate_local_dev_env(template_path=template, output_path=template, seed="seed-5")
+    with pytest.raises(
+        ValueError, match="template_path and output_path must be different files"
+    ):
+        generate_local_dev_env(
+            template_path=template, output_path=template, seed="seed-5"
+        )
 
 
 def test_generate_local_dev_env_rejects_non_file_template_path(
@@ -166,7 +173,9 @@ def test_generate_local_dev_env_rejects_non_file_template_path(
     import pytest
 
     with pytest.raises(ValueError, match="template_path must be a file"):
-        generate_local_dev_env(template_path=template_dir, output_path=output, seed="seed-6")
+        generate_local_dev_env(
+            template_path=template_dir, output_path=output, seed="seed-6"
+        )
 
 
 def test_generate_local_dev_env_rejects_directory_output_path(
@@ -180,7 +189,9 @@ def test_generate_local_dev_env_rejects_directory_output_path(
     import pytest
 
     with pytest.raises(ValueError, match="output_path must be a file path"):
-        generate_local_dev_env(template_path=template, output_path=output_dir, seed="seed-7")
+        generate_local_dev_env(
+            template_path=template, output_path=output_dir, seed="seed-7"
+        )
 
 
 @pytest.mark.parametrize(
@@ -276,12 +287,20 @@ def test_main_resolves_default_paths_from_repo_root(
     )
 
     assert local_dev_env_generator.main([]) == 0
-    assert captured["template_path"] == (
-        local_dev_env_generator._repo_root() / local_dev_env_generator.DEFAULT_TEMPLATE_PATH
-    ).resolve()
-    assert captured["output_path"] == (
-        local_dev_env_generator._repo_root() / local_dev_env_generator.DEFAULT_OUTPUT_PATH
-    ).resolve()
+    assert (
+        captured["template_path"]
+        == (
+            local_dev_env_generator._repo_root()
+            / local_dev_env_generator.DEFAULT_TEMPLATE_PATH
+        ).resolve()
+    )
+    assert (
+        captured["output_path"]
+        == (
+            local_dev_env_generator._repo_root()
+            / local_dev_env_generator.DEFAULT_OUTPUT_PATH
+        ).resolve()
+    )
 
 
 def test_main_resolves_explicit_relative_paths_from_repo_root(
@@ -333,7 +352,9 @@ def test_main_rejects_relative_paths_that_escape_repo_root(
     monkeypatch.chdir(outside_cwd)
     monkeypatch.setattr(local_dev_env_generator, "_repo_root", lambda: repo_root)
 
-    with pytest.raises(ValueError, match="template_path must stay within repo root when relative"):
+    with pytest.raises(
+        ValueError, match="template_path must stay within repo root when relative"
+    ):
         local_dev_env_generator.main(
             [
                 "--template-path",

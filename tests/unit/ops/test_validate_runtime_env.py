@@ -44,7 +44,6 @@ def _set_strict_env() -> None:
     os.environ["OBSERVABILITY_BACKEND"] = "gcp"
     os.environ["PUBLIC_API_RATE_LIMITING_BACKEND"] = "cloudflare"
     os.environ["RATELIMIT_ENABLED"] = "false"
-    os.environ["CIRCUIT_BREAKER_DISTRIBUTED_STATE"] = "false"
     os.environ["GCP_PROJECT_ID"] = "valdrics-prod"
     os.environ["GCP_REGION"] = "us-central1"
     os.environ["GCP_CLOUD_TASKS_QUEUE"] = "valdrics-managed-work"
@@ -179,7 +178,6 @@ def test_validate_runtime_env_loads_explicit_env_file(
                 "OBSERVABILITY_BACKEND=gcp",
                 "PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare",
                 "RATELIMIT_ENABLED=false",
-                "CIRCUIT_BREAKER_DISTRIBUTED_STATE=false",
                 "GCP_PROJECT_ID=valdrics-prod",
                 "GCP_REGION=us-central1",
                 "GCP_CLOUD_TASKS_QUEUE=valdrics-managed-work",
@@ -262,7 +260,6 @@ def test_validate_runtime_env_restores_environment_after_validation(
                 "OBSERVABILITY_BACKEND=gcp",
                 "PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare",
                 "RATELIMIT_ENABLED=false",
-                "CIRCUIT_BREAKER_DISTRIBUTED_STATE=false",
                 "GCP_PROJECT_ID=valdrics-prod",
                 "GCP_REGION=us-central1",
                 "GCP_CLOUD_TASKS_QUEUE=valdrics-managed-work",
@@ -330,7 +327,6 @@ def test_validate_runtime_env_rejects_placeholder_public_url(
                 "OBSERVABILITY_BACKEND=gcp",
                 "PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare",
                 "RATELIMIT_ENABLED=false",
-                "CIRCUIT_BREAKER_DISTRIBUTED_STATE=false",
                 "GCP_PROJECT_ID=valdrics-prod",
                 "GCP_REGION=us-central1",
                 "GCP_CLOUD_TASKS_QUEUE=valdrics-managed-work",
@@ -398,7 +394,6 @@ def test_validate_runtime_env_rejects_unsupported_python_runtime(
                 "OBSERVABILITY_BACKEND=gcp",
                 "PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare",
                 "RATELIMIT_ENABLED=false",
-                "CIRCUIT_BREAKER_DISTRIBUTED_STATE=false",
                 "GCP_PROJECT_ID=valdrics-prod",
                 "GCP_REGION=us-central1",
                 "GCP_CLOUD_TASKS_QUEUE=valdrics-managed-work",

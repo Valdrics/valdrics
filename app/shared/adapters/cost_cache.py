@@ -1,57 +1,24 @@
 """
 Cost result caching for tenant-scoped cost and analysis responses.
 
-Supports:
-1. Process-local in-memory cache by default
-2. Explicit Redis shared-state cache when `REDIS_URL` is configured
-3. Automatic TTL management
-4. Targeted cache invalidation support
+Repo-owned runtime support is process-local only:
+1. Process-local in-memory cache
+2. Automatic TTL management
+3. Targeted cache invalidation support
 
-The supported managed Cloud Run profile remains cacheless by default. Redis is
-used only for explicitly configured shared-cache topologies.
+The supported managed Cloud Run profile remains cacheless by default, so this
+adapter intentionally avoids shared external cache dependencies.
 """
 
 import json
 import hashlib
 import asyncio
-import inspect
 from abc import ABC, abstractmethod
 from datetime import date, timedelta, datetime, timezone
-from typing import Any, Optional, cast
+from typing import Any, Optional
 import structlog
 
-from app.shared.core.config import get_settings
-
 logger = structlog.get_logger()
-
-REDIS_CLIENT_INIT_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
-    ImportError,
-    ModuleNotFoundError,
-    RuntimeError,
-    OSError,
-    TimeoutError,
-    AttributeError,
-    TypeError,
-    ValueError,
-)
-REDIS_OPERATION_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
-    RuntimeError,
-    OSError,
-    TimeoutError,
-    AttributeError,
-    TypeError,
-    ValueError,
-)
-
-
-def _cache_settings() -> Any:
-    return get_settings()
-
-
-def _configured_redis_url(settings_obj: Any | None = None) -> str | None:
-    settings_obj = settings_obj or _cache_settings()
-    redis_url = str(getattr(settings_obj, "REDIS_URL", "") or "").strip()
-    return redis_url or None
 
 
 def _safe_json_loads(raw_payload: Any, *, key: str) -> Any | None:
@@ -89,27 +56,27 @@ class CacheBackend(ABC):
     @abstractmethod
     async def get(self, key: str) -> Optional[str]:
         """Get value from cache."""
-        raise NotImplementedError()
+        ...
 
     @abstractmethod
     async def set(self, key: str, value: str, ttl_seconds: int) -> None:
         """Set value in cache with TTL."""
-        raise NotImplementedError()
+        ...
 
     @abstractmethod
     async def delete(self, key: str) -> None:
         """Delete key from cache."""
-        raise NotImplementedError()
+        ...
 
     @abstractmethod
     async def delete_pattern(self, pattern: str) -> int:
         """Delete keys matching pattern. Returns count deleted."""
-        raise NotImplementedError()
+        ...
 
     @abstractmethod
     async def health_check(self) -> bool:
         """Check if backend is healthy."""
-        raise NotImplementedError()
+        ...
 
 
 class InMemoryCache(CacheBackend):
@@ -150,99 +117,6 @@ class InMemoryCache(CacheBackend):
 
     async def health_check(self) -> bool:
         return True
-
-
-class RedisCache(CacheBackend):
-    """
-    Redis-backed cache for explicitly configured shared-state deployments.
-
-    Features:
-    - Connection pooling
-    - Automatic reconnection
-    - Pattern-based deletion for invalidation
-    """
-
-    def __init__(self, redis_url: str | None = None) -> None:
-        self.redis_url = redis_url or _configured_redis_url()
-        self._client: Any | None = None
-        self._connected = False
-
-    async def _get_client(self) -> Any | None:
-        if self._client is None and self.redis_url:
-            try:
-                import redis.asyncio as aioredis
-
-                self._client = aioredis.from_url(
-                    self.redis_url,
-                    encoding="utf-8",
-                    decode_responses=True,
-                    socket_connect_timeout=5,
-                    socket_timeout=5,
-                )
-                self._connected = True
-                logger.info("redis_connected", url=self.redis_url.split("@")[-1])
-            except REDIS_CLIENT_INIT_RECOVERABLE_ERRORS as e:
-                logger.error("redis_connection_failed", error=str(e))
-                self._connected = False
-                return None
-        return self._client
-
-    async def get(self, key: str) -> Optional[str]:
-        client = await self._get_client()
-        if client is None:
-            return None
-        try:
-            return cast(Optional[str], await client.get(key))
-        except REDIS_OPERATION_RECOVERABLE_ERRORS as e:
-            logger.warning("redis_get_failed", key=key, error=str(e))
-            return None
-
-    async def set(self, key: str, value: str, ttl_seconds: int) -> None:
-        client = await self._get_client()
-        if client is None:
-            return
-        try:
-            await client.setex(key, ttl_seconds, value)
-        except REDIS_OPERATION_RECOVERABLE_ERRORS as e:
-            logger.warning("redis_set_failed", key=key, error=str(e))
-
-    async def delete(self, key: str) -> None:
-        client = await self._get_client()
-        if client is None:
-            return
-        try:
-            await client.delete(key)
-        except REDIS_OPERATION_RECOVERABLE_ERRORS as e:
-            logger.warning("redis_delete_failed", key=key, error=str(e))
-
-    async def delete_pattern(self, pattern: str) -> int:
-        client = await self._get_client()
-        if client is None:
-            return 0
-        try:
-            cursor = 0
-            deleted = 0
-            while True:
-                cursor, keys = await client.scan(cursor, match=pattern, count=100)
-                if keys:
-                    await client.delete(*keys)
-                    deleted += len(keys)
-                if cursor == 0:
-                    break
-            return deleted
-        except REDIS_OPERATION_RECOVERABLE_ERRORS as e:
-            logger.warning("redis_delete_pattern_failed", pattern=pattern, error=str(e))
-            return 0
-
-    async def health_check(self) -> bool:
-        client = await self._get_client()
-        if client is None:
-            return False
-        try:
-            await client.ping()
-            return True
-        except REDIS_OPERATION_RECOVERABLE_ERRORS:
-            return False
 
 
 class CostCache:
@@ -378,10 +252,9 @@ class CostCache:
     async def health_check(self) -> dict[str, Any]:
         """Check cache health for monitoring."""
         healthy = await self.backend.health_check()
-        backend_type = "redis" if isinstance(self.backend, RedisCache) else "memory"
         return {
             "healthy": healthy,
-            "backend": backend_type,
+            "backend": "memory",
             "ttl_costs": self.TTL_DAILY_COSTS,
             "ttl_zombies": self.TTL_ZOMBIES,
         }
@@ -392,65 +265,26 @@ _cache_instance: Optional[CostCache] = None
 _cache_instance_lock = asyncio.Lock()
 
 
-async def _close_backend(backend: CacheBackend) -> None:
-    client = getattr(backend, "_client", None)
-    if client is None:
-        return
-    close = getattr(client, "aclose", None) or getattr(client, "close", None)
-    if not callable(close):
-        return
-    maybe_awaitable = close()
-    if inspect.isawaitable(maybe_awaitable):
-        await maybe_awaitable
-
-
-def _cache_matches_configuration(
-    cache: CostCache,
-    *,
-    redis_url: str | None,
-) -> bool:
-    if redis_url:
-        return str(getattr(cache.backend, "redis_url", "") or "").strip() == redis_url
-    return isinstance(cache.backend, InMemoryCache)
-
-
 async def get_cost_cache() -> CostCache:
     """
     Factory to get cache instance.
 
-    Uses Redis only when `REDIS_URL` is explicitly configured and healthy;
-    otherwise it falls back to in-memory. Singleton pattern for connection
-    reuse.
+    The repo-owned runtime contract is process-local only. Keep a singleton
+    in-memory backend to avoid unnecessary object churn in hot paths.
     """
     global _cache_instance
 
-    redis_url = _configured_redis_url()
     cache = _cache_instance
-    if cache is not None and _cache_matches_configuration(cache, redis_url=redis_url):
+    if cache is not None:
         return cache
 
     async with _cache_instance_lock:
         cache = _cache_instance
-        if cache is not None and _cache_matches_configuration(
-            cache, redis_url=redis_url
-        ):
+        if cache is not None:
             return cache
 
-        previous_backend = cache.backend if cache is not None else None
-        backend: CacheBackend
-        if redis_url:
-            backend = RedisCache(redis_url)
-            if await backend.health_check():
-                logger.info("cost_cache_initialized", backend="redis")
-            else:
-                logger.warning("redis_unhealthy_using_memory")
-                backend = InMemoryCache()
-        else:
-            backend = InMemoryCache()
-            logger.info("cost_cache_initialized", backend="memory")
-
+        backend = InMemoryCache()
+        logger.info("cost_cache_initialized", backend="memory")
         _cache_instance = CostCache(backend)
-        if previous_backend is not None and previous_backend is not backend:
-            await _close_backend(previous_backend)
 
     return _cache_instance

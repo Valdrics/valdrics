@@ -507,7 +507,7 @@ class CostAggregationHandler(BaseJobHandler):
 
         # 2. Store the result in the job's result field (serialized)
         # Note: Summary includes a list of potentially many records.
-        # For very large results, we'd normally store in S3/Redis.
+        # For very large results, we'd normally store in object storage or a cache tier.
         # But for this implementation, we store a summary.
 
         return {

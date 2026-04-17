@@ -161,7 +161,9 @@ describe('ops page unit economics interactions', () => {
 
 		await screen.findByText('Unit Economics Monitor', {}, { timeout: ASYNC_RENDER_TIMEOUT });
 		await screen.findByText('Cost Ingestion SLA', {}, { timeout: ASYNC_RENDER_TIMEOUT });
-		expect(await screen.findAllByText(/pro tier required/i)).toHaveLength(3);
+		await waitFor(() => {
+			expect(screen.getAllByText(/pro tier required/i)).toHaveLength(3);
+		});
 
 		await waitFor(() => {
 			expect(

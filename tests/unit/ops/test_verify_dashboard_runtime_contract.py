@@ -1,6 +1,14 @@
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
+
+import pytest
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX fallback
+    fcntl = None
 
 from scripts.verify_dashboard_runtime_contract import (
     main,
@@ -60,6 +68,25 @@ def test_verify_dashboard_runtime_contract_reports_smoke_failure(tmp_path: Path)
     )
 
     assert errors == ["dashboard runtime smoke failed: refused connection"]
+
+
+@pytest.mark.skipif(fcntl is None, reason="requires POSIX file locking")
+def test_verify_dashboard_runtime_contract_reports_lock_timeout(tmp_path: Path) -> None:
+    _seed_dashboard_runtime_layout(tmp_path)
+    lock_path = tmp_path / ".runtime" / "locks" / "dashboard-runtime-contract.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with contextlib.ExitStack():
+            errors = verify_dashboard_runtime_contract(
+                root=tmp_path,
+                skip_smoke=True,
+                lock_timeout_seconds=0.01,
+            )
+
+    assert len(errors) == 1
+    assert "dashboard runtime contract lock could not be acquired" in errors[0]
 
 
 def test_main_reports_success_and_failure(tmp_path: Path, capsys) -> None:

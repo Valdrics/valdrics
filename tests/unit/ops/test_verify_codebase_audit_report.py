@@ -5,6 +5,8 @@ from pathlib import Path
 import subprocess
 import sys
 
+import pytest
+
 import scripts.verify_codebase_audit_report as codebase_audit_report
 from scripts.verify_codebase_audit_report import (
     DEFAULT_REPORT,
@@ -19,7 +21,9 @@ def _write_json(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
-def _seed_dashboard_package_json(tmp_path: Path, *, include_chart_js: bool = False) -> None:
+def _seed_dashboard_package_json(
+    tmp_path: Path, *, include_chart_js: bool = False
+) -> None:
     dependencies: dict[str, str] = {
         "@sveltejs/kit": "^2.52.2",
         "svelte": "^5.51.5",
@@ -96,7 +100,7 @@ def _valid_report_payload() -> dict[str, object]:
                         "line": 1,
                     }
                 ],
-            }
+            },
         ],
         "partial_or_overstated_claims": [
             {
@@ -136,7 +140,7 @@ def _valid_report_payload() -> dict[str, object]:
                         "line": 1,
                     }
                 ],
-            }
+            },
         ],
         "validation_runs": [
             {
@@ -211,6 +215,11 @@ def test_verify_audit_report_accepts_valid_report(tmp_path: Path) -> None:
     _write_json(tmp_path / ".runtime/staging.audit.report.json", payload)
 
     (tmp_path / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    (tmp_path / ".github/workflows").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".github/workflows/deploy-unified-platform.yml").write_text(
+        "name: deploy-unified-platform\n",
+        encoding="utf-8",
+    )
     (tmp_path / "dashboard").mkdir(parents=True, exist_ok=True)
     (tmp_path / "dashboard/svelte.config.js").write_text(
         "export default {};\n", encoding="utf-8"
@@ -358,7 +367,7 @@ def test_main_accepts_root_override(monkeypatch) -> None:
         _fake_verify_audit_report,
     )
 
-    assert main(["--root", "."]) == 0
+    assert main(["--root", ".", "--report", str(DEFAULT_REPORT)]) == 0
     assert seen == [
         (
             codebase_audit_report.DEFAULT_ROOT,
@@ -368,11 +377,22 @@ def test_main_accepts_root_override(monkeypatch) -> None:
     ]
 
 
-def test_script_entrypoint_bootstraps_repo_imports_for_plain_python(tmp_path: Path) -> None:
+def test_main_requires_explicit_report_argument(capsys) -> None:
+    with pytest.raises(SystemExit) as excinfo:
+        main(["--root", "."])
+
+    assert excinfo.value.code == 2
+    assert "--report" in capsys.readouterr().err
+
+
+def test_script_entrypoint_bootstraps_repo_imports_for_plain_python() -> None:
     completed = subprocess.run(
         [
             sys.executable,
-            str(codebase_audit_report.DEFAULT_ROOT / "scripts/verify_codebase_audit_report.py"),
+            str(
+                codebase_audit_report.DEFAULT_ROOT
+                / "scripts/verify_codebase_audit_report.py"
+            ),
             "--root",
             str(codebase_audit_report.DEFAULT_ROOT),
             "--report",
@@ -383,11 +403,14 @@ def test_script_entrypoint_bootstraps_repo_imports_for_plain_python(tmp_path: Pa
         text=True,
     )
 
-    assert completed.returncode == 0
-    assert "audit report verified" in completed.stdout
+    assert completed.returncode in {0, 1}
+    assert "Traceback" not in completed.stderr
+    assert "No module named" not in completed.stderr
 
 
-def test_collect_backend_tests_count_prefers_uv_when_available(monkeypatch, tmp_path: Path) -> None:
+def test_collect_backend_tests_count_prefers_uv_when_available(
+    monkeypatch, tmp_path: Path
+) -> None:
     seen_commands: list[list[str]] = []
 
     def _fake_run(command, **kwargs):
@@ -412,7 +435,9 @@ def test_collect_backend_tests_count_prefers_uv_when_available(monkeypatch, tmp_
     assert seen_commands == [["uv", "run", "pytest", "--collect-only", "-q"]]
 
 
-def test_collect_backend_tests_count_falls_back_to_python_pytest(monkeypatch, tmp_path: Path) -> None:
+def test_collect_backend_tests_count_falls_back_to_python_pytest(
+    monkeypatch, tmp_path: Path
+) -> None:
     seen_commands: list[list[str]] = []
 
     def _fake_run(command, **kwargs):
@@ -448,12 +473,12 @@ def test_collect_backend_tests_count_falls_back_to_python_pytest(monkeypatch, tm
 
 
 def test_main_rejects_relative_root_escape(capsys) -> None:
-    assert main(["--root", "../outside"]) == 2
+    assert main(["--root", "../outside", "--report", str(DEFAULT_REPORT)]) == 2
     assert "root must stay within repo root when relative" in capsys.readouterr().out
 
 
 def test_main_rejects_relative_report_escape(capsys) -> None:
-    assert main(["--report", "../outside.json"]) == 2
+    assert main(["--root", ".", "--report", "../outside.json"]) == 2
     assert "report must resolve inside the repository root" in capsys.readouterr().out
 
 

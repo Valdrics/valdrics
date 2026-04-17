@@ -15,7 +15,6 @@ from dotenv import dotenv_values
 DEFAULT_REPO_ROOT = Path(".")
 DEFAULT_COMPOSE_PATHS: tuple[Path, ...] = (
     Path("docker-compose.yml"),
-    Path("docker-compose.redis.yml"),
     Path("docker-compose.observability.yml"),
 )
 MUTABLE_TAGS = {"latest"}

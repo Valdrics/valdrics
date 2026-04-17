@@ -63,6 +63,18 @@ def test_map_canonical_charge_category_maps_known_database_service() -> None:
     assert mapping.is_mapped is True
 
 
+def test_map_canonical_charge_category_maps_valkey_as_database_service() -> None:
+    mapping = map_canonical_charge_category(
+        provider="aws",
+        service="AmazonElastiCache",
+        usage_type="Valkey Node",
+    )
+
+    assert mapping.category == "database"
+    assert mapping.subcategory == "managed"
+    assert mapping.is_mapped is True
+
+
 def test_map_canonical_charge_category_maps_known_financial_service() -> None:
     mapping = map_canonical_charge_category(
         provider="aws",

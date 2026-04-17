@@ -11,6 +11,11 @@ This is the single source of truth for what is still open. Historical sections b
 
 Everything else in enforcement runtime hardening is treated as `DONE` baseline with regression-watch posture.
 
+Historical sections below may still reference archived self-managed webhook material
+or retired non-managed coordination paths. Those references are retained only
+as closure evidence snapshots and do not redefine the supported deployment
+contract.
+
 Execution update (2026-03-01D): landing-page audit closure continuation (`landing_page_audit_report.md.resolved`)
 1. Added enterprise sales-assisted path on public marketing surfaces:
    - new route: `dashboard/src/routes/talk-to-sales/+page.svelte`
@@ -52,7 +57,7 @@ Execution update (2026-03-02B): landing report residual closeout
    - `dashboard/src/lib/routeProtection.ts`
    - `dashboard/src/routes/sitemap.xml/+server.ts`
 4. Published explicit closure matrix against report findings:
-   - `docs/ops/landing_page_audit_closure_2026-03-02.md`
+   - `docs/archive/ops/2026-q1/landing_page_audit_closure_2026-03-02.md`
 
 Validation evidence (2026-03-02B):
 1. `cd dashboard && npm run check` -> passed (`0 errors`, `0 warnings`).
@@ -109,7 +114,7 @@ Validation evidence (2026-03-01A)
 Execution update (2026-03-01B): residual audit hardening closeout
 1. Remediation circuit-breaker factory no longer defaults to process-local only state:
    - `app/shared/remediation/circuit_breaker.py`
-   - distributed Redis state is now injected when configured (`CIRCUIT_BREAKER_DISTRIBUTED_STATE=true` + `REDIS_URL`), with deterministic in-memory fallback on unavailability.
+   - optional distributed coordination backing was made explicit, with deterministic in-memory fallback on unavailability.
 2. Enforcement spend-context outage now fails by mode instead of silently allowing positive-cost requests:
    - `app/modules/enforcement/domain/service.py`
    - when `computed_context.data_source_mode == "unavailable"` and delta is positive:
@@ -134,10 +139,10 @@ Execution update (2026-03-01C): operational/public-edge closure continuation
    - shared helper: `dashboard/src/lib/security/turnstile.ts`.
 2. Public auth-provider failure mode hardened:
    - `dashboard/src/hooks.server.ts` now catches auth provider/session resolution faults and returns anonymous context instead of request-crash behavior.
-3. Active-enforcement IAM policy baseline codified in Terraform (disabled by default, tag-scoped when enabled):
-   - `terraform/modules/iam/main.tf`
-   - `terraform/modules/iam/variables.tf`
-   - wired through `terraform/main.tf`, `terraform/variables.tf`, `terraform/outputs.tf`.
+3. Historical self-managed AWS IAM policy baseline was codified in Terraform during migration, but the supported unified-platform contract now keeps IAM directly in the active GCP-managed root module:
+   - active supported path: `terraform/main.tf`
+   - active resources: `google_project_iam_member`, `google_service_account_iam_member`
+   - retired AWS module paths are archived or removed from the active tree.
 4. Migration graph integrity control added and wired:
    - verifier: `scripts/verify_alembic_head_integrity.py`
    - test pack: `tests/unit/ops/test_verify_alembic_head_integrity.py`
@@ -186,10 +191,10 @@ Execution update (2026-02-28E): closure audit rerun
 
 Recent staged closures (2026-02-27, single-sprint hardening pass):
 1. `CI-EVID-001` (`DONE`): CI green-run promotion packet captured.
-   - Artifact: `docs/evidence/ci-green-2026-02-27.md`
+   - Artifact: `docs/archive/evidence/2026-q1/ci-green-2026-02-27.md` (archived completed promotion packet)
    - Gate status: `scripts/run_enforcement_release_evidence_gate.py` passed (`815 passed`, coverage gates satisfied).
 2. `BENCH-DOC-001` (`DONE`): benchmark-alignment hardening documentation profile published.
-   - Artifact: `docs/ops/benchmark_alignment_profiles_2026-02-27.md`
+   - Artifact: `docs/ops/benchmark_alignment_profiles.md`
    - Covers:
      - Kubernetes AdmissionReview guidance profile,
      - CEL portability profile,
@@ -200,7 +205,7 @@ Recent staged closures (2026-02-27, single-sprint hardening pass):
    - Artifact: `docs/ops/evidence/enforcement_failure_injection_2026-02-27.json`
 5. `PKG-006` (`DONE` baseline): machine-verifiable feature enforceability matrix added for paid-tier capabilities.
    - Artifacts:
-     - `docs/ops/feature_enforceability_matrix_2026-02-27.json`
+     - `docs/ops/feature_enforceability_matrix.json`
      - `scripts/generate_feature_enforceability_matrix.py`
      - `scripts/verify_feature_enforceability_matrix.py`
 6. `PKG-007` (`DONE` baseline): Enterprise entitlements switched from dynamic `set(FeatureFlag)` to explicit curated roster (`ENTERPRISE_FEATURES`) with regression guards.
@@ -499,7 +504,7 @@ Execution update (2026-02-27): PKG-003 + PKG-014 runtime gate hardening
      - `tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py`
      - `tests/unit/enforcement/test_approvals_api_direct.py`
 4. Regenerated and verified enforceability artifact:
-   - `docs/ops/feature_enforceability_matrix_2026-02-27.json`
+   - `docs/ops/feature_enforceability_matrix.json`
    - `scripts/verify_feature_enforceability_matrix.py` -> passed.
 5. Release evidence gate reconfirmed after runtime gate hardening:
    - `uv run python3 scripts/run_enforcement_release_evidence_gate.py --stress-evidence-path docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json --failure-evidence-path docs/ops/evidence/enforcement_failure_injection_2026-02-27.json --stress-required-database-engine postgresql`
@@ -613,8 +618,8 @@ Execution update (2026-02-27): release evidence DB-backend provenance hardening
    - env: `ENFORCEMENT_STRESS_EVIDENCE_REQUIRED_DATABASE_ENGINE`
    - release gate CLI: `--stress-required-database-engine`
 4. Docs/template contract updated:
-   - `docs/ops/enforcement_stress_evidence_2026-02-25.md`
-   - `docs/ops/enforcement_failure_injection_matrix_2026-02-25.md`
+   - `docs/ops/enforcement_stress_evidence.md`
+   - `docs/ops/enforcement_failure_injection_matrix.md`
    - `docs/ops/evidence/enforcement_stress_artifact_TEMPLATE.json`
 5. Post-change validation result against recaptured PostgreSQL staged artifact:
    - `uv run python scripts/verify_enforcement_stress_evidence.py --evidence-path docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json --min-duration-seconds 30 --min-concurrent-users 10 --required-database-engine postgresql --max-p95-seconds 2.0 --max-error-rate-percent 1.0 --min-throughput-rps 0.5` -> passed.
@@ -2021,8 +2026,8 @@ This section maps those controls to repository evidence and current readiness in
 | `CTRL-010` Bot friction | Turnstile server-side validation and route dependencies exist (`app/shared/core/turnstile.py`, governance public/onboard endpoints) | Implemented baseline |
 | `CTRL-016` Supply-chain provenance | SBOM + lock verification + attestation workflow exists (`.github/workflows/sbom.yml`) and workflow tests assert wiring (`tests/unit/supply_chain/test_supply_chain_provenance_workflow.py`) | Implemented baseline |
 | `CTRL-017` Key rotation drill evidence | Rotation-compatible enforcement token verification tests exist (`tests/unit/enforcement/test_enforcement_service.py`), emergency rotation runbook exists (`docs/runbooks/secret_rotation_emergency.md`), staged drill artifact exists (`docs/ops/key-rotation-drill-2026-02-27.md`), and release-gate validator enforces freshness/rollback markers (`scripts/verify_key_rotation_drill_evidence.py`) | Implemented baseline |
-| `CTRL-018` Dashboards/alerts evidence pack | Metrics instrumentation + artifactized rules/dashboard/evidence exist (`app/shared/core/ops_metrics.py`, `ops/alerts/enforcement_control_plane_rules.yml`, `ops/dashboards/enforcement_control_plane_overview.json`, `docs/ops/alert-evidence-2026-02-25.md`) | Implemented baseline |
-| `CTRL-019` Incident runbook/drills | Enforcement incident runbook + drill artifacts exist (`docs/runbooks/enforcement_incident_response.md`, `docs/ops/drills/enforcement_incident_drill_2026-02-23.md`) | Implemented baseline |
+| `CTRL-018` Dashboards/alerts evidence pack | Metrics instrumentation + artifactized rules/dashboard/evidence exist (`app/shared/core/ops_metrics.py`, `ops/alerts/enforcement_control_plane_rules.yml`, `ops/dashboards/enforcement_control_plane_overview.json`, `docs/ops/alert-evidence.md`) | Implemented baseline |
+| `CTRL-019` Incident runbook/drills | Enforcement incident runbook + archived baseline drill artifact exist (`docs/runbooks/enforcement_incident_response.md`, `docs/archive/ops/2026-q1/drills/enforcement_incident_drill_2026-02-23.md`) | Implemented baseline |
 | `CTRL-021` Program CI quality gate | Dedicated release-blocking gate job exists (`.github/workflows/ci.yml`, `scripts/run_enterprise_tdd_gate.py`) | Implemented baseline |
 | `CTRL-022` No-placeholder CI scan | CI invokes strict placeholder guard (`scripts/verify_enterprise_placeholder_guards.py`) | Implemented baseline |
 
@@ -2102,7 +2107,7 @@ This section maps those controls to repository evidence and current readiness in
 2. Dashboard pack:
    - `ops/dashboards/enforcement_control_plane_overview.json`
 3. Evidence document:
-   - `docs/ops/alert-evidence-2026-02-25.md`
+   - `docs/ops/alert-evidence.md`
 4. Validation tests:
    - `tests/unit/ops/test_enforcement_observability_pack.py`
 5. New queue backlog metric:
@@ -2159,10 +2164,10 @@ Use this manifest so `PASS` remains binary and auditable.
 | Program CI hard gate definition | `.github/workflows/ci.yml` + `scripts/run_enterprise_tdd_gate.py` | Present |
 | Placeholder/legacy guard definition | `scripts/verify_enterprise_placeholder_guards.py` + `scripts/placeholder_guard_allowlist_full.txt` | Present |
 | Supply-chain SBOM + provenance attestation | `.github/workflows/sbom.yml` + `scripts/generate_provenance_manifest.py` | Present |
-| Incident runbook + drill records | `docs/runbooks/enforcement_incident_response.md` + `docs/ops/drills/enforcement_incident_drill_2026-02-23.md` | Present |
+| Incident runbook + drill records | `docs/runbooks/enforcement_incident_response.md` + `docs/archive/ops/2026-q1/drills/enforcement_incident_drill_2026-02-23.md` | Present |
 | Key rotation drill report | `docs/ops/key-rotation-drill-2026-02-27.md` + `scripts/verify_key_rotation_drill_evidence.py` | Present |
-| Alerts/dashboard evidence packet | `docs/ops/alert-evidence-2026-02-25.md` + `ops/alerts/*` + `ops/dashboards/*` | Present |
-| CI green-run capture for release packet | `docs/evidence/ci-green-YYYY-MM-DD.md` (`docs/evidence/ci-green-template.md` for baseline format) | Template present; staged run artifact still required for promotion packets |
+| Alerts/dashboard evidence packet | `docs/ops/alert-evidence.md` + `ops/alerts/*` + `ops/dashboards/*` | Present |
+| CI green-run capture for release packet | `docs/archive/evidence/<quarter>/ci-green-YYYY-MM-DD.md` (`docs/evidence/ci-green-template.md` for baseline format) | Template present; staged archived run artifact still required for promotion packets |
 
 ### Binary Artifact Closure Checklist (release packet)
 
@@ -2173,11 +2178,11 @@ Treat this checklist as release-blocking closure evidence. Completion is binary 
 2. Staged failure-injection evidence JSON captured and committed:
    - `docs/ops/evidence/enforcement_failure_injection_YYYY-MM-DD.json`
 3. CI green-run release packet captured and committed:
-   - `docs/evidence/ci-green-YYYY-MM-DD.md`
+   - `docs/archive/evidence/<quarter>/ci-green-YYYY-MM-DD.md`
 4. One-pass release evidence gate executed against staged artifacts:
    - `uv run python3 scripts/run_enforcement_release_evidence_gate.py --stress-evidence-path docs/ops/evidence/enforcement_stress_artifact_YYYY-MM-DD.json --failure-evidence-path docs/ops/evidence/enforcement_failure_injection_YYYY-MM-DD.json --stress-max-age-hours 24 --failure-max-age-hours 48 --stress-min-duration-seconds 30 --stress-min-concurrent-users 10`
 5. Post-closure sanity validator confirms artifact checklist contract:
-   - `uv run python3 scripts/verify_enforcement_post_closure_sanity.py --doc-path docs/ops/enforcement_post_closure_sanity_2026-02-26.md --gap-register docs/ops/enforcement_control_plane_gap_register_2026-02-23.md`
+   - `uv run python3 scripts/verify_enforcement_post_closure_sanity.py --doc-path docs/ops/enforcement_post_closure_sanity.md --gap-register docs/ops/enforcement_control_plane_gap_register_2026-02-23.md`
 
 ## LLM free-tier feedback audit (2026-02-24, operator pass)
 
@@ -2989,16 +2994,16 @@ Source feedback items reviewed:
 |---|---|---|---|---|
 | Lock contention behavior + observability (`gate_lock_contended` / `gate_lock_timeout`) | Yes | Addressed (code + tests) | `app/shared/core/ops_metrics.py`, `app/modules/enforcement/domain/service.py`, `app/modules/enforcement/api/v1/enforcement.py`, `tests/unit/enforcement/test_enforcement_service_helpers.py`, `tests/unit/enforcement/test_enforcement_api.py` | Closed for this sanity check; monitor reason/metric distribution in staging. |
 | Computed-context snapshot metadata stability across runs | Yes | Addressed (test added) | `tests/unit/enforcement/test_enforcement_service.py` (`test_evaluate_gate_computed_context_snapshot_metadata_stable_across_runs`) | Closed for this sanity check. |
-| AdmissionReview failure policy alignment (cluster webhook `failurePolicy`) | Yes | Addressed (archived self-managed reference plus active runbook/API evidence) | `docs/runbooks/enforcement_preprovision_integrations.md` (explicit `failurePolicy` guidance + webhook example), `docs/ops/benchmark_alignment_profiles_2026-02-27.md`, `tests/unit/enforcement/enforcement_api_cases_part01.py`, `tests/unit/enforcement/enforcement_api_cases_part02.py`, `tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py` | Keep archived self-managed reference material explicitly scoped and keep the active AdmissionReview examples synced with API contract changes. |
+| AdmissionReview failure policy alignment (cluster webhook `failurePolicy`) | Yes | Addressed (archived self-managed reference plus active runbook/API evidence) | `docs/runbooks/enforcement_preprovision_integrations.md` (explicit `failurePolicy` guidance + webhook example), `docs/ops/benchmark_alignment_profiles.md`, `tests/unit/enforcement/enforcement_api_cases_part01.py`, `tests/unit/enforcement/enforcement_api_cases_part02.py`, `tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py` | Keep archived self-managed reference material explicitly scoped and keep the active AdmissionReview examples synced with API contract changes. |
 | Policy-document migration completeness in export story | Yes | Partial (policy contract/hash authoritative in service/API; export lineage still incomplete) | `app/modules/enforcement/domain/service.py` (materialize + canonical hash), policy tests in `tests/unit/enforcement/test_enforcement_service.py` and `tests/unit/enforcement/test_enforcement_api.py` | Add policy-hash lineage to export evidence (`ECP-015`) so exported decisions can be tied to policy hash at decision time. |
 | End-to-end docs for Terraform preflight -> approval -> consume | Yes | Addressed (runbook added) | `docs/runbooks/enforcement_preprovision_integrations.md` | Keep examples synced with API contract changes. |
 
-### New follow-up gaps opened
+### Follow-up gaps opened at that point in time
 
 1. `ECP-015` (P1): Policy hash lineage in export artifacts.
    - Requirement: export evidence must bind decision records to effective policy hash (not only policy version).
    - Current gap: exports include decisions/approvals parity but do not include policy-hash lineage per decision window.
-2. `ECP-016` (P1): K8s webhook deployment contract pack.
+2. `ECP-016` (P1, historical): K8s webhook deployment contract pack.
    - Requirement: publish production-ready `ValidatingWebhookConfiguration` templates with explicit `failurePolicy`, timeout, and rollout mode guidance per environment.
    - Historical gap at opening time: API supports AdmissionReview; repo lacked deployment manifests/templates for cluster operators.
    - Closed later on 2026-02-25 with archived self-managed reference material plus active AdmissionReview guidance/runbook evidence.
@@ -3038,11 +3043,11 @@ Implemented:
    - File: `app/modules/enforcement/api/v1/ledger.py`
 4. Added Kubernetes AdmissionReview deployment guidance with explicit failure-policy profile.
    - Archived self-managed reference artifacts:
-     - `helm/valdrics/templates/enforcement-validating-webhook.yaml`
-     - `helm/valdrics/values.yaml` (`enforcementWebhook.*`)
+     - `docs/archive/reference/2026-q2/helm/valdrics/templates/enforcement-validating-webhook.yaml`
+     - `docs/archive/reference/2026-q2/helm/valdrics/values.yaml` (`enforcementWebhook.*`)
    - Active operator contract:
      - `docs/runbooks/enforcement_preprovision_integrations.md`
-     - `docs/ops/benchmark_alignment_profiles_2026-02-27.md`
+     - `docs/ops/benchmark_alignment_profiles.md`
 
 Status closure:
 1. `ECP-015`: `DONE` (policy-hash lineage persisted at decision time and included in export parity/manifest evidence).
@@ -3076,7 +3081,7 @@ Implemented:
      - `ops/alerts/enforcement_control_plane_rules.yml`
      - `ops/dashboards/enforcement_control_plane_overview.json`
      - `tests/unit/ops/test_enforcement_observability_pack.py`
-     - `docs/ops/alert-evidence-2026-02-25.md`
+     - `docs/ops/alert-evidence.md`
 2. Added service-level lock-contention reason-code test on rowcount=0 lock path:
    - verifies `409` + `gate_lock_contended` + lock event telemetry (`acquired`, `not_acquired`).
    - File: `tests/unit/enforcement/test_enforcement_service_helpers.py`
@@ -3147,15 +3152,15 @@ Implemented:
    - enforces `failurePolicy=Fail -> timeoutSeconds <= 5`,
    - enforces cert-manager injector secret requirement,
    - disallows mixed CA sources (`certManager.enabled` + `caBundle`).
-   - Archived self-managed reference file: `helm/valdrics/values.schema.json`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/values.schema.json`
 2. Hardened webhook template with explicit render-time guardrails (`fail`):
    - cert-manager secret required when enabled,
    - CA source conflict detection,
    - fail-closed timeout guard.
-   - Archived self-managed reference file: `helm/valdrics/templates/enforcement-validating-webhook.yaml`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/templates/enforcement-validating-webhook.yaml`
 3. Hardened default selector posture:
    - default namespace exclusion for control-plane namespaces.
-   - Archived self-managed reference file: `helm/valdrics/values.yaml`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/values.yaml`
 4. Added AdmissionReview contract coverage for the active operator path:
    - Files:
      - `tests/unit/enforcement/enforcement_api_cases_part01.py`
@@ -3165,8 +3170,8 @@ Implemented:
    - File: `docs/runbooks/enforcement_preprovision_integrations.md`
 
 Validation recorded for the archived self-managed reference and active operator path:
-1. `helm lint helm/valdrics` (archived self-managed reference)
-2. `helm template valdrics-dev helm/valdrics` (archived self-managed reference)
+1. `helm lint docs/archive/reference/2026-q2/helm/valdrics` (archived self-managed reference)
+2. `helm template valdrics-dev docs/archive/reference/2026-q2/helm/valdrics` (archived self-managed reference)
 3. `uv run ruff check tests/unit/enforcement/enforcement_api_cases_part01.py tests/unit/enforcement/enforcement_api_cases_part02.py tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py`
 4. `uv run pytest --no-cov -q tests/unit/enforcement/enforcement_api_cases_part01.py tests/unit/enforcement/enforcement_api_cases_part02.py tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py::test_enforcement_endpoint_wrappers_cover_preflight_and_k8s_review_branches`
 
@@ -3181,27 +3186,27 @@ Implemented:
    - `failurePolicy=Fail` now requires:
      - `autoscaling.enabled=true` with `autoscaling.minReplicas >= 2`, or
      - `autoscaling.enabled=false` with `replicaCount >= 2`.
-   - Archived self-managed reference file: `helm/valdrics/templates/enforcement-validating-webhook.yaml`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/templates/enforcement-validating-webhook.yaml`
 2. Extended Helm values schema with root-level HA constraints:
    - cross-field validation for fail-closed + replica policy,
    - `replicaCount` and `autoscaling.minReplicas` minimums.
-   - Archived self-managed reference file: `helm/valdrics/values.schema.json`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/values.schema.json`
 3. Tightened `LabelSelectorRequirement` schema semantics:
    - `operator in {In, NotIn}` requires non-empty `values`,
    - `operator in {Exists, DoesNotExist}` disallows non-empty `values`.
-   - Archived self-managed reference file: `helm/valdrics/values.schema.json`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/values.schema.json`
 4. Kept active AdmissionReview contract coverage attached to the operator path while the self-managed chart remains archived reference material:
    - `tests/unit/enforcement/enforcement_api_cases_part01.py`
    - `tests/unit/enforcement/enforcement_api_cases_part02.py`
    - `tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py`
 5. Updated chart/runbook comments to surface HA requirement explicitly.
    - Files:
-     - `helm/valdrics/values.yaml` (archived self-managed reference)
+     - `docs/archive/reference/2026-q2/helm/valdrics/values.yaml` (archived self-managed reference)
      - `docs/runbooks/enforcement_preprovision_integrations.md`
 
 Validation recorded for the archived self-managed reference and active operator path:
-1. `helm lint helm/valdrics` (archived self-managed reference)
-2. `helm template valdrics-dev helm/valdrics` (archived self-managed reference)
+1. `helm lint docs/archive/reference/2026-q2/helm/valdrics` (archived self-managed reference)
+2. `helm template valdrics-dev docs/archive/reference/2026-q2/helm/valdrics` (archived self-managed reference)
 3. `uv run ruff check tests/unit/enforcement/enforcement_api_cases_part01.py tests/unit/enforcement/enforcement_api_cases_part02.py tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py`
 4. `uv run pytest --no-cov -q tests/unit/enforcement/enforcement_api_cases_part01.py tests/unit/enforcement/enforcement_api_cases_part02.py tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py::test_enforcement_endpoint_wrappers_cover_preflight_and_k8s_review_branches`
 5. `uv run pytest --no-cov -q tests/unit/ops`
@@ -3374,7 +3379,7 @@ Implemented:
      - `Binary Artifact Closure Checklist (release packet)`
      - `docs/ops/evidence/enforcement_stress_artifact_YYYY-MM-DD.json`
      - `docs/ops/evidence/enforcement_failure_injection_YYYY-MM-DD.json`
-     - `docs/evidence/ci-green-YYYY-MM-DD.md`
+     - `docs/archive/evidence/<quarter>/ci-green-YYYY-MM-DD.md`
    - file: `scripts/verify_enforcement_post_closure_sanity.py`
 3. Expanded post-closure sanity tests for the artifact-template contract:
    - file: `tests/unit/ops/test_verify_enforcement_post_closure_sanity.py`
@@ -3382,8 +3387,8 @@ Implemented:
    - file: `tests/unit/ops/test_release_artifact_templates_pack.py`
    - gate target wiring: `scripts/run_enterprise_tdd_gate.py`
 5. Updated evidence protocol docs to reference template seeds:
-   - `docs/ops/enforcement_stress_evidence_2026-02-25.md`
-   - `docs/ops/enforcement_failure_injection_matrix_2026-02-25.md`
+   - `docs/ops/enforcement_stress_evidence.md`
+   - `docs/ops/enforcement_failure_injection_matrix.md`
 6. Added explicit binary checklist section in this register:
    - `Binary Artifact Closure Checklist (release packet)` under evidence manifest.
 
@@ -3396,7 +3401,7 @@ Result:
    - analytics visibility subset coverage: `99%`
 3. Remaining execution blockers are unchanged and explicit:
    - `BSAFE-009` real staged stress artifact capture/attachment.
-   - staged CI release packet capture (`docs/evidence/ci-green-YYYY-MM-DD.md`) for promotion runs.
+   - staged CI release packet capture (`docs/archive/evidence/<quarter>/ci-green-YYYY-MM-DD.md`) for promotion runs.
 
 Validation:
 1. `DEBUG=false uv run ruff check scripts/verify_enforcement_post_closure_sanity.py scripts/run_enterprise_tdd_gate.py tests/unit/ops/test_verify_enforcement_post_closure_sanity.py tests/unit/ops/test_enforcement_stress_evidence_pack.py tests/unit/ops/test_enforcement_failure_injection_pack.py tests/unit/ops/test_release_artifact_templates_pack.py`
@@ -3416,7 +3421,7 @@ Implemented:
    - decode path now requires `token_type` claim and rejects non-matching values.
    - File: `app/modules/enforcement/domain/service.py`
 2. Added JWT BCP checklist artifact:
-   - `docs/security/jwt_bcp_checklist_2026-02-27.json`
+   - `docs/security/jwt_bcp_checklist.json`
    - includes required controls for algorithm allow-list, issuer/audience binding, explicit token typing, temporal claims, binding claims, replay safety, and rotation-compatible verification.
 3. Added checklist validator script:
    - `scripts/verify_jwt_bcp_checklist.py`
@@ -3447,7 +3452,7 @@ Validation:
 2. `DEBUG=false uv run pytest --no-cov -q tests/unit/enforcement/test_enforcement_service_helpers.py -k "decode_and_extract_approval_token_error_branches or build_approval_token_requires_secret_and_includes_kid or decode_approval_token_deduplicates_candidate_secrets"`
 3. `DEBUG=false uv run pytest --no-cov -q tests/unit/enforcement/test_enforcement_service.py -k "approval_token_claims_include_project_and_hourly_cost_binding or consume_approval_token_rejects_project_claim_mismatch or consume_approval_token_rejects_hourly_cost_claim_mismatch"`
 4. `DEBUG=false uv run pytest --no-cov -q tests/unit/supply_chain/test_verify_jwt_bcp_checklist.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py tests/unit/ops/test_verify_enforcement_post_closure_sanity.py`
-5. `DEBUG=false uv run python3 scripts/verify_jwt_bcp_checklist.py --checklist-path docs/security/jwt_bcp_checklist_2026-02-27.json`
+5. `DEBUG=false uv run python3 scripts/verify_jwt_bcp_checklist.py --checklist-path docs/security/jwt_bcp_checklist.json`
 6. `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py`
 
 ## Execution update (2026-02-27): BSAFE-010 staged failure-injection evidence verifier + gate
@@ -3481,7 +3486,7 @@ Implemented:
 4. Added gate-runner tests for new failure-injection command wiring/fail-fast behavior:
    - `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
 5. Extended failure-injection evidence documentation with staged artifact contract and gate integration:
-   - `docs/ops/enforcement_failure_injection_matrix_2026-02-25.md`
+   - `docs/ops/enforcement_failure_injection_matrix.md`
    - `tests/unit/ops/test_enforcement_failure_injection_pack.py` updated for contract tokens.
 
 Result:
@@ -3520,8 +3525,8 @@ Implemented:
 3. Added wrapper test into enterprise gate target set:
    - `scripts/run_enterprise_tdd_gate.py` now includes `tests/unit/supply_chain/test_run_enforcement_release_evidence_gate.py`.
 4. Updated staged evidence docs with single-command release invocation:
-   - `docs/ops/enforcement_stress_evidence_2026-02-25.md`
-   - `docs/ops/enforcement_failure_injection_matrix_2026-02-25.md`
+   - `docs/ops/enforcement_stress_evidence.md`
+   - `docs/ops/enforcement_failure_injection_matrix.md`
    - corresponding pack tests updated:
      - `tests/unit/ops/test_enforcement_stress_evidence_pack.py`
      - `tests/unit/ops/test_enforcement_failure_injection_pack.py`
@@ -3542,7 +3547,7 @@ Result:
 Validation:
 1. `DEBUG=false uv run ruff check scripts/run_enforcement_release_evidence_gate.py scripts/run_enterprise_tdd_gate.py tests/unit/supply_chain/test_run_enforcement_release_evidence_gate.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py tests/unit/ops/test_enforcement_stress_evidence_pack.py tests/unit/ops/test_enforcement_failure_injection_pack.py`
 2. `DEBUG=false uv run pytest --no-cov -q tests/unit/supply_chain/test_run_enforcement_release_evidence_gate.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py tests/unit/ops/test_enforcement_stress_evidence_pack.py tests/unit/ops/test_enforcement_failure_injection_pack.py tests/unit/ops/test_verify_enforcement_failure_injection_evidence.py`
-3. `DEBUG=false uv run python3 scripts/run_enforcement_release_evidence_gate.py --stress-evidence-path docs/ops/enforcement_stress_evidence_2026-02-25.md --failure-evidence-path docs/ops/enforcement_failure_injection_matrix_2026-02-25.md --dry-run`
+3. `DEBUG=false uv run python3 scripts/run_enforcement_release_evidence_gate.py --stress-evidence-path docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json --failure-evidence-path docs/ops/evidence/enforcement_failure_injection_2026-02-27.json --dry-run`
 4. `DEBUG=false uv run python3 scripts/run_enterprise_tdd_gate.py`
 
 ## Execution update (2026-02-27): register recovery + defensive branch closure + current backlog snapshot
@@ -3555,9 +3560,9 @@ Objective:
 Implemented:
 1. Recovered `docs/ops/enforcement_control_plane_gap_register_2026-02-23.md` from local editor logs after accidental truncation.
 2. Restored missing release-critical evidence docs required by enterprise gate contracts:
-   - `docs/ops/enforcement_post_closure_sanity_2026-02-26.md`
-   - `docs/ops/enforcement_failure_injection_matrix_2026-02-25.md`
-   - `docs/ops/enforcement_stress_evidence_2026-02-25.md`
+   - `docs/ops/enforcement_post_closure_sanity.md`
+   - `docs/ops/enforcement_failure_injection_matrix.md`
+   - `docs/ops/enforcement_stress_evidence.md`
 3. Added explicit defensive-invariant comments in enforcement service guard paths:
    - negative entitlement threshold fail-safes (`auto_approve`, `plan_ceiling`, `enterprise_ceiling`)
    - reserve-amount quantization fail-safe in grant allocation.
@@ -3613,7 +3618,7 @@ Implemented:
    - capture uses `--out` (not `--output`)
    - verification uses `--evidence-path` (not `--artifact`)
    - added explicit `--enforce-thresholds` guidance for release evidence runs.
-   - file: `docs/ops/enforcement_stress_evidence_2026-02-25.md`
+   - file: `docs/ops/enforcement_stress_evidence.md`
 2. Added stricter evidence contract checks in verifier:
    - require `runner == scripts/load_test_api.py`,
    - require timezone-aware ISO timestamp for `captured_at`,
@@ -3682,7 +3687,7 @@ Implemented:
      - `tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
      - `tests/unit/ops/test_verify_enforcement_stress_evidence.py`
 4. Updated stress evidence protocol doc with CI integration contract env vars.
-   - file: `docs/ops/enforcement_stress_evidence_2026-02-25.md`
+   - file: `docs/ops/enforcement_stress_evidence.md`
 
 Result:
 1. Enterprise gate remains green after integration hardening.
@@ -3719,7 +3724,7 @@ Implemented:
 2. Updated stress verifier unit tests to use mathematically consistent run-level fixtures and cover tamper/error paths under the new invariants.
    - file: `tests/unit/ops/test_verify_enforcement_stress_evidence.py`
 3. Updated stress protocol documentation to reflect the strengthened run/aggregate contract.
-   - file: `docs/ops/enforcement_stress_evidence_2026-02-25.md`
+   - file: `docs/ops/enforcement_stress_evidence.md`
 
 Result:
 1. Enterprise gate remains green after aggregate anti-tamper hardening.
@@ -3761,7 +3766,7 @@ Implemented:
      - threshold contract mismatch rejection,
      - evaluation aggregate consistency rejection (`worst_p95` / `min_throughput` / round-count).
 3. Updated stress evidence protocol doc and pack assertions:
-   - `docs/ops/enforcement_stress_evidence_2026-02-25.md`
+   - `docs/ops/enforcement_stress_evidence.md`
    - `tests/unit/ops/test_enforcement_stress_evidence_pack.py`
 4. Updated enterprise gate stress verifier wiring to support explicit workload-floor env overrides when staged artifacts are validated:
    - `ENFORCEMENT_STRESS_EVIDENCE_MIN_DURATION_SECONDS` (default `30`)
@@ -3772,7 +3777,7 @@ Implemented:
    - CI env overrides for minimum workload floor,
    - thresholds/evaluation consistency contract clauses.
    - files:
-     - `docs/ops/enforcement_stress_evidence_2026-02-25.md`
+     - `docs/ops/enforcement_stress_evidence.md`
      - `tests/unit/ops/test_enforcement_stress_evidence_pack.py`
 
 Result:
@@ -4072,7 +4077,7 @@ Implemented:
    - lock contention reason/metric separation,
    - snapshot metadata persistence/export,
    - Kubernetes `failurePolicy` alignment and HA prerequisites.
-   - File: `docs/ops/enforcement_post_closure_sanity_2026-02-26.md`
+   - File: `docs/ops/enforcement_post_closure_sanity.md`
 
 Result:
 1. Post-closure sanity validator now enforces the feedback-driven operator checks as binary evidence requirements.
@@ -4083,7 +4088,7 @@ Result:
 Validation:
 1. `uv run ruff check scripts/verify_enforcement_post_closure_sanity.py tests/unit/ops/test_verify_enforcement_post_closure_sanity.py tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py scripts/run_enterprise_tdd_gate.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
 2. `uv run pytest --no-cov -q tests/unit/ops/test_verify_enforcement_post_closure_sanity.py tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
-3. `uv run python scripts/verify_enforcement_post_closure_sanity.py --doc-path docs/ops/enforcement_post_closure_sanity_2026-02-26.md --gap-register docs/ops/enforcement_control_plane_gap_register_2026-02-23.md`
+3. `uv run python scripts/verify_enforcement_post_closure_sanity.py --doc-path docs/ops/enforcement_post_closure_sanity.md --gap-register docs/ops/enforcement_control_plane_gap_register_2026-02-23.md`
 4. `uv run python scripts/run_enterprise_tdd_gate.py` (`402 passed`)
 
 ## Execution update (2026-02-26): LLM guardrail coverage margin lift + XML threshold fallback for enterprise gate
@@ -4143,19 +4148,17 @@ Objective:
 
 Implemented:
 1. Added machine-readable SSDF matrix:
-   - file: `docs/security/ssdf_traceability_matrix_2026-02-25.json`
+   - file: `docs/security/ssdf_traceability_matrix.json`
    - includes all required SSDF practices (`PO.1..PO.5`, `PS.1..PS.3`, `PW.1/PW.2/PW.4..PW.9`, `RV.1..RV.3`)
    - maps each practice to concrete repository evidence paths and conservative status (`implemented_baseline|partial|planned`).
-2. Added human-readable companion doc:
-   - file: `docs/security/ssdf_traceability_matrix_2026-02-25.md`
-3. Added validator script:
+2. Added validator script:
    - file: `scripts/verify_ssdf_traceability_matrix.py`
    - enforces:
      - required practice coverage,
      - duplicate/invalid status detection,
      - required NIST source URL presence,
      - evidence-path existence checks.
-4. Wired SSDF validator into release-blocking enterprise gate:
+3. Wired SSDF validator into release-blocking enterprise gate:
    - file: `scripts/run_enterprise_tdd_gate.py`
    - command now runs before placeholder and coverage checks.
 5. Added tests:
@@ -4169,7 +4172,7 @@ Validation:
 1. `uv run ruff check scripts/verify_ssdf_traceability_matrix.py tests/unit/supply_chain/test_verify_ssdf_traceability_matrix.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
 2. `uv run mypy scripts/verify_ssdf_traceability_matrix.py`
 3. `uv run pytest --no-cov -q tests/unit/supply_chain/test_verify_ssdf_traceability_matrix.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
-4. `uv run python scripts/verify_ssdf_traceability_matrix.py --matrix-path docs/security/ssdf_traceability_matrix_2026-02-25.json`
+4. `uv run python scripts/verify_ssdf_traceability_matrix.py --matrix-path docs/security/ssdf_traceability_matrix.json`
 
 Primary sources (NIST):
 1. NIST SSDF final publication page:
@@ -4187,7 +4190,7 @@ Objective:
 
 Implemented:
 1. Added failure-injection matrix artifact:
-   - file: `docs/ops/enforcement_failure_injection_matrix_2026-02-25.md`
+   - file: `docs/ops/enforcement_failure_injection_matrix.md`
    - scenarios:
      - `FI-001` gate timeout fallback,
      - `FI-002` lock contention/timeout fail-safe routing,
@@ -4237,7 +4240,7 @@ Implemented:
    - release promotion blocked while burn-rate alert is firing.
    - File: `docs/runbooks/enforcement_incident_response.md`
 5. Updated evidence pack with burn-rate trigger methods and release-hold criteria:
-   - File: `docs/ops/alert-evidence-2026-02-25.md`
+   - File: `docs/ops/alert-evidence.md`
 6. Added test coverage:
    - observability pack test now validates burn-rate recording/alert coverage and dashboard expressions.
    - runbook test validates SLO policy and release-block semantics.
@@ -4267,9 +4270,9 @@ Reviewed feedback source:
 1. Webhook HA gap (`Advice 2`) -> `Addressed`.
    - Evidence:
      - archived self-managed reference material:
-       - `helm/valdrics/templates/enforcement-validating-webhook.yaml` (fail-closed guardrails for timeout, replicas/HPA, PDB, rollout strategy, anti-affinity)
-       - `helm/valdrics/templates/enforcement-webhook-pdb.yaml`
-       - `helm/valdrics/values.schema.json` (non-bypassable fail-closed constraints)
+       - `docs/archive/reference/2026-q2/helm/valdrics/templates/enforcement-validating-webhook.yaml` (fail-closed guardrails for timeout, replicas/HPA, PDB, rollout strategy, anti-affinity)
+       - `docs/archive/reference/2026-q2/helm/valdrics/templates/enforcement-webhook-pdb.yaml`
+       - `docs/archive/reference/2026-q2/helm/valdrics/values.schema.json` (non-bypassable fail-closed constraints)
      - active operator-path evidence:
      - `tests/unit/enforcement/enforcement_api_cases_part01.py`
      - `tests/unit/enforcement/enforcement_api_cases_part02.py`
@@ -4337,7 +4340,7 @@ Implemented:
      - p95/error-rate/throughput thresholds,
      - `evaluation.overall_meets_targets=true`.
 3. Added stress evidence protocol doc:
-   - file: `docs/ops/enforcement_stress_evidence_2026-02-25.md`
+   - file: `docs/ops/enforcement_stress_evidence.md`
    - includes capture command + validator command + release blocking rule.
 4. Added tests:
    - `tests/unit/core/test_load_test_api_script.py` (enforcement profile endpoint coverage),
@@ -4401,7 +4404,7 @@ Objective:
 
 Implemented:
 1. Added explicit post-closure sanity policy document:
-   - file: `docs/ops/enforcement_post_closure_sanity_2026-02-26.md`
+   - file: `docs/ops/enforcement_post_closure_sanity.md`
    - dimensions:
      - concurrency
      - observability
@@ -4431,7 +4434,7 @@ Validation:
 1. `uv run ruff check scripts/verify_enforcement_post_closure_sanity.py tests/unit/ops/test_verify_enforcement_post_closure_sanity.py scripts/run_enterprise_tdd_gate.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
 2. `uv run mypy scripts/verify_enforcement_post_closure_sanity.py scripts/run_enterprise_tdd_gate.py`
 3. `uv run pytest --no-cov -q tests/unit/ops/test_verify_enforcement_post_closure_sanity.py tests/unit/supply_chain/test_enterprise_tdd_gate_runner.py`
-4. `uv run python scripts/verify_enforcement_post_closure_sanity.py --doc-path docs/ops/enforcement_post_closure_sanity_2026-02-26.md --gap-register docs/ops/enforcement_control_plane_gap_register_2026-02-23.md`
+4. `uv run python scripts/verify_enforcement_post_closure_sanity.py --doc-path docs/ops/enforcement_post_closure_sanity.md --gap-register docs/ops/enforcement_control_plane_gap_register_2026-02-23.md`
 
 ## Execution update (2026-02-26): enterprise gate LLM coverage target normalization
 
@@ -4665,24 +4668,24 @@ Implemented:
    - `deploymentStrategy.type`
    - `deploymentStrategy.rollingUpdate.maxUnavailable`
    - `deploymentStrategy.rollingUpdate.maxSurge`
-   - Archived self-managed reference file: `helm/valdrics/values.yaml`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/values.yaml`
 2. Wired deployment template to render explicit strategy:
-   - Archived self-managed reference file: `helm/valdrics/templates/deployment.yaml`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/templates/deployment.yaml`
 3. Added fail-closed guardrails in webhook template:
    - reject non-`RollingUpdate` strategy,
    - reject `maxUnavailable != 0`,
    - reject `maxSurge < 1`,
    - reject missing hard anti-affinity requirements,
    - reject anti-affinity not anchored to `kubernetes.io/hostname`.
-   - Archived self-managed reference file: `helm/valdrics/templates/enforcement-validating-webhook.yaml`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/templates/enforcement-validating-webhook.yaml`
 4. Extended values schema for non-bypassable validation:
    - root `deploymentStrategy` contract,
    - root `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`,
    - fail-closed conditional checks for rollout strategy and host anti-affinity.
-   - Archived self-managed reference file: `helm/valdrics/values.schema.json`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/values.schema.json`
 5. Strengthened defaults for hard anti-affinity in values:
    - `affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution`.
-   - Archived self-managed reference file: `helm/valdrics/values.yaml`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/values.yaml`
 6. Kept active operator-path coverage bound to the AdmissionReview route and wrapper branches while the self-managed chart remains archived reference material:
    - `tests/unit/enforcement/enforcement_api_cases_part01.py`
    - `tests/unit/enforcement/enforcement_api_cases_part02.py`
@@ -4691,8 +4694,8 @@ Implemented:
    - File: `docs/runbooks/enforcement_preprovision_integrations.md`
 
 Validation recorded for the archived self-managed reference and active operator path:
-1. `helm lint helm/valdrics` (archived self-managed reference)
-2. `helm template valdrics-dev helm/valdrics` (archived self-managed reference)
+1. `helm lint docs/archive/reference/2026-q2/helm/valdrics` (archived self-managed reference)
+2. `helm template valdrics-dev docs/archive/reference/2026-q2/helm/valdrics` (archived self-managed reference)
 3. `uv run ruff check tests/unit/enforcement/enforcement_api_cases_part01.py tests/unit/enforcement/enforcement_api_cases_part02.py tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py`
 4. `uv run pytest --no-cov -q tests/unit/enforcement/enforcement_api_cases_part01.py tests/unit/enforcement/enforcement_api_cases_part02.py tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py::test_enforcement_endpoint_wrappers_cover_preflight_and_k8s_review_branches`
 5. `uv run pytest --no-cov -q tests/unit/ops`
@@ -4707,18 +4710,18 @@ Implemented:
 1. Added webhook-adjacent API PodDisruptionBudget template:
    - renders when `enforcementWebhook.enabled=true` and `enforcementWebhook.podDisruptionBudget.enabled=true`.
    - targets API pods (`app.kubernetes.io/component=api`) with configured `maxUnavailable`.
-   - Archived self-managed reference file: `helm/valdrics/templates/enforcement-webhook-pdb.yaml`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/templates/enforcement-webhook-pdb.yaml`
 2. Added values contract for disruption budget:
    - `enforcementWebhook.podDisruptionBudget.enabled`
    - `enforcementWebhook.podDisruptionBudget.maxUnavailable`
-   - Archived self-managed reference file: `helm/valdrics/values.yaml`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/values.yaml`
 3. Extended schema and guardrails for fail-closed mode:
    - `failurePolicy=Fail` now requires `podDisruptionBudget.enabled=true`,
    - `failurePolicy=Fail` now requires `podDisruptionBudget.maxUnavailable <= 1`.
-   - Archived self-managed reference file: `helm/valdrics/values.schema.json`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/values.schema.json`
 4. Added render-time template assertions for same constraints:
    - explicit `fail` on unsafe fail-closed PDB configuration.
-   - Archived self-managed reference file: `helm/valdrics/templates/enforcement-validating-webhook.yaml`
+   - Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/templates/enforcement-validating-webhook.yaml`
 5. Kept active operator-path coverage on the AdmissionReview route and wrapper behavior while the self-managed chart remains archived reference material:
    - `tests/unit/enforcement/enforcement_api_cases_part01.py`
    - `tests/unit/enforcement/enforcement_api_cases_part02.py`
@@ -4727,8 +4730,8 @@ Implemented:
    - File: `docs/runbooks/enforcement_preprovision_integrations.md`
 
 Validation recorded for the archived self-managed reference and active operator path:
-1. `helm lint helm/valdrics` (archived self-managed reference)
-2. `helm template valdrics-dev helm/valdrics` (archived self-managed reference)
+1. `helm lint docs/archive/reference/2026-q2/helm/valdrics` (archived self-managed reference)
+2. `helm template valdrics-dev docs/archive/reference/2026-q2/helm/valdrics` (archived self-managed reference)
 3. `uv run ruff check tests/unit/enforcement/enforcement_api_cases_part01.py tests/unit/enforcement/enforcement_api_cases_part02.py tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py`
 4. `uv run pytest --no-cov -q tests/unit/enforcement/enforcement_api_cases_part01.py tests/unit/enforcement/enforcement_api_cases_part02.py tests/unit/enforcement/test_enforcement_endpoint_wrapper_coverage.py::test_enforcement_endpoint_wrappers_cover_preflight_and_k8s_review_branches`
 5. `uv run pytest --no-cov -q tests/unit/ops`
@@ -5078,14 +5081,13 @@ Release-critical post-closure sanity:
 6. Failure modes: invalid cap settings fall back to bounded defaults instead of unbounded sweeps.
 7. Operational misconfiguration: Turnstile policy/runtime alignment prevents CSP-driven token failures.
 
-## Execution update (2026-03-01O): distributed breaker fail-closed + hybrid scheduler tracing + tenancy passive check
+## Execution update (2026-03-01O): historical distributed-breaker hardening + hybrid scheduler tracing + tenancy passive check
 
 Implemented:
-1. Distributed remediation circuit-breaker hardening:
+1. Historical distributed remediation circuit-breaker hardening:
    - `app/shared/remediation/circuit_breaker.py`
-   - staging/production now fail closed when distributed breaker backend is unavailable,
-   - status includes backend availability metadata,
-   - mutation methods skip safely with explicit warnings when backend is unavailable.
+   - this was the interim distributed-state contract at the time,
+   - it has since been retired from the supported managed runtime profile in favor of process-local remediation breaker state only.
 2. Hybrid scheduler observability uplift:
    - `app/shared/llm/hybrid_scheduler.py`
    - added OTel spans for scheduling decisions and both full/delta execution paths with explicit status and exception recording.
@@ -5111,13 +5113,13 @@ Validation:
 8. `cd dashboard && npm run test:e2e -- e2e/landing-layout-audit.spec.ts` -> `2 passed`.
 
 Release-critical post-closure sanity:
-1. Concurrency: distributed breaker unavailability no longer permits mutable fallback execution in staging/production.
+1. Concurrency: this historical pass hardened distributed breaker behavior at the time; the current supported managed profile no longer depends on a distributed remediation breaker backend.
 2. Observability: scheduler decision/execution tracing plus breaker unavailability logs provide direct root-cause visibility.
 3. Deterministic replay: tenancy passive checks are deterministic over latest audit evidence and explicit max-age thresholds.
 4. Snapshot stability: landing layout and mobile nav checks remain stable after this hardening pass.
 5. Export integrity: no existing export contract changes; new audit/integration signals are additive.
 6. Failure modes: missing/stale/failed tenancy evidence blocks acceptance integration success by default.
-7. Operational misconfiguration: distributed-state backend misconfiguration now fails closed with explicit operator-facing reason codes.
+7. Operational misconfiguration: this historical note is retained for traceability; the current supported managed profile no longer depends on that distributed-state backend.
 
 ## Execution update (2026-03-01P): landing hero decomposition + component-level regression hardening
 

@@ -37,6 +37,116 @@ def _load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _environment_for_report_path(report_path: Path) -> str:
+    filename = report_path.name
+    suffix = ".audit.report.json"
+    if filename.endswith(suffix):
+        candidate = filename[: -len(suffix)].strip().lower()
+        if candidate:
+            return candidate
+    return "staging"
+
+
+def _bootstrap_payload(
+    *,
+    root: Path,
+    report_path: Path,
+    snapshot_date: str,
+    live_facts: dict[str, Any],
+    frontend_stack_phrase: str,
+) -> dict[str, Any]:
+    environment = _environment_for_report_path(report_path)
+    reserved_report = f".runtime/{environment}.report.json"
+    return {
+        "artifact_type": "codebase_audit_validation",
+        "snapshot_date": snapshot_date,
+        "environment": environment,
+        "repository": root.name,
+        "product_name": "Valdrics",
+        "source_report_label": "Repository-generated Codebase Audit Baseline",
+        "validation_status": "partially_accurate",
+        "validation_scope": [
+            "Repository source inspection",
+            "Live measured-fact validation",
+        ],
+        "validation_commands": [
+            "uv run pytest --collect-only -q",
+            f"uv run python3 scripts/verify_codebase_audit_report.py --report {report_path.as_posix()}",
+        ],
+        "summary": {
+            "overall": "Repository audit baseline refreshed from live measured facts.",
+            "high_confidence_findings": [
+                f"The dashboard uses {frontend_stack_phrase}.",
+            ],
+            "important_corrections": [
+                (
+                    "Backend tests collected currently total "
+                    f"{live_facts['backend_tests_collected']}, not 5358."
+                ),
+                (
+                    "Zombie detection plugin classes total "
+                    f"{live_facts['zombie_plugin_classes']} across providers, not 11."
+                ),
+            ],
+        },
+        "measured_facts": live_facts,
+        "confirmed_claims": [
+            {
+                "claim": f"Frontend stack includes {frontend_stack_phrase}.",
+                "evidence": [{"path": "dashboard/package.json", "line": 1}],
+            }
+        ],
+        "partial_or_overstated_claims": [
+            {
+                "claim": (
+                    "Repository source alone proves live staging and production cutover "
+                    "completion."
+                ),
+                "status": "partial",
+                "correction": (
+                    "Live cutover evidence and final operator sign-off remain environment "
+                    "events outside source control."
+                ),
+                "evidence": [{"path": "PLAN.md", "line": 11}],
+            }
+        ],
+        "incorrect_claims": [
+            {
+                "claim": "Testing has 5,358 tests",
+                "correction": (
+                    "A fresh backend collection run reported "
+                    f"{live_facts['backend_tests_collected']} tests collected."
+                ),
+                "evidence": [
+                    {
+                        "path": "pytest --collect-only",
+                        "line": live_facts["backend_tests_collected"],
+                    }
+                ],
+            },
+            {
+                "claim": "FinOps capabilities include 11 zombie detection plugins",
+                "correction": (
+                    "A structural scan found "
+                    f"{live_facts['zombie_plugin_classes']} ZombiePlugin subclasses "
+                    "across provider adapters."
+                ),
+                "evidence": [{"path": "app/modules/optimization/adapters", "line": 1}],
+            },
+        ],
+        "deployment_notes": {
+            "env_report_left_untouched": True,
+            "reason": (
+                f"{reserved_report} remains the authoritative runtime environment "
+                "blocker inventory used by deployment tooling."
+            ),
+        },
+        "limitations": [
+            "Live cutover evidence and operator sign-off are validated outside this repository.",
+        ],
+    }
+
+
 def _replace_or_append(values: list[str], *, predicate: callable, replacement: str) -> list[str]:
     updated: list[str] = []
     replaced = False
@@ -78,10 +188,20 @@ def refresh_audit_report(
     live_facts: dict[str, Any] | None = None,
     frontend_stack_phrase: str | None = None,
 ) -> dict[str, Any]:
-    payload = _load_json(report_path)
     measured_facts = live_facts or collect_live_measured_facts(root=root)
     stack_phrase = frontend_stack_phrase or _derive_frontend_stack_phrase(root=root)
     refreshed_snapshot_date = snapshot_date or date.today().isoformat()
+    payload = (
+        _load_json(report_path)
+        if report_path.exists()
+        else _bootstrap_payload(
+            root=root,
+            report_path=report_path,
+            snapshot_date=refreshed_snapshot_date,
+            live_facts=measured_facts,
+            frontend_stack_phrase=stack_phrase,
+        )
+    )
 
     payload["snapshot_date"] = refreshed_snapshot_date
     payload["measured_facts"] = measured_facts

@@ -21,6 +21,11 @@ def test_prometheus_alerts_reference_current_exported_metrics() -> None:
             expressions.append(str(rule["expr"]))
 
     combined = "\n".join(expressions)
+    rule_names = []
+    for group in alerts["groups"]:
+        for rule in group["rules"]:
+            rule_names.append(str(rule["alert"]))
+
     assert "valdrics_ops_llm_spend_usd_total" in combined
     assert "valdrics_ops_zombies_detected_total" in combined
     assert "valdrics_ops_scan_failure_total" in combined
@@ -39,12 +44,9 @@ def test_prometheus_alerts_reference_current_exported_metrics() -> None:
     assert "valdrics_scan_errors_total" not in combined
     assert "valdrics_carbon_emissions_kg" not in combined
     assert "http_request_duration_seconds_bucket" not in combined
-
-    rule_names = []
-    for group in alerts["groups"]:
-        for rule in group["rules"]:
-            rule_names.append(str(rule["alert"]))
+    assert 'up{job="redis"} == 0' not in combined
     assert "SchedulerDispatchFailClosedDetected" in rule_names
+    assert "RedisDown" not in rule_names
     assert "SchedulerInlineFallbackActive" not in rule_names
 
 
@@ -75,3 +77,18 @@ def test_finops_dashboard_references_current_metrics() -> None:
     assert "valdrics_zombie_potential_savings_usd" not in combined
     assert "valdrics_scans_completed_total" not in combined
     assert "valdrics_llm_cost_usd" not in combined
+
+
+def test_prometheus_scrape_config_matches_cacheless_local_stack() -> None:
+    config = yaml.safe_load(
+        (REPO_ROOT / "prometheus/prometheus.yml").read_text(encoding="utf-8")
+    )
+    assert isinstance(config, dict)
+
+    job_names = [
+        str(scrape_config["job_name"]) for scrape_config in config["scrape_configs"]
+    ]
+    rendered = (REPO_ROOT / "prometheus/prometheus.yml").read_text(encoding="utf-8")
+
+    assert "redis" not in job_names
+    assert "redis:6379" not in rendered

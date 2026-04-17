@@ -50,7 +50,7 @@ def _protected_output_paths() -> set[Path]:
         __file__,
         ".env.example",
         "scripts/validate_migration_env.py",
-        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/feature_enforceability_matrix.json",
         "docs/ops/key-rotation-drill-2026-02-27.md",
     )
 

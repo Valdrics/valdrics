@@ -58,9 +58,15 @@ def test_budget_execution_actor_and_request_type_normalization() -> None:
     assert budget_execution._normalize_actor_type("system") == "system"
     assert budget_execution._normalize_actor_type("other") == "system"
 
-    assert budget_execution._compose_request_type("user", "cost_analysis") == "user:cost_analysis"
+    assert (
+        budget_execution._compose_request_type("user", "cost_analysis")
+        == "user:cost_analysis"
+    )
     assert budget_execution._compose_request_type("system", "") == "system:unknown"
-    assert budget_execution._compose_request_type("system", "user:already") == "user:already"
+    assert (
+        budget_execution._compose_request_type("system", "user:already")
+        == "user:already"
+    )
 
 
 @pytest.mark.asyncio
@@ -70,17 +76,21 @@ async def test_check_budget_state_cache_short_circuit_paths() -> None:
 
     cache_hard = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(get=AsyncMock(return_value="1")),
+        get_raw=AsyncMock(return_value="1"),
     )
-    with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache_hard):
+    with patch(
+        "app.shared.llm.budget_manager.get_cache_service", return_value=cache_hard
+    ):
         state = await budget_execution.check_budget_state(_Manager, tenant_id, db)
     assert state == manager_module.BudgetStatus.HARD_LIMIT
 
     cache_soft = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(get=AsyncMock(side_effect=[None, "1"])),
+        get_raw=AsyncMock(side_effect=[None, "1"]),
     )
-    with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache_soft):
+    with patch(
+        "app.shared.llm.budget_manager.get_cache_service", return_value=cache_soft
+    ):
         state = await budget_execution.check_budget_state(_Manager, tenant_id, db)
     assert state == manager_module.BudgetStatus.SOFT_LIMIT
 
@@ -91,7 +101,7 @@ async def test_check_budget_state_cache_error_is_fail_closed() -> None:
     db = AsyncMock()
     cache = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(get=AsyncMock(side_effect=RuntimeError("redis-down"))),
+        get_raw=AsyncMock(side_effect=RuntimeError("cache-backend-down")),
     )
     with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache):
         with pytest.raises(manager_module.BudgetExceededError):
@@ -104,14 +114,14 @@ async def test_check_budget_state_lookup_cache_error_fails_closed() -> None:
     db = AsyncMock()
     cache = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(get=AsyncMock(side_effect=LookupError("redis-timeout"))),
+        get_raw=AsyncMock(side_effect=LookupError("cache-backend-timeout")),
     )
     with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache):
         with pytest.raises(manager_module.BudgetExceededError) as exc:
             await budget_execution.check_budget_state(_Manager, tenant_id, db)
 
     assert exc.value.details["error"] == "service_unavailable"
-    assert exc.value.details["reason"] == "redis-timeout"
+    assert exc.value.details["reason"] == "cache-backend-timeout"
 
 
 @pytest.mark.asyncio
@@ -120,10 +130,10 @@ async def test_check_budget_state_unexpected_cache_error_bubbles() -> None:
     db = AsyncMock()
     cache = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(get=AsyncMock(side_effect=Exception("redis-timeout"))),
+        get_raw=AsyncMock(side_effect=Exception("cache-backend-timeout")),
     )
     with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache):
-        with pytest.raises(Exception, match="redis-timeout"):
+        with pytest.raises(Exception, match="cache-backend-timeout"):
             await budget_execution.check_budget_state(_Manager, tenant_id, db)
 
 
@@ -131,7 +141,7 @@ async def test_check_budget_state_unexpected_cache_error_bubbles() -> None:
 async def test_check_budget_state_attribute_error_bubbles() -> None:
     tenant_id = uuid4()
     db = AsyncMock()
-    cache = SimpleNamespace(enabled=True, client=SimpleNamespace())
+    cache = SimpleNamespace(enabled=True)
 
     with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache):
         with pytest.raises(AttributeError):
@@ -143,10 +153,8 @@ async def test_check_budget_state_budget_paths() -> None:
     tenant_id = uuid4()
     cache = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(
-            get=AsyncMock(return_value=None),
-            set=AsyncMock(),
-        ),
+        get_raw=AsyncMock(return_value=None),
+        set_raw=AsyncMock(),
     )
     db = AsyncMock()
 
@@ -279,7 +287,7 @@ async def test_check_budget_and_alert_dispatch_paths() -> None:
     db.execute = AsyncMock(side_effect=[budget_result, usage_result])
 
     with (
-        patch("app.shared.llm.budget_manager.audit_log") as audit_log,
+        patch("app.shared.llm.budget_manager.audit_log"),
         patch(
             "app.modules.notifications.domain.get_tenant_slack_service",
             new=AsyncMock(return_value=None),
@@ -330,7 +338,9 @@ async def test_check_budget_and_alert_broken_slack_contract_bubbles() -> None:
 
     budget.alert_sent_at = None
     db.execute = AsyncMock(side_effect=[budget_result, usage_result])
-    slack = SimpleNamespace(send_alert=AsyncMock(side_effect=RuntimeError("slack-fail")))
+    slack = SimpleNamespace(
+        send_alert=AsyncMock(side_effect=RuntimeError("slack-fail"))
+    )
     with (
         patch("app.shared.llm.budget_manager.audit_log"),
         patch(
@@ -429,7 +439,9 @@ async def test_check_and_reserve_budget_auto_bootstrap_tier_defaults_and_actor_n
 
 
 @pytest.mark.asyncio
-async def test_check_and_reserve_budget_resets_monthly_window_before_reserving() -> None:
+async def test_check_and_reserve_budget_resets_monthly_window_before_reserving() -> (
+    None
+):
     tenant_id = uuid4()
     db = AsyncMock()
     db.flush = AsyncMock()
@@ -441,9 +453,7 @@ async def test_check_and_reserve_budget_resets_monthly_window_before_reserving()
         pending_reservations_usd=Decimal("2"),
         budget_reset_at=prior_month,
     )
-    db.execute = AsyncMock(
-        return_value=MagicMock(scalar_one_or_none=lambda: budget)
-    )
+    db.execute = AsyncMock(return_value=MagicMock(scalar_one_or_none=lambda: budget))
 
     manager = SimpleNamespace(
         estimate_cost=_Manager.estimate_cost,
@@ -538,7 +548,9 @@ async def test_check_and_reserve_budget_releases_slot_on_budget_exceeded() -> No
 
 
 @pytest.mark.asyncio
-async def test_check_and_reserve_budget_logs_and_releases_slot_on_unexpected_error() -> None:
+async def test_check_and_reserve_budget_logs_and_releases_slot_on_unexpected_error() -> (
+    None
+):
     tenant_id = uuid4()
     db = AsyncMock()
     db.execute = AsyncMock(side_effect=RuntimeError("db-down"))
@@ -586,7 +598,9 @@ async def test_check_and_reserve_budget_logs_and_releases_slot_on_unexpected_err
 
 
 @pytest.mark.asyncio
-async def test_check_and_reserve_budget_unexpected_error_without_concurrency_slot() -> None:
+async def test_check_and_reserve_budget_unexpected_error_without_concurrency_slot() -> (
+    None
+):
     tenant_id = uuid4()
     db = AsyncMock()
     db.execute = AsyncMock(side_effect=RuntimeError("db-down-no-slot"))
@@ -634,7 +648,9 @@ async def test_check_and_reserve_budget_unexpected_error_without_concurrency_slo
 
 
 @pytest.mark.asyncio
-async def test_record_usage_entry_handles_awaitable_budget_accessor_and_metric_debug_failure() -> None:
+async def test_record_usage_entry_handles_awaitable_budget_accessor_and_metric_debug_failure() -> (
+    None
+):
     tenant_id = uuid4()
     user_id = uuid4()
     budget = SimpleNamespace(
@@ -809,7 +825,9 @@ async def test_record_usage_entry_broken_alert_contract_bubbles() -> None:
         BYOK_PLATFORM_FEE_USD=Decimal("0.0100"),
         estimate_cost=_Manager.estimate_cost,
         _to_decimal=_Manager._to_decimal,
-        _check_budget_and_alert=AsyncMock(side_effect=AttributeError("missing alert dependency")),
+        _check_budget_and_alert=AsyncMock(
+            side_effect=AttributeError("missing alert dependency")
+        ),
         _release_fair_use_inflight_slot=AsyncMock(),
     )
 
@@ -856,7 +874,9 @@ async def test_check_budget_state_non_callable_budget_accessor_defaults_ok() -> 
 
 
 @pytest.mark.asyncio
-async def test_check_budget_and_alert_awaitable_budget_accessor_invalid_limit_returns_early() -> None:
+async def test_check_budget_and_alert_awaitable_budget_accessor_invalid_limit_returns_early() -> (
+    None
+):
     tenant_id = uuid4()
     invalid_budget = SimpleNamespace(
         monthly_limit_usd="invalid",

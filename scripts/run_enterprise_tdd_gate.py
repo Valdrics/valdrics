@@ -42,15 +42,26 @@ def _resolve_command(cmd: Sequence[str]) -> list[str]:
     return [resolved, *list(cmd[1:])]
 
 
+def _cleanup_local_gate_artifacts(repo_root: Path) -> None:
+    # Keep local gate runs deterministic by removing known ignored ambient artifacts
+    # alongside gate-generated coverage files before release checks begin.
+    for relative_path in (
+        "coverage-enterprise-gate.xml",
+        ".coverage.enterprise-gate",
+        "codealike.json",
+    ):
+        (repo_root / relative_path).unlink(missing_ok=True)
+
+    shutil.rmtree(repo_root / "reports" / "coverage", ignore_errors=True)
+
+
 def run_gate(*, dry_run: bool) -> int:
     commands = build_gate_commands()
     repo_root = _repo_root()
     coverage_xml_path = repo_root / "coverage-enterprise-gate.xml"
     coverage_data_path = repo_root / ".coverage.enterprise-gate"
     if not dry_run:
-        coverage_data_path.unlink(missing_ok=True)
-        # Remove stale artifacts so root-hygiene prechecks stay deterministic.
-        coverage_xml_path.unlink(missing_ok=True)
+        _cleanup_local_gate_artifacts(repo_root)
     command_env = os.environ.copy()
     command_env["COVERAGE_FILE"] = str(coverage_data_path)
     # Enforce deterministic release-gate behavior regardless of ambient shell values.
@@ -85,8 +96,7 @@ def run_gate(*, dry_run: bool) -> int:
                 )
     finally:
         if not dry_run:
-            coverage_data_path.unlink(missing_ok=True)
-            coverage_xml_path.unlink(missing_ok=True)
+            _cleanup_local_gate_artifacts(repo_root)
     return 0
 
 

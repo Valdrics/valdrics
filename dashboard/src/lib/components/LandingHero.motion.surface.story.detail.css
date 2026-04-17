@@ -1,0 +1,262 @@
+@media (min-width: 1024px) {
+	.landing-story-band .landing-outcome-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.landing-story-band .landing-product-grid {
+		grid-template-columns: minmax(0, 1.28fr) minmax(18rem, 0.72fr);
+		align-items: start;
+	}
+
+	.landing-story-band .landing-human-proof-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+.landing-story-band .landing-outcome-card,
+.landing-story-band .landing-product-summary,
+.landing-story-band .landing-product-support-card,
+.landing-story-band .landing-human-proof-card,
+.landing-story-band .landing-human-proof-actions,
+.landing-story-band .landing-proof-footnote,
+.landing-story-band .landing-free-tier-strip,
+.landing-story-band .landing-rollout-section,
+.landing-story-band .landing-rollout-block,
+.landing-story-band .landing-plan-card,
+.landing-story-band .landing-roi-control,
+.landing-story-band .landing-roi-metric,
+.landing-story-band .landing-sim-metric,
+.landing-story-band .landing-roi-snapshot,
+.landing-story-band .landing-proof-state-card {
+	background: linear-gradient(180deg, rgb(8 14 22 / 0.95), rgb(11 20 31 / 0.92));
+	border-color: rgb(255 255 255 / 0.1);
+}
+
+.landing-story-band .landing-product-primary,
+.landing-story-band .landing-product-support {
+	display: grid;
+	gap: 1rem;
+}
+
+.landing-story-band .landing-product-summary {
+	display: grid;
+	gap: 0.75rem;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.landing-story-band .landing-product-summary-item {
+	padding: 0.88rem 0.92rem;
+	border-radius: var(--radius-lg);
+	border: 1px solid rgb(255 255 255 / 0.08);
+	background: rgb(7 13 20 / 0.56);
+}
+
+.landing-story-band .landing-product-summary-item p {
+	margin: 0;
+	font-size: 0.74rem;
+	font-weight: 800;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+.landing-story-band .landing-product-summary-item strong {
+	display: block;
+	margin-top: 0.28rem;
+	font-size: 1rem;
+}
+
+.landing-story-band .landing-outcome-card {
+	display: grid;
+	gap: 0.7rem;
+	text-align: left;
+}
+
+.landing-story-band .landing-outcome-card--reactive {
+	border-color: rgb(251 113 133 / 0.18);
+	background:
+		radial-gradient(circle at top left, rgb(251 113 133 / 0.08), transparent 34%),
+		linear-gradient(180deg, rgb(8 14 22 / 0.95), rgb(11 20 31 / 0.92));
+}
+
+.landing-story-band .landing-outcome-card--governed {
+	border-color: rgb(34 211 238 / 0.2);
+	background:
+		radial-gradient(circle at top right, rgb(34 211 238 / 0.1), transparent 34%),
+		linear-gradient(180deg, rgb(8 14 22 / 0.95), rgb(11 20 31 / 0.92));
+}
+
+.landing-story-band .landing-outcome-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 0.5rem;
+}
+
+.landing-story-band .landing-outcome-list li {
+	position: relative;
+	padding-left: 0.92rem;
+	color: var(--color-ink-200);
+	line-height: 1.45;
+}
+
+.landing-story-band .landing-outcome-list li::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0.46rem;
+	width: 0.38rem;
+	height: 0.38rem;
+	border-radius: 9999px;
+	background: var(--color-accent-400);
+	box-shadow: 0 0 0 4px rgb(6 182 212 / 0.14);
+}
+
+.landing-story-band .landing-outcome-metrics {
+	display: grid;
+	gap: 0.65rem;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.landing-story-band .landing-outcome-metric {
+	padding: 0.7rem 0.74rem;
+	border-radius: var(--radius-lg);
+	border: 1px solid rgb(255 255 255 / 0.08);
+	background: rgb(7 13 20 / 0.56);
+}
+
+.landing-story-band .landing-outcome-metric p {
+	margin: 0;
+	font-size: 0.72rem;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	font-weight: 800;
+	color: var(--color-ink-500);
+}
+
+.landing-story-band .landing-outcome-metric strong {
+	display: block;
+	margin-top: 0.24rem;
+	font-size: 0.92rem;
+}
+
+.landing-story-band .landing-plans-grid {
+	grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+	.landing-story-band .landing-plans-grid {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+}
+
+.landing-story-band .landing-plan-card {
+	display: grid;
+	gap: 0.7rem;
+	align-content: start;
+}
+
+.landing-story-band .landing-plan-card.is-featured,
+.landing-story-band .landing-plan-card.is-featured:hover {
+	background:
+		radial-gradient(circle at top right, rgb(34 211 238 / 0.14), transparent 32%),
+		linear-gradient(160deg, rgb(8 18 29 / 0.98), rgb(11 24 37 / 0.94));
+	border-color: rgb(34 211 238 / 0.24);
+	box-shadow:
+		0 0 0 1px rgb(34 211 238 / 0.08),
+		0 22px 56px rgb(4 11 17 / 0.24);
+}
+
+.landing-story-band .landing-free-tier-strip {
+	display: grid;
+	gap: 0.9rem;
+	padding: 1rem 1.05rem;
+}
+
+@media (min-width: 1024px) {
+	.landing-story-band .landing-free-tier-strip {
+		grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr) auto;
+		align-items: center;
+	}
+}
+
+.landing-story-band .landing-free-tier-strip-copy {
+	display: grid;
+	gap: 0.48rem;
+}
+
+.landing-story-band .landing-free-tier-strip-actions {
+	display: grid;
+	gap: 0.42rem;
+	align-items: start;
+	justify-items: start;
+}
+
+.landing-story-band .landing-free-tier-strip-price {
+	margin: 0;
+	font-size: 1.15rem;
+	font-weight: 900;
+}
+
+.landing-story-band .landing-free-tier-primary-cta {
+	min-width: 12rem;
+}
+
+.landing-story-band .landing-proof-state-grid {
+	grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+	.landing-story-band .landing-proof-state-grid {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+}
+
+.landing-story-band .landing-proof-state-card,
+.landing-story-band .landing-proof-footnote {
+	display: grid;
+	gap: 0.7rem;
+	text-align: left;
+}
+
+.landing-story-band .landing-proof-state-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.55rem 0.9rem;
+	align-items: center;
+}
+
+.landing-story-band .landing-human-proof-card {
+	display: grid;
+	gap: 0.65rem;
+}
+
+.landing-story-band .landing-human-proof-card blockquote {
+	margin: 0;
+	font-size: 1rem;
+	line-height: 1.55;
+}
+
+.landing-story-band .landing-human-proof-actions {
+	margin-top: 1rem;
+	display: grid;
+	gap: 0.8rem;
+}
+
+@media (min-width: 900px) {
+	.landing-story-band .landing-human-proof-actions {
+		grid-template-columns: minmax(0, 1.2fr) auto;
+		align-items: center;
+	}
+}
+
+@media (max-width: 767px) {
+	.landing-story-band {
+		padding-top: 0.9rem;
+	}
+
+	.landing-story-band .landing-product-summary,
+	.landing-story-band .landing-outcome-metrics {
+		grid-template-columns: 1fr;
+	}
+}

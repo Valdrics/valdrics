@@ -188,23 +188,22 @@ async def acquire_fair_use_inflight_slot(
     key = fair_use_inflight_key(tenant_id)
 
     cache = manager_module.get_cache_service()
-    if cache.enabled and cache.client is not None:
+    if cache.enabled:
         try:
-            client = cache.client
-            incr = getattr(client, "incr", None)
-            decr = getattr(client, "decr", None)
-            expire = getattr(client, "expire", None)
-            if callable(incr) and callable(decr):
-                current = int(await incr(key))
+            increment = getattr(cache, "increment", None)
+            decrement = getattr(cache, "decrement", None)
+            expire = getattr(cache, "expire", None)
+            if callable(increment) and callable(decrement):
+                current = int(await increment(key))
                 if callable(expire):
                     await expire(key, ttl_seconds)
                 if current > max_inflight:
-                    await decr(key)
+                    await decrement(key)
                     return False, max(current - 1, 0)
                 return True, current
         except FAIR_USE_CACHE_RECOVERABLE_ERRORS as exc:
             manager_module.logger.warning(
-                "llm_fair_use_redis_acquire_failed",
+                "llm_fair_use_cache_acquire_failed",
                 tenant_id=str(tenant_id),
                 error=str(exc),
             )
@@ -233,19 +232,19 @@ async def release_fair_use_inflight_slot(manager_cls: Any, tenant_id: UUID) -> N
         return
 
     cache = manager_module.get_cache_service()
-    if cache.enabled and cache.client is not None:
+    if cache.enabled:
         try:
-            decr = getattr(cache.client, "decr", None)
-            if callable(decr):
-                current = int(await decr(key))
+            decrement = getattr(cache, "decrement", None)
+            if callable(decrement):
+                current = int(await decrement(key))
                 if current < 0:
-                    set_fn = getattr(cache.client, "set", None)
-                    if callable(set_fn):
-                        await set_fn(key, "0", ex=60)
+                    set_raw = getattr(cache, "set_raw", None)
+                    if callable(set_raw):
+                        await set_raw(key, "0", ex=60)
                 return
         except FAIR_USE_CACHE_RECOVERABLE_ERRORS as exc:
             manager_module.logger.warning(
-                "llm_fair_use_redis_release_failed",
+                "llm_fair_use_cache_release_failed",
                 tenant_id=str(tenant_id),
                 error=str(exc),
             )

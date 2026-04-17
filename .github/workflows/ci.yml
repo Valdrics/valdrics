@@ -98,7 +98,6 @@ jobs:
           ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION: "true"
           PUBLIC_API_RATE_LIMITING_BACKEND: "cloudflare"
           RATELIMIT_ENABLED: "false"
-          CIRCUIT_BREAKER_DISTRIBUTED_STATE: "false"
           SAAS_STRICT_INTEGRATIONS: "true"
           SLACK_CHANNEL_ID: ""
           JIRA_BASE_URL: ""
@@ -155,8 +154,11 @@ jobs:
       - name: Enforce Documentation Runtime Contracts
         run: uv run python3 scripts/verify_documentation_runtime_contracts.py
 
+      - name: Enforce Reports Archive Hygiene
+        run: uv run python3 scripts/verify_reports_archive_hygiene.py
+
       - name: Verify Codebase Audit Report
-        run: uv run python3 scripts/verify_codebase_audit_report.py
+        run: uv run python3 scripts/verify_codebase_audit_report.py --report .runtime/staging.audit.report.json
 
       - name: Verify Frontend API Contracts
         run: uv run python scripts/check_frontend_api_contracts.py

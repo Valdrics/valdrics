@@ -82,7 +82,7 @@ def validate_core_secrets(settings_obj: object) -> None:
 
 
 def validate_database_config(settings_obj: object, *, is_production: bool) -> None:
-    """Validate database settings and optional Redis/cache wiring."""
+    """Validate database settings and optional cache wiring."""
     database_url = str(getattr(settings_obj, "DATABASE_URL", "") or "").strip().lower()
     local_sqlite_bootstrap = bool(
         getattr(settings_obj, "LOCAL_SQLITE_BOOTSTRAP", False)
@@ -116,12 +116,6 @@ def validate_database_config(settings_obj: object, *, is_production: bool) -> No
             raise ValueError(
                 "DB_USE_NULL_POOL=true requires DB_EXTERNAL_POOLER=true in production."
             )
-
-    if getattr(settings_obj, "REDIS_URL", None):
-        require_no_managed_placeholder(
-            getattr(settings_obj, "REDIS_URL", None),
-            name="REDIS_URL",
-        )
 
     if getattr(settings_obj, "DB_SLOW_QUERY_THRESHOLD_SECONDS", 0) <= 0:
         raise ValueError("DB_SLOW_QUERY_THRESHOLD_SECONDS must be > 0.")

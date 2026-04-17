@@ -95,12 +95,12 @@ async def test_count_requests_in_window_user_filter_and_none_scalar() -> None:
 @pytest.mark.asyncio
 async def test_acquire_inflight_slot_redis_success_and_over_limit() -> None:
     tenant_id = uuid4()
-    redis_client = SimpleNamespace(
-        incr=AsyncMock(side_effect=[1, 4]),
-        decr=AsyncMock(),
+    cache = SimpleNamespace(
+        enabled=True,
+        increment=AsyncMock(side_effect=[1, 4]),
+        decrement=AsyncMock(),
         expire=AsyncMock(),
     )
-    cache = SimpleNamespace(enabled=True, client=redis_client)
 
     with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache):
         ok, current = await budget_fair_use.acquire_fair_use_inflight_slot(
@@ -114,19 +114,19 @@ async def test_acquire_inflight_slot_redis_success_and_over_limit() -> None:
     assert current == 1
     assert denied is False
     assert denied_current == 3
-    redis_client.expire.assert_awaited()
-    redis_client.decr.assert_awaited_once()
+    cache.expire.assert_awaited()
+    cache.decrement.assert_awaited_once()
 
 
 @pytest.mark.asyncio
-async def test_acquire_inflight_slot_redis_failure_falls_back_to_local() -> None:
+async def test_acquire_inflight_slot_cache_failure_falls_back_to_local() -> None:
     tenant_id = uuid4()
-    redis_client = SimpleNamespace(
-        incr=AsyncMock(side_effect=RuntimeError("redis unavailable")),
-        decr=AsyncMock(),
+    cache = SimpleNamespace(
+        enabled=True,
+        increment=AsyncMock(side_effect=RuntimeError("cache backend unavailable")),
+        decrement=AsyncMock(),
         expire=AsyncMock(),
     )
-    cache = SimpleNamespace(enabled=True, client=redis_client)
 
     with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache):
         ok, current = await budget_fair_use.acquire_fair_use_inflight_slot(
@@ -146,12 +146,12 @@ async def test_acquire_inflight_slot_redis_failure_falls_back_to_local() -> None
 @pytest.mark.asyncio
 async def test_acquire_inflight_slot_unexpected_cache_error_bubbles() -> None:
     tenant_id = uuid4()
-    redis_client = SimpleNamespace(
-        incr=AsyncMock(side_effect=Exception("unexpected cache defect")),
-        decr=AsyncMock(),
+    cache = SimpleNamespace(
+        enabled=True,
+        increment=AsyncMock(side_effect=Exception("unexpected cache defect")),
+        decrement=AsyncMock(),
         expire=AsyncMock(),
     )
-    cache = SimpleNamespace(enabled=True, client=redis_client)
 
     with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache):
         with pytest.raises(Exception, match="unexpected cache defect"):
@@ -177,11 +177,11 @@ async def test_release_slot_respects_guards_disabled_and_clears_local() -> None:
 async def test_release_slot_redis_negative_counter_is_clamped() -> None:
     tenant_id = uuid4()
     settings = SimpleNamespace(LLM_FAIR_USE_GUARDS_ENABLED=True)
-    redis_client = SimpleNamespace(
-        decr=AsyncMock(return_value=-1),
-        set=AsyncMock(),
+    cache = SimpleNamespace(
+        enabled=True,
+        decrement=AsyncMock(return_value=-1),
+        set_raw=AsyncMock(),
     )
-    cache = SimpleNamespace(enabled=True, client=redis_client)
 
     with (
         patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
@@ -189,7 +189,7 @@ async def test_release_slot_redis_negative_counter_is_clamped() -> None:
     ):
         await budget_fair_use.release_fair_use_inflight_slot(DummyManager, tenant_id)
 
-    redis_client.set.assert_awaited_once()
+    cache.set_raw.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -199,8 +199,10 @@ async def test_release_slot_redis_failure_falls_back_to_local_decrement() -> Non
     DummyManager._local_inflight_counts[key] = 2
 
     settings = SimpleNamespace(LLM_FAIR_USE_GUARDS_ENABLED=True)
-    redis_client = SimpleNamespace(decr=AsyncMock(side_effect=RuntimeError("boom")))
-    cache = SimpleNamespace(enabled=True, client=redis_client)
+    cache = SimpleNamespace(
+        enabled=True,
+        decrement=AsyncMock(side_effect=RuntimeError("boom")),
+    )
 
     with (
         patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
@@ -217,13 +219,13 @@ async def test_acquire_slot_additional_cache_and_local_branches() -> None:
 
     cache_no_expire = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(
-            incr=AsyncMock(return_value=1),
-            decr=AsyncMock(),
-            expire=None,
-        ),
+        increment=AsyncMock(return_value=1),
+        decrement=AsyncMock(),
+        expire=None,
     )
-    with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache_no_expire):
+    with patch(
+        "app.shared.llm.budget_manager.get_cache_service", return_value=cache_no_expire
+    ):
         ok, current = await budget_fair_use.acquire_fair_use_inflight_slot(
             DummyManager, tenant_id, max_inflight=2, ttl_seconds=60
         )
@@ -232,7 +234,7 @@ async def test_acquire_slot_additional_cache_and_local_branches() -> None:
 
     cache_missing_decr = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(incr=AsyncMock(return_value=1)),
+        increment=AsyncMock(return_value=1),
     )
     with patch(
         "app.shared.llm.budget_manager.get_cache_service",
@@ -246,7 +248,9 @@ async def test_acquire_slot_additional_cache_and_local_branches() -> None:
 
     local_tenant_id = uuid4()
     cache_disabled = SimpleNamespace(enabled=False, client=None)
-    with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache_disabled):
+    with patch(
+        "app.shared.llm.budget_manager.get_cache_service", return_value=cache_disabled
+    ):
         allowed, _ = await budget_fair_use.acquire_fair_use_inflight_slot(
             DummyManager, local_tenant_id, max_inflight=1, ttl_seconds=60
         )
@@ -265,7 +269,7 @@ async def test_release_slot_additional_local_fallback_paths() -> None:
     DummyManager._local_inflight_counts[key] = 1
 
     settings = SimpleNamespace(LLM_FAIR_USE_GUARDS_ENABLED=True)
-    cache_without_decr = SimpleNamespace(enabled=True, client=SimpleNamespace(decr=None))
+    cache_without_decr = SimpleNamespace(enabled=True, decrement=None)
     with (
         patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
         patch(
@@ -279,7 +283,8 @@ async def test_release_slot_additional_local_fallback_paths() -> None:
     DummyManager._local_inflight_counts[key] = 2
     cache_negative_no_set = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(decr=AsyncMock(return_value=-2), set=None),
+        decrement=AsyncMock(return_value=-2),
+        set_raw=None,
     )
     with (
         patch("app.shared.llm.budget_manager.get_settings", return_value=settings),
@@ -295,7 +300,9 @@ async def test_release_slot_additional_local_fallback_paths() -> None:
 async def test_inflight_slot_local_zero_pop_and_release_non_negative_decr() -> None:
     tenant_id = uuid4()
     cache_disabled = SimpleNamespace(enabled=False, client=None)
-    with patch("app.shared.llm.budget_manager.get_cache_service", return_value=cache_disabled):
+    with patch(
+        "app.shared.llm.budget_manager.get_cache_service", return_value=cache_disabled
+    ):
         ok, current = await budget_fair_use.acquire_fair_use_inflight_slot(
             DummyManager, tenant_id, max_inflight=0, ttl_seconds=30
         )
@@ -305,7 +312,7 @@ async def test_inflight_slot_local_zero_pop_and_release_non_negative_decr() -> N
     settings = SimpleNamespace(LLM_FAIR_USE_GUARDS_ENABLED=True)
     cache_non_negative = SimpleNamespace(
         enabled=True,
-        client=SimpleNamespace(decr=AsyncMock(return_value=0)),
+        decrement=AsyncMock(return_value=0),
     )
     with (
         patch("app.shared.llm.budget_manager.get_settings", return_value=settings),

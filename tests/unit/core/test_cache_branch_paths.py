@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -37,7 +37,7 @@ async def test_cache_get_handles_bad_bytes_and_unexpected_type() -> None:
 
 @pytest.mark.asyncio
 async def test_query_cache_disabled_decorator_passthrough() -> None:
-    cache = QueryCache(redis_client=None)
+    cache = QueryCache(backend_client=None)
 
     async def handler(_db: object, tenant_id: str) -> dict[str, str]:
         return {"tenant": tenant_id}
@@ -49,7 +49,7 @@ async def test_query_cache_disabled_decorator_passthrough() -> None:
 
 @pytest.mark.asyncio
 async def test_query_cache_set_cached_result_noop_when_disabled() -> None:
-    cache = QueryCache(redis_client=None)
+    cache = QueryCache(backend_client=None)
     await cache.set_cached_result("key", {"value": 1}, ttl=10)
     await cache.invalidate_tenant_cache("tenant-1")
 
@@ -59,8 +59,8 @@ def test_get_async_client_returns_none_without_config() -> None:
         patch("app.shared.core.cache.get_settings") as get_settings,
         patch("app.shared.core.cache._async_client", new=None),
     ):
-        get_settings.return_value.UPSTASH_REDIS_URL = None
-        get_settings.return_value.UPSTASH_REDIS_TOKEN = None
+        get_settings.return_value.ENVIRONMENT = "production"
+        get_settings.return_value.PLATFORM_RUNTIME_PROFILE = "gcp"
         assert _get_async_client() is None
 
 
@@ -68,80 +68,49 @@ def test_get_async_client_singleton_creation() -> None:
     with (
         patch("app.shared.core.cache.get_settings") as get_settings,
         patch("app.shared.core.cache._async_client", new=None),
-        patch("app.shared.core.cache.AsyncRedis") as async_redis_cls,
     ):
-        get_settings.return_value.UPSTASH_REDIS_URL = "redis://example"
-        get_settings.return_value.UPSTASH_REDIS_TOKEN = "token"
+        get_settings.return_value.ENVIRONMENT = "development"
+        get_settings.return_value.PLATFORM_RUNTIME_PROFILE = "gcp"
         c1 = _get_async_client()
         c2 = _get_async_client()
     assert c1 is not None
     assert c1 is c2
-    async_redis_cls.assert_called_once()
 
 
-def test_get_async_client_recreates_when_configuration_changes() -> None:
-    first_client = MagicMock()
-    first_client.aclose = MagicMock(return_value=None)
-    second_client = MagicMock()
-    second_client.aclose = MagicMock(return_value=None)
-
+def test_get_async_client_clears_when_runtime_becomes_managed() -> None:
+    settings = SimpleNamespace(
+        ENVIRONMENT="development", PLATFORM_RUNTIME_PROFILE="gcp"
+    )
     with (
-        patch(
-            "app.shared.core.cache.get_settings",
-            side_effect=[
-                SimpleNamespace(
-                    UPSTASH_REDIS_URL="redis://one",
-                    UPSTASH_REDIS_TOKEN="token-one",
-                ),
-                SimpleNamespace(
-                    UPSTASH_REDIS_URL="redis://two",
-                    UPSTASH_REDIS_TOKEN="token-two",
-                ),
-            ],
-        ),
+        patch("app.shared.core.cache.get_settings", return_value=settings),
         patch("app.shared.core.cache._async_client", new=None),
-        patch(
-            "app.shared.core.cache.AsyncRedis",
-            side_effect=[first_client, second_client],
-        ) as async_redis_cls,
     ):
         c1 = _get_async_client()
+        settings.ENVIRONMENT = "production"
         c2 = _get_async_client()
 
-    assert c1 is first_client
-    assert c2 is second_client
-    assert async_redis_cls.call_count == 2
+    assert c1 is not None
+    assert c2 is None
 
 
-def test_get_cache_service_rebuilds_when_async_client_changes() -> None:
-    first_client = MagicMock()
-    first_client.aclose = MagicMock(return_value=None)
-    second_client = MagicMock()
-    second_client.aclose = MagicMock(return_value=None)
+def test_get_cache_service_rebuilds_when_runtime_profile_disables_cache() -> None:
     settings = SimpleNamespace(
-        UPSTASH_REDIS_URL="redis://one",
-        UPSTASH_REDIS_TOKEN="token-one",
+        ENVIRONMENT="development", PLATFORM_RUNTIME_PROFILE="gcp"
     )
-
     with (
         patch("app.shared.core.cache.get_settings", return_value=settings),
         patch("app.shared.core.cache._async_client", new=None),
         patch("app.shared.core.cache._cache_service", new=None),
-        patch(
-            "app.shared.core.cache.AsyncRedis",
-            side_effect=[first_client, second_client],
-        ),
     ):
         from app.shared.core.cache import get_cache_service
 
         first_service = get_cache_service()
-        settings.UPSTASH_REDIS_URL = "redis://two"
-        settings.UPSTASH_REDIS_TOKEN = "token-two"
+        settings.ENVIRONMENT = "production"
         second_service = get_cache_service()
 
     assert first_service is not second_service
-    assert first_service.client is first_client
-    assert second_service.client is second_client
+    assert first_service.enabled is True
+    assert second_service.enabled is False
 
 
 @pytest.mark.asyncio

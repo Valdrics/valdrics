@@ -1,5 +1,5 @@
 """
-Tests for Cost Cache - Redis/In-Memory Caching
+Tests for Cost Cache - In-Memory Caching
 
 Tests:
 1. InMemoryCache backend
@@ -9,7 +9,6 @@ Tests:
 """
 
 import pytest
-from unittest.mock import patch
 from datetime import date
 
 from app.shared.adapters.cost_cache import (
@@ -169,14 +168,10 @@ class TestCostCacheFactory:
     @pytest.mark.asyncio
     async def test_factory_returns_cache(self):
         """Factory should return CostCache instance."""
-        with patch("app.shared.adapters.cost_cache.get_settings") as mock_get_settings:
-            mock_settings = mock_get_settings.return_value
-            mock_settings.REDIS_URL = None
+        # Reset singleton
+        import app.shared.adapters.cost_cache as cache_module
 
-            # Reset singleton
-            import app.shared.adapters.cost_cache as cache_module
+        cache_module._cache_instance = None
 
-            cache_module._cache_instance = None
-
-            cache = await get_cost_cache()
-            assert isinstance(cache, CostCache)
+        cache = await get_cost_cache()
+        assert isinstance(cache, CostCache)

@@ -68,28 +68,6 @@ def evaluate_system_resources(
 
 def _default_worker_probe() -> dict[str, Any]:
     settings = get_settings()
-    if platform_runtime_profile(settings) is PlatformRuntimeProfile.GCP:
-        queue_name = str(getattr(settings, "GCP_CLOUD_TASKS_QUEUE", "") or "").strip()
-        batch_job_name = str(
-            getattr(settings, "GCP_CLOUD_RUN_BATCH_JOB_NAME", "") or ""
-        ).strip()
-        service_name = str(
-            getattr(settings, "GCP_CLOUD_RUN_SERVICE_NAME", "") or ""
-        ).strip()
-        return {
-            "status": "healthy",
-            "message": (
-                "Managed background execution is handled by Cloud Tasks, "
-                "Cloud Scheduler, and Cloud Run Jobs."
-            ),
-            "runtime": "gcp_managed",
-            "scheduler_owner": "cloud_scheduler",
-            "task_queue": queue_name,
-            "batch_job": batch_job_name,
-            "service_name": service_name,
-            "worker_count": 0,
-            "workers": [],
-        }
     if settings.TESTING:
         return {
             "status": "skipped",
@@ -98,13 +76,27 @@ def _default_worker_probe() -> dict[str, Any]:
             "workers": [],
         }
 
+    if platform_runtime_profile(settings) is not PlatformRuntimeProfile.GCP:
+        raise ValueError("Only the managed GCP runtime profile is supported.")
+
+    queue_name = str(getattr(settings, "GCP_CLOUD_TASKS_QUEUE", "") or "").strip()
+    batch_job_name = str(
+        getattr(settings, "GCP_CLOUD_RUN_BATCH_JOB_NAME", "") or ""
+    ).strip()
+    service_name = str(
+        getattr(settings, "GCP_CLOUD_RUN_SERVICE_NAME", "") or ""
+    ).strip()
     return {
-        "status": "unknown",
+        "status": "healthy",
         "message": (
-            "Legacy broker-backed worker probing is no longer supported. "
-            "Use the managed GCP background execution contract."
+            "Managed background execution is handled by Cloud Tasks, "
+            "Cloud Scheduler, and Cloud Run Jobs."
         ),
-        "runtime": "legacy_unsupported",
+        "runtime": "gcp_managed",
+        "scheduler_owner": "cloud_scheduler",
+        "task_queue": queue_name,
+        "batch_job": batch_job_name,
+        "service_name": service_name,
         "worker_count": 0,
         "workers": [],
     }
@@ -160,15 +152,15 @@ async def evaluate_background_jobs(
         result = await db.execute(
             select(
                 func.count().label("total"),
-                func.sum(sa.cast(BackgroundJob.status == JobStatus.PENDING, sa.Integer)).label(
-                    "pending"
-                ),
-                func.sum(sa.cast(BackgroundJob.status == JobStatus.RUNNING, sa.Integer)).label(
-                    "running"
-                ),
-                func.sum(sa.cast(BackgroundJob.status == JobStatus.FAILED, sa.Integer)).label(
-                    "failed"
-                ),
+                func.sum(
+                    sa.cast(BackgroundJob.status == JobStatus.PENDING, sa.Integer)
+                ).label("pending"),
+                func.sum(
+                    sa.cast(BackgroundJob.status == JobStatus.RUNNING, sa.Integer)
+                ).label("running"),
+                func.sum(
+                    sa.cast(BackgroundJob.status == JobStatus.FAILED, sa.Integer)
+                ).label("failed"),
             )
         )
 

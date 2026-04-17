@@ -12,7 +12,7 @@ from scripts.env_generation_common import (
 from typing import Any
 
 
-DEFAULT_CHECKLIST_PATH = Path("docs/security/jwt_bcp_checklist_2026-02-27.json")
+DEFAULT_CHECKLIST_PATH = Path("docs/security/jwt_bcp_checklist.json")
 
 REQUIRED_CONTROL_IDS: tuple[str, ...] = (
     "JWT-ALG-ALLOWLIST",

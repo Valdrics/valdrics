@@ -25,7 +25,9 @@ from unittest.mock import MagicMock, AsyncMock, patch
 # Set test environment BEFORE any app imports (Crucial for lru_cache behavior)
 os.environ.setdefault("TESTING", "true")
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
-os.environ.setdefault("SUPABASE_JWT_SECRET", "test-jwt-secret-for-testing-at-least-32-bytes")
+os.environ.setdefault(
+    "SUPABASE_JWT_SECRET", "test-jwt-secret-for-testing-at-least-32-bytes"
+)
 os.environ.setdefault(
     "ENFORCEMENT_APPROVAL_TOKEN_SECRET",
     "test-approval-token-secret-for-testing-at-least-32-bytes",
@@ -82,6 +84,7 @@ from app.shared.testing.sqlite_artifact_cleanup import (
 )
 
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
     from fastapi.testclient import TestClient
@@ -128,7 +131,9 @@ def _run_async_with_heartbeat(awaitable):
     return asyncio.run(_await_with_asyncio_heartbeat(awaitable))
 
 
-def _start_loop_waker(loop: asyncio.AbstractEventLoop) -> tuple[threading.Event, threading.Thread]:
+def _start_loop_waker(
+    loop: asyncio.AbstractEventLoop,
+) -> tuple[threading.Event, threading.Thread]:
     stop = threading.Event()
 
     def _wake_loop() -> None:
@@ -159,11 +164,7 @@ class _WakefulPytestAsyncioRunner(_BASE_PYTEST_ASYNCIO_RUNNER):
         step: str,
         loop: asyncio.AbstractEventLoop,
     ) -> None:
-        pending = [
-            repr(task)
-            for task in asyncio.all_tasks(loop)
-            if not task.done()
-        ]
+        pending = [repr(task) for task in asyncio.all_tasks(loop) if not task.done()]
         warnings.warn(
             (
                 f"pytest-asyncio runner teardown timed out during {step}; "
@@ -301,7 +302,7 @@ def _register_models():
 
 def pytest_configure(config):
     # Finding #5: Move model registration to pytest_configure
-    # This prevents circular imports at module load time and 
+    # This prevents circular imports at module load time and
     # ensures models are registered before any tests run.
     _register_models()
 
@@ -543,7 +544,9 @@ async def async_client(
 
         try:
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 setattr(client, "app", app)
                 yield client
         finally:
@@ -612,11 +615,15 @@ async def async_client_no_db(
                 continue
 
         app.dependency_overrides[get_db] = _build_async_db_override(mock_db_session)
-        app.dependency_overrides[get_system_db] = _build_async_db_override(mock_db_session)
+        app.dependency_overrides[get_system_db] = _build_async_db_override(
+            mock_db_session
+        )
 
         try:
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 setattr(client, "app", app)
                 yield client
         finally:
@@ -904,6 +911,18 @@ def reset_shared_http_clients():
 
 
 @pytest.fixture(autouse=True)
+def reset_process_local_cache_state():
+    """Reset the process-local cache singleton between tests."""
+    from app.shared.core.cache import reset_cache_service_state
+
+    reset_cache_service_state()
+    try:
+        yield
+    finally:
+        reset_cache_service_state()
+
+
+@pytest.fixture(autouse=True)
 def reset_settings_cache():
     """Ensure settings are fresh for every test to prevent leakage."""
     from app.shared.core.config import get_settings
@@ -932,22 +951,12 @@ def reset_settings_cache():
     # Teardown: ensure we don't leave it in a broken state
     get_settings.cache_clear()
     _run_async_with_heartbeat(dispose_db_runtime())
-    
+
     # 4. Sync app.main if it exists
     if "app.main" in sys.modules:
         import app.main as app_main
+
         app_main.settings = get_settings()
-
-
-@pytest.fixture
-def mock_redis():
-    """Mock Redis client."""
-    redis = MagicMock()
-    redis.get = AsyncMock(return_value=None)
-    redis.set = AsyncMock(return_value=True)
-    redis.delete = AsyncMock(return_value=True)
-    redis.exists = AsyncMock(return_value=False)
-    return redis
 
 
 @pytest.fixture

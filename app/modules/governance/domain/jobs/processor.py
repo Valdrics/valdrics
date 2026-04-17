@@ -72,7 +72,6 @@ JOB_RUNTIME_UNEXPECTED_ERRORS: tuple[type[Exception], ...] = (
     AssertionError,
     AttributeError,
     LookupError,
-    NotImplementedError,
     UnicodeError,
     ArithmeticError,
     ValueError,
@@ -108,9 +107,7 @@ class JobProcessor:
     def _job_status_value(value: Any) -> str:
         return value.value if hasattr(value, "value") else str(value)
 
-    def _is_stale_running_job(
-        self, job: BackgroundJob, *, now: datetime
-    ) -> bool:
+    def _is_stale_running_job(self, job: BackgroundJob, *, now: datetime) -> bool:
         started_at = getattr(job, "started_at", None)
         if not isinstance(started_at, datetime):
             return False
@@ -140,7 +137,9 @@ class JobProcessor:
             )
             return
 
-        backoff_seconds = BACKOFF_BASE_SECONDS * (2 ** max(int(job.attempts or 1) - 1, 0))
+        backoff_seconds = BACKOFF_BASE_SECONDS * (
+            2 ** max(int(job.attempts or 1) - 1, 0)
+        )
         job.status = JobStatus.PENDING.value
         job.scheduled_for = now + timedelta(seconds=backoff_seconds)
         job.started_at = None
@@ -363,11 +362,12 @@ class JobProcessor:
                 .with_for_update(skip_locked=True)
             )
             jobs = list(result.scalars().all())
-            
+
             # 2. Immediately mark as RUNNING and update attempt count
             import socket
+
             worker_id = f"{socket.gethostname()}:{id(self)}"
-            
+
             for job in jobs:
                 job.status = JobStatus.RUNNING.value
                 job.started_at = now

@@ -5,10 +5,8 @@ Tests for CostCache - Caching logic for cost data
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import date, datetime, timezone, timedelta
-from types import SimpleNamespace
 from app.shared.adapters.cost_cache import (
     InMemoryCache,
-    RedisCache,
     CostCache,
     get_cost_cache,
     CacheBackend,
@@ -56,85 +54,6 @@ class TestInMemoryCache:
         assert count == 2
         assert await cache.get("tenant:1:a") is None
         assert await cache.get("tenant:2:a") == "v3"
-
-
-class TestRedisCache:
-    @patch("redis.asyncio.from_url")
-    @pytest.mark.asyncio
-    async def test_set_get(self, mock_from_url):
-        mock_redis = AsyncMock()
-        mock_from_url.return_value = mock_redis
-        mock_redis.get.return_value = "value"
-
-        cache = RedisCache(redis_url="redis://localhost")
-        with patch.object(cache, "_get_client", return_value=mock_redis):
-            await cache.set("key", "value", 10)
-            val = await cache.get("key")
-
-            assert val == "value"
-            mock_redis.setex.assert_called_once()
-            mock_redis.get.assert_called_once_with("key")
-
-    @patch("redis.asyncio.from_url")
-    @pytest.mark.asyncio
-    async def test_delete_pattern(self, mock_from_url):
-        mock_redis = AsyncMock()
-        mock_from_url.return_value = mock_redis
-        mock_redis.scan.side_effect = [(0, ["k1", "k2"])]  # Corrected scan return
-
-        cache = RedisCache(redis_url="redis://localhost")
-        with patch.object(cache, "_get_client", return_value=mock_redis):
-            count = await cache.delete_pattern("val:*")
-
-            assert count == 2
-            mock_redis.delete.assert_called_once_with("k1", "k2")
-
-    @pytest.mark.asyncio
-    async def test_health_check_false_when_no_client(self):
-        cache = RedisCache(redis_url="redis://localhost")
-        with patch.object(cache, "_get_client", return_value=None):
-            assert await cache.health_check() is False
-
-    @pytest.mark.asyncio
-    async def test_health_check_false_on_ping_error(self):
-        mock_redis = AsyncMock()
-        mock_redis.ping.side_effect = RuntimeError("down")
-        cache = RedisCache(redis_url="redis://localhost")
-        with patch.object(cache, "_get_client", return_value=mock_redis):
-            assert await cache.health_check() is False
-
-    @pytest.mark.asyncio
-    async def test_get_handles_exception(self):
-        mock_redis = AsyncMock()
-        mock_redis.get.side_effect = RuntimeError("boom")
-        cache = RedisCache(redis_url="redis://localhost")
-        with patch.object(cache, "_get_client", return_value=mock_redis):
-            assert await cache.get("key") is None
-
-    @pytest.mark.asyncio
-    async def test_set_handles_exception(self):
-        mock_redis = AsyncMock()
-        mock_redis.setex.side_effect = RuntimeError("boom")
-        cache = RedisCache(redis_url="redis://localhost")
-        with patch.object(cache, "_get_client", return_value=mock_redis):
-            await cache.set("key", "value", 10)
-
-    @pytest.mark.asyncio
-    async def test_delete_handles_exception(self):
-        mock_redis = AsyncMock()
-        mock_redis.delete.side_effect = RuntimeError("boom")
-        cache = RedisCache(redis_url="redis://localhost")
-        with patch.object(cache, "_get_client", return_value=mock_redis):
-            await cache.delete("key")
-
-    @pytest.mark.asyncio
-    async def test_delete_pattern_scan_error_returns_zero(self):
-        mock_redis = AsyncMock()
-        mock_redis.scan.side_effect = RuntimeError("scan failed")
-        cache = RedisCache(redis_url="redis://localhost")
-        with patch.object(cache, "_get_client", return_value=mock_redis):
-            assert await cache.delete_pattern("val:*") == 0
-
 
 class TestCostCache:
     @pytest.mark.asyncio
@@ -235,58 +154,15 @@ class TestCostCache:
 
 @pytest.mark.asyncio
 async def test_get_cost_cache_factory():
-    with patch("app.shared.adapters.cost_cache.get_settings") as mock_get_settings:
-        mock_settings = mock_get_settings.return_value
-        mock_settings.REDIS_URL = None
-        # Reset singleton for test
-        with patch("app.shared.adapters.cost_cache._cache_instance", None):
-            cache = await get_cost_cache()
-            assert isinstance(cache.backend, InMemoryCache)
-
-            mock_settings.REDIS_URL = "redis://localhost"
-            with patch("app.shared.adapters.cost_cache.RedisCache") as mock_redis_cls:
-                mock_redis = MagicMock(spec=RedisCache)
-                mock_redis.health_check = AsyncMock(return_value=True)
-                mock_redis_cls.return_value = mock_redis
-
-                # Reset singleton again
-                with patch("app.shared.adapters.cost_cache._cache_instance", None):
-                    cache = await get_cost_cache()
-                    assert cache.backend is mock_redis
-
-            # Redis unhealthy should fallback to memory
-            mock_settings.REDIS_URL = "redis://localhost"
-            with patch("app.shared.adapters.cost_cache.RedisCache") as mock_redis_cls:
-                mock_redis = MagicMock(spec=RedisCache)
-                mock_redis.health_check = AsyncMock(return_value=False)
-                mock_redis_cls.return_value = mock_redis
-
-                with patch("app.shared.adapters.cost_cache._cache_instance", None):
-                    cache = await get_cost_cache()
-                    assert isinstance(cache.backend, InMemoryCache)
+    with patch("app.shared.adapters.cost_cache._cache_instance", None):
+        cache = await get_cost_cache()
+        assert isinstance(cache.backend, InMemoryCache)
 
 
 @pytest.mark.asyncio
-async def test_get_cost_cache_rebuilds_when_redis_url_changes_without_manual_reset():
+async def test_get_cost_cache_reuses_singleton_without_runtime_switching():
     with patch("app.shared.adapters.cost_cache._cache_instance", None):
-        with patch(
-            "app.shared.adapters.cost_cache.get_settings",
-            return_value=SimpleNamespace(REDIS_URL=None),
-        ):
-            cache = await get_cost_cache()
-            assert isinstance(cache.backend, InMemoryCache)
+        first = await get_cost_cache()
+        second = await get_cost_cache()
 
-        with (
-            patch(
-                "app.shared.adapters.cost_cache.get_settings",
-                return_value=SimpleNamespace(REDIS_URL="redis://localhost"),
-            ),
-            patch("app.shared.adapters.cost_cache.RedisCache") as mock_redis_cls,
-        ):
-            mock_redis = MagicMock(spec=RedisCache)
-            mock_redis.health_check = AsyncMock(return_value=True)
-            mock_redis_cls.return_value = mock_redis
-
-            cache = await get_cost_cache()
-
-        assert cache.backend is mock_redis
+    assert first is second

@@ -18,11 +18,15 @@ def test_collect_root_hygiene_violations_detects_exact_and_glob_matches(
     (tmp_path / "artifact.json").write_text("x", encoding="utf-8")
     (tmp_path / "test_alpha.sqlite").write_text("", encoding="utf-8")
     (tmp_path / "valdrics_local_dev.sqlite3").write_text("", encoding="utf-8")
+    (tmp_path / "helm" / "valdrics").mkdir(parents=True)
+    (tmp_path / "terraform" / "modules" / "legacy").mkdir(parents=True)
     (tmp_path / "README.md").write_text("ok", encoding="utf-8")
 
     violations = collect_root_hygiene_violations(tmp_path)
     assert [item.name for item in violations] == [
         "artifact.json",
+        "helm",
+        "terraform/modules",
         "test_alpha.sqlite",
         "valdrics_local_dev.sqlite3",
     ]
@@ -68,7 +72,12 @@ def test_main_resolves_relative_root_from_repo_root_when_run_outside_repo(
     repo_root = Path(repo_root_hygiene_verifier.__file__).resolve().parents[1]
     captured: dict[str, Path] = {}
 
-    def _capture(root: Path, *, prohibited_patterns: tuple[str, ...] = ()) -> tuple[object, ...]:
+    def _capture(
+        root: Path,
+        *,
+        prohibited_patterns: tuple[str, ...] = (),
+        prohibited_paths: tuple[str, ...] = (),
+    ) -> tuple[object, ...]:
         captured["root"] = root
         return ()
 

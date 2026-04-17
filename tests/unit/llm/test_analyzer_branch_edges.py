@@ -14,6 +14,7 @@ from app.shared.core.exceptions import BudgetExceededError
 from app.shared.core.pricing import PricingTier
 from app.shared.llm.analyzer import (
     FINOPS_ANALYSIS_SCHEMA_VERSION,
+    FINOPS_PROMPT_FALLBACK_VERSION,
     FINOPS_RESPONSE_NORMALIZER_VERSION,
     FinOpsAnalyzer,
 )
@@ -232,6 +233,24 @@ async def test_load_system_prompt_falls_back_when_registry_missing_finops_key() 
         prompt = await analyzer._load_system_prompt_async()
 
     assert "FinOps expert" in prompt
+
+
+@pytest.mark.asyncio
+async def test_load_system_prompt_falls_back_when_finops_entry_is_not_mapping() -> None:
+    analyzer = FinOpsAnalyzer(MagicMock())
+
+    with (
+        patch("os.path.exists", return_value=True),
+        patch("builtins.open", mock_open(read_data="finops_analysis: legacy-prompt")),
+        patch(
+            "app.shared.llm.analyzer.yaml.safe_load",
+            return_value={"finops_analysis": "legacy-prompt"},
+        ),
+    ):
+        prompt = await analyzer._load_system_prompt_async()
+
+    assert "FinOps expert" in prompt
+    assert analyzer.prompt_version == FINOPS_PROMPT_FALLBACK_VERSION
 
 
 @pytest.mark.asyncio

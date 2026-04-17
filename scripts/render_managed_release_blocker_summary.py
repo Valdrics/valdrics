@@ -148,6 +148,7 @@ def _verified_environment_reports(
     runtime_report_path: Path,
     migration_report_path: Path,
     deployment_report_path: Path,
+    allow_non_secret_artifact_bundle: bool,
 ) -> EnvironmentReports:
     runtime_report = _resolve_report_path(
         root, runtime_report_path, field_name=f"{environment}_runtime_report_path"
@@ -164,6 +165,7 @@ def _verified_environment_reports(
         runtime_report_path=runtime_report,
         migration_report_path=migration_report,
         deployment_report_path=deployment_report,
+        allow_non_secret_artifact_bundle=allow_non_secret_artifact_bundle,
     )
     if verification_errors:
         raise ValueError(
@@ -319,6 +321,7 @@ def render_managed_release_blocker_summary(
     production_migration_report_path: Path,
     production_deployment_report_path: Path,
     output_path: Path,
+    allow_non_secret_artifact_bundle: bool = False,
 ) -> Path:
     repo_root = Path(root)
     staging = _verified_environment_reports(
@@ -327,6 +330,7 @@ def render_managed_release_blocker_summary(
         runtime_report_path=staging_runtime_report_path,
         migration_report_path=staging_migration_report_path,
         deployment_report_path=staging_deployment_report_path,
+        allow_non_secret_artifact_bundle=allow_non_secret_artifact_bundle,
     )
     production = _verified_environment_reports(
         root=repo_root,
@@ -334,6 +338,7 @@ def render_managed_release_blocker_summary(
         runtime_report_path=production_runtime_report_path,
         migration_report_path=production_migration_report_path,
         deployment_report_path=production_deployment_report_path,
+        allow_non_secret_artifact_bundle=allow_non_secret_artifact_bundle,
     )
     protected_paths = protected_output_paths_from_root(
         repo_root,
@@ -403,6 +408,14 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path(".runtime/deploy/managed-release-blockers.md"),
     )
+    parser.add_argument(
+        "--non-secret-deployment-bundle",
+        action="store_true",
+        help=(
+            "Verify staging and production inputs as downloaded non-secret deployment "
+            "artifact bundles instead of requiring the full secret-bearing deploy workspace."
+        ),
+    )
     return parser
 
 
@@ -419,8 +432,9 @@ def main(argv: list[str] | None = None) -> int:
             production_migration_report_path=args.production_migration_report,
             production_deployment_report_path=args.production_deployment_report,
             output_path=args.output,
+            allow_non_secret_artifact_bundle=bool(args.non_secret_deployment_bundle),
         )
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
         print(f"[managed-release-blocker-summary] FAILED: {exc}")
         return 1
     print(f"[managed-release-blocker-summary] ok output={rendered_path}")

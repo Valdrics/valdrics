@@ -11,7 +11,6 @@ from enum import Enum
 from collections.abc import Awaitable, Callable
 from typing import Any, Optional, TypeVar
 from dataclasses import dataclass, replace
-from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 import structlog
 
@@ -23,41 +22,6 @@ T = TypeVar("T")
 
 def _monotonic_time() -> float:
     return time.monotonic()
-
-CIRCUIT_BREAKER_CONFIG_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
-    RuntimeError,
-    OSError,
-    TimeoutError,
-    ImportError,
-    AttributeError,
-    TypeError,
-    ValueError,
-)
-CIRCUIT_BREAKER_REDIS_CLIENT_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
-    RedisError,
-    RuntimeError,
-    OSError,
-    TimeoutError,
-    ImportError,
-    AttributeError,
-    TypeError,
-    ValueError,
-)
-CIRCUIT_BREAKER_DISTRIBUTED_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
-    RedisError,
-    RuntimeError,
-    OSError,
-    TimeoutError,
-    AttributeError,
-    TypeError,
-    ValueError,
-)
-CIRCUIT_BREAKER_DECODE_RECOVERABLE_ERRORS: tuple[type[Exception], ...] = (
-    UnicodeDecodeError,
-    AttributeError,
-    TypeError,
-    ValueError,
-)
 
 class CircuitState(Enum):
     """Circuit breaker states."""
@@ -117,154 +81,6 @@ class CircuitBreaker:
         self._lock = asyncio.Lock()
         # Allow only a single probe request while HALF_OPEN
         self._half_open_lock = asyncio.Lock()
-
-    def _distributed_config(self) -> tuple[bool, str]:
-        """
-        Resolve distributed circuit-breaker settings lazily.
-
-        This avoids forcing settings initialization at import time.
-        """
-        try:
-            from app.shared.core.config import get_settings
-
-            settings = get_settings()
-            enabled = bool(
-                getattr(settings, "CIRCUIT_BREAKER_DISTRIBUTED_STATE", False)
-            )
-            prefix = (
-                str(
-                    getattr(
-                        settings,
-                        "CIRCUIT_BREAKER_DISTRIBUTED_KEY_PREFIX",
-                        "valdrics:circuit",
-                    )
-                ).strip()
-                or "valdrics:circuit"
-            )
-            return enabled, prefix
-        except CIRCUIT_BREAKER_CONFIG_RECOVERABLE_ERRORS:
-            return False, "valdrics:circuit"
-
-    async def _get_redis_client(self) -> Any | None:
-        enabled, _ = self._distributed_config()
-        if not enabled:
-            return None
-        try:
-            from app.shared.core.rate_limit import get_redis_client
-
-            return get_redis_client()
-        except CIRCUIT_BREAKER_REDIS_CLIENT_RECOVERABLE_ERRORS as exc:
-            logger.debug(
-                "circuit_breaker_distributed_redis_unavailable",
-                name=self.config.name,
-                error=str(exc),
-            )
-            return None
-
-    def _distributed_key(self, suffix: str) -> str:
-        _, prefix = self._distributed_config()
-        return f"{prefix}:{self.config.name}:{suffix}"
-
-    @staticmethod
-    def _as_text(value: Any) -> str | None:
-        if value is None:
-            return None
-        if isinstance(value, bytes):
-            try:
-                return value.decode("utf-8")
-            except CIRCUIT_BREAKER_DECODE_RECOVERABLE_ERRORS:
-                return value.decode(errors="ignore")
-        return str(value)
-
-    async def _sync_state_from_distributed(self) -> None:
-        redis = await self._get_redis_client()
-        if redis is None:
-            return
-
-        state_key = self._distributed_key("state")
-        failure_key = self._distributed_key("last_failure")
-        try:
-            state_raw, last_failure_raw = await redis.mget(state_key, failure_key)
-            state_text = self._as_text(state_raw)
-            if state_text in {
-                CircuitState.CLOSED.value,
-                CircuitState.OPEN.value,
-                CircuitState.HALF_OPEN.value,
-            }:
-                self.state = CircuitState(state_text)
-
-            last_failure_text = self._as_text(last_failure_raw)
-            if last_failure_text:
-                self.metrics.last_failure_time = float(last_failure_text)
-                self.metrics.last_failure_monotonic = None
-        except CIRCUIT_BREAKER_DISTRIBUTED_RECOVERABLE_ERRORS as exc:
-            logger.warning(
-                "circuit_breaker_distributed_sync_failed",
-                name=self.config.name,
-                error=str(exc),
-            )
-
-    async def _persist_state_to_distributed(self, new_state: CircuitState) -> None:
-        redis = await self._get_redis_client()
-        if redis is None:
-            return
-
-        state_key = self._distributed_key("state")
-        failure_key = self._distributed_key("last_failure")
-        probe_key = self._distributed_key("half_open_probe")
-        try:
-            pipeline = redis.pipeline()
-            pipeline.set(state_key, new_state.value)
-            if new_state == CircuitState.OPEN:
-                if self.metrics.last_failure_time is None:
-                    self.metrics.last_failure_time = time.time()
-                if self.metrics.last_failure_monotonic is None:
-                    self.metrics.last_failure_monotonic = _monotonic_time()
-                pipeline.set(failure_key, f"{self.metrics.last_failure_time:.6f}")
-            elif new_state == CircuitState.CLOSED:
-                pipeline.delete(failure_key)
-                pipeline.delete(probe_key)
-            elif new_state == CircuitState.HALF_OPEN:
-                pipeline.delete(probe_key)
-            await pipeline.execute()
-        except CIRCUIT_BREAKER_DISTRIBUTED_RECOVERABLE_ERRORS as exc:
-            logger.warning(
-                "circuit_breaker_distributed_persist_failed",
-                name=self.config.name,
-                state=new_state.value,
-                error=str(exc),
-            )
-
-    async def _acquire_distributed_probe(self) -> bool:
-        redis = await self._get_redis_client()
-        if redis is None:
-            return True
-        probe_key = self._distributed_key("half_open_probe")
-        ttl_seconds = max(1, int(self.config.timeout))
-        try:
-            acquired = await redis.set(probe_key, "1", ex=ttl_seconds, nx=True)
-            return bool(acquired)
-        except CIRCUIT_BREAKER_DISTRIBUTED_RECOVERABLE_ERRORS as exc:
-            logger.warning(
-                "circuit_breaker_distributed_probe_acquire_failed",
-                name=self.config.name,
-                error=str(exc),
-            )
-            return False
-
-    async def _release_distributed_probe(self) -> None:
-        redis = await self._get_redis_client()
-        if redis is None:
-            return
-        probe_key = self._distributed_key("half_open_probe")
-        try:
-            await redis.delete(probe_key)
-        except CIRCUIT_BREAKER_DISTRIBUTED_RECOVERABLE_ERRORS as exc:
-            logger.warning(
-                "circuit_breaker_distributed_probe_release_failed",
-                name=self.config.name,
-                error=str(exc),
-            )
 
     async def _should_attempt_reset(self) -> bool:
         """Check if enough time has passed to attempt recovery."""
@@ -329,7 +145,6 @@ class CircuitBreaker:
         old_state = self.state
         self.state = new_state
         self.metrics.state_changes += 1
-        await self._persist_state_to_distributed(new_state)
 
         logger.info(
             "circuit_breaker_state_changed",
@@ -345,9 +160,7 @@ class CircuitBreaker:
 
         async def wrapper(*args: Any, **kwargs: Any) -> T:
             probe_lock = None
-            distributed_probe_acquired = False
             async with self._lock:
-                await self._sync_state_from_distributed()
                 # Check if circuit should attempt reset
                 if (
                     self.state == CircuitState.OPEN
@@ -383,18 +196,6 @@ class CircuitBreaker:
                                 "last_failure": self.metrics.last_failure_time,
                             },
                         )
-                    distributed_probe_acquired = await self._acquire_distributed_probe()
-                    if not distributed_probe_acquired:
-                        raise ExternalAPIError(
-                            f"Circuit breaker is HALF_OPEN for {self.config.name}",
-                            code="circuit_breaker_half_open",
-                            details={
-                                "circuit_name": self.config.name,
-                                "state": self.state.value,
-                                "last_failure": self.metrics.last_failure_time,
-                                "reason": "half_open_probe_in_progress",
-                            },
-                        )
                     await self._half_open_lock.acquire()
                     probe_lock = self._half_open_lock
 
@@ -410,8 +211,6 @@ class CircuitBreaker:
             finally:
                 if probe_lock and probe_lock.locked():
                     probe_lock.release()
-                if distributed_probe_acquired:
-                    await self._release_distributed_probe()
 
         return wrapper
 

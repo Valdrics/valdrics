@@ -84,6 +84,75 @@ jobs:
       batch_promotion_ref: ${{ needs.publish.outputs.batch_promotion_ref }}
     secrets: inherit
 
+  verify-staging-readiness:
+    name: Verify Staging Release Readiness
+    needs: deploy-staging
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.git_ref || github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install uv
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip uv
+
+      - name: Install backend dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --locked --dev
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.14.0"
+          cache: "pnpm"
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
+      - name: Install pnpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.32.1 --activate
+
+      - name: Download managed deployment bundle
+        uses: actions/download-artifact@fa2c2b49db3baf4d4bca4f0d94d1a2f70ed6f4f7 # v4.2.1
+        with:
+          name: managed-deployment-bundle-staging-${{ inputs.release_tag }}
+          path: .
+
+      - name: Refresh codebase audit report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .runtime
+          uv run python3 scripts/refresh_codebase_audit_report.py \
+            --report ".runtime/staging.audit.report.json"
+
+      - name: Verify managed release readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run python3 scripts/verify_managed_release_readiness.py \
+            --environment staging \
+            --audit-report .runtime/staging.audit.report.json \
+            --runtime-report .runtime/staging.report.json \
+            --migration-report .runtime/staging.migrate.report.json \
+            --deployment-report .runtime/deploy/staging/deployment.report.json \
+            --non-secret-deployment-bundle \
+            --skip-webserver
+
   deploy-production:
     name: Promote Production
     if: ${{ inputs.promote_production }}
@@ -98,3 +167,138 @@ jobs:
       api_promotion_ref: ${{ needs.publish.outputs.api_promotion_ref }}
       batch_promotion_ref: ${{ needs.publish.outputs.batch_promotion_ref }}
     secrets: inherit
+
+  verify-production-readiness:
+    name: Verify Production Release Readiness
+    if: ${{ inputs.promote_production }}
+    needs: deploy-production
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.git_ref || github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install uv
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip uv
+
+      - name: Install backend dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --locked --dev
+
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24.14.0"
+          cache: "pnpm"
+          cache-dependency-path: dashboard/pnpm-lock.yaml
+
+      - name: Install pnpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.32.1 --activate
+
+      - name: Download managed deployment bundle
+        uses: actions/download-artifact@fa2c2b49db3baf4d4bca4f0d94d1a2f70ed6f4f7 # v4.2.1
+        with:
+          name: managed-deployment-bundle-production-${{ inputs.release_tag }}
+          path: .
+
+      - name: Refresh codebase audit report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .runtime
+          uv run python3 scripts/refresh_codebase_audit_report.py \
+            --report ".runtime/production.audit.report.json"
+
+      - name: Verify managed release readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run python3 scripts/verify_managed_release_readiness.py \
+            --environment production \
+            --audit-report .runtime/production.audit.report.json \
+            --runtime-report .runtime/production.report.json \
+            --migration-report .runtime/production.migrate.report.json \
+            --deployment-report .runtime/deploy/production/deployment.report.json \
+            --non-secret-deployment-bundle \
+            --skip-webserver
+
+  render-release-blocker-summary:
+    name: Render Managed Release Blocker Summary
+    if: ${{ inputs.promote_production }}
+    needs:
+      - verify-staging-readiness
+      - verify-production-readiness
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.git_ref || github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version-file: .python-version
+
+      - name: Install uv
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip uv
+
+      - name: Install backend dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv sync --locked --dev
+
+      - name: Download staging managed deployment bundle
+        uses: actions/download-artifact@fa2c2b49db3baf4d4bca4f0d94d1a2f70ed6f4f7 # v4.2.1
+        with:
+          name: managed-deployment-bundle-staging-${{ inputs.release_tag }}
+          path: .
+
+      - name: Download production managed deployment bundle
+        uses: actions/download-artifact@fa2c2b49db3baf4d4bca4f0d94d1a2f70ed6f4f7 # v4.2.1
+        with:
+          name: managed-deployment-bundle-production-${{ inputs.release_tag }}
+          path: .
+
+      - name: Render cross-environment blocker summary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .runtime/deploy
+          uv run python3 scripts/render_managed_release_blocker_summary.py \
+            --staging-runtime-report .runtime/staging.report.json \
+            --staging-migration-report .runtime/staging.migrate.report.json \
+            --staging-deployment-report .runtime/deploy/staging/deployment.report.json \
+            --production-runtime-report .runtime/production.report.json \
+            --production-migration-report .runtime/production.migrate.report.json \
+            --production-deployment-report .runtime/deploy/production/deployment.report.json \
+            --non-secret-deployment-bundle \
+            --output .runtime/deploy/managed-release-blockers.md
+
+      - name: Upload managed release blocker summary
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: managed-release-blocker-summary-${{ inputs.release_tag }}
+          path: .runtime/deploy/managed-release-blockers.md
+          retention-days: 30

@@ -92,7 +92,7 @@ class ZombiePlugin(ABC):
         The dictionary key for results (e.g., 'unattached_volumes').
         Used to aggregate results in the final report.
         """
-        raise NotImplementedError
+        ...
 
     @abstractmethod
     async def scan(
@@ -109,7 +109,7 @@ class ZombiePlugin(ABC):
 
         Subclasses should document their expected arguments (e.g., session, client, region).
         """
-        raise NotImplementedError
+        ...
 
     def _get_client(
         self,

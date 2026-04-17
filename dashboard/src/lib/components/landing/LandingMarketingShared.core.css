@@ -1,0 +1,320 @@
+.landing-copy {
+	display: grid;
+	width: 100%;
+	row-gap: 0.6rem;
+	justify-items: stretch;
+	text-align: center;
+}
+
+@media (min-width: 1100px) {
+	.landing-copy {
+		max-width: 39rem;
+		margin-right: auto;
+		justify-items: start;
+		text-align: left;
+	}
+}
+
+.landing-kicker {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 0.55rem;
+}
+
+@media (min-width: 1100px) {
+	.landing-kicker {
+		justify-content: flex-start;
+	}
+}
+
+.landing-kicker .badge {
+	line-height: 1.25;
+}
+
+.landing-kicker-text {
+	color: var(--color-ink-700);
+	font-size: 0.95rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+	text-wrap: balance;
+}
+
+.landing-title {
+	margin: 0.2rem auto 0;
+	max-width: 11.5ch;
+	font-family: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
+	font-size: clamp(2.4rem, 5vw, 4.35rem);
+	font-weight: 700;
+	letter-spacing: -0.055em;
+	line-height: 0.94;
+	color: var(--color-ink-950);
+	text-wrap: balance;
+}
+
+@media (min-width: 1100px) {
+	.landing-title {
+		margin-left: 0;
+		max-width: 10.8ch;
+	}
+}
+
+.landing-subtitle {
+	margin: 0;
+	max-width: 34rem;
+	color: var(--color-ink-700);
+	font-size: clamp(1.02rem, 2vw, 1.18rem);
+	font-weight: 520;
+	line-height: 1.56;
+	text-wrap: balance;
+}
+
+@media (min-width: 1100px) {
+	.landing-subtitle {
+		max-width: 31rem;
+	}
+}
+
+.landing-cta {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.75rem;
+	margin-top: 0.55rem;
+	width: 100%;
+}
+
+@media (min-width: 1100px) {
+	.landing-cta {
+		justify-content: flex-start;
+	}
+}
+
+.landing-cta-primary,
+.landing-cta-secondary {
+	min-width: 12rem;
+}
+
+.landing-cta-primary {
+	box-shadow: 0 16px 30px rgb(8 126 164 / 0.18);
+}
+
+.landing-cta-secondary {
+	border-color: rgb(8 126 164 / 0.14);
+	background: rgb(255 255 255 / 0.82);
+	color: var(--color-ink-900);
+	box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.55);
+}
+
+.landing-cta-secondary:hover {
+	border-color: rgb(8 126 164 / 0.22);
+	background: rgb(255 255 255 / 0.94);
+}
+
+.landing-copy-points {
+	display: grid;
+	grid-template-columns: repeat(3, minmax(0, 1fr));
+	gap: 0.75rem;
+	width: 100%;
+	margin-top: 0.35rem;
+}
+
+.landing-copy-point {
+	display: grid;
+	gap: 0.28rem;
+	padding: 0.9rem 0.95rem;
+	border: 1px solid rgb(8 126 164 / 0.08);
+	border-radius: 1rem;
+	background: rgb(255 255 255 / 0.72);
+	box-shadow: 0 14px 32px rgb(15 23 42 / 0.04);
+}
+
+.landing-copy-point-title {
+	margin: 0;
+	font-size: 0.78rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: rgb(8 126 164);
+}
+
+.landing-copy-point-detail {
+	margin: 0;
+	color: var(--color-ink-700);
+	font-size: 0.93rem;
+	line-height: 1.48;
+}
+
+@media (max-width: 767px) {
+	.landing-cta {
+		flex-direction: column;
+		align-items: stretch;
+	}
+
+	.landing-cta a {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+	}
+
+	.landing-copy-points {
+		grid-template-columns: 1fr;
+	}
+}
+
+.landing-section-head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: end;
+	justify-content: space-between;
+	gap: 0.9rem 1rem;
+	max-width: 68rem;
+	margin: 0 auto 1rem;
+}
+
+.landing-h2 {
+	margin: 0;
+	font-family: 'Fraunces', 'Iowan Old Style', 'Palatino Linotype', Palatino, serif;
+	font-size: clamp(1.95rem, 3vw, 2.7rem);
+	font-weight: 700;
+	letter-spacing: -0.04em;
+	line-height: 1.02;
+	color: var(--color-ink-950);
+}
+
+.landing-section-sub {
+	margin: 0.55rem 0 0;
+	max-width: 42rem;
+	color: var(--color-ink-600);
+	font-size: 1.02rem;
+	line-height: 1.6;
+}
+
+@media (max-width: 767px) {
+	.landing-section-head {
+		align-items: start;
+	}
+}
+
+.landing-proof-k {
+	margin: 0;
+	font-size: 0.76rem;
+	font-weight: 800;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: rgb(8 126 164);
+}
+
+.landing-cta-link {
+	display: inline-flex;
+	margin-top: 0.2rem;
+	font-size: 0.92rem;
+	font-weight: 700;
+	color: rgb(8 126 164);
+	text-decoration: underline;
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
+}
+
+.landing-cta-link:hover {
+	color: rgb(14 165 233);
+}
+
+.landing-cta-link:focus-visible {
+	outline: 2px solid var(--color-accent-500);
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+
+.landing-currency-toggle {
+	display: grid;
+	gap: 0.35rem;
+	justify-items: start;
+	text-align: left;
+}
+
+.landing-currency-toggle__label {
+	font-size: 0.74rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--color-ink-500);
+}
+
+.landing-currency-toggle__controls {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 0.45rem;
+	padding: 0.22rem;
+	border-radius: 999px;
+	border: 1px solid rgb(8 126 164 / 0.14);
+	background: rgb(255 255 255 / 0.92);
+}
+
+.landing-currency-toggle__controls button {
+	min-height: 2.2rem;
+	padding: 0.52rem 0.8rem;
+	border: 0;
+	border-radius: 999px;
+	background: transparent;
+	color: var(--color-ink-700);
+	font-size: 0.86rem;
+	font-weight: 700;
+	transition:
+		background-color var(--duration-fast) var(--ease-out),
+		color var(--duration-fast) var(--ease-out),
+		box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.landing-currency-toggle__controls button.active {
+	background: linear-gradient(135deg, var(--color-brand-600) 0%, var(--color-brand-700) 100%);
+	color: var(--color-ink-50);
+	box-shadow: 0 10px 20px rgb(16 159 210 / 0.22);
+}
+
+.landing-currency-toggle__controls button:focus-visible {
+	outline: 2px solid var(--color-accent-500);
+	outline-offset: 2px;
+}
+
+.landing-currency-toggle__note {
+	margin: 0;
+	max-width: 20rem;
+	font-size: 0.82rem;
+	line-height: 1.45;
+	color: var(--color-ink-500);
+}
+
+@media (max-width: 767px) {
+	.landing-currency-toggle {
+		width: 100%;
+	}
+
+	.landing-currency-toggle__controls {
+		width: 100%;
+	}
+
+	.landing-currency-toggle__controls button {
+		flex: 1 1 auto;
+		justify-content: center;
+	}
+}
+
+.landing-roi-grid,
+.landing-sim-grid {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 1rem;
+}
+
+@media (min-width: 1024px) {
+	.landing-roi-grid {
+		grid-template-columns: 1.05fr 0.95fr;
+	}
+
+	.landing-sim-grid {
+		grid-template-columns: 1fr 1fr;
+	}
+}

@@ -19,7 +19,6 @@ REMEDIATION_ACTION_PROGRAMMER_ERRORS: tuple[type[BaseException], ...] = (
     AttributeError,
     KeyError,
     LookupError,
-    NotImplementedError,
 )
 
 
@@ -52,8 +51,6 @@ class RemediationContext:
     parameters: Optional[Dict[str, Any]] = None
 
 
-
-
 class BaseRemediationAction(ABC):
     """
     Abstract base class for all remediation actions.
@@ -69,7 +66,9 @@ class BaseRemediationAction(ABC):
         pass
 
     @abstractmethod
-    async def create_backup(self, resource_id: str, context: RemediationContext) -> Optional[str]:
+    async def create_backup(
+        self, resource_id: str, context: RemediationContext
+    ) -> Optional[str]:
         """
         Create a backup (snapshot/disk) before a destructive action.
         Returns the ID of the created backup.
@@ -77,7 +76,9 @@ class BaseRemediationAction(ABC):
         pass
 
     @abstractmethod
-    async def _perform_action(self, resource_id: str, context: RemediationContext) -> ExecutionResult:
+    async def _perform_action(
+        self, resource_id: str, context: RemediationContext
+    ) -> ExecutionResult:
         """
         The actual implementation of the remediation action.
         """
@@ -91,12 +92,16 @@ class BaseRemediationAction(ABC):
         """
         return FeatureFlag.AUTO_REMEDIATION
 
-    async def execute(self, resource_id: str, context: RemediationContext) -> ExecutionResult:
+    async def execute(
+        self, resource_id: str, context: RemediationContext
+    ) -> ExecutionResult:
         """
         Perform the actual remediation action with retries and logging.
         """
         action_name = self.__class__.__name__
-        logger.info("remediation_action_started", resource_id=resource_id, action=action_name)
+        logger.info(
+            "remediation_action_started", resource_id=resource_id, action=action_name
+        )
         try:
             # 1. Tier/Feature Check
             if not is_feature_enabled(context.tier, self.required_feature):
@@ -104,7 +109,7 @@ class BaseRemediationAction(ABC):
                     status=ExecutionStatus.SKIPPED,
                     resource_id=resource_id,
                     action_taken=action_name,
-                    error_message=f"Feature '{self.required_feature.value}' not enabled for tier '{context.tier}'"
+                    error_message=f"Feature '{self.required_feature.value}' not enabled for tier '{context.tier}'",
                 )
 
             # 2. Validate
@@ -113,38 +118,33 @@ class BaseRemediationAction(ABC):
                     status=ExecutionStatus.SKIPPED,
                     resource_id=resource_id,
                     action_taken=action_name,
-                    error_message="Validation failed"
+                    error_message="Validation failed",
                 )
 
             # 2. Backup if requested
             backup_id = None
             if context.create_backup:
-                 backup_id = await self.create_backup(resource_id, context)
+                backup_id = await self.create_backup(resource_id, context)
 
             # 3. Perform with retry
             @tenacity_retry("external_api")
             async def wrapped_action() -> ExecutionResult:
                 return await self._perform_action(resource_id, context)
-            
+
             result = await wrapped_action()
             result.backup_id = backup_id
-            
-            logger.info("remediation_action_completed", resource_id=resource_id, action=action_name, status=result.status.value)
-            return result
-            
-        except REMEDIATION_ACTION_EXECUTION_RECOVERABLE_EXCEPTIONS as e:
-            logger.error("remediation_action_failed", resource_id=resource_id, action=action_name, error=str(e))
-            return ExecutionResult(
-                status=ExecutionStatus.FAILED,
+
+            logger.info(
+                "remediation_action_completed",
                 resource_id=resource_id,
-                action_taken=action_name,
-                error_message=str(e)
+                action=action_name,
+                status=result.status.value,
             )
-        except REMEDIATION_ACTION_PROGRAMMER_ERRORS:
-            raise
-        except Exception as e:
+            return result
+
+        except REMEDIATION_ACTION_EXECUTION_RECOVERABLE_EXCEPTIONS as e:
             logger.error(
-                "remediation_action_unexpected_failure",
+                "remediation_action_failed",
                 resource_id=resource_id,
                 action=action_name,
                 error=str(e),
@@ -155,3 +155,5 @@ class BaseRemediationAction(ABC):
                 action_taken=action_name,
                 error_message=str(e),
             )
+        except REMEDIATION_ACTION_PROGRAMMER_ERRORS:
+            raise

@@ -420,7 +420,7 @@ class CURUsageAnalyzer:
                     "resource_id": resource_id,
                     "total_usage_hours": Decimal("0"),
                     "node_type": record.get("product_instance_type") or "unknown",
-                    "engine": record.get("product_cache_engine") or "redis",
+                    "engine": record.get("product_cache_engine") or "unknown",
                     "cost": Decimal("0"),
                 }
 

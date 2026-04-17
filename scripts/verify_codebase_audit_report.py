@@ -274,10 +274,14 @@ def _package_version(
             value = dev_dependencies.get(package_name)
             if isinstance(value, str) and value.strip():
                 return value
-    raise ValueError(f"could not determine version for {package_name} from dashboard/package.json")
+    raise ValueError(
+        f"could not determine version for {package_name} from dashboard/package.json"
+    )
 
 
-def _has_dashboard_dependency(package_payload: dict[str, Any], package_name: str) -> bool:
+def _has_dashboard_dependency(
+    package_payload: dict[str, Any], package_name: str
+) -> bool:
     for section_name in ("dependencies", "devDependencies"):
         section = package_payload.get(section_name)
         if isinstance(section, dict) and package_name in section:
@@ -311,7 +315,9 @@ def collect_live_measured_facts(*, root: Path) -> dict[str, Any]:
         ).strip(),
         "fastapi_requirement": _extract_fastapi_requirement(pyproject_payload),
         "frontend_svelte_version": _package_version(package_payload, "svelte"),
-        "frontend_sveltekit_version": _package_version(package_payload, "@sveltejs/kit"),
+        "frontend_sveltekit_version": _package_version(
+            package_payload, "@sveltejs/kit"
+        ),
         "backend_tests_collected": _collect_backend_tests_count(root=root),
         "test_and_spec_files": _count_test_and_spec_files(root=root),
         "zombie_plugin_classes": _count_zombie_plugin_classes(root=root),
@@ -346,14 +352,14 @@ def _collect_backend_tests_count(*, root: Path) -> int:
             check=False,
         )
         output = "\n".join(
-            chunk for chunk in (completed.stdout.strip(), completed.stderr.strip()) if chunk
+            chunk
+            for chunk in (completed.stdout.strip(), completed.stderr.strip())
+            if chunk
         )
         match = re.search(r"(\d+)\s+tests\s+collected", output)
         if completed.returncode == 0 and match is not None:
             return int(match.group(1))
-        failures.append(
-            f"{' '.join(command)} exited {completed.returncode}"
-        )
+        failures.append(f"{' '.join(command)} exited {completed.returncode}")
 
     raise ValueError(
         "could not determine backend_tests_collected from pytest collection output: "
@@ -473,12 +479,8 @@ def _validate_claim_consistency(
     if isinstance(summary, dict):
         important_corrections = summary.get("important_corrections")
         if isinstance(important_corrections, list):
-            backend_phrase = (
-                f"Backend tests collected currently total {backend_tests_collected}, not 5358."
-            )
-            zombie_phrase = (
-                f"Zombie detection plugin classes total {zombie_plugin_classes} across providers, not 11."
-            )
+            backend_phrase = f"Backend tests collected currently total {backend_tests_collected}, not 5358."
+            zombie_phrase = f"Zombie detection plugin classes total {zombie_plugin_classes} across providers, not 11."
             _expect(
                 backend_phrase in important_corrections,
                 "summary.important_corrections must include the live backend test count correction",
@@ -491,9 +493,7 @@ def _validate_claim_consistency(
             )
         high_confidence_findings = summary.get("high_confidence_findings")
         if isinstance(high_confidence_findings, list) and frontend_stack_phrase:
-            frontend_summary_phrase = (
-                f"The dashboard uses {frontend_stack_phrase}."
-            )
+            frontend_summary_phrase = f"The dashboard uses {frontend_stack_phrase}."
             _expect(
                 frontend_summary_phrase in high_confidence_findings,
                 "summary.high_confidence_findings must include the live frontend stack summary",
@@ -506,13 +506,9 @@ def _validate_claim_consistency(
 
     confirmed_claims = payload.get("confirmed_claims")
     if isinstance(confirmed_claims, list) and frontend_stack_phrase:
-        expected_frontend_claim = (
-            f"Frontend stack includes {frontend_stack_phrase}."
-        )
+        expected_frontend_claim = f"Frontend stack includes {frontend_stack_phrase}."
         confirmed_frontend_claims = [
-            claim.get("claim")
-            for claim in confirmed_claims
-            if isinstance(claim, dict)
+            claim.get("claim") for claim in confirmed_claims if isinstance(claim, dict)
         ]
         _expect(
             expected_frontend_claim in confirmed_frontend_claims,
@@ -535,7 +531,11 @@ def _validate_claim_consistency(
                 errors=errors,
             )
             evidence_line = None
-            if isinstance(evidence, list) and evidence and isinstance(evidence[0], dict):
+            if (
+                isinstance(evidence, list)
+                and evidence
+                and isinstance(evidence[0], dict)
+            ):
                 evidence_line = evidence[0].get("line")
             _expect(
                 evidence_line == backend_tests_collected,
@@ -823,7 +823,7 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--report",
-        default=str(DEFAULT_REPORT),
+        required=True,
         help="Path to the audit report JSON artifact. Must resolve inside the repo root.",
     )
     return parser.parse_args(argv)

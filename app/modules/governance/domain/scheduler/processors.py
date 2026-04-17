@@ -19,7 +19,10 @@ from app.modules.optimization.domain.factory import ZombieDetectorFactory
 from app.shared.adapters.factory import AdapterFactory
 from app.schemas.costs import CloudUsageSummary, CostRecord
 from app.shared.core.adapter_usage import fetch_daily_costs_if_supported
-from app.shared.core.connection_state import is_connection_active, resolve_connection_region
+from app.shared.core.connection_state import (
+    is_connection_active,
+    resolve_connection_region,
+)
 from app.shared.core.connection_queries import CONNECTION_MODEL_PAIRS
 from app.shared.core.config import get_settings
 from app.shared.core.provider import (
@@ -43,7 +46,6 @@ PROCESSOR_PROGRAMMER_ERRORS: tuple[type[BaseException], ...] = (
     AssertionError,
     AttributeError,
     LookupError,
-    NotImplementedError,
 )
 
 
@@ -145,6 +147,7 @@ class AnalysisProcessor:
 
             for conn in connections:
                 try:
+
                     async def _run_analysis() -> None:
                         provider = resolve_provider_from_connection(conn)
                         if not provider:
@@ -188,7 +191,9 @@ class AnalysisProcessor:
                         )
                         if isinstance(analysis_result, dict):
                             try:
-                                from app.shared.llm.guardrails import FinOpsAnalysisResult
+                                from app.shared.llm.guardrails import (
+                                    FinOpsAnalysisResult,
+                                )
 
                                 parsed_result = FinOpsAnalysisResult(**analysis_result)
                                 await savings_processor.process_recommendations(

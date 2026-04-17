@@ -117,31 +117,23 @@ class Settings(
         allowed = {"gcp"}
         if normalized not in allowed:
             allowed_text = ", ".join(sorted(allowed))
-            raise ValueError(
-                f"PLATFORM_RUNTIME_PROFILE must be one of: {allowed_text}"
-            )
+            raise ValueError(f"PLATFORM_RUNTIME_PROFILE must be one of: {allowed_text}")
         return normalized
 
     @field_validator("OBSERVABILITY_BACKEND", mode="before")
     @classmethod
     def _normalize_observability_backend(cls, value: object) -> str:
-        normalized = str(value or "auto").strip().lower()
-        allowed = {"auto", "otlp", "gcp"}
-        if normalized not in allowed:
-            allowed_text = ", ".join(sorted(allowed))
-            raise ValueError(f"OBSERVABILITY_BACKEND must be one of: {allowed_text}")
+        normalized = str(value or "gcp").strip().lower()
+        if normalized != "gcp":
+            raise ValueError("OBSERVABILITY_BACKEND must be gcp.")
         return normalized
 
     @field_validator("PUBLIC_API_RATE_LIMITING_BACKEND", mode="before")
     @classmethod
     def _normalize_public_api_rate_limiting_backend(cls, value: object) -> str:
-        normalized = str(value or "redis").strip().lower()
-        allowed = {"redis", "cloudflare"}
-        if normalized not in allowed:
-            allowed_text = ", ".join(sorted(allowed))
-            raise ValueError(
-                f"PUBLIC_API_RATE_LIMITING_BACKEND must be one of: {allowed_text}"
-            )
+        normalized = str(value or "cloudflare").strip().lower()
+        if normalized != "cloudflare":
+            raise ValueError("PUBLIC_API_RATE_LIMITING_BACKEND must be cloudflare.")
         return normalized
 
     @field_validator("AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN", mode="before")

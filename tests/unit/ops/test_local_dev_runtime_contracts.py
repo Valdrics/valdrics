@@ -33,13 +33,14 @@ def test_local_docs_point_sqlite_users_to_bootstrap_not_alembic_history() -> Non
     assert "make env-compose" in readme
     assert "make bootstrap-local-db" in readme
     assert "make docker-up" in readme
-    assert "make docker-up-redis" in readme
-    assert "docker-compose.redis.yml" in readme
     assert "`TESTING=false`" in readme
     assert ".env.compose.dev" in readme
-    assert "default compose path is cacheless" in readme
+    assert "checked-in compose topology is cacheless by" in readme
+    assert "make docker-up-redis" not in readme
+    assert "docker-compose.redis.yml" not in readme
     assert "Postgres/Redis docker compose path" not in readme
     assert "dockerized Postgres/Redis path" not in readme
+    assert "without Redis" not in readme
     assert "cp .env.dev .env" not in readme
     assert "docker-compose up -d" not in readme
     assert "Zero secrets stored." not in readme
@@ -55,14 +56,9 @@ def test_local_compose_targets_require_generated_env_and_compose_v2() -> None:
 
     assert "make env-compose" in makefile
     assert "docker compose --env-file .env.compose.dev up -d" in makefile
-    assert (
-        "docker compose -f docker-compose.yml -f docker-compose.redis.yml --env-file .env.compose.dev up -d"
-        in makefile
-    )
-    assert (
-        "docker compose -f docker-compose.yml -f docker-compose.redis.yml --env-file .env.compose.dev down"
-        in makefile
-    )
+    assert "docker-up-redis" not in makefile
+    assert "docker-compose.redis.yml" not in makefile
+    assert "docker compose --env-file .env.compose.dev down" in makefile
     assert (
         "docker compose --env-file .env.compose.dev -f docker-compose.observability.yml up -d"
         in makefile
@@ -76,36 +72,37 @@ def test_local_compose_targets_require_generated_env_and_compose_v2() -> None:
     assert "GRAFANA_PASSWORD in .env.compose.dev" in makefile
 
 
-def test_local_compose_bootstraps_postgres_and_keeps_redis_out_of_base_stack() -> None:
+def test_local_compose_bootstraps_postgres_and_keeps_shared_state_out_of_checked_in_stack() -> None:
     compose = _load_yaml(REPO_ROOT / "docker-compose.yml")
-    redis_overlay = _load_yaml(REPO_ROOT / "docker-compose.redis.yml")
+    observability = _load_yaml(REPO_ROOT / "docker-compose.observability.yml")
+    prometheus = _load_yaml(REPO_ROOT / "prometheus/prometheus.yml")
     makefile_text = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
     assert isinstance(compose, dict)
-    assert isinstance(redis_overlay, dict)
+    assert isinstance(observability, dict)
+    assert isinstance(prometheus, dict)
 
     services = compose["services"]
     assert services["postgres"]["image"] == "postgres:16.8-alpine"
     assert "redis" not in services
     assert "redis" not in compose.get("volumes", {})
-    assert redis_overlay["services"]["redis"]["image"] == "redis:7.2.5-alpine"
+    assert "redis" not in observability["services"]
+    assert "redis_data" not in observability.get("volumes", {})
+    assert "redis" not in {
+        str(scrape_config["job_name"])
+        for scrape_config in prometheus["scrape_configs"]
+    }
     assert "docker compose --env-file .env.compose.dev up -d" in makefile_text
-    assert "-f docker-compose.yml -f docker-compose.redis.yml --env-file .env.compose.dev up -d" in makefile_text
+    assert "docker-compose.redis.yml" not in makefile_text
 
 
-def test_local_compose_api_redis_dependency_exists_only_in_overlay() -> None:
+def test_local_compose_api_has_no_checked_in_shared_state_dependency() -> None:
     compose = _load_yaml(REPO_ROOT / "docker-compose.yml")
-    redis_overlay = _load_yaml(REPO_ROOT / "docker-compose.redis.yml")
     assert isinstance(compose, dict)
-    assert isinstance(redis_overlay, dict)
 
     api_depends = compose["services"]["api"]["depends_on"]
     assert api_depends["postgres"]["condition"] == "service_healthy"
     assert "redis" not in api_depends
     assert "environment" not in compose["services"]["api"]
-
-    overlay_api = redis_overlay["services"]["api"]
-    assert overlay_api["depends_on"]["redis"]["condition"] == "service_healthy"
-    assert overlay_api["environment"]["REDIS_URL"] == "redis://redis:6379"
 
 
 def test_sqlite_alembic_replay_is_explicitly_blocked_for_local_sqlite() -> None:

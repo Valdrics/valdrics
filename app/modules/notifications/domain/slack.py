@@ -11,7 +11,6 @@ import time
 from threading import Lock
 from uuid import UUID
 
-from redis.exceptions import RedisError
 from slack_sdk.web.async_client import AsyncWebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy import select
@@ -19,13 +18,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger()
 SLACK_CLIENT_RECOVERABLE_EXCEPTIONS = (
-    RuntimeError,
-    TypeError,
-    OSError,
-    ValueError,
-)
-SLACK_DEDUP_REDIS_RECOVERABLE_EXCEPTIONS = (
-    RedisError,
     RuntimeError,
     TypeError,
     OSError,
@@ -65,37 +57,18 @@ class SlackService:
         self.bot_token = bot_token
         self.channel_id = channel_id
 
-        # Local fallback when distributed Redis-backed deduplication is unavailable.
+        # Local fallback when shared deduplication state is unavailable.
         self._sent_alerts: dict[str, float] = {}
         self._dedup_window_seconds = 3600  # 1 hour deduplication window
 
-    @staticmethod
-    def _dedup_cache_key(channel_id: str, alert_hash: str) -> str:
-        return f"notifications:slack:dedup:{channel_id}:{alert_hash}"
-
     async def _is_duplicate_alert(self, alert_hash: str, current_time: float) -> bool:
-        try:
-            from app.shared.core.rate_limit import get_redis_client
-
-            redis_client = get_redis_client()
-            if redis_client is not None:
-                cache_key = self._dedup_cache_key(self.channel_id, alert_hash)
-                recorded = await redis_client.set(
-                    cache_key,
-                    str(int(current_time)),
-                    ex=int(self._dedup_window_seconds),
-                    nx=True,
-                )
-                return not bool(recorded)
-        except SLACK_DEDUP_REDIS_RECOVERABLE_EXCEPTIONS as exc:
-            logger.warning("slack_dedup_redis_unavailable", error=str(exc))
-
         last_sent = self._sent_alerts.get(alert_hash)
         if last_sent is not None and (
             current_time - last_sent < self._dedup_window_seconds
         ):
             return True
 
+        # Keep only instance-local deduplication in the supported cacheless profile.
         self._sent_alerts[alert_hash] = current_time
         self._sent_alerts = {
             key: value

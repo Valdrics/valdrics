@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import socket
@@ -14,6 +15,11 @@ from typing import Callable
 from urllib.error import URLError
 from urllib.request import urlopen
 
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - non-POSIX fallback
+    fcntl = None
+
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -22,6 +28,7 @@ from scripts.env_generation_common import repo_root_for, resolve_cli_path_from_r
 
 DEFAULT_ROOT = repo_root_for(__file__)
 DEFAULT_TIMEOUT_SECONDS = 15.0
+DEFAULT_LOCK_TIMEOUT_SECONDS = 300.0
 
 BuildRunner = Callable[[Path], None]
 SmokeRunner = Callable[[Path], str | None]
@@ -69,6 +76,39 @@ def build_dashboard(root: Path) -> None:
         check=True,
         text=True,
     )
+
+
+def _dashboard_runtime_lock_path(root: Path) -> Path:
+    return root / ".runtime" / "locks" / "dashboard-runtime-contract.lock"
+
+
+@contextmanager
+def _dashboard_runtime_lock(
+    root: Path, *, timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS
+):
+    if fcntl is None:
+        yield
+        return
+
+    lock_path = _dashboard_runtime_lock_path(root)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+", encoding="utf-8") as lock_file:
+        deadline = time.monotonic() + timeout_seconds
+        while True:
+            try:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(
+                        "dashboard runtime contract lock could not be acquired within "
+                        f"{timeout_seconds:.2f}s: {lock_path.as_posix()}"
+                    )
+                time.sleep(0.1)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
 
 
 def _reserve_local_port() -> int:
@@ -169,6 +209,7 @@ def verify_dashboard_runtime_contract(
     root: Path = DEFAULT_ROOT,
     build: bool = False,
     skip_smoke: bool = False,
+    lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS,
     build_runner: BuildRunner = build_dashboard,
     smoke_runner: SmokeRunner | None = None,
 ) -> list[str]:
@@ -178,29 +219,40 @@ def verify_dashboard_runtime_contract(
     if not repo_root.is_dir():
         return [f"root must be a directory: {repo_root}"]
 
-    if build:
-        build_runner(repo_root)
+    try:
+        with _dashboard_runtime_lock(
+            repo_root,
+            timeout_seconds=lock_timeout_seconds,
+        ):
+            if build:
+                build_runner(repo_root)
 
-    errors: list[str] = []
-    for path in _required_paths(repo_root):
-        if not path.exists():
-            errors.append(f"missing required dashboard runtime artifact: {path.as_posix()}")
-        elif not path.is_file():
-            errors.append(f"dashboard runtime artifact must be a file: {path.as_posix()}")
+            errors: list[str] = []
+            for path in _required_paths(repo_root):
+                if not path.exists():
+                    errors.append(
+                        f"missing required dashboard runtime artifact: {path.as_posix()}"
+                    )
+                elif not path.is_file():
+                    errors.append(
+                        f"dashboard runtime artifact must be a file: {path.as_posix()}"
+                    )
 
-    if errors:
-        return errors
+            if errors:
+                return errors
 
-    errors.extend(_text_contract_errors(repo_root))
-    if errors:
-        return errors
+            errors.extend(_text_contract_errors(repo_root))
+            if errors:
+                return errors
 
-    if skip_smoke:
-        return []
+            if skip_smoke:
+                return []
 
-    runner = smoke_runner or (lambda root_path: smoke_dashboard_runtime(root_path))
-    smoke_error = runner(repo_root)
-    return [smoke_error] if smoke_error else []
+            runner = smoke_runner or (lambda root_path: smoke_dashboard_runtime(root_path))
+            smoke_error = runner(repo_root)
+            return [smoke_error] if smoke_error else []
+    except TimeoutError as exc:
+        return [str(exc)]
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -16,7 +16,6 @@ locals {
     OBSERVABILITY_BACKEND                         = "gcp"
     PUBLIC_API_RATE_LIMITING_BACKEND              = "cloudflare"
     RATELIMIT_ENABLED                             = "false"
-    CIRCUIT_BREAKER_DISTRIBUTED_STATE             = "false"
     GCP_PROJECT_ID                                = var.gcp_project_id
     GCP_REGION                                    = var.gcp_region
     GCP_CLOUD_TASKS_QUEUE                         = google_cloud_tasks_queue.runtime.name

@@ -103,7 +103,7 @@ async def test_get_safety_status_exception_returns_defaults(
     with (
         patch(
             "app.shared.remediation.circuit_breaker.get_circuit_breaker",
-            side_effect=RuntimeError("redis down"),
+            side_effect=RuntimeError("cache backend down"),
         ),
         patch(
             "app.shared.core.config.get_settings",
@@ -133,7 +133,7 @@ async def test_reset_circuit_breaker_failure(
     )
 
     mock_cb = AsyncMock()
-    mock_cb.reset.side_effect = RuntimeError("redis down")
+    mock_cb.reset.side_effect = RuntimeError("cache backend down")
 
     app.dependency_overrides[get_current_user] = lambda: mock_user
     with patch(
