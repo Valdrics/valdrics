@@ -32,7 +32,7 @@ def test_settings_defaults():
         KDF_SALT=FAKE_KDF_SALT,
     )
     assert settings.APP_NAME == "Valdrics"
-    assert settings.RATELIMIT_ENABLED is True
+    assert settings.RATELIMIT_ENABLED is False
 
 
 def test_settings_normalizes_legacy_brand_name() -> None:
@@ -106,12 +106,23 @@ def test_settings_admin_key_env_validation():
                 DEBUG=True,  # DEBUG=True doesn't bypass ENV checks for admin key
                 SUPABASE_JWT_SECRET=FAKE_SUPABASE_SECRET,
                 DATABASE_URL="postgresql://host/db",
+                API_URL=FAKE_API_URL,
+                FRONTEND_URL=FAKE_FRONTEND_URL,
                 CSRF_SECRET_KEY=FAKE_CSRF_SECRET,
                 ENCRYPTION_KEY=FAKE_ENCRYPTION_KEY,
                 KDF_SALT=FAKE_KDF_SALT,
                 ADMIN_API_KEY=None,  # Force it to None
                 ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
                 ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
+                GCP_PROJECT_ID="valdrics-staging",
+                GCP_REGION="us-central1",
+                GCP_CLOUD_TASKS_QUEUE="valdrics-default",
+                GCP_CLOUD_TASKS_INVOKER_SERVICE_ACCOUNT_EMAIL="tasks@valdrics.iam.gserviceaccount.com",
+                GCP_CLOUD_RUN_SERVICE_NAME="valdrics-api",
+                GCP_CLOUD_RUN_BATCH_JOB_NAME="valdrics-scheduler-batch",
+                GCP_INTERNAL_ALLOWED_SERVICE_ACCOUNTS=[
+                    "tasks@valdrics.iam.gserviceaccount.com"
+                ],
                 _env_file=None,
             )
         assert "ADMIN_API_KEY must be >= 32 chars" in str(exc.value)
@@ -175,10 +186,18 @@ def test_settings_is_production_property():
             PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
             PAYSTACK_PUBLIC_KEY=FAKE_PAYSTACK_PUBLIC_KEY,
             ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=True,
-            REDIS_URL="redis://localhost:6379",
             DB_SSL_MODE="require",
             ENFORCEMENT_APPROVAL_TOKEN_SECRET=FAKE_ENFORCEMENT_APPROVAL_SECRET,
             ENFORCEMENT_EXPORT_SIGNING_SECRET=FAKE_ENFORCEMENT_EXPORT_SECRET,
+            GCP_PROJECT_ID="valdrics-prod",
+            GCP_REGION="us-central1",
+            GCP_CLOUD_TASKS_QUEUE="valdrics-default",
+            GCP_CLOUD_TASKS_INVOKER_SERVICE_ACCOUNT_EMAIL="tasks@valdrics.iam.gserviceaccount.com",
+            GCP_CLOUD_RUN_SERVICE_NAME="valdrics-api",
+            GCP_CLOUD_RUN_BATCH_JOB_NAME="valdrics-scheduler-batch",
+            GCP_INTERNAL_ALLOWED_SERVICE_ACCOUNTS=[
+                "tasks@valdrics.iam.gserviceaccount.com"
+            ],
             _env_file=None,
         )
         assert s_prod.is_production is True

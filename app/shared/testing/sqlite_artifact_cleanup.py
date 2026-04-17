@@ -26,7 +26,7 @@ _SQLITE_ARTIFACT_PATTERNS: tuple[str, ...] = (
 
 
 def build_sqlite_test_database_path(base_dir: Path) -> Path:
-    """Create a unique file-backed SQLite path under a caller-provided temp dir."""
+    """Create a unique file-backed SQLite path under a caller-provided directory."""
     base_dir.mkdir(parents=True, exist_ok=True)
     return base_dir / f"test_{uuid4().hex}.sqlite"
 

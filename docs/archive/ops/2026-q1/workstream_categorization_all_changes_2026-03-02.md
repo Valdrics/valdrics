@@ -3,7 +3,7 @@
 This document categorizes the full local working-tree delta at capture time.
 
 ## Inventory Source of Truth
-- File-level inventory: `docs/ops/evidence/all_changes_inventory_2026-03-02.txt`
+- File-level inventory: `docs/archive/ops/2026-q1/evidence/all_changes_inventory_2026-03-02.txt`
 - Total changed paths: `383`
   - Modified: `348`
   - Deleted: `22`

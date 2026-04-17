@@ -37,8 +37,10 @@ _RATES_CACHE: dict[str, tuple[Decimal, float, Optional[str]]] = {
 }
 _L1_TTL_SECONDS = 300.0
 
+
 class ExchangeRateUnavailableError(RuntimeError):
     """Raised when strict callers cannot obtain a trustworthy FX rate."""
+
 
 class ExchangeRateService:
     """Canonical FX service used by billing and non-billing consumers."""
@@ -190,7 +192,7 @@ class ExchangeRateService:
                     )
                 raise
 
-    async def _read_redis_rate(
+    async def _read_cache_rate(
         self, to_currency: str
     ) -> tuple[Optional[Decimal], Optional[float], Optional[str]]:
         from app.shared.core.cache import get_cache_service
@@ -200,7 +202,7 @@ class ExchangeRateService:
             return None, None, None
 
         key = f"currency_rate:{to_currency}"
-        payload = await cache._get(key)
+        payload = await cache.get(key)
         if not isinstance(payload, dict):
             return None, None, None
 
@@ -224,7 +226,7 @@ class ExchangeRateService:
         provider_name = str(provider) if isinstance(provider, str) else None
         return rate, updated_ts, provider_name
 
-    async def _write_redis_rate(
+    async def _write_cache_rate(
         self,
         to_currency: str,
         rate: Decimal,
@@ -236,7 +238,7 @@ class ExchangeRateService:
         if not cache.enabled:
             return
         try:
-            await cache._set(
+            await cache.set(
                 f"currency_rate:{to_currency}",
                 {
                     "rate": float(rate),
@@ -247,7 +249,7 @@ class ExchangeRateService:
             )
         except EXCHANGE_RATE_CACHE_RECOVERABLE_ERRORS as exc:
             logger.debug(
-                "exchange_rate_redis_write_failed",
+                "exchange_rate_cache_write_failed",
                 currency=to_currency,
                 error=str(exc),
             )
@@ -344,23 +346,23 @@ class ExchangeRateService:
             else:
                 return l1_rate
 
-        # L2: Redis cache
-        redis_rate, redis_updated_ts, redis_provider = await self._read_redis_rate(
+        # L2: cache service
+        cache_rate, cache_updated_ts, cache_provider = await self._read_cache_rate(
             currency
         )
         if (
-            redis_rate
-            and redis_updated_ts
-            and (now_wall_ts - redis_updated_ts) <= max_age_seconds
+            cache_rate
+            and cache_updated_ts
+            and (now_wall_ts - cache_updated_ts) <= max_age_seconds
         ):
-            if strict and currency == "NGN" and redis_provider != "cbn_nfem":
+            if strict and currency == "NGN" and cache_provider != "cbn_nfem":
                 logger.warning(
-                    "strict_ngn_ignoring_non_official_redis_rate",
-                    provider=redis_provider,
+                    "strict_ngn_ignoring_non_official_cache_rate",
+                    provider=cache_provider,
                 )
             else:
-                self._write_l1_rate(currency, redis_rate, redis_provider)
-                return redis_rate
+                self._write_l1_rate(currency, cache_rate, cache_provider)
+                return cache_rate
 
         # L3: DB cache
         db_rate, db_updated_at, db_provider = await self._read_db_rate(currency)
@@ -372,7 +374,7 @@ class ExchangeRateService:
                 )
             else:
                 self._write_l1_rate(currency, db_rate, db_provider)
-                await self._write_redis_rate(currency, db_rate, db_provider)
+                await self._write_cache_rate(currency, db_rate, db_provider)
                 return db_rate
 
         # Live fetch
@@ -383,7 +385,7 @@ class ExchangeRateService:
                     "Official NGN rate unavailable; charging halted"
                 )
             self._write_l1_rate(currency, live_rate, provider)
-            await self._write_redis_rate(currency, live_rate, provider)
+            await self._write_cache_rate(currency, live_rate, provider)
             # Keep DB authoritative for NGN official rates only.
             if not (currency == "NGN" and provider != "cbn_nfem"):
                 await self._upsert_db_rate(currency, live_rate, provider)
@@ -450,21 +452,26 @@ class ExchangeRateService:
             logger.warning("exchange_rate_list_cached_failed", error=str(exc))
 
         for code, payload in _RATES_CACHE.items():
-            raw_rate: Any = payload[0] if isinstance(payload, tuple) and payload else None
+            raw_rate: Any = (
+                payload[0] if isinstance(payload, tuple) and payload else None
+            )
             if isinstance(raw_rate, Decimal):
                 rates[str(code).upper()] = raw_rate
 
         return rates
+
 
 async def get_exchange_rate(to_currency: str, *, strict: bool = False) -> Decimal:
     """Convenience function for existing call sites."""
     service = ExchangeRateService()
     return await service.get_rate(to_currency, strict=strict)
 
+
 async def list_exchange_rates() -> dict[str, Decimal]:
     """Return cached exchange rates for diagnostics and internal APIs."""
     service = ExchangeRateService()
     return await service.list_cached_rates()
+
 
 async def convert_usd(
     amount_usd: float | Decimal,
@@ -479,6 +486,7 @@ async def convert_usd(
     rate = await get_exchange_rate(currency, strict=strict)
     return Decimal(str(amount_usd)) * rate
 
+
 async def convert_to_usd(
     amount: float | Decimal,
     from_currency: str,
@@ -491,6 +499,7 @@ async def convert_to_usd(
         return Decimal(str(amount))
     rate = await get_exchange_rate(currency, strict=strict)
     return convert_to_usd_amount(amount, rate)
+
 
 async def format_currency(
     amount_usd: float | Decimal,

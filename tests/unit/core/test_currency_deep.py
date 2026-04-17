@@ -89,7 +89,7 @@ class TestCurrencyDeep:
             patch("app.shared.core.currency.time.time", return_value=500.0),
             patch.object(
                 service,
-                "_read_redis_rate",
+                "_read_cache_rate",
                 new=AsyncMock(return_value=(None, None, None)),
             ),
             patch.object(
@@ -104,7 +104,7 @@ class TestCurrencyDeep:
             ),
             patch.object(
                 service,
-                "_write_redis_rate",
+                "_write_cache_rate",
                 new=AsyncMock(return_value=None),
             ),
             patch.object(
@@ -118,13 +118,13 @@ class TestCurrencyDeep:
         assert rate == Decimal("1.23")
 
     @pytest.mark.asyncio
-    async def test_get_exchange_rate_redis_hit(self):
+    async def test_get_exchange_rate_cache_hit(self):
         mock_cache = MagicMock()
         mock_cache.enabled = True
-        mock_cache._get = AsyncMock(
+        mock_cache.get = AsyncMock(
             return_value={"rate": 1500.0, "updated_at": time.time()}
         )
-        mock_cache._set = AsyncMock()
+        mock_cache.set = AsyncMock()
 
         with patch("app.shared.core.cache.get_cache_service", return_value=mock_cache):
             rate = await get_exchange_rate("NGN")
@@ -132,14 +132,20 @@ class TestCurrencyDeep:
             assert "NGN" in _RATES_CACHE
 
     @pytest.mark.asyncio
-    async def test_get_exchange_rate_redis_freshness_uses_wall_clock_not_monotonic(self):
+    async def test_get_exchange_rate_cache_freshness_uses_wall_clock_not_monotonic(
+        self,
+    ):
         service = ExchangeRateService()
         mock_cache = MagicMock()
         mock_cache.enabled = True
-        mock_cache._get = AsyncMock(
-            return_value={"rate": 1500.0, "updated_at": 10_000.0, "provider": "cbn_nfem"}
+        mock_cache.get = AsyncMock(
+            return_value={
+                "rate": 1500.0,
+                "updated_at": 10_000.0,
+                "provider": "cbn_nfem",
+            }
         )
-        mock_cache._set = AsyncMock()
+        mock_cache.set = AsyncMock()
 
         with (
             patch("app.shared.core.cache.get_cache_service", return_value=mock_cache),
@@ -161,7 +167,7 @@ class TestCurrencyDeep:
             ),
             patch.object(
                 service,
-                "_write_redis_rate",
+                "_write_cache_rate",
                 new=AsyncMock(return_value=None),
             ),
             patch.object(
@@ -232,11 +238,11 @@ class TestCurrencyDeep:
             assert "ZAR" in await format_currency(10, "ZAR")
 
     @pytest.mark.asyncio
-    async def test_get_exchange_rate_updates_redis(self):
+    async def test_get_exchange_rate_updates_cache_service(self):
         mock_cache = MagicMock()
         mock_cache.enabled = True
-        mock_cache._get = AsyncMock(return_value=None)
-        mock_cache._set = AsyncMock()
+        mock_cache.get = AsyncMock(return_value=None)
+        mock_cache.set = AsyncMock()
 
         with (
             patch("app.shared.core.cache.get_cache_service", return_value=mock_cache),
@@ -258,7 +264,25 @@ class TestCurrencyDeep:
         ):
             rate = await get_exchange_rate("NGN")
             assert rate == Decimal("1500.0")
-            assert mock_cache._set.called
+            assert mock_cache.set.called
+
+    @pytest.mark.asyncio
+    async def test_read_cache_rate_returns_none_provider_when_payload_missing_provider(
+        self,
+    ):
+        service = ExchangeRateService()
+        mock_cache = MagicMock()
+        mock_cache.enabled = True
+        mock_cache.get = AsyncMock(
+            return_value={"rate": 1500.0, "updated_at": time.time()}
+        )
+
+        with patch("app.shared.core.cache.get_cache_service", return_value=mock_cache):
+            rate, updated_at, provider = await service._read_cache_rate("NGN")
+
+        assert rate == Decimal("1500.0")
+        assert updated_at is not None
+        assert provider is None
 
     def test_exchange_rate_service_cache_ttl_hours_uses_live_settings(self):
         first_settings = MagicMock(EXCHANGE_RATE_SYNC_INTERVAL_HOURS=2)

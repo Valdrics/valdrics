@@ -1,6 +1,6 @@
 import pytest
-from unittest.mock import AsyncMock, patch
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
 from slack_sdk.errors import SlackApiError
 from app.modules.notifications.domain.slack import SlackService, get_tenant_slack_service
 from app.shared.core.pricing import PricingTier
@@ -39,15 +39,9 @@ async def test_send_alert_deduplication(slack_service):
 async def test_send_alert_local_dedup_window_uses_monotonic_time(slack_service):
     slack_service.client.chat_postMessage = AsyncMock()
 
-    with (
-        patch(
-            "app.shared.core.rate_limit.get_redis_client",
-            side_effect=RuntimeError("redis unavailable"),
-        ),
-        patch(
-            "app.modules.notifications.domain.slack._dedup_now",
-            side_effect=[1_000.0, 5_000.0],
-        ),
+    with patch(
+        "app.modules.notifications.domain.slack._dedup_now",
+        side_effect=[1_000.0, 5_000.0],
     ):
         await slack_service.send_alert("Dupe", "Msg")
         result = await slack_service.send_alert("Dupe", "Msg")
@@ -73,18 +67,17 @@ async def test_send_alert_no_deduplication_different_msg(slack_service):
 
 
 @pytest.mark.asyncio
-async def test_send_alert_no_deduplication_different_msg(slack_service):
-    """Verifies that different messages with same title are NOT deduped."""
+async def test_send_alert_no_deduplication_different_severity(slack_service):
+    """Verifies that different severities with same title/message are NOT deduped."""
     slack_service.client.chat_postMessage = AsyncMock()
 
     # First send
-    await slack_service.send_alert("Same Title", "Msg 1")
+    await slack_service.send_alert("Same Title", "Msg", "info")
 
-    # Second send with same title but different message
-    result = await slack_service.send_alert("Same Title", "Msg 2")
+    # Second send with same title/message but different severity
+    result = await slack_service.send_alert("Same Title", "Msg", "critical")
 
     assert result is True
-    # Should be called TWICE
     assert slack_service.client.chat_postMessage.call_count == 2
 
 
@@ -136,16 +129,6 @@ async def test_send_with_retry_does_not_swallow_fatal_errors(slack_service):
 
     with pytest.raises(KeyboardInterrupt):
         await slack_service.send_alert("Test", "Msg")
-
-
-@pytest.mark.asyncio
-async def test_send_alert_dedup_attribute_error_bubbles(slack_service):
-    slack_service.client.chat_postMessage = AsyncMock()
-    cache_client = SimpleNamespace()
-
-    with patch("app.shared.core.rate_limit.get_redis_client", return_value=cache_client):
-        with pytest.raises(AttributeError):
-            await slack_service.send_alert("Test", "Msg")
 
 
 @pytest.mark.asyncio

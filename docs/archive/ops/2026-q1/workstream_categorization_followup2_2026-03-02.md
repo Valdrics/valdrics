@@ -3,7 +3,7 @@
 This register categorizes all current local changes for this batch.
 
 ## Inventory Source
-- `docs/ops/evidence/all_changes_inventory_followup2_2026-03-02.txt`
+- `docs/archive/ops/2026-q1/evidence/all_changes_inventory_followup2_2026-03-02.txt`
 - Total changed paths at capture: `14`
 
 ## Track R: Landing trust/hero polish + route-guard tests
@@ -33,7 +33,7 @@ This register categorizes all current local changes for this batch.
 - Files:
   - `docs/DEPLOYMENT.md`
   - `docs/ops/cloudflare_go_live_checklist_2026-03-02.md`
-  - `docs/ops/evidence/all_changes_inventory_followup2_2026-03-02.txt`
+  - `docs/archive/ops/2026-q1/evidence/all_changes_inventory_followup2_2026-03-02.txt`
   - `docs/ops/workstream_categorization_followup2_2026-03-02.md`
 
 ## Merge intent

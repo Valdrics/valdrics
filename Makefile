@@ -1,7 +1,7 @@
 # Valdrics Makefile
 # Developer convenience commands using uv
 
-.PHONY: help install dev test lint format security clean docker-build docker-up docker-up-redis docker-down observability observability-down env-dev env-compose bootstrap-local-db clean-local-db smoke-local-db verify-managed-bundle public-quality docs-hygiene
+.PHONY: help install dev test lint format security clean docker-build docker-up docker-down observability observability-down env-dev env-compose bootstrap-local-db clean-local-db smoke-local-db verify-managed-bundle render-managed-release-blockers public-quality docs-hygiene
 
 # Default target
 help:
@@ -14,8 +14,9 @@ help:
 	@echo "  make clean-local-db - Remove local sqlite bootstrap artifacts from the repo root"
 	@echo "  make smoke-local-db - Prove the local sqlite bootstrap path reaches a healthy app state"
 	@echo "  make verify-managed-bundle ENVIRONMENT=<staging|production> - Verify runtime, migration, and deployment artifacts stay coherent"
+	@echo "  make render-managed-release-blockers [NON_SECRET_BUNDLE=true] - Render the cross-environment blocker summary from staging + production bundles"
 	@echo "  make public-quality [DASHBOARD_URL=http://localhost:5174] - Run public smoke + a11y + perf + visual gates"
-	@echo "  make docs-hygiene - Fail on orphaned dated docs and prohibited active duplicates"
+	@echo "  make docs-hygiene - Fail on orphaned dated docs/reports and prohibited active duplicates"
 	@echo "  make dev         - Start development servers (auto-uses .env.dev when present)"
 	@echo "  make test        - Run test suite"
 	@echo "  make lint        - Run linters"
@@ -26,7 +27,6 @@ help:
 	@echo "Docker Commands:"
 	@echo "  make docker-build  - Build Docker image"
 	@echo "  make docker-up     - Start the default local docker compose stack (Postgres + API + dashboard)"
-	@echo "  make docker-up-redis - Start the local docker compose stack with the isolated Redis drill overlay"
 	@echo "  make observability - Start Prometheus/Grafana stack for local compose"
 	@echo ""
 	@echo "Deployment:"
@@ -57,11 +57,15 @@ verify-managed-bundle:
 	@test -n "$(ENVIRONMENT)" || (echo "ENVIRONMENT must be set to staging or production" && exit 1)
 	uv run python3 scripts/verify_managed_deployment_bundle.py --environment $(ENVIRONMENT)
 
+render-managed-release-blockers:
+	@/bin/bash -lc 'ARGS=""; if [ "$(NON_SECRET_BUNDLE)" = "true" ]; then ARGS="--non-secret-deployment-bundle"; fi; uv run python3 scripts/render_managed_release_blocker_summary.py $$ARGS'
+
 public-quality:
 	@/bin/bash -lc 'ARGS=""; if [ -n "$(DASHBOARD_URL)" ]; then ARGS="--dashboard-url $(DASHBOARD_URL) --skip-webserver"; fi; uv run python3 scripts/run_public_frontend_quality_gate.py $$ARGS'
 
 docs-hygiene:
 	uv run python3 scripts/verify_docs_archive_hygiene.py
+	uv run python3 scripts/verify_reports_archive_hygiene.py
 
 dev:
 	@if [ -f .env.dev ]; then \
@@ -102,7 +106,7 @@ security:
 clean:
 	rm -rf .pytest_cache .ruff_cache .mypy_cache
 	rm -rf __pycache__ app/__pycache__ tests/__pycache__
-	rm -rf .coverage coverage.xml htmlcov
+	rm -rf .coverage coverage.xml htmlcov reports/coverage
 	rm -rf dist build *.egg-info
 
 # Docker
@@ -112,11 +116,8 @@ docker-build:
 docker-up:
 	@/bin/bash -lc 'if [ ! -f .env.compose.dev ]; then echo "Missing .env.compose.dev. Run '\''make env-compose'\'' first."; exit 1; fi; docker compose --env-file .env.compose.dev up -d'
 
-docker-up-redis:
-	@/bin/bash -lc 'if [ ! -f .env.compose.dev ]; then echo "Missing .env.compose.dev. Run '\''make env-compose'\'' first."; exit 1; fi; docker compose -f docker-compose.yml -f docker-compose.redis.yml --env-file .env.compose.dev up -d'
-
 docker-down:
-	@/bin/bash -lc 'if [ ! -f .env.compose.dev ]; then echo "Missing .env.compose.dev. Run '\''make env-compose'\'' first."; exit 1; fi; docker compose -f docker-compose.yml -f docker-compose.redis.yml --env-file .env.compose.dev down'
+	@/bin/bash -lc 'if [ ! -f .env.compose.dev ]; then echo "Missing .env.compose.dev. Run '\''make env-compose'\'' first."; exit 1; fi; docker compose --env-file .env.compose.dev down'
 
 observability:
 	@/bin/bash -lc 'if [ ! -f .env.compose.dev ]; then echo "Missing .env.compose.dev. Run '\''make env-compose'\'' first."; exit 1; fi; docker compose --env-file .env.compose.dev -f docker-compose.observability.yml up -d'
@@ -137,8 +138,7 @@ migrate-create:
 
 # Pre-commit
 hooks-install:
-	uv run pre-commit install
-	uv run pre-commit install --hook-type commit-msg
+	uv run pre-commit install --install-hooks
 
 hooks-run:
 	uv run pre-commit run --all-files

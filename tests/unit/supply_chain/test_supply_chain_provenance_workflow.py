@@ -153,7 +153,6 @@ def test_performance_gate_supports_reuse_and_ci_automation() -> None:
     assert 'OBSERVABILITY_BACKEND: "gcp"' in perf_text
     assert 'PUBLIC_API_RATE_LIMITING_BACKEND: "cloudflare"' in perf_text
     assert 'RATELIMIT_ENABLED: "false"' in perf_text
-    assert 'CIRCUIT_BREAKER_DISTRIBUTED_STATE: "false"' in perf_text
     assert 'GCP_PROJECT_ID: "valdrics-staging"' in perf_text
     assert 'GCP_CLOUD_TASKS_QUEUE: "valdrics-default"' in perf_text
     assert "postgres:16.13-alpine" in perf_text
@@ -161,33 +160,39 @@ def test_performance_gate_supports_reuse_and_ci_automation() -> None:
     assert 'OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4317"' not in perf_text
     assert "otel/opentelemetry-collector:0.147.0" not in perf_text
     assert "Wait for OTEL Collector" not in perf_text
-    assert "uv run python scripts/validate_runtime_env.py --environment staging" in perf_text
+    assert (
+        "uv run python scripts/validate_runtime_env.py --environment staging"
+        in perf_text
+    )
     assert "uv run alembic upgrade head" in perf_text
-    assert "uv run celery -A app.shared.core.celery_app:celery_app worker -l info" not in perf_text
+    assert (
+        "uv run celery -A app.shared.core.celery_app:celery_app worker -l info"
+        not in perf_text
+    )
     assert "performance-health-gate:" in ci_text
     assert "performance-dashboard-gate:" in ci_text
     assert "performance-ops-gate:" in ci_text
     assert "uses: ./.github/workflows/performance-gate.yml" in ci_text
     assert "performance.owner@valdrics.local" not in perf_text
-    assert 'performance.owner@valdrics.ai' in perf_text
-    assert 'performance.owner@valdrics.ai' in (
+    assert "performance.owner@valdrics.ai" in perf_text
+    assert "performance.owner@valdrics.ai" in (
         REPO_ROOT / "scripts/bootstrap_performance_tenant.py"
     ).read_text(encoding="utf-8")
     assert 'p95_target: "1.25"' in ci_text
     assert "bootstrap_tier:" in perf_text
     assert '--tier "${{ inputs.bootstrap_tier }}"' in perf_text
-    assert 'tail -n 1 | tr -d' in perf_text
+    assert "tail -n 1 | tr -d" in perf_text
     assert 'bootstrap_tier: "starter"' in ci_text
-    assert 'name: perf-gate-evidence-${{ inputs.profile }}' in perf_text
-    assert 'name: perf-gate-api-log-${{ inputs.profile }}' in perf_text
-    assert 'name: perf-gate-worker-log-${{ inputs.profile }}' in perf_text
+    assert "name: perf-gate-evidence-${{ inputs.profile }}" in perf_text
+    assert "name: perf-gate-api-log-${{ inputs.profile }}" in perf_text
+    assert "name: perf-gate-worker-log-${{ inputs.profile }}" in perf_text
 
 
 def test_strict_runtime_preflight_is_hermetic_and_explicit_in_workflows() -> None:
     ci_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
-    dr_text = (
-        REPO_ROOT / ".github/workflows/disaster-recovery-drill.yml"
-    ).read_text(encoding="utf-8")
+    dr_text = (REPO_ROOT / ".github/workflows/disaster-recovery-drill.yml").read_text(
+        encoding="utf-8"
+    )
 
     assert 'API_URL: "https://api.validation.example.com"' in ci_text
     assert 'FRONTEND_URL: "https://app.validation.example.com"' in ci_text
@@ -200,35 +205,45 @@ def test_strict_runtime_preflight_is_hermetic_and_explicit_in_workflows() -> Non
     assert 'OBSERVABILITY_BACKEND: "gcp"' in dr_text
     assert 'PUBLIC_API_RATE_LIMITING_BACKEND: "cloudflare"' in dr_text
     assert 'RATELIMIT_ENABLED: "false"' in dr_text
-    assert 'CIRCUIT_BREAKER_DISTRIBUTED_STATE: "false"' in dr_text
     assert 'GCP_PROJECT_ID: "valdrics-staging"' in dr_text
     assert 'SENTRY_DSN: "https://example@sentry.io/1"' not in dr_text
     assert 'OTEL_EXPORTER_OTLP_ENDPOINT: "http://127.0.0.1:4317"' not in dr_text
     assert "otel/opentelemetry-collector:0.147.0" not in dr_text
     assert "Wait for OTEL Collector" not in dr_text
-    assert "uv run python scripts/validate_runtime_env.py --environment staging" in dr_text
+    assert (
+        "uv run python scripts/validate_runtime_env.py --environment staging" in dr_text
+    )
     assert "Launch Managed Worker Loop" in dr_text
     assert "scripts/run_local_managed_worker.py" in dr_text
-    assert "uv run celery -A app.shared.core.celery_app:celery_app worker -l info" not in dr_text
+    assert (
+        "uv run celery -A app.shared.core.celery_app:celery_app worker -l info"
+        not in dr_text
+    )
 
 
 def test_local_postgres_service_workflows_disable_db_ssl() -> None:
     perf_text = (REPO_ROOT / ".github/workflows/performance-gate.yml").read_text(
         encoding="utf-8"
     )
-    dr_text = (
-        REPO_ROOT / ".github/workflows/disaster-recovery-drill.yml"
-    ).read_text(encoding="utf-8")
+    dr_text = (REPO_ROOT / ".github/workflows/disaster-recovery-drill.yml").read_text(
+        encoding="utf-8"
+    )
 
-    assert 'DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"' in perf_text
+    assert (
+        'DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"'
+        in perf_text
+    )
     assert 'DB_SSL_MODE: "disable"' in perf_text
-    assert 'REDIS_URL: "redis://localhost:6379/0"' not in perf_text
-    assert 'DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"' in dr_text
+    assert (
+        'DATABASE_URL: "postgresql+asyncpg://postgres:local-dev-change-me@127.0.0.1:5432/valdrics"'
+        in dr_text
+    )
     assert 'DB_SSL_MODE: "disable"' in dr_text
-    assert 'REDIS_URL: "redis://localhost:6379/0"' not in dr_text
 
 
-def test_ci_and_security_workflows_fail_on_high_or_critical_infra_and_container_findings() -> None:
+def test_ci_and_security_workflows_fail_on_high_or_critical_infra_and_container_findings() -> (
+    None
+):
     ci_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     security_text = (REPO_ROOT / ".github/workflows/security-scan.yml").read_text(
         encoding="utf-8"
@@ -246,15 +261,17 @@ def test_security_scan_uses_hermetic_compose_env_for_dast() -> None:
         encoding="utf-8"
     )
 
-    assert "scripts/generate_local_compose_env.py --output-path .env.compose.dev" in text
+    assert (
+        "scripts/generate_local_compose_env.py --output-path .env.compose.dev" in text
+    )
     assert "cp .env.example .env" not in text
     assert '"PUBLIC_API_RATE_LIMITING_BACKEND": "cloudflare"' in text
     assert '"RATELIMIT_ENABLED": "false"' in text
-    assert '"CIRCUIT_BREAKER_DISTRIBUTED_STATE": "false"' in text
-    assert '"CIRCUIT_BREAKER_DISTRIBUTED_STATE": "true"' not in text
-    assert '"REDIS_URL": ""' in text
-    assert 'docker compose --env-file .env.compose.dev up -d --build postgres api dashboard' in text
-    assert 'docker compose --env-file .env.compose.dev down -v' in text
+    assert (
+        "docker compose --env-file .env.compose.dev up -d --build postgres api dashboard"
+        in text
+    )
+    assert "docker compose --env-file .env.compose.dev down -v" in text
     assert "docker compose up -d --build postgres redis api dashboard" not in text
 
 
@@ -265,16 +282,15 @@ def test_ci_workflow_pins_tflint_setup_version() -> None:
     assert "tflint_version: v0.61.0" in ci_text
 
 
-
-
 def test_cla_workflow_uses_in_repo_python_implementation() -> None:
-    text = (REPO_ROOT / '.github/workflows/cla.yml').read_text(encoding='utf-8')
+    text = (REPO_ROOT / ".github/workflows/cla.yml").read_text(encoding="utf-8")
 
-    assert 'contributor-assistant/github-action' not in text
-    assert 'python3 scripts/cla_assistant.py' in text
-    assert 'CLA_SIGNATURES_BRANCH: cla-signatures' in text
-    assert 'statuses: write' in text
-    assert 'issues: write' in text
+    assert "contributor-assistant/github-action" not in text
+    assert "python3 scripts/cla_assistant.py" in text
+    assert "CLA_SIGNATURES_BRANCH: cla-signatures" in text
+    assert "statuses: write" in text
+    assert "issues: write" in text
+
 
 def test_critical_workflows_use_immutable_action_shas_and_fixed_runner_images() -> None:
     uses_pattern = re.compile(

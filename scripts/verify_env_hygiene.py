@@ -29,6 +29,17 @@ REQUIRED_POSITIVE_INTEGER_KEYS: tuple[str, ...] = (
     "DB_POOL_TIMEOUT",
 )
 
+FORBIDDEN_TEMPLATE_KEYS: tuple[str, ...] = (
+    "REDIS_URL",
+    "UPSTASH_REDIS_URL",
+    "UPSTASH_REDIS_TOKEN",
+    "CIRCUIT_BREAKER_DISTRIBUTED_STATE",
+    "CIRCUIT_BREAKER_DISTRIBUTED_KEY_PREFIX",
+    "SENTRY_DSN",
+    "OTEL_EXPORTER_OTLP_ENDPOINT",
+    "OTEL_LOGS_EXPORT_ENABLED",
+)
+
 DEFAULT_TEMPLATE_PATH = Path(".env.example")
 
 
@@ -162,6 +173,12 @@ def verify_env_hygiene(*, repo_root: Path, template_path: Path) -> tuple[str, ..
         failure = _validate_positive_integer(values, key)
         if failure:
             errors.append(failure)
+
+    for key in FORBIDDEN_TEMPLATE_KEYS:
+        if key in values:
+            errors.append(
+                f"Retired managed-runtime key must not appear in .env.example: {key}"
+            )
 
     return tuple(errors)
 

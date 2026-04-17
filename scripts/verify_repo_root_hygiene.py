@@ -30,6 +30,10 @@ PROHIBITED_ROOT_PATTERNS: tuple[str, ...] = (
     "valdrics_local*.sqlite3-wal",
     "valdrics_local*.sqlite3.bootstrap.lock",
 )
+PROHIBITED_ROOT_PATHS: tuple[str, ...] = (
+    "helm",
+    "terraform/modules",
+)
 
 
 @dataclass(frozen=True)
@@ -54,10 +58,18 @@ def _validate_root(root: Path) -> None:
 
 
 def collect_root_hygiene_violations(
-    root: Path, *, prohibited_patterns: tuple[str, ...] = PROHIBITED_ROOT_PATTERNS
+    root: Path,
+    *,
+    prohibited_patterns: tuple[str, ...] = PROHIBITED_ROOT_PATTERNS,
+    prohibited_paths: tuple[str, ...] = PROHIBITED_ROOT_PATHS,
 ) -> tuple[RootHygieneViolation, ...]:
     _validate_root(root)
     violations: list[RootHygieneViolation] = []
+    for relative_path in prohibited_paths:
+        if (root / relative_path).exists():
+            violations.append(
+                RootHygieneViolation(name=relative_path, pattern=relative_path)
+            )
     for child in root.iterdir():
         if not child.is_file():
             continue
@@ -72,7 +84,7 @@ def collect_root_hygiene_violations(
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Fail when prohibited artifacts are present in repository root."
+        description="Fail when prohibited active-tree artifacts are present in repository root."
     )
     parser.add_argument(
         "--root",
@@ -94,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[repo-root-hygiene] ok root={root}")
         return 0
 
-    print(f"[repo-root-hygiene] found {len(violations)} prohibited root file(s):")
+    print(f"[repo-root-hygiene] found {len(violations)} prohibited active-tree path(s):")
     for violation in violations:
         print(
             f" - {violation.name} (matched pattern {violation.pattern!r}); "

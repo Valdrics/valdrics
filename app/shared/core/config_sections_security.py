@@ -55,10 +55,3 @@ class SecuritySettings:
     KDF_ITERATIONS: int = 100000
     # Blind index key-stretching to slow offline guessing if key material is exposed.
     BLIND_INDEX_KDF_ITERATIONS: int = 50000
-
-    # Optional runtime cache / coordination backend.
-    REDIS_URL: str | None = None  # e.g., redis://localhost:6379
-
-    # Optional Upstash-backed cache service.
-    UPSTASH_REDIS_URL: str | None = None  # e.g., https://xxx.upstash.io
-    UPSTASH_REDIS_TOKEN: str | None = None

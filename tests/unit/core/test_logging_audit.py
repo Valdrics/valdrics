@@ -4,7 +4,7 @@ from uuid import UUID
 import pytest
 from app.shared.core.logging import (
     pii_redactor,
-    add_otel_trace_id,
+    add_managed_runtime_log_fields,
     audit_log,
     audit_log_async,
     _parse_tenant_id,
@@ -48,17 +48,78 @@ def test_pii_redactor_regex():
     assert "[EMAIL_REDACTED]" in redacted["details"]
 
 
-def test_add_otel_trace_id():
-    """Verify trace ID injection from tracing context."""
-    with patch(
-        "app.shared.core.tracing.get_current_trace_id", return_value="trace-123"
-    ):
-        result = add_otel_trace_id(None, None, {"event": "test"})
-        assert result["trace_id"] == "trace-123"
+def test_add_managed_runtime_log_fields_adds_trace_metadata() -> None:
+    """Verify trace metadata and severity injection for managed runtimes."""
 
-    with patch("app.shared.core.tracing.get_current_trace_id", return_value=None):
-        result = add_otel_trace_id(None, None, {"event": "test"})
-        assert "trace_id" not in result
+    class _SpanContext:
+        def __init__(self, trace_id: int, span_id: int, is_valid: bool = True) -> None:
+            self.trace_id = trace_id
+            self.span_id = span_id
+            self.is_valid = is_valid
+
+    class _Span:
+        def __init__(self, context: _SpanContext) -> None:
+            self._context = context
+
+        def get_span_context(self) -> _SpanContext:
+            return self._context
+
+    trace_id = 0xABC
+    span_id = 0x1234
+    expected_trace_id = format(trace_id, "032x")
+    expected_span_id = format(span_id, "016x")
+
+    with (
+        patch(
+            "app.shared.core.logging.trace.get_current_span",
+            return_value=_Span(_SpanContext(trace_id, span_id)),
+        ),
+        patch("app.shared.core.logging.get_settings") as mock_settings,
+    ):
+        mock_settings.return_value.GCP_PROJECT_ID = "valdrics-prod"
+        result = add_managed_runtime_log_fields(
+            None, None, {"event": "test", "level": "warning"}
+        )
+
+    assert result["severity"] == "WARNING"
+    assert result["message"] == "test"
+    assert result["trace_id"] == expected_trace_id
+    assert (
+        result["logging.googleapis.com/trace"]
+        == f"projects/valdrics-prod/traces/{expected_trace_id}"
+    )
+    assert result["logging.googleapis.com/spanId"] == expected_span_id
+
+
+def test_add_managed_runtime_log_fields_skips_invalid_span() -> None:
+    """Verify invalid spans do not emit trace correlation fields."""
+
+    class _SpanContext:
+        def __init__(self) -> None:
+            self.trace_id = 0
+            self.span_id = 0
+            self.is_valid = False
+
+    class _Span:
+        def __init__(self, context: _SpanContext) -> None:
+            self._context = context
+
+        def get_span_context(self) -> _SpanContext:
+            return self._context
+
+    with patch(
+        "app.shared.core.logging.trace.get_current_span",
+        return_value=_Span(_SpanContext()),
+    ):
+        result = add_managed_runtime_log_fields(
+            None, None, {"event": "test", "level": "info"}
+        )
+
+    assert result["severity"] == "INFO"
+    assert result["message"] == "test"
+    assert "trace_id" not in result
+    assert "logging.googleapis.com/trace" not in result
+    assert "logging.googleapis.com/spanId" not in result
 
 
 def test_audit_log_schema():
@@ -81,7 +142,9 @@ def test_parse_tenant_id_normalizes_uuid_strings() -> None:
 
 
 @pytest.mark.asyncio
-async def test_audit_log_async_isolated_parses_tenant_uuid_before_session_context() -> None:
+async def test_audit_log_async_isolated_parses_tenant_uuid_before_session_context() -> (
+    None
+):
     session = AsyncMock()
     parsed_tenant = UUID("d290f1ee-6c54-4b01-90e6-d701748f0851")
 
@@ -99,8 +162,12 @@ async def test_audit_log_async_isolated_parses_tenant_uuid_before_session_contex
             return False
 
     with (
-        patch("app.shared.db.session.async_session_maker", return_value=_SessionContext()),
-        patch("app.shared.db.session.set_session_tenant_id", new=AsyncMock()) as set_tenant_id,
+        patch(
+            "app.shared.db.session.async_session_maker", return_value=_SessionContext()
+        ),
+        patch(
+            "app.shared.db.session.set_session_tenant_id", new=AsyncMock()
+        ) as set_tenant_id,
         patch(
             "app.modules.governance.domain.security.audit_log.AuditLogger",
             return_value=audit_logger_instance,
@@ -123,7 +190,9 @@ async def test_audit_log_async_isolated_parses_tenant_uuid_before_session_contex
 
 
 @pytest.mark.asyncio
-async def test_audit_log_async_isolated_uses_independent_session_for_duck_typed_db() -> None:
+async def test_audit_log_async_isolated_uses_independent_session_for_duck_typed_db() -> (
+    None
+):
     caller_db = AsyncMock()
     session = AsyncMock()
     parsed_tenant = UUID("d290f1ee-6c54-4b01-90e6-d701748f0851")
@@ -142,8 +211,12 @@ async def test_audit_log_async_isolated_uses_independent_session_for_duck_typed_
             return False
 
     with (
-        patch("app.shared.db.session.async_session_maker", return_value=_SessionContext()),
-        patch("app.shared.db.session.set_session_tenant_id", new=AsyncMock()) as set_tenant_id,
+        patch(
+            "app.shared.db.session.async_session_maker", return_value=_SessionContext()
+        ),
+        patch(
+            "app.shared.db.session.set_session_tenant_id", new=AsyncMock()
+        ) as set_tenant_id,
         patch(
             "app.modules.governance.domain.security.audit_log.AuditLogger",
             return_value=audit_logger_instance,
@@ -166,7 +239,9 @@ async def test_audit_log_async_isolated_uses_independent_session_for_duck_typed_
 
 
 @pytest.mark.asyncio
-async def test_audit_log_async_isolated_without_tenant_uses_system_audit_logger() -> None:
+async def test_audit_log_async_isolated_without_tenant_uses_system_audit_logger() -> (
+    None
+):
     session = AsyncMock()
 
     async def _log(**_: object) -> dict[str, str]:
@@ -183,7 +258,9 @@ async def test_audit_log_async_isolated_without_tenant_uses_system_audit_logger(
             return False
 
     with (
-        patch("app.shared.db.session.async_session_maker", return_value=_SessionContext()),
+        patch(
+            "app.shared.db.session.async_session_maker", return_value=_SessionContext()
+        ),
         patch(
             "app.shared.db.session.mark_session_system_context",
             new=AsyncMock(),
@@ -225,18 +302,18 @@ def test_setup_logging_no_crash():
     """Verify logging setup runs for both Debug and Prod modes."""
     with (
         patch("app.shared.core.logging.get_settings") as mock_settings,
-        patch("app.shared.core.logging.configure_otlp_log_export") as mock_otlp,
+        patch("app.shared.core.logging.structlog.configure") as mock_structlog,
+        patch("app.shared.core.logging.logging.basicConfig") as mock_basic_config,
     ):
         # 1. Debug (Console)
         mock_settings.return_value.DEBUG = True
         mock_settings.return_value.TESTING = False
-        mock_settings.return_value.OTEL_EXPORTER_OTLP_ENDPOINT = ""
+        mock_settings.return_value.GCP_PROJECT_ID = ""
         setup_logging()
 
         # 2. Prod (JSON)
         mock_settings.return_value.DEBUG = False
-        mock_settings.return_value.OTEL_EXPORTER_OTLP_ENDPOINT = (
-            "http://otel-collector:4317"
-        )
+        mock_settings.return_value.GCP_PROJECT_ID = "valdrics-prod"
         setup_logging()
-        assert mock_otlp.called
+        assert mock_structlog.call_count == 2
+        assert mock_basic_config.call_count == 2

@@ -84,6 +84,58 @@ def test_verify_env_hygiene_flags_tracked_env_and_secret_values(
     assert "Missing required key in .env.example: DB_POOL_TIMEOUT" in joined
 
 
+def test_verify_env_hygiene_flags_retired_managed_runtime_keys(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _write(
+        tmp_path / ".env.example",
+        "\n".join(
+            [
+                _valid_template(),
+                "REDIS_URL=redis://localhost:6379/0",
+                "UPSTASH_REDIS_URL=https://example.upstash.io",
+                "UPSTASH_REDIS_TOKEN=secret",
+                "CIRCUIT_BREAKER_DISTRIBUTED_STATE=true",
+                "CIRCUIT_BREAKER_DISTRIBUTED_KEY_PREFIX=valdrics:circuit",
+                "SENTRY_DSN=https://example@sentry.io/1",
+                "OTEL_EXPORTER_OTLP_ENDPOINT=https://otel.example.com",
+                "OTEL_LOGS_EXPORT_ENABLED=true",
+            ]
+        ),
+    )
+    monkeypatch.setattr(
+        "scripts.verify_env_hygiene._tracked_env_files",
+        lambda _repo_root: (),
+    )
+
+    errors = verify_env_hygiene(
+        repo_root=tmp_path,
+        template_path=Path(".env.example"),
+    )
+
+    joined = "\n".join(errors)
+    assert "Retired managed-runtime key must not appear in .env.example: REDIS_URL" in joined
+    assert "Retired managed-runtime key must not appear in .env.example: UPSTASH_REDIS_URL" in joined
+    assert "Retired managed-runtime key must not appear in .env.example: UPSTASH_REDIS_TOKEN" in joined
+    assert (
+        "Retired managed-runtime key must not appear in .env.example: CIRCUIT_BREAKER_DISTRIBUTED_STATE"
+        in joined
+    )
+    assert (
+        "Retired managed-runtime key must not appear in .env.example: CIRCUIT_BREAKER_DISTRIBUTED_KEY_PREFIX"
+        in joined
+    )
+    assert "Retired managed-runtime key must not appear in .env.example: SENTRY_DSN" in joined
+    assert (
+        "Retired managed-runtime key must not appear in .env.example: OTEL_EXPORTER_OTLP_ENDPOINT"
+        in joined
+    )
+    assert (
+        "Retired managed-runtime key must not appear in .env.example: OTEL_LOGS_EXPORT_ENABLED"
+        in joined
+    )
+
+
 def test_main_returns_failure_for_missing_template(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(
         "scripts.verify_env_hygiene._tracked_env_files",

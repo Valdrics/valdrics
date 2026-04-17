@@ -118,3 +118,36 @@ def test_refresh_audit_report_updates_live_fact_dependent_fields(tmp_path: Path)
     assert written["incorrect_claims"][1]["correction"] == (
         "A structural scan found 56 ZombiePlugin subclasses across provider adapters."
     )
+
+
+def test_refresh_audit_report_bootstraps_missing_environment_specific_report(
+    tmp_path: Path,
+) -> None:
+    report_path = tmp_path / ".runtime/production.audit.report.json"
+
+    refreshed = refresh_audit_report(
+        root=tmp_path,
+        report_path=report_path,
+        snapshot_date="2026-04-13",
+        live_facts={
+            "python_requires": ">=3.12,<3.13",
+            "fastapi_requirement": "~=0.128.0",
+            "frontend_svelte_version": "^5.51.5",
+            "frontend_sveltekit_version": "^2.52.2",
+            "backend_tests_collected": 6330,
+            "test_and_spec_files": 965,
+            "zombie_plugin_classes": 56,
+            "direct_audit_logger_call_sites": 33,
+        },
+        frontend_stack_phrase="SvelteKit, Svelte 5, TypeScript, Tailwind CSS v4, Vitest, and Playwright",
+    )
+
+    written = json.loads(report_path.read_text(encoding="utf-8"))
+
+    assert report_path.exists()
+    assert refreshed["environment"] == "production"
+    assert refreshed["source_report_label"] == "Repository-generated Codebase Audit Baseline"
+    assert written["deployment_notes"]["env_report_left_untouched"] is True
+    assert ".runtime/production.report.json" in written["deployment_notes"]["reason"]
+    assert written["measured_facts"]["backend_tests_collected"] == 6330
+    assert written["confirmed_claims"][0]["claim"].startswith("Frontend stack includes ")

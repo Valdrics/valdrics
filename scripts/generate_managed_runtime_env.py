@@ -62,7 +62,7 @@ def _protected_output_paths() -> set[Path]:
         __file__,
         ".env.example",
         "scripts/validate_runtime_env.py",
-        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/feature_enforceability_matrix.json",
         "docs/ops/key-rotation-drill-2026-02-27.md",
     )
 
@@ -483,13 +483,11 @@ def _build_overrides(
         "ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION": "false",
         "SAAS_STRICT_INTEGRATIONS": "true",
         "EXPOSE_API_DOCUMENTATION_PUBLICLY": "false",
-        "OTEL_LOGS_EXPORT_ENABLED": "true",
         "TRUST_PROXY_HEADERS": "true",
         "TRUSTED_PROXY_HOPS": "1",
         "TRUSTED_PROXY_CIDRS": _render_trusted_proxy_cidrs(
             normalized_trusted_proxy_cidrs
         ),
-        "CIRCUIT_BREAKER_DISTRIBUTED_STATE": "false",
         "FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK": "false",
         "FORECASTER_BREAK_GLASS_REASON": "",
         "FORECASTER_BREAK_GLASS_EXPIRES_AT": "",

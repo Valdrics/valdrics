@@ -2,6 +2,15 @@
 
 This directory stores staged enforcement evidence artifacts used by release gates.
 
+Historical local-change inventory captures no longer live here. Archive-only
+`all_changes_inventory*.txt` snapshots belong under
+`docs/archive/ops/<quarter>/evidence/` so the active evidence tree stays limited
+to current release-gate artifacts.
+
+Dated evidence artifacts remain active only when they are explicitly registered
+in `scripts/verify_docs_archive_hygiene.py`. A hard-coded reference by itself is
+not enough to keep a historical capture in this directory.
+
 ## Required Artifact Names
 
 1. Stress artifact: `enforcement_stress_artifact_YYYY-MM-DD.json`

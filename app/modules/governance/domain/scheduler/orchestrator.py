@@ -143,7 +143,7 @@ class SchedulerOrchestrator:
         race on the same managed trigger.
         """
         settings = self._settings()
-        # Test runs should be deterministic and fast; do not depend on Redis lock timing.
+        # Test runs should be deterministic and fast; do not depend on external lock timing.
         if settings.TESTING or settings.PYTEST_CURRENT_TEST:
             return True
 

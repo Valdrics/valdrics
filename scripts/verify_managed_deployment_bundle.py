@@ -43,12 +43,29 @@ EXPECTED_DEPLOYMENT_ARTIFACT_KEYS = (
     "cloudflare_pages_env_json",
     "artifact_registry_release_metadata",
     "terraform_runtime_tfvars",
+    "operator_handoff_markdown",
+)
+NON_SECRET_RELEASE_ARTIFACT_KEYS = (
+    "unified_platform_manifest",
+    "cloudflare_pages_env_json",
+    "artifact_registry_release_metadata",
+    "operator_handoff_markdown",
+)
+FULL_BUNDLE_ARTIFACT_KEYS_REQUIRED_ON_DISK = (
+    "unified_platform_manifest",
+    "secret_manager_runtime_secrets",
+    "cloudflare_pages_env_json",
+    "artifact_registry_release_metadata",
+    "terraform_runtime_tfvars",
 )
 EXPECTED_DEPLOYMENT_ARTIFACT_FILENAMES = {
     artifact_key: artifact_path.name
     for artifact_key, artifact_path in zip(
         EXPECTED_DEPLOYMENT_ARTIFACT_KEYS,
-        _artifact_output_paths(Path("/tmp/verify-managed-deployment-bundle"))[:5],
+        (
+            *_artifact_output_paths(Path("/tmp/verify-managed-deployment-bundle"))[:5],
+            Path("/tmp/verify-managed-deployment-bundle/operator-handoff.md"),
+        ),
         strict=True,
     )
 }
@@ -104,6 +121,7 @@ def verify_managed_deployment_bundle(
     runtime_report_path: Path,
     migration_report_path: Path,
     deployment_report_path: Path,
+    allow_non_secret_artifact_bundle: bool = False,
 ) -> list[str]:
     normalized_environment = str(environment or "").strip().lower()
     if normalized_environment not in SUPPORTED_ENVIRONMENTS:
@@ -161,21 +179,6 @@ def verify_managed_deployment_bundle(
 
     report_consistency_error_count = len(errors)
     _expect(
-        runtime_env_path.exists(),
-        f"missing runtime env file: {runtime_env_path.as_posix()}",
-        errors=errors,
-    )
-    _expect(
-        migration_env_path.exists(),
-        f"missing migration env file: {migration_env_path.as_posix()}",
-        errors=errors,
-    )
-    _expect(
-        deployment_runtime_env_path.exists(),
-        f"missing deployment runtime env file: {deployment_runtime_env_path.as_posix()}",
-        errors=errors,
-    )
-    _expect(
         deployment_output_dir.exists(),
         f"missing deployment output dir: {deployment_output_dir.as_posix()}",
         errors=errors,
@@ -196,126 +199,225 @@ def verify_managed_deployment_bundle(
         ),
         errors=errors,
     )
+    if not allow_non_secret_artifact_bundle:
+        _expect(
+            deployment_runtime_env_path.exists(),
+            (
+                "missing deployment runtime env file: "
+                f"{deployment_runtime_env_path.as_posix()}"
+            ),
+            errors=errors,
+        )
+        _expect(
+            runtime_env_path.exists(),
+            f"missing runtime env file: {runtime_env_path.as_posix()}",
+            errors=errors,
+        )
+        _expect(
+            migration_env_path.exists(),
+            f"missing migration env file: {migration_env_path.as_posix()}",
+            errors=errors,
+        )
 
     if len(errors) > report_consistency_error_count:
         return errors
 
-    runtime_values = parse_env_file(runtime_env_path)
-    migration_values = parse_env_file(migration_env_path)
-    _expect(
-        str(runtime_values.get("ENVIRONMENT", "")).strip().lower()
-        == normalized_environment,
-        (
-            f"runtime env ENVIRONMENT mismatch in {runtime_env_path.as_posix()}: "
-            f"expected {normalized_environment!r}"
-        ),
-        errors=errors,
-    )
-    _expect(
-        str(migration_values.get("ENVIRONMENT", "")).strip().lower()
-        == normalized_environment,
-        (
-            f"migration env ENVIRONMENT mismatch in {migration_env_path.as_posix()}: "
-            f"expected {normalized_environment!r}"
-        ),
-        errors=errors,
-    )
+    if allow_non_secret_artifact_bundle:
+        expected_runtime_blockers = _sorted_strings(
+            runtime_report.get("runtime_validation_blockers")
+        )
+        expected_runtime_declared = _sorted_strings(
+            runtime_report.get("declared_external_placeholders")
+        )
+        expected_runtime_required = _sorted_strings(
+            runtime_report.get("required_operator_input_keys")
+        )
+        _expect(
+            _sorted_strings(runtime_report.get("unresolved_external_keys"))
+            == expected_runtime_declared,
+            "runtime report unresolved_external_keys must match declared_external_placeholders",
+            errors=errors,
+        )
+        _expect(
+            set(expected_runtime_blockers).issubset(set(expected_runtime_required)),
+            "runtime report runtime_validation_blockers must stay within required_operator_input_keys",
+            errors=errors,
+        )
+        _expect(
+            bool(runtime_report.get("validation_ready"))
+            == (not expected_runtime_blockers),
+            "runtime report validation_ready does not match runtime blockers",
+            errors=errors,
+        )
+        _expect(
+            not expected_runtime_blockers,
+            (
+                "runtime report still contains unresolved runtime_validation_blockers "
+                f"in the non-secret release artifact bundle: {expected_runtime_blockers!r}"
+            ),
+            errors=errors,
+        )
 
-    expected_runtime_blockers = _identify_unresolved_keys(
-        runtime_values,
-        RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS,
-    )
-    expected_runtime_declared = _identify_unresolved_keys(
-        runtime_values,
-        DECLARED_EXTERNAL_VALUE_KEYS,
-    )
-    expected_runtime_required = _runtime_required_operator_input_keys(runtime_values)
+        expected_migration_blockers = _sorted_strings(
+            migration_report.get("migration_validation_blockers")
+        )
+        expected_migration_required = _sorted_strings(
+            migration_report.get("required_operator_input_keys")
+        )
+        _expect(
+            set(expected_migration_blockers).issubset(set(expected_migration_required)),
+            "migration report migration_validation_blockers must stay within required_operator_input_keys",
+            errors=errors,
+        )
+        _expect(
+            bool(migration_report.get("migration_ready"))
+            == (not expected_migration_blockers),
+            "migration report migration_ready does not match migration blockers",
+            errors=errors,
+        )
+        _expect(
+            not expected_migration_blockers,
+            (
+                "migration report still contains unresolved migration_validation_blockers "
+                f"in the non-secret release artifact bundle: {expected_migration_blockers!r}"
+            ),
+            errors=errors,
+        )
 
-    _expect(
-        _sorted_strings(runtime_report.get("runtime_validation_blockers"))
-        == expected_runtime_blockers,
-        (
-            "runtime report blockers drift from runtime env: "
-            f"expected {expected_runtime_blockers!r}, "
-            f"got {_sorted_strings(runtime_report.get('runtime_validation_blockers'))!r}"
-        ),
-        errors=errors,
-    )
-    _expect(
-        _sorted_strings(runtime_report.get("declared_external_placeholders"))
-        == expected_runtime_declared,
-        (
-            "runtime report declared placeholders drift from runtime env: "
-            f"expected {expected_runtime_declared!r}, "
-            f"got {_sorted_strings(runtime_report.get('declared_external_placeholders'))!r}"
-        ),
-        errors=errors,
-    )
-    _expect(
-        _sorted_strings(runtime_report.get("unresolved_external_keys"))
-        == expected_runtime_declared,
-        (
-            "runtime report unresolved_external_keys drift from runtime env: "
-            f"expected {expected_runtime_declared!r}, "
-            f"got {_sorted_strings(runtime_report.get('unresolved_external_keys'))!r}"
-        ),
-        errors=errors,
-    )
-    _expect(
-        _sorted_strings(runtime_report.get("required_operator_input_keys"))
-        == expected_runtime_required,
-        (
-            "runtime report required_operator_input_keys drift from runtime env: "
-            f"expected {expected_runtime_required!r}, "
-            f"got {_sorted_strings(runtime_report.get('required_operator_input_keys'))!r}"
-        ),
-        errors=errors,
-    )
-    _expect(
-        bool(runtime_report.get("validation_ready")) == (not expected_runtime_blockers),
-        "runtime report validation_ready does not match runtime blockers",
-        errors=errors,
-    )
+        expected_deployment_blockers = expected_runtime_blockers
+        _expect(
+            _sorted_strings(deployment_report.get("runtime_validation_blockers"))
+            == expected_deployment_blockers,
+            (
+                "deployment report runtime blockers drift from runtime report: "
+                f"expected {expected_deployment_blockers!r}, "
+                f"got {_sorted_strings(deployment_report.get('runtime_validation_blockers'))!r}"
+            ),
+            errors=errors,
+        )
+    else:
+        runtime_values = parse_env_file(runtime_env_path)
+        migration_values = parse_env_file(migration_env_path)
+        _expect(
+            str(runtime_values.get("ENVIRONMENT", "")).strip().lower()
+            == normalized_environment,
+            (
+                f"runtime env ENVIRONMENT mismatch in {runtime_env_path.as_posix()}: "
+                f"expected {normalized_environment!r}"
+            ),
+            errors=errors,
+        )
+        _expect(
+            str(migration_values.get("ENVIRONMENT", "")).strip().lower()
+            == normalized_environment,
+            (
+                f"migration env ENVIRONMENT mismatch in {migration_env_path.as_posix()}: "
+                f"expected {normalized_environment!r}"
+            ),
+            errors=errors,
+        )
 
-    expected_migration_blockers = _migration_blockers(migration_values)
-    expected_migration_required = _migration_required_operator_input_keys(migration_values)
-    _expect(
-        _sorted_strings(migration_report.get("migration_validation_blockers"))
-        == expected_migration_blockers,
-        (
-            "migration report blockers drift from migration env: "
-            f"expected {expected_migration_blockers!r}, "
-            f"got {_sorted_strings(migration_report.get('migration_validation_blockers'))!r}"
-        ),
-        errors=errors,
-    )
-    _expect(
-        _sorted_strings(migration_report.get("required_operator_input_keys"))
-        == expected_migration_required,
-        (
-            "migration report required_operator_input_keys drift from migration env: "
-            f"expected {expected_migration_required!r}, "
-            f"got {_sorted_strings(migration_report.get('required_operator_input_keys'))!r}"
-        ),
-        errors=errors,
-    )
-    _expect(
-        bool(migration_report.get("migration_ready")) == (not expected_migration_blockers),
-        "migration report migration_ready does not match migration blockers",
-        errors=errors,
-    )
+        expected_runtime_blockers = _identify_unresolved_keys(
+            runtime_values,
+            RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS,
+        )
+        expected_runtime_declared = _identify_unresolved_keys(
+            runtime_values,
+            DECLARED_EXTERNAL_VALUE_KEYS,
+        )
+        expected_runtime_required = _runtime_required_operator_input_keys(
+            runtime_values
+        )
 
-    expected_deployment_blockers = _runtime_blockers(runtime_values)
-    _expect(
-        _sorted_strings(deployment_report.get("runtime_validation_blockers"))
-        == expected_deployment_blockers,
-        (
-            "deployment report runtime blockers drift from runtime env: "
-            f"expected {expected_deployment_blockers!r}, "
-            f"got {_sorted_strings(deployment_report.get('runtime_validation_blockers'))!r}"
-        ),
-        errors=errors,
-    )
+        _expect(
+            _sorted_strings(runtime_report.get("runtime_validation_blockers"))
+            == expected_runtime_blockers,
+            (
+                "runtime report blockers drift from runtime env: "
+                f"expected {expected_runtime_blockers!r}, "
+                f"got {_sorted_strings(runtime_report.get('runtime_validation_blockers'))!r}"
+            ),
+            errors=errors,
+        )
+        _expect(
+            _sorted_strings(runtime_report.get("declared_external_placeholders"))
+            == expected_runtime_declared,
+            (
+                "runtime report declared placeholders drift from runtime env: "
+                f"expected {expected_runtime_declared!r}, "
+                f"got {_sorted_strings(runtime_report.get('declared_external_placeholders'))!r}"
+            ),
+            errors=errors,
+        )
+        _expect(
+            _sorted_strings(runtime_report.get("unresolved_external_keys"))
+            == expected_runtime_declared,
+            (
+                "runtime report unresolved_external_keys drift from runtime env: "
+                f"expected {expected_runtime_declared!r}, "
+                f"got {_sorted_strings(runtime_report.get('unresolved_external_keys'))!r}"
+            ),
+            errors=errors,
+        )
+        _expect(
+            _sorted_strings(runtime_report.get("required_operator_input_keys"))
+            == expected_runtime_required,
+            (
+                "runtime report required_operator_input_keys drift from runtime env: "
+                f"expected {expected_runtime_required!r}, "
+                f"got {_sorted_strings(runtime_report.get('required_operator_input_keys'))!r}"
+            ),
+            errors=errors,
+        )
+        _expect(
+            bool(runtime_report.get("validation_ready"))
+            == (not expected_runtime_blockers),
+            "runtime report validation_ready does not match runtime blockers",
+            errors=errors,
+        )
+
+        expected_migration_blockers = _migration_blockers(migration_values)
+        expected_migration_required = _migration_required_operator_input_keys(
+            migration_values
+        )
+        _expect(
+            _sorted_strings(migration_report.get("migration_validation_blockers"))
+            == expected_migration_blockers,
+            (
+                "migration report blockers drift from migration env: "
+                f"expected {expected_migration_blockers!r}, "
+                f"got {_sorted_strings(migration_report.get('migration_validation_blockers'))!r}"
+            ),
+            errors=errors,
+        )
+        _expect(
+            _sorted_strings(migration_report.get("required_operator_input_keys"))
+            == expected_migration_required,
+            (
+                "migration report required_operator_input_keys drift from migration env: "
+                f"expected {expected_migration_required!r}, "
+                f"got {_sorted_strings(migration_report.get('required_operator_input_keys'))!r}"
+            ),
+            errors=errors,
+        )
+        _expect(
+            bool(migration_report.get("migration_ready"))
+            == (not expected_migration_blockers),
+            "migration report migration_ready does not match migration blockers",
+            errors=errors,
+        )
+
+        expected_deployment_blockers = _runtime_blockers(runtime_values)
+        _expect(
+            _sorted_strings(deployment_report.get("runtime_validation_blockers"))
+            == expected_deployment_blockers,
+            (
+                "deployment report runtime blockers drift from runtime env: "
+                f"expected {expected_deployment_blockers!r}, "
+                f"got {_sorted_strings(deployment_report.get('runtime_validation_blockers'))!r}"
+            ),
+            errors=errors,
+        )
 
     artifacts = deployment_report.get("artifacts")
     if not isinstance(artifacts, dict):
@@ -323,6 +425,11 @@ def verify_managed_deployment_bundle(
         return errors
 
     seen_artifact_paths: dict[Path, str] = {}
+    artifact_keys_required_on_disk = (
+        FULL_BUNDLE_ARTIFACT_KEYS_REQUIRED_ON_DISK
+        if not allow_non_secret_artifact_bundle
+        else NON_SECRET_RELEASE_ARTIFACT_KEYS
+    )
     for artifact_key in EXPECTED_DEPLOYMENT_ARTIFACT_KEYS:
         artifact_path = artifacts.get(artifact_key)
         _expect(
@@ -363,8 +470,16 @@ def verify_managed_deployment_bundle(
                 errors=errors,
             )
             _expect(
-                resolved.exists(),
-                f"deployment artifact missing on disk: {resolved.as_posix()}",
+                resolved.exists() or artifact_key not in artifact_keys_required_on_disk,
+                (
+                    f"deployment artifact missing on disk: {resolved.as_posix()}"
+                    if artifact_key in artifact_keys_required_on_disk
+                    else (
+                        "deployment artifact path is recorded but not present in the "
+                        "non-secret release artifact bundle: "
+                        f"{resolved.as_posix()}"
+                    )
+                ),
                 errors=errors,
             )
 
@@ -380,14 +495,19 @@ def verify_managed_deployment_bundle(
         ),
         errors=errors,
     )
-    _expect(
-        terraform_tfvars_path.exists(),
-        f"missing terraform runtime tfvars: {terraform_tfvars_path.as_posix()}",
-        errors=errors,
-    )
+    if not allow_non_secret_artifact_bundle:
+        _expect(
+            terraform_tfvars_path.exists(),
+            f"missing terraform runtime tfvars: {terraform_tfvars_path.as_posix()}",
+            errors=errors,
+        )
     if errors:
         return errors
 
+    unified_platform_manifest_path = _normalize_path(
+        str(artifacts["unified_platform_manifest"]),
+        base_dir=deployment_report_path.parent,
+    )
     secret_manager_runtime_path = _normalize_path(
         str(artifacts["secret_manager_runtime_secrets"]),
         base_dir=deployment_report_path.parent,
@@ -401,43 +521,107 @@ def verify_managed_deployment_bundle(
         base_dir=deployment_report_path.parent,
     )
 
-    secret_manager_runtime_payload = _load_json(secret_manager_runtime_path)
+    unified_platform_manifest = _load_json(unified_platform_manifest_path)
     cloudflare_pages_env = _load_json(cloudflare_pages_env_path)
     artifact_registry_release = _load_json(artifact_registry_release_path)
-    terraform_tfvars_payload = _load_json(terraform_tfvars_path)
-
-    expected_secret_blockers = _placeholder_keys(
-        {str(key): str(value) for key, value in secret_manager_runtime_payload.items()}
+    _expect(
+        str(unified_platform_manifest.get("environment", "") or "").strip().lower()
+        == normalized_environment,
+        (
+            "unified platform manifest environment mismatch: "
+            f"expected {normalized_environment!r}"
+        ),
+        errors=errors,
     )
+    _expect(
+        str(unified_platform_manifest.get("strategy", "") or "").strip()
+        == "unified_platform_managed_release",
+        "unified platform manifest strategy must be unified_platform_managed_release",
+        errors=errors,
+    )
+
     expected_cloudflare_blockers = _placeholder_keys(
         {str(key): str(value) for key, value in cloudflare_pages_env.items()}
     )
     expected_release_blockers = sorted(
         set(_json_placeholder_blockers(artifact_registry_release))
     )
-    expected_terraform_remaining_inputs = _terraform_remaining_inputs(
-        terraform_tfvars_payload
-    )
-    expected_terraform_value_blockers = sorted(
-        set(_json_placeholder_blockers(terraform_tfvars_payload))
-    )
+    if allow_non_secret_artifact_bundle:
+        expected_secret_keys = _sorted_strings(
+            deployment_report.get("secret_manager_secret_keys")
+        )
+        expected_secret_blockers = _sorted_strings(
+            deployment_report.get("secret_manager_secret_value_blockers")
+        )
+        expected_terraform_remaining_inputs = _sorted_strings(
+            deployment_report.get("terraform_remaining_inputs")
+        )
+        expected_terraform_value_blockers = _sorted_strings(
+            deployment_report.get("terraform_value_blockers")
+        )
+        _expect(
+            bool(expected_secret_keys),
+            "deployment report secret_manager_secret_keys must stay non-empty for the non-secret release artifact bundle",
+            errors=errors,
+        )
+        _expect(
+            not expected_secret_blockers,
+            (
+                "deployment report still contains secret_manager_secret_value_blockers "
+                f"in the non-secret release artifact bundle: {expected_secret_blockers!r}"
+            ),
+            errors=errors,
+        )
+        _expect(
+            not expected_terraform_remaining_inputs,
+            (
+                "deployment report still contains terraform_remaining_inputs "
+                f"in the non-secret release artifact bundle: {expected_terraform_remaining_inputs!r}"
+            ),
+            errors=errors,
+        )
+        _expect(
+            not expected_terraform_value_blockers,
+            (
+                "deployment report still contains terraform_value_blockers "
+                f"in the non-secret release artifact bundle: {expected_terraform_value_blockers!r}"
+            ),
+            errors=errors,
+        )
+    else:
+        secret_manager_runtime_payload = _load_json(secret_manager_runtime_path)
+        terraform_tfvars_payload = _load_json(terraform_tfvars_path)
+        expected_secret_blockers = _placeholder_keys(
+            {
+                str(key): str(value)
+                for key, value in secret_manager_runtime_payload.items()
+            }
+        )
+        expected_terraform_remaining_inputs = _terraform_remaining_inputs(
+            terraform_tfvars_payload
+        )
+        expected_terraform_value_blockers = sorted(
+            set(_json_placeholder_blockers(terraform_tfvars_payload))
+        )
 
-    _expect(
-        _sorted_strings(deployment_report.get("secret_manager_secret_keys"))
-        == sorted(str(key) for key in secret_manager_runtime_payload),
-        "deployment report secret_manager_secret_keys drift from generated secret payload",
-        errors=errors,
-    )
-    _expect(
-        _sorted_strings(deployment_report.get("secret_manager_secret_value_blockers"))
-        == expected_secret_blockers,
-        (
-            "deployment report secret_manager_secret_value_blockers drift from generated secret payload: "
-            f"expected {expected_secret_blockers!r}, "
-            f"got {_sorted_strings(deployment_report.get('secret_manager_secret_value_blockers'))!r}"
-        ),
-        errors=errors,
-    )
+        _expect(
+            _sorted_strings(deployment_report.get("secret_manager_secret_keys"))
+            == sorted(str(key) for key in secret_manager_runtime_payload),
+            "deployment report secret_manager_secret_keys drift from generated secret payload",
+            errors=errors,
+        )
+        _expect(
+            _sorted_strings(
+                deployment_report.get("secret_manager_secret_value_blockers")
+            )
+            == expected_secret_blockers,
+            (
+                "deployment report secret_manager_secret_value_blockers drift from generated secret payload: "
+                f"expected {expected_secret_blockers!r}, "
+                f"got {_sorted_strings(deployment_report.get('secret_manager_secret_value_blockers'))!r}"
+            ),
+            errors=errors,
+        )
     _expect(
         _sorted_strings(deployment_report.get("cloudflare_pages_public_env_keys"))
         == sorted(str(key) for key in cloudflare_pages_env),
@@ -455,7 +639,9 @@ def verify_managed_deployment_bundle(
         errors=errors,
     )
     _expect(
-        _sorted_strings(deployment_report.get("artifact_registry_release_value_blockers"))
+        _sorted_strings(
+            deployment_report.get("artifact_registry_release_value_blockers")
+        )
         == expected_release_blockers,
         (
             "deployment report artifact_registry_release_value_blockers drift from generated Artifact Registry metadata: "
@@ -515,15 +701,16 @@ def verify_managed_deployment_bundle(
         "deployment report ready_for_terraform does not match blockers",
         errors=errors,
     )
-    _expect(
-        str(terraform_tfvars_payload.get("environment", "") or "").strip().lower()
-        == normalized_environment,
-        (
-            "terraform runtime tfvars environment mismatch: "
-            f"expected {normalized_environment!r}"
-        ),
-        errors=errors,
-    )
+    if not allow_non_secret_artifact_bundle:
+        _expect(
+            str(terraform_tfvars_payload.get("environment", "") or "").strip().lower()
+            == normalized_environment,
+            (
+                "terraform runtime tfvars environment mismatch: "
+                f"expected {normalized_environment!r}"
+            ),
+            errors=errors,
+        )
 
     return errors
 
@@ -569,7 +756,8 @@ def main(argv: list[str] | None = None) -> int:
             args.runtime_report or Path(".runtime") / f"{environment}.report.json"
         )
         migration_report = _resolve_report_path(
-            args.migration_report or Path(".runtime") / f"{environment}.migrate.report.json"
+            args.migration_report
+            or Path(".runtime") / f"{environment}.migrate.report.json"
         )
         deployment_report = _resolve_report_path(
             args.deployment_report

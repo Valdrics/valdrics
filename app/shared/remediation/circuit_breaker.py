@@ -1,5 +1,4 @@
 import time
-import json
 import asyncio
 from collections import OrderedDict
 from enum import Enum
@@ -11,14 +10,6 @@ import structlog
 from app.shared.core.config import get_settings
 
 logger = structlog.get_logger()
-REDIS_CLIENT_RESOLUTION_RECOVERABLE_EXCEPTIONS = (
-    ImportError,
-    AttributeError,
-    OSError,
-    RuntimeError,
-    TypeError,
-    ValueError,
-)
 
 
 def _monotonic_time() -> float:
@@ -49,84 +40,49 @@ class CircuitBreakerConfig:
 
 class CircuitBreakerState:
     """
-    Handles circuit-breaker state with process-local memory by default.
-
-    Redis-backed shared state is used only when it is explicitly configured for
-    distributed execution.
+    Handles circuit-breaker state with process-local memory only.
     """
 
-    def __init__(self, tenant_id: str, redis_client: Any = None) -> None:
+    def __init__(self, tenant_id: str) -> None:
         self.tenant_id = tenant_id
-        self.redis = redis_client
         self._memory_state: Dict[str, Any] = {}
-        self.prefix = f"cb:{tenant_id}:"
 
     async def get(self, key: str, default: Any = None) -> Any:
-        if self.redis:
-            val = await self.redis.get(self.prefix + key)
-            if val is not None:
-                try:
-                    return json.loads(val)
-                except (json.JSONDecodeError, TypeError, ValueError):
-                    return val
-            return default
         return self._memory_state.get(key, default)
 
     async def set(self, key: str, value: Any, expire: int | None = None) -> None:
-        if self.redis:
-            val = json.dumps(value) if not isinstance(value, (str, bytes)) else value
-            await self.redis.set(self.prefix + key, val, ex=expire)
-        else:
-            self._memory_state[key] = value
+        del expire
+        self._memory_state[key] = value
 
     async def incr(self, key: str) -> int:
-        if self.redis:
-            return cast(int, await self.redis.incr(self.prefix + key))
-
         current = cast(int, self._memory_state.get(key, 0))
         new_val = current + 1
         self._memory_state[key] = new_val
         return new_val
 
     async def incr_float(self, key: str, amount: float) -> float:
-        if self.redis:
-            return cast(float, await self.redis.incrbyfloat(self.prefix + key, amount))
-
         current = float(self._memory_state.get(key, 0.0))
         new_val = current + float(amount)
         self._memory_state[key] = new_val
         return new_val
 
     async def delete(self, key: str) -> None:
-        if self.redis:
-            await self.redis.delete(self.prefix + key)
-        else:
-            self._memory_state.pop(key, None)
+        self._memory_state.pop(key, None)
 
 
 class CircuitBreaker:
     """
-    Advanced circuit breaker with tenant isolation and optional distributed state.
-
-    Shared Redis state is used only when distributed mode is explicitly enabled
-    and a Redis backend is configured. Otherwise the breaker stays process-local.
+    Advanced circuit breaker with tenant isolation and process-local state.
     """
 
     def __init__(
         self,
         tenant_id: str,
         config: Optional[CircuitBreakerConfig] = None,
-        redis_client: Any = None,
-        backend_unavailable_reason: str | None = None,
     ) -> None:
         self.tenant_id = tenant_id
         self.config = config or CircuitBreakerConfig.from_settings()
-        self.state = CircuitBreakerState(tenant_id, redis_client)
-        self.backend_unavailable_reason = (
-            str(backend_unavailable_reason).strip()
-            if backend_unavailable_reason
-            else None
-        )
+        self.state = CircuitBreakerState(tenant_id)
 
     async def _reset_daily_budget_if_needed(self) -> None:
         """Reset daily savings counter when UTC date changes."""
@@ -141,27 +97,18 @@ class CircuitBreaker:
         return CircuitState(s)
 
     async def can_execute(self, estimated_savings: float = 0.0) -> bool:
-        if self.backend_unavailable_reason:
-            logger.error(
-                "circuit_breaker_backend_unavailable_fail_closed",
-                tenant_id=self.tenant_id,
-                reason=self.backend_unavailable_reason,
-            )
-            return False
-
         state = await self.get_state()
 
         if state == CircuitState.OPEN.value or state == CircuitState.OPEN:
-            if self.state.redis is None:
-                last_fail_monotonic = await self.state.get("last_failure_monotonic")
-                if (
-                    last_fail_monotonic
-                    and (_monotonic_time() - float(last_fail_monotonic))
-                    > self.config.recovery_timeout_seconds
-                ):
-                    await self.state.set("state", CircuitState.HALF_OPEN.value)
-                    logger.info("circuit_breaker_half_open", tenant_id=self.tenant_id)
-                    return True
+            last_fail_monotonic = await self.state.get("last_failure_monotonic")
+            if (
+                last_fail_monotonic
+                and (_monotonic_time() - float(last_fail_monotonic))
+                > self.config.recovery_timeout_seconds
+            ):
+                await self.state.set("state", CircuitState.HALF_OPEN.value)
+                logger.info("circuit_breaker_half_open", tenant_id=self.tenant_id)
+                return True
             last_fail = await self.state.get("last_failure_at")
             if (
                 last_fail
@@ -188,14 +135,6 @@ class CircuitBreaker:
         return True
 
     async def record_success(self, savings: float = 0.0) -> None:
-        if self.backend_unavailable_reason:
-            logger.warning(
-                "circuit_breaker_record_success_skipped_backend_unavailable",
-                tenant_id=self.tenant_id,
-                reason=self.backend_unavailable_reason,
-            )
-            return
-
         state = await self.get_state()
         if state == CircuitState.HALF_OPEN:
             await self.reset()
@@ -209,19 +148,9 @@ class CircuitBreaker:
         await self.state.incr_float("daily_savings_usd", savings)
 
     async def record_failure(self, error: str) -> None:
-        if self.backend_unavailable_reason:
-            logger.warning(
-                "circuit_breaker_record_failure_skipped_backend_unavailable",
-                tenant_id=self.tenant_id,
-                reason=self.backend_unavailable_reason,
-                error=error,
-            )
-            return
-
         count = await self.state.incr("failure_count")
         await self.state.set("last_failure_at", time.time())
-        if self.state.redis is None:
-            await self.state.set("last_failure_monotonic", _monotonic_time())
+        await self.state.set("last_failure_monotonic", _monotonic_time())
         await self.state.set("last_error", error)
 
         if count >= self.config.failure_threshold:
@@ -235,14 +164,6 @@ class CircuitBreaker:
 
     async def reset(self) -> None:
         """Manually reset the circuit breaker."""
-        if self.backend_unavailable_reason:
-            logger.warning(
-                "circuit_breaker_reset_skipped_backend_unavailable",
-                tenant_id=self.tenant_id,
-                reason=self.backend_unavailable_reason,
-            )
-            return
-
         await self.state.set("state", CircuitState.CLOSED.value)
         await self.state.set("failure_count", 0)
         await self.state.delete("last_failure_at")
@@ -257,8 +178,6 @@ class CircuitBreaker:
             "daily_savings_usd": await self.state.get("daily_savings_usd", 0.0),
             "can_execute": await self.can_execute(),
             "last_error": await self.state.get("last_error"),
-            "distributed_backend_available": self.backend_unavailable_reason is None,
-            "backend_unavailable_reason": self.backend_unavailable_reason,
         }
 
 
@@ -266,77 +185,19 @@ class CircuitBreaker:
 _tenant_breakers: "OrderedDict[str, CircuitBreaker]" = OrderedDict()
 _tenant_breakers_lock = asyncio.Lock()
 
-
-def _resolve_distributed_redis_client() -> Any | None:
-    """
-    Resolve a shared Redis client only when distributed state is explicitly enabled.
-
-    Falls back to process-local memory if distributed mode is disabled or no
-    healthy Redis client can be resolved. Production and staging callers may
-    still fail closed if distributed state was requested but is unavailable.
-    """
-    runtime_settings = get_settings()
-    distributed_enabled = bool(
-        getattr(runtime_settings, "CIRCUIT_BREAKER_DISTRIBUTED_STATE", False)
-    )
-    if not distributed_enabled:
-        return None
-
-    redis_url = str(getattr(runtime_settings, "REDIS_URL", "") or "").strip()
-    if not redis_url:
-        logger.warning("remediation_circuit_breaker_distributed_missing_redis_url")
-        return None
-
-    try:
-        from app.shared.core.rate_limit import get_redis_client
-
-        return get_redis_client()
-    except REDIS_CLIENT_RESOLUTION_RECOVERABLE_EXCEPTIONS as exc:
-        logger.warning(
-            "remediation_circuit_breaker_distributed_client_unavailable",
-            error=str(exc),
-        )
-        return None
-
-
 async def get_circuit_breaker(tenant_id: str) -> CircuitBreaker:
     """Get or create a circuit breaker for a tenant."""
     async with _tenant_breakers_lock:
-        redis_client = _resolve_distributed_redis_client()
         runtime_settings = get_settings()
-        environment = str(getattr(runtime_settings, "ENVIRONMENT", "") or "").strip().lower()
-        distributed_enabled = bool(
-            getattr(runtime_settings, "CIRCUIT_BREAKER_DISTRIBUTED_STATE", False)
-        )
-        backend_unavailable_reason: str | None = None
-        if distributed_enabled and redis_client is None and environment in {
-            "production",
-            "staging",
-        }:
-            backend_unavailable_reason = "distributed_state_backend_unavailable"
-            logger.error(
-                "remediation_circuit_breaker_distributed_unavailable_fail_closed",
-                tenant_id=tenant_id,
-                environment=environment,
-            )
-
         current_config = CircuitBreakerConfig.from_settings()
         existing_breaker = _tenant_breakers.get(tenant_id)
-        if (
-            existing_breaker is not None
-            and existing_breaker.config == current_config
-            and existing_breaker.state.redis is redis_client
-            and existing_breaker.backend_unavailable_reason
-            == backend_unavailable_reason
-        ):
+        if existing_breaker is not None and existing_breaker.config == current_config:
             _tenant_breakers.move_to_end(tenant_id)
             return existing_breaker
 
         _tenant_breakers[tenant_id] = CircuitBreaker(
             tenant_id,
             config=current_config,
-            redis_client=redis_client,
-            backend_unavailable_reason=backend_unavailable_reason,
         )
 
         max_cache_size = max(

@@ -16,17 +16,13 @@ FAKE_ENFORCEMENT_APPROVAL_SECRET = "a" * 48
 FAKE_ENFORCEMENT_EXPORT_SECRET = "e" * 48
 FAKE_API_URL = "https://api.example.com"
 FAKE_FRONTEND_URL = "https://app.example.com"
-FAKE_OTEL_ENDPOINT = "https://otel.example.com:4317"
-FAKE_SENTRY_DSN = "https://public@example.com/1"
 # Base64 for 'KDF_SALT_FOR_TESTING_32_BYTES_OK' (32 bytes)
 FAKE_KDF_SALT = "S0RGX1NBTFRfRk9SX1RFU1RJTkdfMzJfQllURVNfT0s="
 FAKE_GCP_PROJECT_ID = "valdrics-prod"
 FAKE_GCP_REGION = "us-central1"
 FAKE_GCP_TASK_QUEUE = "valdrics-managed-work"
 FAKE_GCP_TASKS_INVOKER = "tasks-invoker@valdrics-prod.iam.gserviceaccount.com"
-FAKE_GCP_SCHEDULER_INVOKER = (
-    "scheduler-invoker@valdrics-prod.iam.gserviceaccount.com"
-)
+FAKE_GCP_SCHEDULER_INVOKER = "scheduler-invoker@valdrics-prod.iam.gserviceaccount.com"
 FAKE_GCP_CLOUD_RUN_SERVICE_NAME = "valdrics-api"
 FAKE_GCP_CLOUD_RUN_BATCH_JOB_NAME = "valdrics-batch"
 FAKE_GCP_INTERNAL_BASE_URL = "https://valdrics-api-xyz.run.app"
@@ -42,7 +38,6 @@ def strict_managed_production_kwargs(**overrides: object) -> dict[str, object]:
         "OBSERVABILITY_BACKEND": "gcp",
         "PUBLIC_API_RATE_LIMITING_BACKEND": "cloudflare",
         "RATELIMIT_ENABLED": False,
-        "CIRCUIT_BREAKER_DISTRIBUTED_STATE": False,
         "GCP_PROJECT_ID": FAKE_GCP_PROJECT_ID,
         "GCP_REGION": FAKE_GCP_REGION,
         "GCP_CLOUD_TASKS_QUEUE": FAKE_GCP_TASK_QUEUE,
@@ -515,49 +510,44 @@ class TestSettingsValidation:
                 exc.value
             )
 
-    def test_settings_managed_gcp_rejects_distributed_breaker_state(
-        self,
-    ):
-        with patch.dict("os.environ", {}, clear=True):
-            with pytest.raises(ValidationError) as exc:
-                Settings(
-                    **strict_managed_production_kwargs(
-                        CIRCUIT_BREAKER_DISTRIBUTED_STATE=True,
-                    ),
-                    _env_file=None,
-                )
-        assert (
-            "CIRCUIT_BREAKER_DISTRIBUTED_STATE must be false for the supported managed GCP profile"
-            in str(exc.value)
-        )
-
-    def test_settings_production_requires_redis_only_for_explicit_app_limiter(self):
+    def test_settings_production_requires_cloudflare_public_rate_limiting(self):
         with patch.dict("os.environ", {}, clear=True):
             with pytest.raises(ValidationError) as exc:
                 Settings(
                     **strict_managed_production_kwargs(
                         PUBLIC_API_RATE_LIMITING_BACKEND="redis",
-                        RATELIMIT_ENABLED=True,
-                        REDIS_URL=None,
                     ),
                     _env_file=None,
                 )
-            assert "REDIS_URL is required only when RATELIMIT_ENABLED=true" in str(
+            assert "PUBLIC_API_RATE_LIMITING_BACKEND must be cloudflare" in str(
                 exc.value
             )
 
-    def test_settings_production_allows_in_memory_rate_limit_with_break_glass(self):
+    def test_settings_production_rejects_enabled_app_rate_limiter(self):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError) as exc:
+                Settings(
+                    **strict_managed_production_kwargs(
+                        PUBLIC_API_RATE_LIMITING_BACKEND="cloudflare",
+                        RATELIMIT_ENABLED=True,
+                    ),
+                    _env_file=None,
+                )
+            assert (
+                "RATELIMIT_ENABLED must be false when PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare"
+                in str(exc.value)
+            )
+
+    def test_settings_production_allows_supported_cloudflare_profile(self):
         with patch.dict("os.environ", {}, clear=True):
             settings = Settings(
                 **strict_managed_production_kwargs(
-                    PUBLIC_API_RATE_LIMITING_BACKEND="redis",
-                    RATELIMIT_ENABLED=True,
-                    ALLOW_IN_MEMORY_RATE_LIMITS=True,
-                    REDIS_URL=None,
+                    PUBLIC_API_RATE_LIMITING_BACKEND="cloudflare",
+                    RATELIMIT_ENABLED=False,
                 ),
                 _env_file=None,
             )
-            assert settings.ALLOW_IN_MEMORY_RATE_LIMITS is True
+            assert settings.PUBLIC_API_RATE_LIMITING_BACKEND == "cloudflare"
 
     def test_settings_gcp_cloudflare_profile_allows_supported_managed_contract(self):
         with patch.dict("os.environ", {}, clear=True):
@@ -570,7 +560,6 @@ class TestSettingsValidation:
                 OBSERVABILITY_BACKEND="gcp",
                 PUBLIC_API_RATE_LIMITING_BACKEND="cloudflare",
                 RATELIMIT_ENABLED=False,
-                CIRCUIT_BREAKER_DISTRIBUTED_STATE=False,
                 GCP_PROJECT_ID="valdrics-prod",
                 GCP_REGION="us-central1",
                 GCP_CLOUD_TASKS_QUEUE="valdrics-managed-work",
@@ -605,7 +594,6 @@ class TestSettingsValidation:
 
         assert settings.PUBLIC_API_RATE_LIMITING_BACKEND == "cloudflare"
         assert settings.RATELIMIT_ENABLED is False
-        assert settings.CIRCUIT_BREAKER_DISTRIBUTED_STATE is False
 
     def test_settings_gcp_cloudflare_profile_rejects_enabled_app_rate_limiter(self):
         with patch.dict("os.environ", {}, clear=True):
@@ -619,7 +607,6 @@ class TestSettingsValidation:
                     OBSERVABILITY_BACKEND="gcp",
                     PUBLIC_API_RATE_LIMITING_BACKEND="cloudflare",
                     RATELIMIT_ENABLED=True,
-                    CIRCUIT_BREAKER_DISTRIBUTED_STATE=False,
                     GCP_PROJECT_ID="valdrics-prod",
                     GCP_REGION="us-central1",
                     GCP_CLOUD_TASKS_QUEUE="valdrics-managed-work",
@@ -640,7 +627,6 @@ class TestSettingsValidation:
                     DEBUG=False,
                     TESTING=False,
                     DB_SSL_MODE="require",
-                    OTEL_EXPORTER_OTLP_ENDPOINT=FAKE_OTEL_ENDPOINT,
                     ADMIN_API_KEY="a" * 32,
                     GROQ_API_KEY="g" * 32,
                     PAYSTACK_SECRET_KEY=FAKE_PAYSTACK_SECRET_KEY,
@@ -667,7 +653,6 @@ class TestSettingsValidation:
                     OBSERVABILITY_BACKEND="gcp",
                     PUBLIC_API_RATE_LIMITING_BACKEND="cloudflare",
                     RATELIMIT_ENABLED=False,
-                    CIRCUIT_BREAKER_DISTRIBUTED_STATE=False,
                     GCP_PROJECT_ID="valdrics-prod",
                     GCP_REGION="us-central1",
                     GCP_CLOUD_TASKS_QUEUE="valdrics-managed-work",
@@ -715,7 +700,6 @@ class TestSettingsValidation:
                     OBSERVABILITY_BACKEND="gcp",
                     PUBLIC_API_RATE_LIMITING_BACKEND="cloudflare",
                     RATELIMIT_ENABLED=False,
-                    CIRCUIT_BREAKER_DISTRIBUTED_STATE=False,
                     GCP_PROJECT_ID="valdrics-prod",
                     GCP_REGION="us-central1",
                     GCP_CLOUD_TASKS_QUEUE="valdrics-managed-work",

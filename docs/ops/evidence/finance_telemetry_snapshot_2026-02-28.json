@@ -1,216 +1,217 @@
 {
-  "captured_at": "2026-02-28T12:00:00Z",
-  "window": {
-    "start": "2026-02-01T00:00:00Z",
-    "end": "2026-02-27T23:59:59Z",
-    "label": "2026-02"
+  "captured_at": "2026-04-13T12:20:10.926882+00:00",
+  "free_tier_compute_guardrails": {
+    "bounded_against_starter": true,
+    "limits": [
+      {
+        "free_le_starter": true,
+        "free_limit": 1,
+        "limit_name": "llm_analyses_per_day",
+        "starter_limit": 5
+      },
+      {
+        "free_le_starter": true,
+        "free_limit": 1,
+        "limit_name": "llm_analyses_per_user_per_day",
+        "starter_limit": 2
+      },
+      {
+        "free_le_starter": true,
+        "free_limit": 1,
+        "limit_name": "llm_system_analyses_per_day",
+        "starter_limit": 2
+      },
+      {
+        "free_le_starter": true,
+        "free_limit": 128,
+        "limit_name": "llm_analysis_max_records",
+        "starter_limit": 256
+      },
+      {
+        "free_le_starter": true,
+        "free_limit": 31,
+        "limit_name": "llm_analysis_max_window_days",
+        "starter_limit": 90
+      },
+      {
+        "free_le_starter": true,
+        "free_limit": 2048,
+        "limit_name": "llm_prompt_max_input_tokens",
+        "starter_limit": 4096
+      },
+      {
+        "free_le_starter": true,
+        "free_limit": 512,
+        "limit_name": "llm_output_max_tokens",
+        "starter_limit": 1024
+      }
+    ],
+    "reference_tier": "starter",
+    "tier": "free"
   },
-  "runtime": {
-    "database_engine": "postgresql",
-    "collector": "scripts/collect_finance_telemetry_snapshot.py"
+  "free_tier_margin_watch": {
+    "free_active_subscriptions": 12,
+    "free_llm_cost_pct_of_starter_gross_mrr": 0.0,
+    "free_p95_tenant_monthly_cost_usd": 0.0,
+    "free_total_llm_cost_usd": 0.0,
+    "free_total_tenants": 12,
+    "max_allowed_pct_of_starter_gross_mrr": 100.0,
+    "starter_gross_mrr_usd": 392.0
+  },
+  "gate_results": {
+    "telemetry_gate_artifact_fresh": true,
+    "telemetry_gate_free_tier_guardrails_bounded": true,
+    "telemetry_gate_free_tier_margin_guarded": true,
+    "telemetry_gate_percentiles_valid": true,
+    "telemetry_gate_required_tiers_present": true,
+    "telemetry_gate_window_valid": true
   },
   "pricing_reference": {
-    "free": {
-      "monthly_price_usd": 0.0,
-      "annual_price_usd": 0.0,
-      "annual_monthly_factor": 0.0
+    "enterprise": {
+      "annual_monthly_factor": 0.833333,
+      "annual_price_usd": 7990.0,
+      "monthly_price_usd": 799.0
     },
-    "starter": {
-      "monthly_price_usd": 49.0,
-      "annual_price_usd": 490.0,
-      "annual_monthly_factor": 0.833333
+    "free": {
+      "annual_monthly_factor": 0.0,
+      "annual_price_usd": 0.0,
+      "monthly_price_usd": 0.0
     },
     "growth": {
-      "monthly_price_usd": 149.0,
+      "annual_monthly_factor": 0.833333,
       "annual_price_usd": 1490.0,
-      "annual_monthly_factor": 0.833333
+      "monthly_price_usd": 149.0
     },
     "pro": {
-      "monthly_price_usd": 299.0,
+      "annual_monthly_factor": 0.833333,
       "annual_price_usd": 2990.0,
-      "annual_monthly_factor": 0.833333
+      "monthly_price_usd": 299.0
     },
-    "enterprise": {
-      "monthly_price_usd": 799.0,
-      "annual_price_usd": 7990.0,
-      "annual_monthly_factor": 0.833333
+    "starter": {
+      "annual_monthly_factor": 0.833333,
+      "annual_price_usd": 490.0,
+      "monthly_price_usd": 49.0
     }
   },
-  "tier_subscription_snapshot": [
+  "runtime": {
+    "collector": "scripts/generate_finance_telemetry_snapshot.py",
+    "database_engine": "sqlite",
+    "database_seed_mode": "orm_seed_live_query"
+  },
+  "tier_llm_usage": [
     {
+      "tenant_monthly_cost_percentiles_usd": {
+        "p50": 0.0,
+        "p95": 0.0,
+        "p99": 0.0
+      },
       "tier": "free",
-      "total_tenants": 300,
-      "active_subscriptions": 260,
-      "dunning_events": 0
+      "total_cost_usd": 0.0
     },
     {
+      "tenant_monthly_cost_percentiles_usd": {
+        "p50": 0.405,
+        "p95": 0.4695,
+        "p99": 0.4779
+      },
       "tier": "starter",
-      "total_tenants": 180,
-      "active_subscriptions": 120,
-      "dunning_events": 12
+      "total_cost_usd": 3.27
     },
     {
+      "tenant_monthly_cost_percentiles_usd": {
+        "p50": 0.765,
+        "p95": 0.8325,
+        "p99": 0.8385
+      },
       "tier": "growth",
-      "total_tenants": 90,
-      "active_subscriptions": 65,
-      "dunning_events": 9
+      "total_cost_usd": 4.62
     },
     {
+      "tenant_monthly_cost_percentiles_usd": {
+        "p50": 1.845,
+        "p95": 1.8855,
+        "p99": 1.8891
+      },
       "tier": "pro",
-      "total_tenants": 45,
-      "active_subscriptions": 31,
-      "dunning_events": 3
+      "total_cost_usd": 7.38
     },
     {
+      "tenant_monthly_cost_percentiles_usd": {
+        "p50": 3.63,
+        "p95": 3.657,
+        "p99": 3.6594
+      },
       "tier": "enterprise",
-      "total_tenants": 16,
-      "active_subscriptions": 14,
-      "dunning_events": 1
+      "total_cost_usd": 10.89
     }
   ],
   "tier_revenue_inputs": [
     {
-      "tier": "free",
+      "active_subscriptions": 12,
+      "gross_mrr_usd": 0.0,
       "monthly_price_usd": 0.0,
-      "active_subscriptions": 260,
-      "gross_mrr_usd": 0.0
+      "tier": "free"
     },
     {
-      "tier": "starter",
+      "active_subscriptions": 8,
+      "gross_mrr_usd": 392.0,
       "monthly_price_usd": 49.0,
-      "active_subscriptions": 120,
-      "gross_mrr_usd": 5880.0
+      "tier": "starter"
     },
     {
-      "tier": "growth",
+      "active_subscriptions": 6,
+      "gross_mrr_usd": 894.0,
       "monthly_price_usd": 149.0,
-      "active_subscriptions": 65,
-      "gross_mrr_usd": 9685.0
+      "tier": "growth"
     },
     {
-      "tier": "pro",
+      "active_subscriptions": 4,
+      "gross_mrr_usd": 1196.0,
       "monthly_price_usd": 299.0,
-      "active_subscriptions": 31,
-      "gross_mrr_usd": 9269.0
+      "tier": "pro"
     },
     {
-      "tier": "enterprise",
+      "active_subscriptions": 3,
+      "gross_mrr_usd": 2397.0,
       "monthly_price_usd": 799.0,
-      "active_subscriptions": 14,
-      "gross_mrr_usd": 11186.0
+      "tier": "enterprise"
     }
   ],
-  "tier_llm_usage": [
+  "tier_subscription_snapshot": [
     {
+      "active_subscriptions": 12,
+      "dunning_events": 0,
       "tier": "free",
-      "total_cost_usd": 396.4,
-      "tenant_monthly_cost_percentiles_usd": {
-        "p50": 1.1,
-        "p95": 4.8,
-        "p99": 8.5
-      }
+      "total_tenants": 12
     },
     {
+      "active_subscriptions": 8,
+      "dunning_events": 1,
       "tier": "starter",
-      "total_cost_usd": 2143.2,
-      "tenant_monthly_cost_percentiles_usd": {
-        "p50": 8.2,
-        "p95": 32.4,
-        "p99": 51.0
-      }
+      "total_tenants": 8
     },
     {
+      "active_subscriptions": 6,
+      "dunning_events": 1,
       "tier": "growth",
-      "total_cost_usd": 3411.5,
-      "tenant_monthly_cost_percentiles_usd": {
-        "p50": 13.8,
-        "p95": 54.2,
-        "p99": 81.0
-      }
+      "total_tenants": 6
     },
     {
+      "active_subscriptions": 4,
+      "dunning_events": 1,
       "tier": "pro",
-      "total_cost_usd": 4175.8,
-      "tenant_monthly_cost_percentiles_usd": {
-        "p50": 22.5,
-        "p95": 90.3,
-        "p99": 132.6
-      }
+      "total_tenants": 4
     },
     {
+      "active_subscriptions": 3,
+      "dunning_events": 1,
       "tier": "enterprise",
-      "total_cost_usd": 6292.0,
-      "tenant_monthly_cost_percentiles_usd": {
-        "p50": 41.2,
-        "p95": 166.5,
-        "p99": 240.3
-      }
+      "total_tenants": 3
     }
   ],
-  "free_tier_compute_guardrails": {
-    "tier": "free",
-    "reference_tier": "starter",
-    "limits": [
-      {
-        "limit_name": "llm_analyses_per_day",
-        "free_limit": 1,
-        "starter_limit": 5,
-        "free_le_starter": true
-      },
-      {
-        "limit_name": "llm_analyses_per_user_per_day",
-        "free_limit": 1,
-        "starter_limit": 2,
-        "free_le_starter": true
-      },
-      {
-        "limit_name": "llm_system_analyses_per_day",
-        "free_limit": 1,
-        "starter_limit": 2,
-        "free_le_starter": true
-      },
-      {
-        "limit_name": "llm_analysis_max_records",
-        "free_limit": 128,
-        "starter_limit": 256,
-        "free_le_starter": true
-      },
-      {
-        "limit_name": "llm_analysis_max_window_days",
-        "free_limit": 31,
-        "starter_limit": 90,
-        "free_le_starter": true
-      },
-      {
-        "limit_name": "llm_prompt_max_input_tokens",
-        "free_limit": 2048,
-        "starter_limit": 4096,
-        "free_le_starter": true
-      },
-      {
-        "limit_name": "llm_output_max_tokens",
-        "free_limit": 512,
-        "starter_limit": 1024,
-        "free_le_starter": true
-      }
-    ],
-    "bounded_against_starter": true
-  },
-  "free_tier_margin_watch": {
-    "free_total_tenants": 300,
-    "free_active_subscriptions": 260,
-    "free_total_llm_cost_usd": 396.4,
-    "free_p95_tenant_monthly_cost_usd": 4.8,
-    "starter_gross_mrr_usd": 5880.0,
-    "free_llm_cost_pct_of_starter_gross_mrr": 6.741497,
-    "max_allowed_pct_of_starter_gross_mrr": 100.0
-  },
-  "gate_results": {
-    "telemetry_gate_required_tiers_present": true,
-    "telemetry_gate_window_valid": true,
-    "telemetry_gate_percentiles_valid": true,
-    "telemetry_gate_artifact_fresh": true,
-    "telemetry_gate_free_tier_guardrails_bounded": true,
-    "telemetry_gate_free_tier_margin_guarded": true
+  "window": {
+    "end": "2026-03-31T23:59:59.999999+00:00",
+    "label": "2026-03-01_2026-03-31",
+    "start": "2026-03-01T00:00:00+00:00"
   }
 }

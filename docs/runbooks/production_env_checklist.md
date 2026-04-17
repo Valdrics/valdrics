@@ -21,9 +21,9 @@ uv run python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info
 - Tenant users do not set backend process env vars.
 - The supported Cloud Run profile uses one API process per container and scales via Cloud Run concurrency and instance settings.
 
-## 2. Required operator env vars
+## 2. Required operator inputs
 
-Set these in the runtime and deployment contract:
+Set these in the runtime, deployment, and promotion contract:
 
 - `ENVIRONMENT=production`
 - `API_URL=https://<your-api-domain>`
@@ -32,7 +32,6 @@ Set these in the runtime and deployment contract:
 - `OBSERVABILITY_BACKEND=gcp`
 - `PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare`
 - `RATELIMIT_ENABLED=false`
-- `CIRCUIT_BREAKER_DISTRIBUTED_STATE=false`
 - `SUPABASE_ANON_KEY=...`
 - `SUPABASE_JWT_SECRET=...`
 - `ENFORCEMENT_APPROVAL_TOKEN_SECRET=...`
@@ -42,6 +41,11 @@ Set these in the runtime and deployment contract:
 - selected LLM provider key
 - `PAYSTACK_SECRET_KEY=sk_live_...`
 - `PAYSTACK_PUBLIC_KEY=pk_live_...`
+
+Required promotion refs for the reusable deploy workflow:
+
+- `api_promotion_ref=repo@sha256:...`
+- `batch_promotion_ref=repo@sha256:...`
 
 Use the generated reports as the authoritative key-level contract:
 
@@ -97,10 +101,12 @@ Outputs:
 - `release/artifact-registry-release.json`
 - `release/artifact-registry-release.env`
 - `managed-deployment-bundle-<environment>-<release-tag>` non-secret evidence bundle uploaded by the reusable deploy workflow
+- `managed-release-blocker-summary-<release-tag>` uploaded by `release-unified-platform.yml` only when `promote_production=true`
 
 Required promotion input format:
 
 - `--api-promotion-ref <repo@sha256:...>`
+- `--batch-promotion-ref <repo@sha256:...>`
 
 ## 2d. Generate and verify deployment artifacts
 
@@ -110,6 +116,8 @@ Normal release path:
 - `.github/workflows/deploy-unified-platform.yml` materializes `.runtime/production.migrate.env`
 - `.github/workflows/deploy-unified-platform.yml` generates `.runtime/deploy/production/*`
 - `.github/workflows/deploy-unified-platform.yml` runs `scripts/verify_managed_deployment_bundle.py` before Terraform apply
+- `.github/workflows/deploy-unified-platform.yml` renders `.runtime/deploy/production/operator-handoff.md`
+- `.github/workflows/deploy-unified-platform.yml` refreshes the codebase audit report and runs `scripts/verify_managed_release_readiness.py` after the deploy smoke check
 
 Operator preflight or incident-repair path:
 
@@ -118,10 +126,16 @@ uv run python scripts/generate_managed_deployment_artifacts.py --environment pro
 uv run python scripts/verify_dashboard_runtime_contract.py --build
 uv run python scripts/verify_managed_deployment_bundle.py --environment production
 uv run python scripts/render_managed_deployment_handoff.py --environment production
-uv run python scripts/render_managed_release_blocker_summary.py
 ```
 
-Default deployment outputs:
+When both staging and production bundles are present locally, render the
+cross-environment blocker rollup with `scripts/render_managed_release_blocker_summary.py` via:
+
+```bash
+make render-managed-release-blockers
+```
+
+Default deploy-workspace outputs:
 
 - `.runtime/deploy/<environment>/unified-platform-manifest.json`
 - `.runtime/deploy/<environment>/secret-manager-runtime-secrets.json`
@@ -129,7 +143,28 @@ Default deployment outputs:
 - `.runtime/deploy/<environment>/artifact-registry-release.json`
 - `.runtime/deploy/<environment>/terraform.runtime.auto.tfvars.json`
 - `.runtime/deploy/<environment>/deployment.report.json`
+- `.runtime/deploy/<environment>/operator-handoff.md`
 - `.runtime/deploy/managed-release-blockers.md`
+
+Uploaded non-secret deployment evidence bundle:
+
+- `.runtime/<environment>.report.json`
+- `.runtime/<environment>.migrate.report.json`
+- `.runtime/deploy/<environment>/unified-platform-manifest.json`
+- `.runtime/deploy/<environment>/cloudflare-pages-env.json`
+- `.runtime/deploy/<environment>/artifact-registry-release.json`
+- `.runtime/deploy/<environment>/deployment.report.json`
+- `.runtime/deploy/<environment>/operator-handoff.md`
+- excludes `.runtime/<environment>.env`, `.runtime/<environment>.migrate.env`,
+  `secret-manager-runtime-secrets.json`, and
+  `terraform.runtime.auto.tfvars.json`
+
+Uploaded cross-environment release review artifact:
+
+- `.runtime/deploy/managed-release-blockers.md`
+- generated from downloaded non-secret staging and production bundles
+- download both per-environment bundles into the repo root before rendering manually so the expected `.runtime/...` paths are restored
+- uploaded automatically only when `.github/workflows/release-unified-platform.yml` runs with `promote_production=true`
 
 ## 2e. Apply infrastructure and deploy
 
@@ -146,6 +181,7 @@ This path:
 - materializes the managed runtime env from `RUNTIME_PLAIN_ENV_JSON` and `RUNTIME_SECRET_ENV_JSON`
 - generates the managed migration env and deployment bundle
 - verifies the managed deployment bundle
+- uploads the non-secret deployment evidence bundle for clean-runner release verification
 - applies Terraform from `.runtime/deploy/<environment>/terraform.runtime.auto.tfvars.json`
 - runs Alembic from `.runtime/<environment>.migrate.env`
 - deploys the dashboard from `.runtime/deploy/<environment>/cloudflare-pages-env.json`
@@ -165,10 +201,11 @@ Infrastructure values still required outside the runtime env:
 4. Confirm the deploy job uploaded `managed-deployment-bundle-production-<release-tag>`.
 5. Verify the dashboard runtime contract.
 6. Verify the managed deployment bundle.
-7. Render the operator handoff and refresh the cross-environment blocker rollup when doing manual preflight review.
+7. Render the operator handoff and, when both staging and production bundles are available locally, refresh the cross-environment blocker rollup with `make render-managed-release-blockers NON_SECRET_BUNDLE=true`.
 8. Confirm the reusable deploy workflow migration step succeeds from `.runtime/production.migrate.env`.
 9. Deploy through `.github/workflows/release-unified-platform.yml`.
-10. Validate `/health/live`, `/health`, Cloud Tasks delivery, Cloud Run Job launch, and dashboard connectivity.
+10. Validate `/health/live`, then confirm the reusable deploy workflow refreshes the codebase audit report and runs `scripts/verify_managed_release_readiness.py --non-secret-deployment-bundle` against the uploaded non-secret bundle.
+11. When the same release run also promoted production, confirm `managed-release-blocker-summary-<release-tag>` was uploaded and matches the downloaded staging and production bundles.
 
 ## 4. Notes
 

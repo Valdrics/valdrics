@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Helm chart for Kubernetes deployment (`helm/valdrics/`)
+- Archived Helm chart reference for the retired Kubernetes deployment path (`docs/archive/reference/2026-q2/helm/valdrics/`)
 - Grafana dashboards for API and FinOps metrics
 - Pre-commit hooks for code quality
 - Prometheus alerting rules

@@ -155,9 +155,9 @@ async def enforce_global_abuse_guard_impl(
                 "retry_after_seconds": int((local_until - now).total_seconds()),
             },
         )
-    if cache.enabled and cache.client is not None:
+    if cache.enabled:
         try:
-            get_fn = getattr(cache.client, "get", None)
+            get_fn = getattr(cache, "get_raw", None)
             if callable(get_fn) and await get_fn(block_key):
                 manager_module.LLM_PRE_AUTH_DENIALS.labels(
                     reason="global_abuse_temporal_block",
@@ -261,9 +261,9 @@ async def enforce_global_abuse_guard_impl(
         manager_cls._local_global_abuse_block_until = now + timedelta(
             seconds=block_seconds
         )
-        if cache.enabled and cache.client is not None:
+        if cache.enabled:
             try:
-                set_fn = getattr(cache.client, "set", None)
+                set_fn = getattr(cache, "set_raw", None)
                 if callable(set_fn):
                     await set_fn(block_key, "1", ex=block_seconds)
             except fair_use_cache_recoverable_errors as exc:

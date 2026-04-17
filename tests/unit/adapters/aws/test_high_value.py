@@ -113,6 +113,41 @@ async def test_idle_elasticache_plugin_scan_success(mock_session, mock_pricing):
 
 
 @pytest.mark.asyncio
+async def test_idle_elasticache_plugin_missing_engine_defaults_to_unknown(
+    mock_session, mock_pricing
+):
+    plugin = IdleElastiCachePlugin()
+
+    mock_ec = MagicMock()
+    mock_ec.get_paginator = MagicMock()
+    mock_cw = MagicMock()
+    mock_cw.get_metric_statistics = AsyncMock()
+
+    mock_session.client.return_value.__aenter__.side_effect = [mock_ec, mock_cw]
+
+    mock_paginator = MagicMock()
+    mock_paginator.paginate.return_value = AsyncIterator(
+        [
+            {
+                "CacheClusters": [
+                    {
+                        "CacheClusterId": "cache-unknown",
+                        "CacheNodeType": "cache.t3.micro",
+                    }
+                ]
+            }
+        ]
+    )
+    mock_ec.get_paginator.return_value = mock_paginator
+    mock_cw.get_metric_statistics.return_value = {"Datapoints": [{"Average": 1.5}]}
+
+    results = await plugin.scan(mock_session, "us-east-1")
+
+    assert len(results) == 1
+    assert results[0]["engine"] == "unknown"
+
+
+@pytest.mark.asyncio
 async def test_idle_sagemaker_notebooks_plugin_scan_success(mock_session, mock_pricing):
     """Test SageMaker plugin finds old notebooks."""
     plugin = IdleSageMakerNotebooksPlugin()

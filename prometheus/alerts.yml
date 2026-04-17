@@ -168,16 +168,6 @@ groups:
           summary: "High memory usage"
           description: "Process memory usage is {{ $value | humanize1024 }}B"
 
-      # Redis connection issues
-      - alert: RedisDown
-        expr: up{job="redis"} == 0
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: "Redis is down"
-          description: "Redis has been unreachable for more than 1 minute"
-
   - name: valdrics-greenops
     rules:
       # Carbon emissions spike

@@ -12,7 +12,7 @@ from scripts.env_generation_common import (
 from typing import Any
 
 
-DEFAULT_MATRIX_PATH = Path("docs/security/ssdf_traceability_matrix_2026-02-25.json")
+DEFAULT_MATRIX_PATH = Path("docs/security/ssdf_traceability_matrix.json")
 
 REQUIRED_PRACTICE_IDS: tuple[str, ...] = (
     "PO.1",

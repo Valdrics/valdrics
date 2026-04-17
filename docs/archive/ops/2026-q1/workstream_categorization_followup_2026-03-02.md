@@ -3,7 +3,7 @@
 This document categorizes the full follow-up local delta after PR `#217`.
 
 ## Inventory Source
-- `docs/ops/evidence/all_changes_inventory_followup_2026-03-02.txt`
+- `docs/archive/ops/2026-q1/evidence/all_changes_inventory_followup_2026-03-02.txt`
 - Total changed paths: `16`
   - Modified: `12`
   - Added: `4`
@@ -40,7 +40,7 @@ This document categorizes the full follow-up local delta after PR `#217`.
   - Snapshot evidence inventory for this follow-up batch
 - Files:
   - `docs/ops/landing_page_audit_closure_2026-03-02.md`
-  - `docs/ops/evidence/all_changes_inventory_followup_2026-03-02.txt`
+  - `docs/archive/ops/2026-q1/evidence/all_changes_inventory_followup_2026-03-02.txt`
 
 ## Merge intent
 - One PR for this entire follow-up batch, linked to both track issues.

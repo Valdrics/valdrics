@@ -86,8 +86,6 @@ def test_generate_local_compose_env_derives_required_key_shapes(tmp_path: Path) 
     assert values["API_URL"] == "http://localhost:8000"
     assert values["FRONTEND_URL"] == "http://localhost:3000"
     assert values["ORIGIN"] == "http://localhost:3000"
-    assert values["CIRCUIT_BREAKER_DISTRIBUTED_STATE"] == "false"
-    assert values["REDIS_URL"] == ""
     assert values["POSTGRES_DB"] == "valdrics"
     assert values["POSTGRES_USER"] == "postgres"
     assert "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN" not in values
@@ -104,8 +102,9 @@ def test_generate_local_compose_env_derives_required_key_shapes(tmp_path: Path) 
     assert len(values["ENCRYPTION_KEY"]) >= 32
     assert len(base64.b64decode(values["KDF_SALT"])) == 32
     rendered = output.read_text(encoding="utf-8")
-    assert "make docker-up-redis" in rendered
-    assert "isolated Redis drill overlay" in rendered
+    assert "cacheless" in rendered
+    assert "make docker-up-redis" not in rendered
+    assert "isolated Redis drill overlay" not in rendered
 
 
 def test_generate_local_compose_env_changes_with_seed(tmp_path: Path) -> None:

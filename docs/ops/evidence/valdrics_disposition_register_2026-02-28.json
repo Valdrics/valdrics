@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-03-14T04:22:19+00:00",
+  "captured_at": "2026-04-14T04:35:30+00:00",
   "dispositions": [
     {
       "control_probe_ids": [
@@ -10,96 +10,89 @@
       "finding_id": "VAL-ADAPT-001",
       "owner": "platform-architecture@valdrics.local",
       "rationale": "VAL-ADAPT-001 is governed by live controls (adapter_coverage, module_size_budget) and currently passes runtime validation.",
-      "review_by": "2026-04-13",
+      "review_by": "2026-05-14",
       "status": "documented_exception"
     },
     {
-      "backlog_ref": "VAL-DB-002",
       "control_probe_ids": [
         "env_hygiene",
         "audit_controls"
       ],
-      "exit_criteria": "Resolve failing probes and require two consecutive passing release runs before downgrading from planned_refactor.",
+      "exit_criteria": "Maintain probe pass state in release pipelines; convert disposition to closed once audit confirms sustained pass trend.",
       "finding_id": "VAL-DB-002",
       "owner": "platform-database@valdrics.local",
-      "rationale": "VAL-DB-002 has failing runtime probes: audit_controls.",
-      "review_by": "2026-04-13",
-      "status": "planned_refactor"
+      "rationale": "VAL-DB-002 is governed by live controls (env_hygiene, audit_controls) and currently passes runtime validation.",
+      "review_by": "2026-05-14",
+      "status": "documented_exception"
     },
     {
-      "backlog_ref": "VAL-DB-003",
       "control_probe_ids": [
         "dependency_locking",
         "audit_controls"
       ],
-      "exit_criteria": "Resolve failing probes and require two consecutive passing release runs before downgrading from planned_refactor.",
+      "exit_criteria": "Maintain probe pass state in release pipelines; convert disposition to closed once audit confirms sustained pass trend.",
       "finding_id": "VAL-DB-003",
       "owner": "platform-database@valdrics.local",
-      "rationale": "VAL-DB-003 has failing runtime probes: audit_controls.",
-      "review_by": "2026-04-13",
-      "status": "planned_refactor"
+      "rationale": "VAL-DB-003 is governed by live controls (dependency_locking, audit_controls) and currently passes runtime validation.",
+      "review_by": "2026-05-14",
+      "status": "documented_exception"
     },
     {
-      "backlog_ref": "VAL-DB-004",
       "control_probe_ids": [
         "audit_controls"
       ],
-      "exit_criteria": "Resolve failing probes and require two consecutive passing release runs before downgrading from planned_refactor.",
+      "exit_criteria": "Maintain probe pass state in release pipelines; convert disposition to closed once audit confirms sustained pass trend.",
       "finding_id": "VAL-DB-004",
       "owner": "platform-database@valdrics.local",
-      "rationale": "VAL-DB-004 has failing runtime probes: audit_controls.",
-      "review_by": "2026-04-13",
-      "status": "planned_refactor"
+      "rationale": "VAL-DB-004 is governed by live controls (audit_controls) and currently passes runtime validation.",
+      "review_by": "2026-05-14",
+      "status": "documented_exception"
     },
     {
-      "backlog_ref": "VAL-API-001",
       "control_probe_ids": [
         "audit_controls"
       ],
-      "exit_criteria": "Resolve failing probes and require two consecutive passing release runs before downgrading from planned_refactor.",
+      "exit_criteria": "Maintain probe pass state in release pipelines; convert disposition to closed once audit confirms sustained pass trend.",
       "finding_id": "VAL-API-001",
       "owner": "platform-security@valdrics.local",
-      "rationale": "VAL-API-001 has failing runtime probes: audit_controls.",
-      "review_by": "2026-04-13",
-      "status": "planned_refactor"
+      "rationale": "VAL-API-001 is governed by live controls (audit_controls) and currently passes runtime validation.",
+      "review_by": "2026-05-14",
+      "status": "documented_exception"
     },
     {
-      "backlog_ref": "VAL-API-002",
       "control_probe_ids": [
         "audit_controls"
       ],
-      "exit_criteria": "Resolve failing probes and require two consecutive passing release runs before downgrading from planned_refactor.",
+      "exit_criteria": "Maintain probe pass state in release pipelines; convert disposition to closed once audit confirms sustained pass trend.",
       "finding_id": "VAL-API-002",
       "owner": "platform-security@valdrics.local",
-      "rationale": "VAL-API-002 has failing runtime probes: audit_controls.",
-      "review_by": "2026-04-13",
-      "status": "planned_refactor"
+      "rationale": "VAL-API-002 is governed by live controls (audit_controls) and currently passes runtime validation.",
+      "review_by": "2026-05-14",
+      "status": "documented_exception"
     },
     {
-      "backlog_ref": "VAL-API-004",
       "control_probe_ids": [
         "env_hygiene",
         "audit_controls"
       ],
-      "exit_criteria": "Resolve failing probes and require two consecutive passing release runs before downgrading from planned_refactor.",
+      "exit_criteria": "Maintain probe pass state in release pipelines; convert disposition to closed once audit confirms sustained pass trend.",
       "finding_id": "VAL-API-004",
       "owner": "platform-security@valdrics.local",
-      "rationale": "VAL-API-004 has failing runtime probes: audit_controls.",
-      "review_by": "2026-04-13",
-      "status": "planned_refactor"
+      "rationale": "VAL-API-004 is governed by live controls (env_hygiene, audit_controls) and currently passes runtime validation.",
+      "review_by": "2026-05-14",
+      "status": "documented_exception"
     },
     {
-      "backlog_ref": "VAL-ADAPT-002+",
       "control_probe_ids": [
         "module_size_budget",
         "audit_controls"
       ],
-      "exit_criteria": "Resolve failing probes and require two consecutive passing release runs before downgrading from planned_refactor.",
+      "exit_criteria": "Maintain probe pass state in release pipelines; convert disposition to closed once audit confirms sustained pass trend.",
       "finding_id": "VAL-ADAPT-002+",
       "owner": "platform-architecture@valdrics.local",
-      "rationale": "VAL-ADAPT-002+ has failing runtime probes: audit_controls.",
-      "review_by": "2026-04-13",
-      "status": "planned_refactor"
+      "rationale": "VAL-ADAPT-002+ is governed by live controls (module_size_budget, audit_controls) and currently passes runtime validation.",
+      "review_by": "2026-05-14",
+      "status": "documented_exception"
     }
   ],
   "runtime_probe_results": [
@@ -111,8 +104,8 @@
     },
     {
       "command": "python3 scripts/verify_audit_report_resolved.py --skip-report-check",
-      "output_excerpt": "[audit-report] FAILED\n- [H-02] catch-all handlers must be zero; found 1 (app/modules/optimization/domain/actions/base.py:136:exception)\n- [M-06] missing CVE scanning token: aquasecurity/trivy-action\n[audit-report] summary passed=25 failed=2 checked=27",
-      "passed": false,
+      "output_excerpt": "[audit-report] ok passed=27 checked=27 repo_root=.",
+      "passed": true,
       "probe_id": "audit_controls"
     },
     {

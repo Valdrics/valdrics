@@ -110,7 +110,7 @@ jobs:
         run: |
           set -euo pipefail
           corepack enable
-          corepack prepare pnpm@10.19.0 --activate
+          corepack prepare pnpm@10.32.1 --activate
 
       - name: Set up Python
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
@@ -286,6 +286,13 @@ jobs:
                   handle.write(f"{key}={value}\n")
           PY
 
+      - name: Render managed deployment handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run python3 scripts/render_managed_deployment_handoff.py \
+            --environment "${DEPLOY_ENVIRONMENT}"
+
       - name: Upload non-secret deployment evidence bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -297,6 +304,7 @@ jobs:
             .runtime/deploy/${{ inputs.environment }}/cloudflare-pages-env.json
             .runtime/deploy/${{ inputs.environment }}/artifact-registry-release.json
             .runtime/deploy/${{ inputs.environment }}/deployment.report.json
+            .runtime/deploy/${{ inputs.environment }}/operator-handoff.md
           retention-days: 30
 
       - name: Terraform apply unified platform
@@ -352,3 +360,23 @@ jobs:
         run: |
           set -euo pipefail
           curl --fail --silent --show-error "${{ steps.managed_bundle.outputs.api_url }}/health/live" >/dev/null
+
+      - name: Refresh codebase audit report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .runtime
+          uv run python3 scripts/refresh_codebase_audit_report.py \
+            --report ".runtime/${DEPLOY_ENVIRONMENT}.audit.report.json"
+
+      - name: Verify managed release readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv run python3 scripts/verify_managed_release_readiness.py \
+            --environment "${DEPLOY_ENVIRONMENT}" \
+            --audit-report ".runtime/${DEPLOY_ENVIRONMENT}.audit.report.json" \
+            --runtime-report ".runtime/${DEPLOY_ENVIRONMENT}.report.json" \
+            --migration-report ".runtime/${DEPLOY_ENVIRONMENT}.migrate.report.json" \
+            --deployment-report "${DEPLOY_DIR}/deployment.report.json" \
+            --skip-webserver

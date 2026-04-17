@@ -1,13 +1,13 @@
 {
-  "captured_at": "2026-02-27T10:00:00Z",
+  "captured_at": "2026-04-13T12:20:18.497192+00:00",
   "close_history": [
     {
-      "blended_gross_margin_percent": 84.2,
+      "blended_gross_margin_percent": 83.7,
       "month": "2026-01"
     },
     {
-      "blended_gross_margin_percent": 84.6,
-      "month": "2026-02"
+      "blended_gross_margin_percent": 85.31,
+      "month": "2026-03-01_2026-03-31"
     }
   ],
   "gate_results": {
@@ -18,16 +18,16 @@
     "fin_gate_5_stress_resilience": true
   },
   "metrics": {
-    "annual_discount_impact_percent": 7.38,
-    "blended_gross_margin_percent": 84.6,
-    "growth_to_pro_conversion_mom_delta_percent": 0.8,
-    "p95_tenant_llm_cogs_pct_mrr": 5.2,
-    "pro_to_enterprise_conversion_mom_delta_percent": 0.4,
-    "stress_margin_percent": 76.0
+    "annual_discount_impact_percent": 10.03,
+    "blended_gross_margin_percent": 85.31,
+    "growth_to_pro_conversion_mom_delta_percent": 0.4,
+    "p95_tenant_llm_cogs_pct_mrr": 1.08,
+    "pro_to_enterprise_conversion_mom_delta_percent": 0.2,
+    "stress_margin_percent": 78.69
   },
   "stress_scenario": {
     "infra_cost_multiplier": 2.0,
-    "projected_margin_percent": 76.0
+    "projected_margin_percent": 78.69
   },
   "thresholds": {
     "max_annual_discount_impact_percent": 18.0,
@@ -40,45 +40,45 @@
   },
   "tier_unit_economics": [
     {
-      "effective_mrr_usd": 55000.0,
-      "gross_margin_percent": 84.55,
-      "infra_cogs_usd": 5000.0,
-      "llm_cogs_usd": 2000.0,
-      "mrr_usd": 60000.0,
-      "support_cogs_usd": 1500.0,
+      "effective_mrr_usd": 346.27,
+      "gross_margin_percent": 72.0,
+      "infra_cogs_usd": 27.7,
+      "llm_cogs_usd": 3.27,
+      "mrr_usd": 392.0,
+      "support_cogs_usd": 66.0,
       "tier": "starter"
     },
     {
-      "effective_mrr_usd": 110000.0,
-      "gross_margin_percent": 85.91,
-      "infra_cogs_usd": 9000.0,
-      "llm_cogs_usd": 4000.0,
-      "mrr_usd": 120000.0,
-      "support_cogs_usd": 2500.0,
+      "effective_mrr_usd": 789.7,
+      "gross_margin_percent": 82.8,
+      "infra_cogs_usd": 59.23,
+      "llm_cogs_usd": 4.62,
+      "mrr_usd": 894.0,
+      "support_cogs_usd": 72.0,
       "tier": "growth"
     },
     {
-      "effective_mrr_usd": 165000.0,
-      "gross_margin_percent": 84.24,
-      "infra_cogs_usd": 15000.0,
-      "llm_cogs_usd": 7000.0,
-      "mrr_usd": 180000.0,
-      "support_cogs_usd": 4000.0,
+      "effective_mrr_usd": 1056.47,
+      "gross_margin_percent": 84.74,
+      "infra_cogs_usd": 71.84,
+      "llm_cogs_usd": 7.38,
+      "mrr_usd": 1196.0,
+      "support_cogs_usd": 82.0,
       "tier": "pro"
     },
     {
-      "effective_mrr_usd": 235000.0,
-      "gross_margin_percent": 84.26,
-      "infra_cogs_usd": 20000.0,
-      "llm_cogs_usd": 10000.0,
-      "mrr_usd": 250000.0,
-      "support_cogs_usd": 7000.0,
+      "effective_mrr_usd": 2197.25,
+      "gross_margin_percent": 88.59,
+      "infra_cogs_usd": 131.83,
+      "llm_cogs_usd": 10.89,
+      "mrr_usd": 2397.0,
+      "support_cogs_usd": 108.0,
       "tier": "enterprise"
     }
   ],
   "window": {
-    "end": "2026-02-27T23:59:59Z",
-    "label": "2026-02",
-    "start": "2026-02-01T00:00:00Z"
+    "end": "2026-03-31T23:59:59.999999+00:00",
+    "label": "2026-03-01_2026-03-31",
+    "start": "2026-03-01T00:00:00+00:00"
   }
 }

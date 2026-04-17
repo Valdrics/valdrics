@@ -47,17 +47,6 @@ REQUIRED_DOCUMENTS: tuple[DocumentRequirement, ...] = (
         ),
     ),
     DocumentRequirement(
-        path="ADR-0007-redis-backed-circuit-breakers.md",
-        required_tokens=(
-            "## Context",
-            "## Decision",
-            "## Consequences",
-            "Redis",
-            "Cloud Run",
-            "Superseded",
-        ),
-    ),
-    DocumentRequirement(
         path="ADR-0008-codecarbon-emissions-observability.md",
         required_tokens=(
             "## Context",
@@ -65,19 +54,6 @@ REQUIRED_DOCUMENTS: tuple[DocumentRequirement, ...] = (
             "## Consequences",
             "CodeCarbon",
             "emissions",
-        ),
-    ),
-    DocumentRequirement(
-        path="ADR-0009-celery-redis-job-orchestration.md",
-        required_tokens=(
-            "## Context",
-            "## Decision",
-            "## Consequences",
-            "Celery",
-            "Cloud Tasks",
-            "Cloud Scheduler",
-            "Cloud Run Jobs",
-            "Superseded",
         ),
     ),
     DocumentRequirement(
@@ -107,7 +83,9 @@ def _repo_root() -> Path:
 
 
 def _resolve_docs_root(value: str) -> Path:
-    return resolve_cli_path_from_root(_repo_root(), Path(str(value)), field_name="docs_root")
+    return resolve_cli_path_from_root(
+        _repo_root(), Path(str(value)), field_name="docs_root"
+    )
 
 
 def verify_architecture_docs(docs_root: Path) -> tuple[str, ...]:
@@ -137,9 +115,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--docs-root",
-        default=str(
-            _repo_root() / "docs" / "architecture"
-        ),
+        default=str(_repo_root() / "docs" / "architecture"),
         help="Path to architecture docs directory.",
     )
     return parser
@@ -150,8 +126,7 @@ def main(argv: list[str] | None = None) -> int:
     docs_root = _resolve_docs_root(str(args.docs_root))
     if not docs_root.exists():
         print(
-            "[verify_architecture_decision_records] "
-            f"docs_root not found: {docs_root}"
+            f"[verify_architecture_decision_records] docs_root not found: {docs_root}"
         )
         return 2
     if not docs_root.is_dir():
@@ -162,17 +137,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     errors = verify_architecture_docs(docs_root)
     if errors:
-        print(
-            "[verify_architecture_decision_records] "
-            f"found {len(errors)} issue(s):"
-        )
+        print(f"[verify_architecture_decision_records] found {len(errors)} issue(s):")
         for error in errors:
             print(f" - {error}")
         return 1
-    print(
-        "[verify_architecture_decision_records] ok "
-        f"docs_root={docs_root}"
-    )
+    print(f"[verify_architecture_decision_records] ok docs_root={docs_root}")
     return 0
 
 

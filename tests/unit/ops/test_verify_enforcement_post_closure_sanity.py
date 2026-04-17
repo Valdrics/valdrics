@@ -42,7 +42,7 @@ def test_validate_tokens_fails_for_missing_token(tmp_path: Path) -> None:
 
 def test_verify_post_closure_sanity_passes_against_repo_contracts() -> None:
     exit_code = verify_post_closure_sanity(
-        doc_path=REPO_ROOT / "docs/ops/enforcement_post_closure_sanity_2026-02-26.md",
+        doc_path=REPO_ROOT / "docs/ops/enforcement_post_closure_sanity.md",
         gap_register_path=REPO_ROOT
         / "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md",
         repo_root=REPO_ROOT,
@@ -122,6 +122,8 @@ def test_gap_register_required_tokens_include_canonical_open_items_header() -> N
     assert "Current Open Items (Canonical, 2026-02-27)" in required
     assert "CI-EVID-001" in required
     assert "BENCH-DOC-001" in required
+    assert "docs/archive/evidence/<quarter>/ci-green-YYYY-MM-DD.md" in required
+    assert "docs/evidence/ci-green-YYYY-MM-DD.md" not in required
 
 
 def test_gap_register_forbidden_tokens_reject_removed_active_helm_contract_refs(
@@ -153,15 +155,19 @@ def test_live_gap_register_scopes_remaining_helm_evidence_as_archived_reference(
         "deployable webhook template + explicit failure-policy profiles via chart values and runbook contract"
         not in raw
     )
+    assert "### Follow-up gaps opened at that point in time" in raw
+    assert "`ECP-016` (P1, historical): K8s webhook deployment contract pack." in raw
     assert (
         "Validation recorded for the archived self-managed reference and active operator path:"
         in raw
     )
     assert (
-        "Archived self-managed reference file: `helm/valdrics/values.schema.json`"
+        "Archived self-managed reference file: `docs/archive/reference/2026-q2/helm/valdrics/values.schema.json`"
         in raw
     )
     assert "active operator-path evidence:" in raw
+    assert "docs/archive/evidence/<quarter>/ci-green-YYYY-MM-DD.md" in raw
+    assert "docs/evidence/ci-green-YYYY-MM-DD.md" not in raw
     assert "deployment template still open" not in raw
     assert (
         "repo lacks deployment manifests/templates for cluster operators"

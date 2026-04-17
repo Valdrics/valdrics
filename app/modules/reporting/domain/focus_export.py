@@ -39,7 +39,6 @@ FOCUS_EXPORT_STREAM_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     TypeError,
     ValueError,
     AttributeError,
-    NotImplementedError,
 )
 FOCUS_EXPORT_COST_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     InvalidOperation,

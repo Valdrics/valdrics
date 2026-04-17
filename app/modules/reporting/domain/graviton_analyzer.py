@@ -48,7 +48,7 @@ GRAVITON_EQUIVALENTS = {
 COMPATIBLE_WORKLOADS = [
     "web servers (nginx, apache)",
     "containerized microservices (docker, k8s)",
-    "caching layers (redis, memcached)",
+    "caching layers (valkey, redis oss, memcached)",
     "open-source databases (mysql, postgres, mariadb)",
     "big data processing (hadoop, spark)",
     "media encoding (ffmpeg)",
@@ -82,7 +82,9 @@ class GravitonAnalyzer(ArmMigrationAnalyzer):
     def get_equivalent(self, instance_type: str) -> Optional[tuple[str, int]]:
         return GRAVITON_EQUIVALENTS.get(instance_type)
 
-    def get_instance_type_from_resource(self, resource: Dict[str, Any]) -> Optional[str]:
+    def get_instance_type_from_resource(
+        self, resource: Dict[str, Any]
+    ) -> Optional[str]:
         # For AWS, MultiTenantAWSAdapter returns the instance type in the 'type' field
         return resource.get("type")
 
@@ -91,23 +93,25 @@ class GravitonAnalyzer(ArmMigrationAnalyzer):
         Scan EC2 instances and identify Graviton migration candidates.
         """
         base_result = await super().analyze(tenant_id=tenant_id)
-        
+
         # Enrich candidates with energy_savings_percent for report consumers
         for candidate in base_result.get("candidates", []):
             candidate["energy_savings_percent"] = candidate.get("savings_percent", 0)
 
         # Enrich with AWS-specific metadata
-        base_result.update({
-            "already_graviton": base_result.get("arm_instances", 0),
-            "potential_energy_reduction_percent": (
-                sum(c["savings_percent"] for c in base_result.get("candidates", []))
-                / len(base_result.get("candidates", []))
-                if base_result.get("candidates")
-                else 0
-            ),
-            "compatible_workloads": COMPATIBLE_WORKLOADS,
-            "requires_validation": REQUIRES_VALIDATION,
-        })
+        base_result.update(
+            {
+                "already_graviton": base_result.get("arm_instances", 0),
+                "potential_energy_reduction_percent": (
+                    sum(c["savings_percent"] for c in base_result.get("candidates", []))
+                    / len(base_result.get("candidates", []))
+                    if base_result.get("candidates")
+                    else 0
+                ),
+                "compatible_workloads": COMPATIBLE_WORKLOADS,
+                "requires_validation": REQUIRES_VALIDATION,
+            }
+        )
 
         return base_result
 

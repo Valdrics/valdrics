@@ -26,9 +26,8 @@ def _settings(
     break_glass_reason: str | None = "Temporary dependency incident",
     break_glass_expires_at: str | None = None,
     break_glass_max_duration_hours: int = 168,
-    sentry_dsn: str | None = "https://example@sentry.io/1",
-    otlp_endpoint: str | None = "http://otel-collector:4317",
-    observability_backend: str = "otlp",
+    gcp_project_id: str = "valdrics-prod",
+    observability_backend: str = "gcp",
 ) -> SimpleNamespace:
     if break_glass_expires_at is None:
         break_glass_expires_at = (
@@ -38,12 +37,11 @@ def _settings(
         ENVIRONMENT=environment,
         TESTING=testing,
         OBSERVABILITY_BACKEND=observability_backend,
+        GCP_PROJECT_ID=gcp_project_id,
         FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=allow_prophet_fallback,
         FORECASTER_BREAK_GLASS_REASON=break_glass_reason,
         FORECASTER_BREAK_GLASS_EXPIRES_AT=break_glass_expires_at,
         FORECASTER_BREAK_GLASS_MAX_DURATION_HOURS=break_glass_max_duration_hours,
-        SENTRY_DSN=sentry_dsn,
-        OTEL_EXPORTER_OTLP_ENDPOINT=otlp_endpoint,
     )
 
 
@@ -61,40 +59,32 @@ def test_validate_runtime_dependencies_requires_tiktoken_in_strict_env() -> None
             validate_runtime_dependencies(settings)  # type: ignore[arg-type]
 
 
-def test_validate_runtime_dependencies_requires_sentry_sdk_when_dsn_set() -> None:
-    settings = _settings(
-        environment="staging",
-        sentry_dsn="https://example@sentry.io/1",
-    )
+def test_validate_runtime_dependencies_rejects_non_gcp_observability_backend() -> None:
+    settings = _settings(environment="production", observability_backend="otlp")
+
+    with pytest.raises(ValueError, match="ObservabilityBackend"):
+        validate_runtime_dependencies(settings)  # type: ignore[arg-type]
+
+
+def test_validate_runtime_dependencies_requires_cloud_trace_exporter_in_strict_env() -> (
+    None
+):
+    settings = _settings(environment="staging")
 
     def available(module_name: str) -> bool:
-        if module_name == "sentry_sdk":
-            return False
-        return True
+        return module_name != "opentelemetry.exporter.cloud_trace"
 
     with patch(
         "app.shared.core.runtime_dependencies._module_available",
         side_effect=available,
     ):
-        with pytest.raises(RuntimeError, match="SENTRY_DSN"):
+        with pytest.raises(RuntimeError, match="Cloud Trace export"):
             validate_runtime_dependencies(settings)  # type: ignore[arg-type]
 
 
-def test_validate_runtime_dependencies_requires_otlp_endpoint_in_strict_env() -> None:
-    settings = _settings(environment="production", otlp_endpoint="")
-
-    with pytest.raises(RuntimeError, match="OTEL_EXPORTER_OTLP_ENDPOINT"):
-        validate_runtime_dependencies(settings)  # type: ignore[arg-type]
-
-
-def test_validate_runtime_dependencies_requires_sentry_dsn_in_strict_env() -> None:
-    settings = _settings(environment="staging", sentry_dsn="")
-
-    with pytest.raises(RuntimeError, match="SENTRY_DSN"):
-        validate_runtime_dependencies(settings)  # type: ignore[arg-type]
-
-
-def test_validate_runtime_dependencies_requires_prophet_when_fallback_disabled() -> None:
+def test_validate_runtime_dependencies_requires_prophet_when_fallback_disabled() -> (
+    None
+):
     settings = _settings(environment="production", allow_prophet_fallback=False)
 
     def available(module_name: str) -> bool:
@@ -108,7 +98,9 @@ def test_validate_runtime_dependencies_requires_prophet_when_fallback_disabled()
             validate_runtime_dependencies(settings)  # type: ignore[arg-type]
 
 
-def test_validate_runtime_dependencies_logs_prophet_fallback_when_break_glass_enabled() -> None:
+def test_validate_runtime_dependencies_logs_prophet_fallback_when_break_glass_enabled() -> (
+    None
+):
     settings = _settings(environment="staging", allow_prophet_fallback=True)
 
     def available(module_name: str) -> bool:
@@ -159,7 +151,9 @@ def test_validate_runtime_dependencies_rejects_break_glass_invalid_expiry() -> N
         validate_runtime_dependencies(settings)  # type: ignore[arg-type]
 
 
-def test_validate_runtime_dependencies_rejects_break_glass_exceeding_max_window() -> None:
+def test_validate_runtime_dependencies_rejects_break_glass_exceeding_max_window() -> (
+    None
+):
     too_far = (datetime.now(timezone.utc) + timedelta(days=8)).isoformat()
     settings = _settings(
         environment="production",
@@ -168,7 +162,9 @@ def test_validate_runtime_dependencies_rejects_break_glass_exceeding_max_window(
         break_glass_max_duration_hours=24 * 7,
     )
 
-    with pytest.raises(RuntimeError, match="exceeds the allowed strict-environment window"):
+    with pytest.raises(
+        RuntimeError, match="exceeds the allowed strict-environment window"
+    ):
         validate_runtime_dependencies(settings)  # type: ignore[arg-type]
 
 

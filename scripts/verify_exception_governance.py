@@ -37,7 +37,9 @@ def _resolve_root_path(path: Path) -> Path:
 
 
 def _resolve_baseline_path(path: Path) -> Path:
-    resolved = resolve_cli_path_from_root(_repo_root(), path, field_name="baseline_path")
+    resolved = resolve_cli_path_from_root(
+        _repo_root(), path, field_name="baseline_path"
+    )
     if resolved.exists() and not resolved.is_file():
         raise ValueError(f"baseline_path must be a file path: {resolved.as_posix()}")
     return resolved
@@ -133,7 +135,9 @@ def write_baseline(
     sites: tuple[ExceptionSite, ...],
 ) -> None:
     if baseline_path.exists() and not baseline_path.is_file():
-        raise ValueError(f"baseline_path must be a file path: {baseline_path.as_posix()}")
+        raise ValueError(
+            f"baseline_path must be a file path: {baseline_path.as_posix()}"
+        )
     _ensure_baseline_parent_dir(baseline_path)
     payload = {
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -162,7 +166,7 @@ def write_baseline(
             baseline_path.unlink(missing_ok=True)
 
 
-def _load_baseline(baseline_path: Path) -> tuple[ExceptionSite, ...]:
+def load_baseline(baseline_path: Path) -> tuple[ExceptionSite, ...]:
     if not baseline_path.exists():
         raise FileNotFoundError(
             f"Baseline file does not exist: {baseline_path.as_posix()}"
@@ -176,7 +180,11 @@ def _load_baseline(baseline_path: Path) -> tuple[ExceptionSite, ...]:
         path = item.get("path")
         line = item.get("line")
         kind = item.get("kind")
-        if not isinstance(path, str) or not isinstance(line, int) or not isinstance(kind, str):
+        if (
+            not isinstance(path, str)
+            or not isinstance(line, int)
+            or not isinstance(kind, str)
+        ):
             continue
         sites.append(ExceptionSite(path=path, line=line, kind=kind))
     return tuple(sorted(sites, key=lambda item: (item.path, item.line, item.kind)))
@@ -186,7 +194,9 @@ def verify_against_baseline(
     *,
     current: tuple[ExceptionSite, ...],
     baseline: tuple[ExceptionSite, ...],
-) -> tuple[tuple[ExceptionSite, ...], tuple[ExceptionSite, ...], tuple[ExceptionSite, ...]]:
+) -> tuple[
+    tuple[ExceptionSite, ...], tuple[ExceptionSite, ...], tuple[ExceptionSite, ...]
+]:
     current_keys = {site.key(): site for site in current}
     baseline_keys = {site.key(): site for site in baseline}
 
@@ -268,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     try:
-        baseline = _load_baseline(baseline_path)
+        baseline = load_baseline(baseline_path)
     except FileNotFoundError as exc:
         print(f"[exception-governance] failed: {exc}")
         return 2

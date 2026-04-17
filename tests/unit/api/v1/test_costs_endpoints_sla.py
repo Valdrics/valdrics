@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 from fastapi import HTTPException
 from httpx import AsyncClient
+from unittest.mock import AsyncMock, patch
 
 from app.models.background_job import BackgroundJob, JobStatus, JobType
 from app.models.cloud import CloudAccount, CostRecord
@@ -154,6 +155,83 @@ def test_anomaly_to_response_item_rejects_non_finite_decimal_fields() -> None:
 
     with pytest.raises(ValueError, match="actual_cost_usd must be finite"):
         costs_api._anomaly_to_response_item(anomaly)
+
+
+@pytest.mark.asyncio
+async def test_get_ingestion_sla_returns_existing_model_payload() -> None:
+    payload = costs_api.IngestionSLAResponse(
+        window_hours=24,
+        target_success_rate_percent=95.0,
+        total_jobs=2,
+        successful_jobs=2,
+        failed_jobs=0,
+        success_rate_percent=100.0,
+        meets_sla=True,
+        latest_completed_at="2026-02-01T10:00:00+00:00",
+        avg_duration_seconds=60.0,
+        p95_duration_seconds=90.0,
+        records_ingested=42,
+    )
+
+    with patch.object(
+        costs_api,
+        "get_ingestion_sla_impl",
+        new=AsyncMock(return_value=payload),
+    ) as mock_impl:
+        out = await costs_api.get_ingestion_sla(
+            window_hours=24,
+            target_success_rate_percent=95.0,
+            user=CurrentUser(
+                id=uuid.uuid4(),
+                tenant_id=uuid.uuid4(),
+                email="sla-model@valdrics.io",
+                role=UserRole.MEMBER,
+                tier=PricingTier.STARTER,
+            ),
+            db=AsyncMock(),
+        )
+
+    assert out is payload
+    mock_impl.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_ingestion_sla_validates_mapping_payload_into_model() -> None:
+    with patch.object(
+        costs_api,
+        "get_ingestion_sla_impl",
+        new=AsyncMock(
+            return_value={
+                "window_hours": 12,
+                "target_success_rate_percent": 90.0,
+                "total_jobs": 3,
+                "successful_jobs": 2,
+                "failed_jobs": 1,
+                "success_rate_percent": 66.67,
+                "meets_sla": False,
+                "latest_completed_at": None,
+                "avg_duration_seconds": 30.0,
+                "p95_duration_seconds": 45.0,
+                "records_ingested": 10,
+            }
+        ),
+    ):
+        out = await costs_api.get_ingestion_sla(
+            window_hours=12,
+            target_success_rate_percent=90.0,
+            user=CurrentUser(
+                id=uuid.uuid4(),
+                tenant_id=uuid.uuid4(),
+                email="sla-dict@valdrics.io",
+                role=UserRole.MEMBER,
+                tier=PricingTier.STARTER,
+            ),
+            db=AsyncMock(),
+        )
+
+    assert isinstance(out, costs_api.IngestionSLAResponse)
+    assert out.total_jobs == 3
+    assert out.meets_sla is False
 
 
 @pytest.mark.asyncio

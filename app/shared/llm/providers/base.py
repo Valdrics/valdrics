@@ -17,7 +17,7 @@ class BaseProvider(ABC):
         max_output_tokens: Optional[int] = None,
     ) -> BaseChatModel:
         """Create a LangChain compatible ChatModel."""
-        raise NotImplementedError()
+        ...
 
     def validate_api_key(self, api_key: Optional[str], provider_name: str) -> None:
         """Standardized API key validation logic."""

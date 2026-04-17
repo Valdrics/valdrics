@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-DOC_PATH = REPO_ROOT / "docs" / "ops" / "enforcement_stress_evidence_2026-02-25.md"
+DOC_PATH = REPO_ROOT / "docs" / "ops" / "enforcement_stress_evidence.md"
 
 
 def test_enforcement_stress_evidence_protocol_exists_and_references_gate_tools() -> None:

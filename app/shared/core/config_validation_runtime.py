@@ -6,7 +6,9 @@ from datetime import datetime, timedelta, timezone
 import ipaddress
 from urllib.parse import urlparse
 
-from app.shared.core.config_validation_placeholders import require_no_managed_placeholder
+from app.shared.core.config_validation_placeholders import (
+    require_no_managed_placeholder,
+)
 from app.shared.core.cors_policy import validate_strict_cors_allowed_origins
 from app.shared.orchestration.contracts import (
     platform_runtime_profile,
@@ -26,7 +28,9 @@ def _normalize_environment(value: object) -> str:
     return str(value or "").strip().lower()
 
 
-def _strict_environment(settings_obj: object, *, env_production: str, env_staging: str) -> bool:
+def _strict_environment(
+    settings_obj: object, *, env_production: str, env_staging: str
+) -> bool:
     return _normalize_environment(getattr(settings_obj, "ENVIRONMENT", "")) in {
         env_production,
         env_staging,
@@ -34,9 +38,14 @@ def _strict_environment(settings_obj: object, *, env_production: str, env_stagin
 
 
 def _public_api_rate_limiting_backend(settings_obj: object) -> str:
-    return str(
-        getattr(settings_obj, "PUBLIC_API_RATE_LIMITING_BACKEND", "redis") or "redis"
-    ).strip().lower()
+    return (
+        str(
+            getattr(settings_obj, "PUBLIC_API_RATE_LIMITING_BACKEND", "cloudflare")
+            or "cloudflare"
+        )
+        .strip()
+        .lower()
+    )
 
 
 def _parse_break_glass_expiry(raw_value: object) -> datetime:
@@ -86,7 +95,9 @@ def _validate_break_glass_window(
 
     max_duration_candidate = max_duration_hours
     if isinstance(max_duration_candidate, bool):
-        raise ValueError(f"{setting_prefix}_MAX_DURATION_HOURS must be a positive integer.")
+        raise ValueError(
+            f"{setting_prefix}_MAX_DURATION_HOURS must be a positive integer."
+        )
     try:
         if isinstance(max_duration_candidate, (bytes, bytearray)):
             max_hours = int(max_duration_candidate.decode().strip())
@@ -97,7 +108,9 @@ def _validate_break_glass_window(
         else:
             max_hours = int(str(max_duration_candidate).strip())
     except (TypeError, ValueError) as exc:
-        raise ValueError(f"{setting_prefix}_MAX_DURATION_HOURS must be a positive integer.") from exc
+        raise ValueError(
+            f"{setting_prefix}_MAX_DURATION_HOURS must be a positive integer."
+        ) from exc
     if max_hours < 1:
         raise ValueError(f"{setting_prefix}_MAX_DURATION_HOURS must be >= 1.")
     if expires_dt > now_utc + timedelta(hours=max_hours):
@@ -114,7 +127,9 @@ def _validate_strict_public_url(url: object, *, name: str) -> None:
 
     parsed = urlparse(candidate)
     if parsed.scheme != "https" or not parsed.netloc:
-        raise ValueError(f"{name} must use an explicit https:// URL in staging/production.")
+        raise ValueError(
+            f"{name} must use an explicit https:// URL in staging/production."
+        )
     if parsed.username or parsed.password:
         raise ValueError(f"{name} must not include embedded credentials.")
     if parsed.query or parsed.fragment:
@@ -152,7 +167,9 @@ def validate_turnstile_config(
     if timeout_seconds > 15:
         raise ValueError("TURNSTILE_TIMEOUT_SECONDS must be <= 15.")
 
-    verify_url = str(getattr(settings_obj, "TURNSTILE_VERIFY_URL", "") or "").strip().lower()
+    verify_url = (
+        str(getattr(settings_obj, "TURNSTILE_VERIFY_URL", "") or "").strip().lower()
+    )
     if not verify_url.startswith("https://"):
         raise ValueError("TURNSTILE_VERIFY_URL must use https://.")
 
@@ -248,7 +265,9 @@ def validate_environment_safety(
         try:
             ipaddress.ip_network(cidr, strict=False)
         except ValueError as exc:
-            raise ValueError(f"TRUSTED_PROXY_CIDRS contains invalid CIDR: {cidr}") from exc
+            raise ValueError(
+                f"TRUSTED_PROXY_CIDRS contains invalid CIDR: {cidr}"
+            ) from exc
 
     environment = _normalize_environment(getattr(settings_obj, "ENVIRONMENT", ""))
     if (
@@ -309,7 +328,9 @@ def validate_environment_safety(
                     name="GCP_INTERNAL_AUTH_AUDIENCE",
                 )
                 api_url_value = str(getattr(settings_obj, "API_URL", "") or "").strip()
-                if internal_auth_audience_value.rstrip("/") != api_url_value.rstrip("/"):
+                if internal_auth_audience_value.rstrip("/") != api_url_value.rstrip(
+                    "/"
+                ):
                     raise ValueError(
                         "GCP_INTERNAL_AUTH_AUDIENCE must match API_URL in the supported "
                         "Cloudflare-fronted GCP runtime profile because Cloud Run custom "
@@ -356,31 +377,18 @@ def validate_environment_safety(
                 "INTERNAL_METRICS_AUTH_TOKEN must be >= 32 chars when configured."
             )
 
-        distributed_breaker_enabled = bool(
-            getattr(settings_obj, "CIRCUIT_BREAKER_DISTRIBUTED_STATE", False)
-        )
-        redis_url = str(getattr(settings_obj, "REDIS_URL", "") or "").strip()
-
         if (
             runtime_profile is PlatformRuntimeProfile.GCP
-            and distributed_breaker_enabled
+            and public_rate_limit_backend != "cloudflare"
         ):
             raise ValueError(
-                "CIRCUIT_BREAKER_DISTRIBUTED_STATE must be false for the supported managed GCP profile."
+                "PUBLIC_API_RATE_LIMITING_BACKEND must be cloudflare for the supported managed GCP profile."
             )
-
-        if (
-            bool(getattr(settings_obj, "RATELIMIT_ENABLED", False))
-            and not redis_url
-            and not bool(getattr(settings_obj, "ALLOW_IN_MEMORY_RATE_LIMITS", False))
+        if runtime_profile is PlatformRuntimeProfile.GCP and bool(
+            getattr(settings_obj, "RATELIMIT_ENABLED", False)
         ):
             raise ValueError(
-                "REDIS_URL is required only when RATELIMIT_ENABLED=true in "
-                "staging/production for the shared application limiter. "
-                "The supported managed GCP profile uses "
-                "PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare with "
-                "RATELIMIT_ENABLED=false. Set ALLOW_IN_MEMORY_RATE_LIMITS=true "
-                "only for temporary break-glass usage."
+                "RATELIMIT_ENABLED must be false for the supported managed GCP profile; public API throttling is delegated to Cloudflare edge."
             )
 
         _validate_strict_public_url(
@@ -393,9 +401,13 @@ def validate_environment_safety(
         )
 
         _validate_break_glass_window(
-            enabled=_is_truthy(getattr(settings_obj, "ALLOW_INSECURE_OUTBOUND_TLS", False)),
+            enabled=_is_truthy(
+                getattr(settings_obj, "ALLOW_INSECURE_OUTBOUND_TLS", False)
+            ),
             reason=getattr(settings_obj, "OUTBOUND_TLS_BREAK_GLASS_REASON", None),
-            expires_at=getattr(settings_obj, "OUTBOUND_TLS_BREAK_GLASS_EXPIRES_AT", None),
+            expires_at=getattr(
+                settings_obj, "OUTBOUND_TLS_BREAK_GLASS_EXPIRES_AT", None
+            ),
             max_duration_hours=getattr(
                 settings_obj,
                 "OUTBOUND_TLS_BREAK_GLASS_MAX_DURATION_HOURS",
@@ -405,7 +417,9 @@ def validate_environment_safety(
             setting_prefix="OUTBOUND_TLS_BREAK_GLASS",
         )
 
-        audit_retention_days = int(getattr(settings_obj, "AUDIT_LOG_RETENTION_DAYS", 0) or 0)
+        audit_retention_days = int(
+            getattr(settings_obj, "AUDIT_LOG_RETENTION_DAYS", 0) or 0
+        )
         if audit_retention_days < 1:
             raise ValueError("AUDIT_LOG_RETENTION_DAYS must be >= 1.")
 
@@ -413,8 +427,8 @@ def validate_environment_safety(
             settings_obj,
             "CORS_ORIGINS",
             validate_strict_cors_allowed_origins(
-            list(getattr(settings_obj, "CORS_ORIGINS", []) or []),
-            frontend_url=str(getattr(settings_obj, "FRONTEND_URL", "") or ""),
+                list(getattr(settings_obj, "CORS_ORIGINS", []) or []),
+                frontend_url=str(getattr(settings_obj, "FRONTEND_URL", "") or ""),
             ),
         )
 
@@ -426,11 +440,17 @@ def validate_remediation_guardrails(
     env_staging: str,
 ) -> None:
     """Validate safety guardrail configuration for remediation execution."""
-    normalized_scope = str(
-        getattr(settings_obj, "REMEDIATION_KILL_SWITCH_SCOPE", "tenant") or "tenant"
-    ).strip().lower()
+    normalized_scope = (
+        str(
+            getattr(settings_obj, "REMEDIATION_KILL_SWITCH_SCOPE", "tenant") or "tenant"
+        )
+        .strip()
+        .lower()
+    )
     if normalized_scope not in {"tenant", "global"}:
-        raise ValueError("REMEDIATION_KILL_SWITCH_SCOPE must be one of: tenant, global.")
+        raise ValueError(
+            "REMEDIATION_KILL_SWITCH_SCOPE must be one of: tenant, global."
+        )
     setattr(settings_obj, "REMEDIATION_KILL_SWITCH_SCOPE", normalized_scope)
 
     if (
@@ -491,11 +511,17 @@ def validate_enforcement_guardrails(settings_obj: object) -> None:
     if export_signing_kid and len(export_signing_kid) > 64:
         raise ValueError("ENFORCEMENT_EXPORT_SIGNING_KID must be <= 64 chars.")
 
-    if getattr(settings_obj, "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS", 0) < 60:
+    if (
+        getattr(settings_obj, "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS", 0)
+        < 60
+    ):
         raise ValueError(
             "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS must be >= 60."
         )
-    if getattr(settings_obj, "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS", 0) > 604800:
+    if (
+        getattr(settings_obj, "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS", 0)
+        > 604800
+    ):
         raise ValueError(
             "ENFORCEMENT_RESERVATION_RECONCILIATION_SLA_SECONDS must be <= 604800."
         )
@@ -509,15 +535,26 @@ def validate_enforcement_guardrails(settings_obj: object) -> None:
         raise ValueError(
             "ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT must be >= 1."
         )
-    if getattr(settings_obj, "ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT", 0) > 1000:
+    if (
+        getattr(settings_obj, "ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT", 0)
+        > 1000
+    ):
         raise ValueError(
             "ENFORCEMENT_RECONCILIATION_EXCEPTION_SCAN_LIMIT must be <= 1000."
         )
-    if getattr(settings_obj, "ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_THRESHOLD_USD", 0) < 0:
+    if (
+        getattr(settings_obj, "ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_THRESHOLD_USD", 0)
+        < 0
+    ):
         raise ValueError(
             "ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_THRESHOLD_USD must be >= 0."
         )
-    if getattr(settings_obj, "ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_EXCEPTION_COUNT", 0) < 1:
+    if (
+        getattr(
+            settings_obj, "ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_EXCEPTION_COUNT", 0
+        )
+        < 1
+    ):
         raise ValueError(
             "ENFORCEMENT_RECONCILIATION_DRIFT_ALERT_EXCEPTION_COUNT must be >= 1."
         )

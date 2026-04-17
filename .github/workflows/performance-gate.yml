@@ -134,8 +134,6 @@ env:
   PAYSTACK_PUBLIC_KEY: "example_paystack_public_ci_validation_only"
   PUBLIC_API_RATE_LIMITING_BACKEND: "cloudflare"
   RATELIMIT_ENABLED: "false"
-  CIRCUIT_BREAKER_DISTRIBUTED_STATE: "false"
-  OTEL_LOGS_EXPORT_ENABLED: "true"
   APP_RUNTIME_DATA_DIR: "/tmp/valdrics"
   TRUST_PROXY_HEADERS: "true"
   TRUSTED_PROXY_CIDRS: '["127.0.0.1/32"]'

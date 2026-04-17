@@ -1,19 +1,36 @@
 # Valdrics Unified Platform Redesign Plan
 
 ## Summary
+
 Redesign Valdrics to a single managed operating model built around:
+
 - frontend on Cloudflare Pages/Workers
 - database, auth, and storage on Supabase
 - backend API, async execution, scheduling, secrets, and release artifacts on GCP
 
-## Current Status (Updated 2026-04-12)
+## Current Status (Updated 2026-04-16)
+
 - Phase 0: Complete. The repo now centers on the unified GCP + Cloudflare + Supabase contract, with Terraform/deployment artifacts and managed-runtime docs aligned to that target.
 - Phase 1: Complete. Backend orchestration is abstracted behind managed-runtime ports/adapters instead of direct Celery/APScheduler ownership in the supported path.
 - Phase 2: Complete in the repo. Cloud Tasks, Cloud Scheduler, and Cloud Run Jobs execution paths, internal handlers, and deployment generators are implemented and covered.
-- Phase 3: In progress. Active Celery/Koyeb production dependencies have been removed from the supported profile, but live cutover evidence and final release-ops closure still need to be treated as separate completion gates.
-- Phase 4: In progress. Current cleanup work has removed the managed-contract AWS trust requirement, legacy Redis host/port compatibility, AWS/Redis health aliases, the last Redis-specific public health helper, and managed OTLP/Sentry operator inputs, and now separates active production docs/contracts from local-only compose and archived future-scale references while narrowing runtime cache, circuit-breaker, and operator-runbook Redis language to explicit local, break-glass, or distributed-state paths only. The default local compose topology is now cacheless at the base file level, with Redis isolated in an explicit override for drills, the active CI/perf/DR workflows now align to the managed GCP observability contract instead of normalizing OTLP/Sentry inputs, the unsupported AWS warm-standby regional failover workflow/script/test path has been removed so the repo-owned DR surface is manual restore/redeploy/reroute plus the rebuild-and-verify drill only, active compliance/policy surfaces no longer treat archived Helm/AWS infrastructure references as supported deployment evidence, the active SSDF, benchmark-alignment, and post-closure enforcement evidence paths no longer depend on the archived Helm webhook contract test, and the live enforcement gap register now scopes remaining Helm references as archived self-managed reference material rather than current operator-path evidence.
+- Phase 3: In progress. Active Celery/Koyeb production dependencies have been removed from the supported profile, the repo-owned enforcement release packet is green, the enterprise TDD/release gate is green, and the repo-owned managed release readiness verifier is green for both `staging` and `production`, but live staging/production cutover evidence and final release-operations sign-off are environment events that are not yet recorded here as completed facts, so they remain the only open completion gates for this phase.
+- Phase 4: Complete in the repo. The supported managed GCP profile no longer exposes the retired shared-state Redis and distributed-breaker knobs, active env templates/generators/workflows/Terraform defaults emit only the supported Cloudflare-fronted contract, public rate limiting is normalized to the Cloudflare-only posture, active docs now use current Cloudflare WAF terminology and describe breaker state as an internal process-local detail instead of a runtime toggle, managed runtime logging now follows the Cloud Run integrated structured stdout/stderr path instead of a separate client-library export branch, the active cache surface has been simplified to managed-profile cacheless behavior plus process-local memory outside that profile rather than an external Upstash/Redis contract, the Python runtime dependency set, currency-cache internals, and live status UI no longer carry a Redis-specific contract, ElastiCache analysis paths no longer silently assume Redis when engine metadata is absent, the release pipeline now refreshes the codebase audit report and runs `verify_managed_release_readiness.py` from the reusable deploy workflow, the managed deployment artifact generator now preserves only the supported release bundle plus operator handoff outputs instead of carrying retired runtime-specific filename contracts, the last live self-managed Helm/Kubernetes reference, legacy AWS/EKS/Redis Terraform modules, provider-specific AWS tenant smoke flow, stale dated audit/production-fixes report packs, duplicate incident-response docs, unreferenced legacy AWS/CI-CD guide docs, non-canonical identity/discovery/persona notes, and generated change-categorization/inventory archive noise have been archived out of the active tree or removed, and the remaining compliance/evidence cleanup has been consolidated onto canonical undated paths with archive guardrails for historical material.
+
+## What Is Actually Left
+
+The remaining work is now environment-side rather than repo-side:
+
+- deploy `staging` on the managed GCP + Cloudflare + Supabase stack
+- run parity smoke, workload, and rollback validation against that live staging environment
+- cut staging traffic fully to the managed stack
+- promote the same immutable artifact/process to `production`
+- capture staging/production cutover evidence in the canonical operator packet
+- obtain final release-operations sign-off
+
+Non-blocking repo hygiene may still be done opportunistically, but it is no longer a plan completion gate. Candidate examples include archiving non-contract product/reference docs that are not used by runtime, verification, or operator workflows.
 
 The plan optimizes for the constraints you called out:
+
 - one source of truth for infra
 - one deployment pipeline
 - one environment model
@@ -21,6 +38,7 @@ The plan optimizes for the constraints you called out:
 - one runbook set
 
 The target state is a **single modular-monolith backend** with managed platform primitives, not a microservices split:
+
 - Cloud Run service for the API
 - Cloud Tasks for queued async work
 - Cloud Scheduler for cron/scheduled triggers
@@ -33,6 +51,7 @@ The target state is a **single modular-monolith backend** with managed platform 
 ## Key Changes
 
 ### 1. Operating model and source of truth
+
 - Make **Terraform** the only source of truth for cloud infrastructure across GCP, Cloudflare, and Supabase project/settings where the provider supports them.
 - Keep **Alembic + SQL migrations** as the only source of truth for database schema, RLS, indexes, and data migrations.
 - Remove Koyeb as the supported runtime target; move Helm/EKS to archived reference material because it is not part of the active delivery plan.
@@ -47,6 +66,7 @@ The target state is a **single modular-monolith backend** with managed platform 
   - Cloudflare Pages preview/staging and production environments mapped explicitly
 
 ### 2. One deployment pipeline
+
 - Use **GitHub Actions** as the only release pipeline for both frontend and backend.
 - Pipeline stages:
   - validate + test
@@ -62,6 +82,7 @@ The target state is a **single modular-monolith backend** with managed platform 
 - Keep release promotion immutable: one build artifact promoted through environments.
 
 ### 3. One backend runtime model
+
 - Retain the backend as a modular monolith in `app/modules`, but replace runtime orchestration primitives:
   - Celery -> Cloud Tasks / Cloud Run Jobs
   - Redis-backed async queue -> Cloud Tasks
@@ -84,6 +105,7 @@ The target state is a **single modular-monolith backend** with managed platform 
 - Keep the existing SSE jobs stream initially for compatibility; do not redesign job UX to Realtime in phase 1.
 
 ### 4. One environment model
+
 - `local`:
   - local Python/uv workflow
   - local or ephemeral database as currently used for tests/dev
@@ -98,6 +120,7 @@ The target state is a **single modular-monolith backend** with managed platform 
 - No separate “special” deploy path per environment. Same pipeline, same artifact model, same service graph.
 
 ### 5. One observability model
+
 - Use **OpenTelemetry** as the single instrumentation standard across backend code.
 - Use **Google Cloud Operations** as the single primary production observability backend:
   - Cloud Logging
@@ -110,6 +133,7 @@ The target state is a **single modular-monolith backend** with managed platform 
 - Standardize structured event names, task IDs, job IDs, and request correlation across API, task handlers, and batch jobs.
 
 ## Important API / Interface / Type Changes
+
 - Add internal-only task endpoints for Cloud Tasks delivery, authenticated by Google-signed identity:
   - `/internal/tasks/...`
 - Add internal-only scheduler trigger endpoints for Cloud Scheduler where direct job invocation is not used:
@@ -140,6 +164,7 @@ The target state is a **single modular-monolith backend** with managed platform 
 ## Migration Plan
 
 ### Phase 0: Platform contract and IaC foundation
+
 - Add Terraform modules for:
   - GCP project/runtime
   - Artifact Registry
@@ -155,6 +180,7 @@ The target state is a **single modular-monolith backend** with managed platform 
 - Replace deployment docs/runbooks with a single GCP + Cloudflare + Supabase runbook set.
 
 ### Phase 1: Runtime abstraction inside the backend
+
 - Introduce orchestration interfaces and move all direct Celery/scheduler usage behind adapters.
 - Separate work into three categories:
   - synchronous request-path work
@@ -164,6 +190,7 @@ The target state is a **single modular-monolith backend** with managed platform 
 - Make the internal orchestration transport swappable without changing module business logic.
 
 ### Phase 2: GCP execution adapters
+
 - Implement Cloud Tasks adapter for request-adjacent async work.
 - Implement Cloud Scheduler adapter for scheduled invocations.
 - Implement Cloud Run Jobs adapter for heavy scans, sweeps, and long-running jobs.
@@ -171,6 +198,7 @@ The target state is a **single modular-monolith backend** with managed platform 
 - Keep public API behavior stable while swapping the execution backend underneath.
 
 ### Phase 3: Cutover and removal
+
 - Deploy staging on the new stack.
 - Run parity smoke and workload checks.
 - Cut staging traffic fully to the GCP-managed backend.
@@ -179,12 +207,14 @@ The target state is a **single modular-monolith backend** with managed platform 
 - Archive or delete obsolete deployment generators and runbooks after successful production cutover.
 
 ### Phase 4: Cleanup and simplification
+
 - Remove dead config keys and legacy runtime validators.
 - Remove legacy Koyeb deployment artifacts from the active operator flow.
 - Remove Redis/Celery operational docs if no remaining production dependency exists.
 - Consolidate docs to one architecture overview, one deploy guide, one rollback guide, and one disaster-recovery guide.
 
 ## Test Plan
+
 - Unit tests for orchestration ports and both adapter families.
 - Integration tests for:
   - authenticated Cloud Tasks delivery
@@ -214,6 +244,7 @@ The target state is a **single modular-monolith backend** with managed platform 
   - environment drift detection
 
 ## Acceptance Criteria
+
 - One Terraform-based infra control plane is active for supported environments.
 - One GitHub Actions deployment pipeline is the only supported deploy path.
 - Staging and production use the same topology and deployment mechanics.
@@ -223,6 +254,7 @@ The target state is a **single modular-monolith backend** with managed platform 
 - provider onboarding and remediation flows pass on the new stack before production cutover.
 
 ## Assumptions and Defaults
+
 - Chosen target stack is fixed:
   - Cloudflare for frontend
   - Supabase for Postgres/Auth/Storage

@@ -14,9 +14,6 @@ class GovernanceSettings:
     CIRCUIT_BREAKER_RECOVERY_SECONDS: int = 300
     CIRCUIT_BREAKER_MAX_DAILY_SAVINGS: float = 1000.0
     CIRCUIT_BREAKER_CACHE_SIZE: int = 1000
-    # Supported managed GCP runtime keeps breaker state process-local and fail-closed.
-    CIRCUIT_BREAKER_DISTRIBUTED_STATE: bool = False
-    CIRCUIT_BREAKER_DISTRIBUTED_KEY_PREFIX: str = "valdrics:circuit"
     # REMEDIATION KILL SWITCH: Stop all deletions if daily cost impact hits $500
     REMEDIATION_KILL_SWITCH_THRESHOLD: float = 500.0
     REMEDIATION_KILL_SWITCH_SCOPE: str = Field(

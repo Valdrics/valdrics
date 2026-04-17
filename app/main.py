@@ -47,7 +47,6 @@ from app.shared.core.docs_assets import render_redoc_ui_html, render_swagger_ui_
 from app.shared.core.enforcement_http_boundary import (
     register_enforcement_domain_exception_handler,
 )
-from app.shared.core.sentry import init_sentry
 from app.shared.core.runtime_dependencies import validate_runtime_dependencies
 from app.shared.core.validation_errors import sanitize_validation_errors
 from app.shared.core.timeout import TimeoutMiddleware
@@ -71,7 +70,7 @@ from app.modules.governance.api.v1.scim import (
     scim_error_response,
 )
 
-# Configure logging and Sentry
+# Configure structured logging
 setup_logging()
 settings = get_settings()
 
@@ -130,7 +129,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = reload_settings_from_environment()
     await dispose_db_runtime()
     validate_runtime_dependencies(settings)
-    init_sentry()
     from app.modules.governance.api.v1.health_dashboard import set_startup_time
 
     set_startup_time()

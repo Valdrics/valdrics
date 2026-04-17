@@ -1,0 +1,147 @@
+.connections-page {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-8);
+}
+
+.connections-page__header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-4);
+}
+
+.connections-page__title {
+	margin: 0 0 var(--space-2);
+	font-size: clamp(1.875rem, 3vw, 2.25rem);
+	font-weight: 700;
+	line-height: 1.1;
+}
+
+.connections-page__subtitle {
+	margin: 0;
+	max-width: 42rem;
+	color: var(--color-ink-400);
+}
+
+.connections-page__cta {
+	width: auto;
+	white-space: nowrap;
+}
+
+.connections-page__notice {
+	border-radius: var(--radius-lg);
+	border: 1px solid transparent;
+	padding: var(--space-4) var(--space-5);
+}
+
+.connections-page__notice p {
+	margin: 0;
+}
+
+.connections-page__notice--error {
+	border-color: rgb(239 68 68 / 0.5);
+	background: rgb(239 68 68 / 0.1);
+	color: var(--color-danger-400);
+}
+
+.connections-page__notice--success {
+	border-color: rgb(16 185 129 / 0.5);
+	background: rgb(16 185 129 / 0.1);
+	color: var(--color-success-400);
+}
+
+.connections-page__grid {
+	display: grid;
+	grid-template-columns: repeat(1, minmax(0, 1fr));
+	gap: var(--space-6);
+}
+
+.connections-page__placeholder,
+.connections-page__org-placeholder {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.connections-page__placeholder {
+	min-height: 23rem;
+}
+
+.connections-page__org-placeholder {
+	min-height: 12rem;
+}
+
+.connections-provider-card,
+.connections-connector-card {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+}
+
+.connections-card-delay-0 {
+	animation-delay: 0ms;
+}
+
+.connections-card-delay-1 {
+	animation-delay: 100ms;
+}
+
+.connections-card-delay-2 {
+	animation-delay: 200ms;
+}
+
+.connections-card-delay-3 {
+	animation-delay: 300ms;
+}
+
+.connections-card-delay-4 {
+	animation-delay: 400ms;
+}
+
+.connections-card-delay-5 {
+	animation-delay: 500ms;
+}
+
+.connections-card-delay-6 {
+	animation-delay: 600ms;
+}
+
+.connections-card__header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--space-3);
+	margin-bottom: var(--space-1);
+}
+
+.connections-card__identity {
+	display: flex;
+	align-items: center;
+	gap: var(--space-3);
+	min-width: 0;
+}
+
+.connections-card__title {
+	margin: 0;
+	font-size: var(--text-lg);
+	font-weight: 700;
+}
+
+.connections-card__subtitle {
+	margin: var(--space-1) 0 0;
+	font-size: var(--text-xs);
+	color: var(--color-ink-500);
+}
+
+.connections-card__status {
+	flex-shrink: 0;
+}
+
+.connections-list {
+	display: flex;
+	flex-direction: column;
+	gap: var(--space-4);
+	margin: 0 0 var(--space-2);
+}
+

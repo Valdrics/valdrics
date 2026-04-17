@@ -9,7 +9,7 @@ ALERT_RULES_PATH = REPO_ROOT / "ops" / "alerts" / "enforcement_control_plane_rul
 DASHBOARD_PATH = (
     REPO_ROOT / "ops" / "dashboards" / "enforcement_control_plane_overview.json"
 )
-EVIDENCE_DOC_PATH = REPO_ROOT / "docs" / "ops" / "alert-evidence-2026-02-25.md"
+EVIDENCE_DOC_PATH = REPO_ROOT / "docs" / "ops" / "alert-evidence.md"
 
 
 def test_enforcement_alert_rules_pack_exists_and_covers_required_signals() -> None:

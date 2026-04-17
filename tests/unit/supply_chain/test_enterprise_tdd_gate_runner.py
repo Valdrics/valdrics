@@ -90,6 +90,9 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
     ratio_cmd = next(
         cmd for cmd in commands if "scripts/verify_test_to_production_ratio.py" in cmd
     )
+    reports_archive_cmd = next(
+        cmd for cmd in commands if "scripts/verify_reports_archive_hygiene.py" in cmd
+    )
     alembic_head_cmd = next(
         cmd for cmd in commands if "scripts/verify_alembic_head_integrity.py" in cmd
     )
@@ -129,7 +132,7 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
 
     assert jwt_bcp_cmd[:4] == ["uv", "run", "python3", "scripts/verify_jwt_bcp_checklist.py"]
     assert "--checklist-path" in jwt_bcp_cmd
-    assert "docs/security/jwt_bcp_checklist_2026-02-27.json" in jwt_bcp_cmd
+    assert "docs/security/jwt_bcp_checklist.json" in jwt_bcp_cmd
     assert auth_coverage_cmd[:4] == [
         "uv",
         "run",
@@ -173,6 +176,12 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
         "python3",
         "scripts/verify_test_to_production_ratio.py",
     ]
+    assert reports_archive_cmd[:4] == [
+        "uv",
+        "run",
+        "python3",
+        "scripts/verify_reports_archive_hygiene.py",
+    ]
     assert alembic_head_cmd[:4] == [
         "uv",
         "run",
@@ -184,7 +193,7 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
 
     assert ssdf_cmd[:4] == ["uv", "run", "python3", "scripts/verify_ssdf_traceability_matrix.py"]
     assert "--matrix-path" in ssdf_cmd
-    assert "docs/security/ssdf_traceability_matrix_2026-02-25.json" in ssdf_cmd
+    assert "docs/security/ssdf_traceability_matrix.json" in ssdf_cmd
 
     assert sanity_cmd[:4] == [
         "uv",
@@ -193,7 +202,7 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
         "scripts/verify_enforcement_post_closure_sanity.py",
     ]
     assert "--doc-path" in sanity_cmd
-    assert "docs/ops/enforcement_post_closure_sanity_2026-02-26.md" in sanity_cmd
+    assert "docs/ops/enforcement_post_closure_sanity.md" in sanity_cmd
     assert "--gap-register" in sanity_cmd
     assert "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md" in sanity_cmd
 
@@ -201,7 +210,7 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
     assert "--gap-register" in pkg015_cmd
     assert "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md" in pkg015_cmd
     assert "--matrix-path" in pkg015_cmd
-    assert "docs/ops/feature_enforceability_matrix_2026-02-27.json" in pkg015_cmd
+    assert "docs/ops/feature_enforceability_matrix.json" in pkg015_cmd
 
     assert key_rotation_cmd[:4] == [
         "uv",
@@ -259,7 +268,11 @@ def test_build_gate_commands_includes_required_test_targets() -> None:
 
     assert pytest_cmd[:3] == ["uv", "run", "pytest"]
     assert "tests/unit/enforcement" in pytest_cmd
-    assert "tests/unit/shared/llm/test_budget_fair_use_branches.py" in pytest_cmd
+    assert "tests/unit/shared/llm/test_budget_fair_use_core.py" in pytest_cmd
+    assert "tests/unit/shared/llm/test_budget_fair_use_daily_limit_edges.py" in pytest_cmd
+    assert "tests/unit/shared/llm/test_budget_fair_use_daily_limits.py" in pytest_cmd
+    assert "tests/unit/shared/llm/test_budget_fair_use_global_abuse.py" in pytest_cmd
+    assert "tests/unit/shared/llm/test_budget_fair_use_guard_signals.py" in pytest_cmd
     assert "tests/unit/shared/llm/test_budget_execution_branches.py" in pytest_cmd
     assert "tests/unit/shared/llm/test_pricing_data.py" in pytest_cmd
     assert "tests/unit/core/test_budget_manager_audit.py" in pytest_cmd
@@ -997,3 +1010,62 @@ def test_run_gate_forces_debug_false_in_command_environment(
 
     assert run_gate(dry_run=False) == 0
     assert captured_debug_values == ["false"]
+
+
+def test_run_gate_removes_ignored_local_codealike_artifact_before_checks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    ambient_artifact = repo_root / "codealike.json"
+    ambient_artifact.write_text('{"projectId":"x"}', encoding="utf-8")
+
+    monkeypatch.setattr("scripts.run_enterprise_tdd_gate._repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        "scripts.run_enterprise_tdd_gate.build_gate_commands",
+        lambda: [["uv", "run", "python3", "-c", "print('ok')"]],
+    )
+
+    observed_artifact_state: list[bool] = []
+
+    def _capture_run(cmd, check, env=None):
+        del cmd, check, env
+        observed_artifact_state.append(ambient_artifact.exists())
+        return subprocess.CompletedProcess(args=[], returncode=0)
+
+    monkeypatch.setattr("scripts.run_enterprise_tdd_gate.subprocess.run", _capture_run)
+
+    assert run_gate(dry_run=False) == 0
+    assert observed_artifact_state == [False]
+    assert not ambient_artifact.exists()
+
+
+def test_run_gate_removes_ignored_local_reports_coverage_tree_before_checks(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    coverage_artifact = repo_root / "reports" / "coverage" / "html" / "index.html"
+    coverage_artifact.parent.mkdir(parents=True)
+    coverage_artifact.write_text("<html></html>", encoding="utf-8")
+
+    monkeypatch.setattr("scripts.run_enterprise_tdd_gate._repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        "scripts.run_enterprise_tdd_gate.build_gate_commands",
+        lambda: [["uv", "run", "python3", "-c", "print('ok')"]],
+    )
+
+    observed_tree_state: list[bool] = []
+
+    def _capture_run(cmd, check, env=None):
+        del cmd, check, env
+        observed_tree_state.append((repo_root / "reports" / "coverage").exists())
+        return subprocess.CompletedProcess(args=[], returncode=0)
+
+    monkeypatch.setattr("scripts.run_enterprise_tdd_gate.subprocess.run", _capture_run)
+
+    assert run_gate(dry_run=False) == 0
+    assert observed_tree_state == [False]
+    assert not (repo_root / "reports" / "coverage").exists()

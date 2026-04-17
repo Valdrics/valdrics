@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
 
-from app.shared.core.cache import CacheService, QueryCache, _get_sync_client
+from app.shared.core.cache import CacheService, QueryCache
 
 
 class _BytesDecodeNone(bytes):
@@ -18,7 +18,6 @@ class _BytesDecodeNone(bytes):
 def _reset_cache_singletons() -> None:
     import app.shared.core.cache as cache_mod
 
-    cache_mod._sync_client = None
     cache_mod._async_client = None
     cache_mod._cache_service = None
 
@@ -30,7 +29,9 @@ async def test_cache_cost_wrappers_delegate_to_internal_methods() -> None:
 
     tenant_id = uuid4()
     with (
-        patch.object(service, "_get", new=AsyncMock(return_value=[{"ok": True}])) as mock_get,
+        patch.object(
+            service, "_get", new=AsyncMock(return_value=[{"ok": True}])
+        ) as mock_get,
         patch.object(service, "_set", new=AsyncMock(return_value=True)) as mock_set,
     ):
         assert await service.get_cost_data(tenant_id, "7d") == [{"ok": True}]
@@ -89,113 +90,88 @@ async def test_cache_get_handles_primitive_and_bytes_decode_to_none() -> None:
     assert await service.get("k:none-after-decode") is None
 
 
-def test_get_sync_client_reuses_existing_singleton() -> None:
-    class _ExistingClient:
-        def __init__(self) -> None:
-            self._valdrics_cache_url = "redis://example"
-            self._valdrics_cache_token = "token"
-
-    existing = _ExistingClient()
-    with (
-        patch("app.shared.core.cache._sync_client", new=existing),
-        patch(
-            "app.shared.core.cache._current_cache_configuration",
-            return_value=("redis://example", "token"),
-        ),
-        patch("app.shared.core.cache.Redis") as mock_redis_cls,
-    ):
-        assert _get_sync_client() is existing
-    mock_redis_cls.assert_not_called()
-
-
-def test_get_sync_client_recreates_when_configuration_changes() -> None:
-    first = MagicMock()
-    first.close = MagicMock(return_value=None)
-    second = MagicMock()
-    second.close = MagicMock(return_value=None)
+def test_get_cache_service_rebuilds_when_runtime_changes_from_dev_to_managed() -> None:
+    settings = SimpleNamespace(
+        ENVIRONMENT="development", PLATFORM_RUNTIME_PROFILE="gcp"
+    )
 
     with (
-        patch(
-            "app.shared.core.cache.get_settings",
-            side_effect=[
-                SimpleNamespace(
-                    UPSTASH_REDIS_URL="redis://one",
-                    UPSTASH_REDIS_TOKEN="token-one",
-                ),
-                SimpleNamespace(
-                    UPSTASH_REDIS_URL="redis://two",
-                    UPSTASH_REDIS_TOKEN="token-two",
-                ),
-            ],
-        ),
-        patch("app.shared.core.cache._sync_client", new=None),
-        patch("app.shared.core.cache.Redis", side_effect=[first, second]) as redis_cls,
+        patch("app.shared.core.cache.get_settings", return_value=settings),
+        patch("app.shared.core.cache._async_client", new=None),
+        patch("app.shared.core.cache._cache_service", new=None),
     ):
-        c1 = _get_sync_client()
-        c2 = _get_sync_client()
+        from app.shared.core.cache import get_cache_service
 
-    assert c1 is first
-    assert c2 is second
-    assert redis_cls.call_count == 2
+        first_service = get_cache_service()
+        settings.ENVIRONMENT = "production"
+        second_service = get_cache_service()
+
+    assert first_service is not second_service
+    assert first_service.enabled is True
+    assert second_service.enabled is False
 
 
 def test_query_cache_make_cache_key_includes_tenant_prefix() -> None:
-    cache = QueryCache(redis_client=AsyncMock())
+    cache = QueryCache(backend_client=AsyncMock())
     key = cache._make_cache_key("q", {"a": 1}, tenant_id="tenant-1")
     assert key.startswith("query_cache:tenant:tenant-1:")
 
 
 @pytest.mark.asyncio
 async def test_query_cache_get_cached_result_disabled_and_branch_paths() -> None:
-    disabled = QueryCache(redis_client=None)
+    disabled = QueryCache(backend_client=None)
     assert await disabled.get_cached_result("k") is None
 
-    redis = AsyncMock()
-    cache = QueryCache(redis_client=redis)
+    backend_client = AsyncMock()
+    cache = QueryCache(backend_client=backend_client)
 
-    redis.get.return_value = b"\xff"
+    backend_client.get.return_value = b"\xff"
     assert await cache.get_cached_result("k1") is None
 
-    redis.get.return_value = '[1, 2]'
+    backend_client.get.return_value = "[1, 2]"
     assert await cache.get_cached_result("k2") == [1, 2]
 
-    redis.get.return_value = True
+    backend_client.get.return_value = True
     assert await cache.get_cached_result("k3") is True
 
-    redis.get.return_value = None
+    backend_client.get.return_value = None
     assert await cache.get_cached_result("k4") is None
 
-    redis.get.side_effect = RuntimeError("get failed")
+    backend_client.get.side_effect = RuntimeError("get failed")
     assert await cache.get_cached_result("k5") is None
 
 
 @pytest.mark.asyncio
-async def test_query_cache_set_cached_result_error_and_invalidate_tenant_cache_paths() -> None:
-    redis = AsyncMock()
-    cache = QueryCache(redis_client=redis)
+async def test_query_cache_set_cached_result_error_and_invalidate_tenant_cache_paths() -> (
+    None
+):
+    backend_client = AsyncMock()
+    cache = QueryCache(backend_client=backend_client)
 
-    redis.set.side_effect = RuntimeError("set failed")
+    backend_client.set.side_effect = RuntimeError("set failed")
     await cache.set_cached_result("k", {"a": 1})
 
-    redis.set.side_effect = None
-    redis.scan.side_effect = [(1, ["k1", "k2"]), (0, [])]
+    backend_client.set.side_effect = None
+    backend_client.scan.side_effect = [(1, ["k1", "k2"]), (0, [])]
     await cache.invalidate_tenant_cache("tenant-1")
-    redis.delete.assert_any_await("k1", "k2")
+    backend_client.delete.assert_any_await("k1", "k2")
 
-    redis.scan.side_effect = RuntimeError("scan failed")
+    backend_client.scan.side_effect = RuntimeError("scan failed")
     await cache.invalidate_tenant_cache("tenant-1")
 
 
 @pytest.mark.asyncio
 async def test_cached_query_uses_positional_tenant_and_returns_cached_hit() -> None:
-    redis = AsyncMock()
-    cache = QueryCache(redis_client=redis)
+    backend_client = AsyncMock()
+    cache = QueryCache(backend_client=backend_client)
 
     async def handler(_db: object, tenant_id: str, extra: str) -> dict[str, str]:
         return {"tenant": tenant_id, "extra": extra}
 
     with (
-        patch.object(cache, "get_cached_result", new=AsyncMock(return_value={"hit": True})) as mock_get,
+        patch.object(
+            cache, "get_cached_result", new=AsyncMock(return_value={"hit": True})
+        ) as mock_get,
         patch.object(cache, "_make_cache_key", wraps=cache._make_cache_key) as mock_key,
     ):
         wrapped = cache.cached_query(ttl=30, tenant_aware=True)(handler)
@@ -207,8 +183,10 @@ async def test_cached_query_uses_positional_tenant_and_returns_cached_hit() -> N
 
 @pytest.mark.asyncio
 async def test_cached_query_skips_lock_block_when_enabled_but_redis_removed() -> None:
-    cache = QueryCache(redis_client=AsyncMock())
-    cache.redis = None  # Force the branch that skips lock management while enabled remains True.
+    cache = QueryCache(backend_client=AsyncMock())
+    cache.backend_client = (
+        None  # Force the branch that skips lock management while enabled remains True.
+    )
 
     async def handler(_db: object) -> dict[str, bool]:
         return {"ok": True}
@@ -225,13 +203,13 @@ async def test_cached_query_skips_lock_block_when_enabled_but_redis_removed() ->
 
 @pytest.mark.asyncio
 async def test_cached_query_lock_wait_returns_after_other_worker_fills_cache() -> None:
-    redis = AsyncMock()
-    cache = QueryCache(redis_client=redis)
+    backend_client = AsyncMock()
+    cache = QueryCache(backend_client=backend_client)
 
     async def handler(_db: object) -> dict[str, bool]:
         return {"computed": True}
 
-    redis.set = AsyncMock(return_value=False)
+    backend_client.set = AsyncMock(return_value=False)
     with (
         patch.object(
             cache,
@@ -246,18 +224,18 @@ async def test_cached_query_lock_wait_returns_after_other_worker_fills_cache() -
     assert result == {"from_cache": True}
     assert mock_get.await_count >= 3
     mock_sleep.assert_awaited()
-    redis.delete.assert_not_called()
+    backend_client.delete.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_cached_query_lock_acquire_exception_then_executes_query() -> None:
-    redis = AsyncMock()
-    cache = QueryCache(redis_client=redis)
+    backend_client = AsyncMock()
+    cache = QueryCache(backend_client=backend_client)
 
     async def handler(_db: object) -> dict[str, str]:
         return {"ok": "value"}
 
-    redis.set = AsyncMock(side_effect=RuntimeError("lock acquire failed"))
+    backend_client.set = AsyncMock(side_effect=RuntimeError("lock acquire failed"))
     with (
         patch.object(cache, "get_cached_result", new=AsyncMock(return_value=None)),
         patch.object(cache, "set_cached_result", new=AsyncMock()) as mock_set,
@@ -269,16 +247,22 @@ async def test_cached_query_lock_acquire_exception_then_executes_query() -> None
 
 
 @pytest.mark.asyncio
-async def test_cached_query_lock_wait_timeout_reacquire_error_falls_back_to_execution() -> None:
-    redis = AsyncMock()
-    cache = QueryCache(redis_client=redis)
+async def test_cached_query_lock_wait_timeout_reacquire_error_falls_back_to_execution() -> (
+    None
+):
+    backend_client = AsyncMock()
+    cache = QueryCache(backend_client=backend_client)
 
     async def handler(_db: object) -> dict[str, str]:
         return {"computed": "value"}
 
-    redis.set = AsyncMock(side_effect=[False, RuntimeError("reacquire failed")])
+    backend_client.set = AsyncMock(
+        side_effect=[False, RuntimeError("reacquire failed")]
+    )
     with (
-        patch.object(cache, "get_cached_result", new=AsyncMock(side_effect=[None] * 20)),
+        patch.object(
+            cache, "get_cached_result", new=AsyncMock(side_effect=[None] * 20)
+        ),
         patch.object(cache, "set_cached_result", new=AsyncMock()) as mock_set,
         patch("app.shared.core.cache.asyncio.sleep", new=AsyncMock()),
     ):
@@ -290,15 +274,17 @@ async def test_cached_query_lock_wait_timeout_reacquire_error_falls_back_to_exec
 
 @pytest.mark.asyncio
 async def test_cached_query_lock_reacquire_success_skips_timeout_warning() -> None:
-    redis = AsyncMock()
-    cache = QueryCache(redis_client=redis)
+    backend_client = AsyncMock()
+    cache = QueryCache(backend_client=backend_client)
 
     async def handler(_db: object) -> dict[str, str]:
         return {"computed": "value"}
 
-    redis.set = AsyncMock(side_effect=[False, True])
+    backend_client.set = AsyncMock(side_effect=[False, True])
     with (
-        patch.object(cache, "get_cached_result", new=AsyncMock(side_effect=[None] * 20)),
+        patch.object(
+            cache, "get_cached_result", new=AsyncMock(side_effect=[None] * 20)
+        ),
         patch.object(cache, "set_cached_result", new=AsyncMock()) as mock_set,
         patch("app.shared.core.cache.asyncio.sleep", new=AsyncMock()),
         patch("app.shared.core.cache.logger") as mock_logger,
@@ -313,14 +299,14 @@ async def test_cached_query_lock_reacquire_success_skips_timeout_warning() -> No
 
 @pytest.mark.asyncio
 async def test_cached_query_logs_lock_release_error_when_delete_fails() -> None:
-    redis = AsyncMock()
-    cache = QueryCache(redis_client=redis)
+    backend_client = AsyncMock()
+    cache = QueryCache(backend_client=backend_client)
 
     async def handler(_db: object) -> dict[str, bool]:
         return {"ok": True}
 
-    redis.set = AsyncMock(return_value=True)
-    redis.delete = AsyncMock(side_effect=RuntimeError("delete failed"))
+    backend_client.set = AsyncMock(return_value=True)
+    backend_client.delete = AsyncMock(side_effect=RuntimeError("delete failed"))
     with (
         patch.object(cache, "get_cached_result", new=AsyncMock(return_value=None)),
         patch.object(cache, "set_cached_result", new=AsyncMock()),
@@ -329,6 +315,10 @@ async def test_cached_query_logs_lock_release_error_when_delete_fails() -> None:
         wrapped = cache.cached_query()(handler)
         assert await wrapped(object()) == {"ok": True}
 
-    events = [c for c in mock_logger.warning.call_args_list if c.args and c.args[0] == "cache_lock_release_error"]
+    events = [
+        c
+        for c in mock_logger.warning.call_args_list
+        if c.args and c.args[0] == "cache_lock_release_error"
+    ]
     assert events, "expected cache_lock_release_error warning"
     assert events[-1].kwargs["error"] == "delete failed"

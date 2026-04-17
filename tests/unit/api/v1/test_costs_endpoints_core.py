@@ -9,6 +9,7 @@ import pytest
 from fastapi.params import Depends
 from httpx import AsyncClient
 
+from app.modules.reporting.api.v1 import costs as costs_api
 from app.modules.reporting.api.v1 import costs_core_endpoints, costs_http_routes_core
 from app.shared.core.auth import (
     CurrentUser,
@@ -60,6 +61,42 @@ def test_cost_routes_bind_db_context_dependencies() -> None:
     assert (
         _dependency_for(costs_core_endpoints.get_costs, "current_user")
         is get_current_user_with_db_context
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_costs_root_delegates_to_get_costs_wrapper() -> None:
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    user = CurrentUser(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="root-costs@valdrics.io",
+        role=UserRole.MEMBER,
+        tier=PricingTier.STARTER,
+    )
+    response = MagicMock()
+    db = AsyncMock()
+    payload = {"total_cost": 12.34}
+
+    with patch.object(costs_api, "get_costs", new=AsyncMock(return_value=payload)) as mock_get_costs:
+        out = await costs_api.get_costs_root(
+            response=response,
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 31),
+            provider="aws",
+            db=db,
+            current_user=user,
+        )
+
+    assert out == payload
+    mock_get_costs.assert_awaited_once_with(
+        response=response,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+        provider="aws",
+        db=db,
+        current_user=user,
     )
 
 
@@ -445,4 +482,3 @@ async def test_analyze_costs_paths(async_client: AsyncClient, app):
             assert "client_ip" in mock_analyzer.analyze.await_args.kwargs
     finally:
         _clear_reporting_auth_overrides(app)
-

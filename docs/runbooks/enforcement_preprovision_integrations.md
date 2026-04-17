@@ -186,4 +186,4 @@ Guardrails enforced by chart contract:
 
 For standards-aligned deployment profiles tied to benchmark hardening closure (`BENCH-DOC-001`), use:
 
-1. `docs/ops/benchmark_alignment_profiles_2026-02-27.md`
+1. `docs/ops/benchmark_alignment_profiles.md`

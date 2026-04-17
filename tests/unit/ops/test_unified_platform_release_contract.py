@@ -131,6 +131,9 @@ def test_deploy_unified_platform_workflow_applies_terraform_and_cloudflare_pages
     workflow = (REPO_ROOT / ".github/workflows/deploy-unified-platform.yml").read_text(
         encoding="utf-8"
     )
+    upload_section = workflow.split(
+        "Upload non-secret deployment evidence bundle", maxsplit=1
+    )[1].split("Terraform apply unified platform", maxsplit=1)[0]
 
     assert "workflow_call:" in workflow
     assert "release_tag:" in workflow
@@ -143,12 +146,21 @@ def test_deploy_unified_platform_workflow_applies_terraform_and_cloudflare_pages
     assert "generate_managed_migration_env.py" in workflow
     assert "generate_managed_deployment_artifacts.py" in workflow
     assert "verify_managed_deployment_bundle.py" in workflow
+    assert "render_managed_deployment_handoff.py" in workflow
+    assert "refresh_codebase_audit_report.py" in workflow
+    assert "verify_managed_release_readiness.py" in workflow
     assert "actions/upload-artifact@" in workflow
+    assert ".runtime/${{ inputs.environment }}.report.json" in upload_section
+    assert ".runtime/${{ inputs.environment }}.migrate.report.json" in upload_section
+    assert "deployment.report.json" in upload_section
+    assert "operator-handoff.md" in upload_section
+    assert "secret-manager-runtime-secrets.json" not in upload_section
+    assert "terraform.runtime.auto.tfvars.json" not in upload_section
     assert "terraform -chdir=terraform init" in workflow
     assert "terraform.runtime.auto.tfvars.json" in workflow
     assert "-var-file=" in workflow
     assert "terraform -chdir=terraform apply -auto-approve tfplan" in workflow
-    assert "source \"${{ steps.managed_bundle.outputs.migration_env_path }}\"" in workflow
+    assert 'source "${{ steps.managed_bundle.outputs.migration_env_path }}"' in workflow
     assert "uv run alembic upgrade head" in workflow
     assert "wrangler pages deploy" in workflow
     assert "/health/live" in workflow
@@ -180,6 +192,11 @@ def test_release_unified_platform_workflow_promotes_one_digest_through_environme
     assert "inputs.release_tag" in workflow
     assert "needs.publish.outputs.api_promotion_ref" in workflow
     assert "needs.publish.outputs.batch_promotion_ref" in workflow
+    assert "--non-secret-deployment-bundle" in workflow
+    assert "render-release-blocker-summary:" in workflow
+    assert "Render Managed Release Blocker Summary" in workflow
+    assert "render_managed_release_blocker_summary.py" in workflow
+    assert "managed-release-blocker-summary-${{ inputs.release_tag }}" in workflow
     assert "promote_production" in workflow
 
 
@@ -197,4 +214,8 @@ def test_unified_platform_release_runbook_matches_new_control_plane() -> None:
     assert "Cloudflare Pages" in runbook
     assert "Supabase" in runbook
     assert "same `api_promotion_ref`" in runbook
+    assert "same `batch_promotion_ref`" in runbook
+    assert "verify_managed_release_readiness.py" in runbook
     assert "managed deployment bundle" in runbook
+    assert "managed-release-blocker-summary-<release-tag>" in runbook
+    assert "make render-managed-release-blockers NON_SECRET_BUNDLE=true" in runbook

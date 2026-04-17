@@ -56,24 +56,10 @@ services:
     networks:
       - observability
 
-  # Redis for caching (optional, for local dev)
-  redis:
-    image: redis:7-alpine
-    container_name: valdrics-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    command: redis-server --appendonly yes
-    restart: unless-stopped
-    networks:
-      - observability
-
 volumes:
   prometheus_data:
   grafana_data:
   alertmanager_data:
-  redis_data:
 
 networks:
   observability:

@@ -1,5 +1,8 @@
 # Pre-commit configuration for Valdrics
-# Install: uv sync --group dev && uv run pre-commit install
+# Install: uv sync --group dev && uv run pre-commit install --install-hooks
+
+default_install_hook_types: [pre-commit, pre-push, commit-msg]
+minimum_pre_commit_version: "3.2.0"
 
 repos:
   - repo: local
@@ -9,6 +12,111 @@ repos:
         entry: python3 scripts/security/check_local_env_for_live_secrets.py
         language: system
         pass_filenames: false
+        stages: [pre-commit, pre-push, manual]
+
+      - id: verify-repo-root-hygiene
+        name: verify-repo-root-hygiene
+        entry: uv run python3 scripts/verify_repo_root_hygiene.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit, pre-push, manual]
+
+      - id: verify-env-hygiene
+        name: verify-env-hygiene
+        entry: uv run python3 scripts/verify_env_hygiene.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit, pre-push, manual]
+
+      - id: verify-dependency-locking
+        name: verify-dependency-locking
+        entry: uv run python3 scripts/verify_dependency_locking.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push, manual]
+
+      - id: verify-documentation-runtime-contracts
+        name: verify-documentation-runtime-contracts
+        entry: uv run python3 scripts/verify_documentation_runtime_contracts.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push, manual]
+
+      - id: verify-docs-archive-hygiene
+        name: verify-docs-archive-hygiene
+        entry: uv run python3 scripts/verify_docs_archive_hygiene.py
+        language: system
+        pass_filenames: false
+        files: ^(docs/|scripts/verify_docs_archive_hygiene\.py)
+        stages: [pre-push, manual]
+
+      - id: verify-reports-archive-hygiene
+        name: verify-reports-archive-hygiene
+        entry: uv run python3 scripts/verify_reports_archive_hygiene.py
+        language: system
+        pass_filenames: false
+        files: ^(reports/|scripts/verify_reports_archive_hygiene\.py)
+        stages: [pre-push, manual]
+
+      - id: verify-enterprise-placeholder-guards
+        name: verify-enterprise-placeholder-guards
+        entry: uv run python3 scripts/verify_enterprise_placeholder_guards.py --profile strict
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push, manual]
+
+      - id: verify-container-image-pinning
+        name: verify-container-image-pinning
+        entry: uv run python3 scripts/verify_container_image_pinning.py
+        language: system
+        pass_filenames: false
+        files: ^(docker-compose\.yml|docker-compose\.observability\.yml|scripts/verify_container_image_pinning\.py)$
+        stages: [pre-push, manual]
+
+      - id: verify-alembic-head-integrity
+        name: verify-alembic-head-integrity
+        entry: uv run python3 scripts/verify_alembic_head_integrity.py
+        language: system
+        pass_filenames: false
+        files: ^(migrations/versions/|scripts/verify_alembic_head_integrity\.py)$
+        stages: [pre-push, manual]
+
+      - id: verify-architecture-decision-records
+        name: verify-architecture-decision-records
+        entry: uv run python3 scripts/verify_architecture_decision_records.py
+        language: system
+        pass_filenames: false
+        files: ^(docs/architecture/|scripts/verify_architecture_decision_records\.py)$
+        stages: [pre-push, manual]
+
+      - id: verify-jwt-bcp-checklist
+        name: verify-jwt-bcp-checklist
+        entry: uv run python3 scripts/verify_jwt_bcp_checklist.py
+        language: system
+        pass_filenames: false
+        files: ^(docs/security/jwt_bcp_checklist\.json|scripts/verify_jwt_bcp_checklist\.py)$
+        stages: [pre-push, manual]
+
+      - id: verify-ssdf-traceability-matrix
+        name: verify-ssdf-traceability-matrix
+        entry: uv run python3 scripts/verify_ssdf_traceability_matrix.py
+        language: system
+        pass_filenames: false
+        files: ^(docs/security/ssdf_traceability_matrix\.json|scripts/verify_ssdf_traceability_matrix\.py)$
+        stages: [pre-push, manual]
+
+      - id: verify-dashboard-runtime-contract
+        name: verify-dashboard-runtime-contract
+        entry: uv run python3 scripts/verify_dashboard_runtime_contract.py --build --skip-smoke
+        language: system
+        pass_filenames: false
+        files: ^(dashboard/|Dockerfile\.dashboard|scripts/verify_dashboard_runtime_contract\.py)$
+        stages: [manual]
 
   # Ruff - Fast Python linter & formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit

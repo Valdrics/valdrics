@@ -46,10 +46,8 @@ DEPLOYMENT_PLAIN_ENV_KEYS = (
     "OBSERVABILITY_BACKEND",
     "PUBLIC_API_RATE_LIMITING_BACKEND",
     "RATELIMIT_ENABLED",
-    "CIRCUIT_BREAKER_DISTRIBUTED_STATE",
     "LLM_PROVIDER",
     "EXPOSE_API_DOCUMENTATION_PUBLICLY",
-    "OTEL_LOGS_EXPORT_ENABLED",
     "SAAS_STRICT_INTEGRATIONS",
     "TRUST_PROXY_HEADERS",
     "CORS_ORIGINS",
@@ -75,13 +73,10 @@ DEPLOYMENT_SECRET_EXCLUDED_KEYS = frozenset(DEPLOYMENT_PLAIN_ENV_KEYS) | {
     "GCP_PROJECT_ID",
     "GCP_REGION",
     "OBSERVABILITY_BACKEND",
-    "OTEL_EXPORTER_OTLP_ENDPOINT",
-    "OTEL_EXPORTER_OTLP_INSECURE",
     "PLATFORM_RUNTIME_PROFILE",
     "POSTGRES_DB",
     "POSTGRES_PASSWORD",
     "POSTGRES_USER",
-    "SENTRY_DSN",
     "SUPABASE_ANON_KEY",
     "SUPABASE_URL",
     "TESTING",
@@ -110,6 +105,20 @@ GITHUB_ENVIRONMENT_SECRET_REQUIREMENTS = (
     "GCP_WORKLOAD_IDENTITY_PROVIDER",
     "GCP_DEPLOYER_SERVICE_ACCOUNT",
     "GCP_ARTIFACT_PUBLISHER_SERVICE_ACCOUNT",
+)
+
+MANAGED_OUTPUT_FILENAME_ALLOWLIST = frozenset(
+    {
+        "unified-platform-manifest.json",
+        "secret-manager-runtime-secrets.json",
+        "cloudflare-pages-env.json",
+        "artifact-registry-release.json",
+        "terraform.runtime.auto.tfvars.json",
+        "deployment.report.json",
+        # Rendered by scripts/render_managed_deployment_handoff.py and kept alongside
+        # the generated deployment bundle for operator use.
+        "operator-handoff.md",
+    }
 )
 
 
@@ -283,6 +292,17 @@ def _artifact_output_paths(output_dir: Path) -> tuple[Path, ...]:
         output_dir / "terraform.runtime.auto.tfvars.json",
         output_dir / "deployment.report.json",
     )
+
+
+def _prune_unmanaged_output_files(output_dir: Path) -> None:
+    if not output_dir.exists():
+        return
+    for candidate in output_dir.iterdir():
+        if not candidate.is_file() and not candidate.is_symlink():
+            continue
+        if candidate.name in MANAGED_OUTPUT_FILENAME_ALLOWLIST:
+            continue
+        candidate.unlink()
 
 
 def _ensure_output_dir_parent(output_dir: Path) -> None:
@@ -621,6 +641,7 @@ def generate_managed_deployment_artifacts(
         terraform_tfvars_path,
         report_path,
     ) = _artifact_output_paths(output_dir)
+    operator_handoff_path = output_dir / "operator-handoff.md"
 
     secret_manager_secret_keys = sorted(secret_manager_runtime_payload)
     secret_manager_secret_value_blockers = _placeholder_keys(
@@ -654,6 +675,7 @@ def generate_managed_deployment_artifacts(
                 artifact_registry_release_path.as_posix()
             ),
             "terraform_runtime_tfvars": terraform_tfvars_path.as_posix(),
+            "operator_handoff_markdown": operator_handoff_path.as_posix(),
         },
         "ready_for_unified_platform": (
             not runtime_blockers
@@ -713,6 +735,7 @@ def generate_managed_deployment_artifacts(
             staged_path.replace(final_path)
             promoted_paths.append(final_path)
         promotion_completed = True
+        _prune_unmanaged_output_files(output_dir)
     finally:
         if not promotion_completed:
             for final_path in promoted_paths:

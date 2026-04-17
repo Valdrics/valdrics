@@ -211,6 +211,32 @@ def test_main_resolves_default_report_path_from_repo_root_when_run_outside_repo(
     assert main(["--repo-root", ".", "--finding", "C-01"]) == 0
 
 
+def test_main_allows_missing_report_when_flag_is_set(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        audit_report_verifier,
+        "run_checks",
+        lambda *, repo_root, finding_ids: ((), ("ok",)),
+    )
+
+    assert (
+        main(
+            [
+                "--repo-root",
+                str(tmp_path),
+                "--report-path",
+                "missing-report.md",
+                "--allow-missing-report",
+                "--finding",
+                "C-01",
+            ]
+        )
+        == 0
+    )
+
+
 def test_main_rejects_relative_repo_root_repo_escape() -> None:
     assert main(["--repo-root", os.path.join("..", ".."), "--skip-report-check"]) == 2
 
@@ -261,7 +287,7 @@ def test_main_passes_m01_with_compact_optimization_structure(tmp_path: Path) -> 
             "MODULE_LINE_BUDGET_OVERRIDES: dict[str, int] = {}\n"
             "override_budget = 700\n"
             "max(default_max_lines, override_budget)\n"
-            "default=\"strict\"\n"
+            'default="strict"\n'
         ),
     )
     _write(tmp_path / "app/modules/optimization/domain/service.py", "pass\n")
@@ -287,7 +313,7 @@ def test_main_flags_m01_when_file_budget_exceeded(tmp_path: Path) -> None:
             "MODULE_LINE_BUDGET_OVERRIDES: dict[str, int] = {}\n"
             "override_budget = 700\n"
             "max(default_max_lines, override_budget)\n"
-            "default=\"strict\"\n"
+            'default="strict"\n'
         ),
     )
     for idx in range(106):
@@ -317,7 +343,7 @@ def test_main_ignores_optimization_package_markers_for_m01(tmp_path: Path) -> No
             "MODULE_LINE_BUDGET_OVERRIDES: dict[str, int] = {}\n"
             "override_budget = 700\n"
             "max(default_max_lines, override_budget)\n"
-            "default=\"strict\"\n"
+            'default="strict"\n'
         ),
     )
     for idx in range(105):
@@ -363,7 +389,9 @@ def test_main_flags_m03_when_bundle_exceeds_default_budget(tmp_path: Path) -> No
     assert exit_code == 1
 
 
-def test_main_passes_h07_with_ratio_governance_and_improved_ratio(tmp_path: Path) -> None:
+def test_main_passes_h07_with_ratio_governance_and_improved_ratio(
+    tmp_path: Path,
+) -> None:
     _write(
         tmp_path / "scripts/run_enterprise_tdd_gate.py",
         "\n".join(

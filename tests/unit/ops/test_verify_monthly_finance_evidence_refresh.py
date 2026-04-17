@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import math
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -18,6 +18,17 @@ from scripts.verify_monthly_finance_evidence_refresh import (
 def _write(path: Path, *, captured_at: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"captured_at": captured_at}), encoding="utf-8")
+
+
+def _as_of_after_checked_in_artifacts(*paths: Path) -> str:
+    latest_captured_at = max(
+        monthly_refresh_verifier._parse_iso_utc(
+            json.loads(path.read_text(encoding="utf-8"))["captured_at"],
+            field=f"{path.name}.captured_at",
+        )
+        for path in paths
+    )
+    return (latest_captured_at + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
 
 
 AS_OF_UTC = datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc)
@@ -144,6 +155,11 @@ def test_main_resolves_relative_paths_from_repo_root_when_run_outside_repo(
     finance_guardrails = repo_root / "docs" / "ops" / "evidence" / "finance_guardrails_2026-02-27.json"
     finance_telemetry = repo_root / "docs" / "ops" / "evidence" / "finance_telemetry_snapshot_2026-02-28.json"
     pkg_fin = repo_root / "docs" / "ops" / "evidence" / "pkg_fin_policy_decisions_2026-02-28.json"
+    as_of = _as_of_after_checked_in_artifacts(
+        finance_guardrails,
+        finance_telemetry,
+        pkg_fin,
+    )
     monkeypatch.chdir(tmp_path)
 
     assert (
@@ -156,7 +172,7 @@ def test_main_resolves_relative_paths_from_repo_root_when_run_outside_repo(
                 "--pkg-fin-policy-decisions-path",
                 os.path.relpath(pkg_fin, repo_root),
                 "--as-of",
-                "2026-03-15T00:00:00Z",
+                as_of,
             ]
         )
         == 0

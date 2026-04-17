@@ -1,11 +1,9 @@
 import pytest
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import MagicMock, patch
 from app.shared.core.rate_limit import (
     context_aware_key,
     get_analysis_limit,
-    check_remediation_rate_limit,
     get_limiter,
-    get_redis_client,
 )
 from uuid import uuid4
 from types import SimpleNamespace
@@ -83,110 +81,6 @@ def test_get_analysis_limit_tiers_use_configured_settings(mock_request):
         assert get_analysis_limit(mock_request) == "4/hour"
 
 
-@pytest.mark.asyncio
-async def test_check_remediation_rate_limit_redis_success():
-    """Test remediation limit using Redis."""
-    tenant_id = uuid4()
-    mock_redis = AsyncMock()
-    mock_redis.incr.return_value = 5
-
-    with patch("app.shared.core.rate_limit.get_redis_client", return_value=mock_redis):
-        allowed = await check_remediation_rate_limit(
-            tenant_id, "stop_instance", limit=10
-        )
-        assert allowed is True
-        mock_redis.incr.assert_called_once()
-        mock_redis.expire.assert_not_called()  # Only called on current == 1
-
-
-@pytest.mark.asyncio
-async def test_check_remediation_rate_limit_redis_first_call():
-    """Test first call in Redis sets expiry."""
-    tenant_id = uuid4()
-    mock_redis = AsyncMock()
-    mock_redis.incr.return_value = 1
-
-    with patch("app.shared.core.rate_limit.get_redis_client", return_value=mock_redis):
-        await check_remediation_rate_limit(tenant_id, "stop_instance")
-        mock_redis.expire.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_check_remediation_rate_limit_redis_error_fallback():
-    """Test fallback to memory when Redis fails."""
-    tenant_id = uuid4()
-    mock_redis = AsyncMock()
-    mock_redis.incr.side_effect = RuntimeError("Redis connection lost")
-
-    with (
-        patch("app.shared.core.rate_limit.get_redis_client", return_value=mock_redis),
-        patch(
-            "app.shared.core.rate_limit.get_settings",
-            return_value=SimpleNamespace(
-                ENVIRONMENT="production",
-                PLATFORM_RUNTIME_PROFILE="gcp",
-                PUBLIC_API_RATE_LIMITING_BACKEND="cloudflare",
-            ),
-        ),
-    ):
-        # Should NOT raise, but fallback to memory
-        allowed = await check_remediation_rate_limit(
-            tenant_id, "stop_instance", limit=10
-        )
-        assert allowed is True
-
-
-@pytest.mark.asyncio
-async def test_check_remediation_rate_limit_memory_fallback():
-    """Test remediation limit using memory fallback."""
-    tenant_id = "mem-tenant"
-    action = "test_action"
-
-    # Ensure redis is None
-    with patch("app.shared.core.rate_limit.get_redis_client", return_value=None):
-        # First call - allowed
-        allowed = await check_remediation_rate_limit(tenant_id, action, limit=1)
-        assert allowed is True
-
-        # Second call - exceeded
-        allowed = await check_remediation_rate_limit(tenant_id, action, limit=1)
-        assert allowed is False
-
-
-@pytest.mark.asyncio
-async def test_check_remediation_rate_limit_memory_reset():
-    """Test memory fallback window reset."""
-    tenant_id = "reset-tenant"
-    action = "reset_action"
-
-    with patch("app.shared.core.rate_limit.get_redis_client", return_value=None):
-        with patch(
-            "app.shared.core.rate_limit._monotonic_time",
-            side_effect=[100.0, 100.0 + 7200.0],
-        ):
-            # Initial call
-            await check_remediation_rate_limit(tenant_id, action, limit=1)
-            allowed = await check_remediation_rate_limit(tenant_id, action, limit=1)
-            assert allowed is True
-
-
-@pytest.mark.asyncio
-async def test_check_remediation_rate_limit_memory_uses_monotonic_window() -> None:
-    tenant_id = "monotonic-tenant"
-    action = "monotonic-action"
-
-    with (
-        patch("app.shared.core.rate_limit.get_redis_client", return_value=None),
-        patch(
-            "app.shared.core.rate_limit._monotonic_time",
-            side_effect=[500.0, 500.0 + 3601.0],
-        ),
-        patch("app.shared.core.rate_limit.time.time", return_value=1.0),
-    ):
-        assert await check_remediation_rate_limit(tenant_id, action, limit=1) is True
-        assert await check_remediation_rate_limit(tenant_id, action, limit=1) is True
-
-
 def test_get_limiter_initialization():
     """Test that limiter is initialized with correct strategy."""
     with patch("app.shared.core.rate_limit._limiter", None):
@@ -194,41 +88,26 @@ def test_get_limiter_initialization():
         assert limiter is not None
 
 
-def test_get_limiter_rejects_in_memory_in_production() -> None:
+def test_get_limiter_uses_memory_storage_in_local_runtime() -> None:
     mock_settings = SimpleNamespace(
-        REDIS_URL=None,
-        ENVIRONMENT="production",
+        ENVIRONMENT="local",
         PLATFORM_RUNTIME_PROFILE="gcp",
-        ALLOW_IN_MEMORY_RATE_LIMITS=False,
         RATELIMIT_ENABLED=True,
-        PUBLIC_API_RATE_LIMITING_BACKEND="redis",
+        PUBLIC_API_RATE_LIMITING_BACKEND="cloudflare",
         TESTING=False,
     )
     with patch("app.shared.core.rate_limit.get_settings", return_value=mock_settings):
-        with patch("app.shared.core.rate_limit._limiter", None):
-            with pytest.raises(RuntimeError, match="REDIS_URL is required only when"):
-                get_limiter()
-
-
-def test_get_limiter_allows_break_glass_in_production() -> None:
-    mock_settings = SimpleNamespace(
-        REDIS_URL=None,
-        ENVIRONMENT="production",
-        PLATFORM_RUNTIME_PROFILE="gcp",
-        ALLOW_IN_MEMORY_RATE_LIMITS=True,
-        RATELIMIT_ENABLED=True,
-        PUBLIC_API_RATE_LIMITING_BACKEND="redis",
-        TESTING=False,
-    )
-    with patch("app.shared.core.rate_limit.get_settings", return_value=mock_settings):
-        with patch("app.shared.core.rate_limit._limiter", None):
+        with (
+            patch("app.shared.core.rate_limit._limiter", None),
+            patch("app.shared.core.rate_limit._limiter_enabled", None),
+        ):
             limiter = get_limiter()
             assert limiter is not None
+            assert limiter._storage_uri == "memory://"
 
 
 def test_get_limiter_allows_disabled_cloudflare_edge_profile() -> None:
     mock_settings = SimpleNamespace(
-        REDIS_URL=None,
         ENVIRONMENT="production",
         ALLOW_IN_MEMORY_RATE_LIMITS=False,
         RATELIMIT_ENABLED=False,
@@ -253,29 +132,3 @@ def test_setup_rate_limiting():
         setup_rate_limiting(app)
         assert app.state.limiter == mock_limiter
         app.add_exception_handler.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_get_redis_client_logic():
-    """Test redis client lifecycle management."""
-    with (
-        patch("app.shared.core.rate_limit._redis_client", None),
-        patch("app.shared.core.rate_limit._redis_client_loop_marker", None),
-        patch("app.shared.core.rate_limit._redis_client_url", None),
-        patch("app.shared.core.rate_limit.get_settings") as mock_settings,
-    ):
-        mock_settings.return_value.REDIS_URL = "redis://localhost"
-        with patch("app.shared.core.rate_limit.from_url") as mock_from_url:
-            mock_from_url.return_value = MagicMock()
-            client = get_redis_client()
-            assert client is not None
-
-            # Test reconnect logic if loop changes
-            with (
-                patch("app.shared.core.rate_limit._redis_client_loop_marker", 100),
-                patch(
-                    "app.shared.core.rate_limit._current_loop_marker", return_value=200
-                ),
-            ):
-                get_redis_client()
-                assert mock_from_url.call_count == 2

@@ -152,7 +152,9 @@ def map_canonical_charge_category(
             "spanner",
             "bigquery",
             "dynamodb",
+            "valkey",
             "redis",
+            "redis oss",
             "cache",
         ),
     ):

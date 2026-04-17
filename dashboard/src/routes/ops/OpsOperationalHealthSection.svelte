@@ -1,13 +1,23 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import UpgradeNotice from '$lib/components/UpgradeNotice.svelte';
-	import { createLazyComponent } from '$lib/lazyComponent';
 	import {
 		canAccessOpsAcceptanceEvidence,
 		canAccessOpsCloseWorkflow,
 		canAccessOpsJobSlo
 	} from '$lib/entitlements';
 	import OpsStatusBanners from './OpsStatusBanners.svelte';
+	import {
+		loadOpsAcceptanceKpiSection,
+		loadOpsCloseWorkflowSection,
+		loadOpsIngestionSlaSection,
+		loadOpsIntegrationAcceptanceSection,
+		loadOpsJobSloSection,
+		loadOpsUnitEconomicsSection,
+		type OpsAcceptanceActions,
+		type OpsCloseActions,
+		type OpsReliabilityActions
+	} from './opsOperationalSectionLoaders';
 	import { buildOpsOperationalInitialState } from './opsOperationalState';
 	import { createOpsOperationalUnitActions } from './opsOperationalUnitActions';
 	import {
@@ -22,91 +32,8 @@
 		jobSloMetricBadgeClass
 	} from './opsUtils';
 	import { formatDelta, unitDeltaClass } from './unitEconomics';
-	import type { IngestionSLAResponse, JobSLOResponse } from './opsTypes';
 
 	const OPS_REQUEST_TIMEOUT_MS = 10000;
-	const loadOpsAcceptanceKpiSection = createLazyComponent(
-		() => import('./OpsAcceptanceKpiSection.svelte')
-	);
-	const loadOpsUnitEconomicsSection = createLazyComponent<{
-		unitStartDate: string;
-		unitEndDate: string;
-		unitAlertOnAnomaly: boolean;
-		refreshingUnitEconomics: boolean;
-		refreshUnitEconomics: () => void | Promise<void>;
-		unitEconomics: import('./opsTypes').UnitEconomicsResponse | null;
-		unitSettings: import('./opsTypes').UnitEconomicsSettings | null;
-		saveUnitEconomicsSettings: (event?: SubmitEvent) => void | Promise<void>;
-		savingUnitSettings: boolean;
-		formatUsd: (value: number | null | undefined) => string;
-		formatNumber: (value: number | null | undefined, digits?: number) => string;
-		formatDelta: (value: number | null | undefined) => string;
-		unitDeltaClass: (
-			metric: import('./opsTypes').UnitEconomicsResponse['metrics'][number]
-		) => string;
-	}>(() => import('./OpsUnitEconomicsSection.svelte'));
-	const loadOpsIntegrationAcceptanceSection = createLazyComponent(
-		() => import('./OpsIntegrationAcceptanceSection.svelte')
-	);
-	const loadOpsCloseWorkflowSection = createLazyComponent(
-		() => import('./OpsCloseWorkflowSection.svelte')
-	);
-	const loadOpsIngestionSlaSection = createLazyComponent<{
-		ingestionSlaWindowHours: number;
-		refreshingIngestionSla: boolean;
-		refreshIngestionSla: () => void | Promise<void>;
-		ingestionSla: IngestionSLAResponse | null;
-		ingestionSlaBadgeClass: (value: IngestionSLAResponse) => string;
-		formatNumber: (value: number | null | undefined, digits?: number) => string;
-		formatDuration: (value: number | null | undefined) => string;
-		formatDate: (value: string | null | undefined) => string;
-	}>(() => import('./OpsIngestionSlaSection.svelte'));
-	const loadOpsJobSloSection = createLazyComponent<{
-		jobSloWindowHours: number;
-		refreshingJobSlo: boolean;
-		refreshJobSlo: () => void | Promise<void>;
-		jobSlo: JobSLOResponse | null;
-		jobSloBadgeClass: (value: JobSLOResponse) => string;
-		jobSloMetricBadgeClass: (metric: JobSLOResponse['metrics'][number]) => string;
-		formatDuration: (value: number | null | undefined) => string;
-	}>(() => import('./OpsJobSloSection.svelte'));
-	type OpsAcceptanceActions = {
-		refreshAcceptanceKpis: () => Promise<void>;
-		refreshAcceptanceKpiHistory: () => Promise<void>;
-		preloadAcceptanceEvidence: (options?: {
-			includeKpis?: boolean;
-			includeRuns?: boolean;
-		}) => Promise<void>;
-		captureAcceptanceKpis: () => Promise<void>;
-		refreshAcceptanceRuns: () => Promise<void>;
-		captureAcceptanceRuns: () => Promise<void>;
-		runAcceptanceSuite: () => Promise<void>;
-		downloadAcceptanceKpiJson: () => Promise<void>;
-		downloadAcceptanceKpiCsv: () => Promise<void>;
-		hasSelectedAcceptanceChannels: (
-			includeSlack: boolean,
-			includeJira: boolean,
-			includeWorkflow: boolean
-		) => boolean;
-		acceptanceRunStatusClass: (status: string) => string;
-	};
-
-	type OpsCloseActions = {
-		previewClosePackage: () => Promise<void>;
-		preloadClosePackage: () => Promise<void>;
-		saveProviderInvoice: (event?: SubmitEvent) => Promise<void>;
-		deleteProviderInvoice: () => Promise<void>;
-		downloadClosePackageJson: () => Promise<void>;
-		downloadClosePackageCsv: () => Promise<void>;
-		downloadRestatementCsv: () => Promise<void>;
-	};
-
-	type OpsReliabilityActions = {
-		loadReliabilityData: (options?: { silent?: boolean }) => Promise<void>;
-		refreshIngestionSla: () => Promise<void>;
-		refreshJobSlo: () => Promise<void>;
-	};
-
 	let { data } = $props();
 	const opsState = $state(buildOpsOperationalInitialState());
 	let reliabilityAnchor: HTMLDivElement | null = $state(null);

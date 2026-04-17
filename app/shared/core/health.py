@@ -236,8 +236,8 @@ class HealthService:
     ) -> Dict[str, Any]:
         """Contain unexpected subcheck failures so /health remains deterministic."""
         try:
-            result = await asyncio.wait_for(
-                coro,
+            (result,) = await asyncio.wait_for(
+                asyncio.gather(coro, return_exceptions=True),
                 timeout=self._health_timeout_seconds(component=component),
             )
         except asyncio.TimeoutError:
@@ -257,20 +257,6 @@ class HealthService:
                 "component": component,
             }
         except HEALTH_RECOVERABLE_ERRORS as exc:
-            fallback_status = HEALTH_FALLBACK_STATUSES.get(component, "unknown")
-            logger.error(
-                "health_check_unhandled_exception",
-                component=component,
-                fallback_status=fallback_status,
-                error_type=type(exc).__name__,
-                error=str(exc),
-            )
-            return {
-                "status": fallback_status,
-                "error": str(exc),
-                "component": component,
-            }
-        except Exception as exc:
             fallback_status = HEALTH_FALLBACK_STATUSES.get(component, "unknown")
             logger.error(
                 "health_check_unhandled_exception",

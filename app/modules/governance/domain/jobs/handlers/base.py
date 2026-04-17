@@ -27,12 +27,6 @@ JOB_HANDLER_UNEXPECTED_RECOVERABLE_EXCEPTIONS = (
     asyncio.TimeoutError,
     SQLAlchemyError,
 )
-JOB_HANDLER_SENTRY_ALERT_RECOVERABLE_EXCEPTIONS = (
-    RuntimeError,
-    ValueError,
-    TypeError,
-    ImportError,
-)
 
 
 class JobTimeoutError(ValdricsException):
@@ -243,18 +237,6 @@ class BaseJobHandler(ABC):
             error_message=error_message[:500],
             attempts=job.attempts,
         )
-
-        # PRODUCTION: Alert ops team
-        try:
-            from app.shared.core.sentry import capture_exception
-
-            capture_exception(
-                Exception(
-                    f"Job {job.id} moved to DLQ after {job.attempts} attempts: {error_message}"
-                )
-            )
-        except JOB_HANDLER_SENTRY_ALERT_RECOVERABLE_EXCEPTIONS:
-            pass
 
     async def _handle_valdrics_exception(
         self, job: BackgroundJob, exc: ValdricsException, db: AsyncSession

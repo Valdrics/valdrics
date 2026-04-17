@@ -5,7 +5,7 @@ Runtime environment preflight validator.
 Validates:
 - Supported Python runtime contract (Python 3.12.x)
 - Settings contract (required secrets/env, security constraints)
-- Runtime dependency contract (tiktoken, prophet fallback policy, sentry-sdk when DSN set)
+- Runtime dependency contract (tiktoken, Cloud Trace exporter, managed Cloud Run logging posture, prophet fallback policy)
 """
 
 from __future__ import annotations

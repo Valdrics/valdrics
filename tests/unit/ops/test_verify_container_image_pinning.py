@@ -159,8 +159,10 @@ def test_main_returns_failure_for_missing_default_compose_files(tmp_path: Path) 
     assert exit_code == 1
 
 
-def test_default_compose_paths_include_local_redis_overlay() -> None:
-    assert Path("docker-compose.redis.yml") in image_pinning.DEFAULT_COMPOSE_PATHS
+def test_default_compose_paths_match_active_compose_surfaces() -> None:
+    assert Path("docker-compose.yml") in image_pinning.DEFAULT_COMPOSE_PATHS
+    assert Path("docker-compose.observability.yml") in image_pinning.DEFAULT_COMPOSE_PATHS
+    assert Path("docker-compose.redis.yml") not in image_pinning.DEFAULT_COMPOSE_PATHS
 
 
 def test_verify_container_image_pinning_rejects_non_directory_repo_root(tmp_path: Path) -> None:

@@ -49,14 +49,18 @@ SKIP_DIRECTORIES = {
     ".ruff_cache",
     ".mypy_cache",
 }
-ALLOWED_ORPHANED_DATED_DOC_PREFIXES = (
-    "docs/evidence/",
-    "docs/ops/evidence/",
-)
-ALLOWED_ORPHANED_DATED_DOCS = {
-    "docs/security/jwt_bcp_checklist_2026-02-27.json",
-    "docs/security/ssdf_traceability_matrix_2026-02-25.json",
-    "docs/security/ssdf_traceability_matrix_2026-02-25.md",
+REGISTERED_ACTIVE_DATED_DOCS = {
+    "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md",
+    "docs/ops/evidence/enforcement_failure_injection_2026-02-27.json",
+    "docs/ops/evidence/enforcement_stress_artifact_2026-02-27.json",
+    "docs/ops/evidence/finance_committee_packet_assumptions_2026-02-28.json",
+    "docs/ops/evidence/finance_guardrails_2026-02-27.json",
+    "docs/ops/evidence/finance_telemetry_snapshot_2026-02-28.json",
+    "docs/ops/evidence/pkg_fin_operational_readiness_2026-03-01.json",
+    "docs/ops/evidence/pkg_fin_policy_decisions_2026-02-28.json",
+    "docs/ops/evidence/pricing_benchmark_register_2026-02-27.json",
+    "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",
+    "docs/ops/key-rotation-drill-2026-02-27.md",
 }
 WEAK_REFERENCE_PREFIXES = (
     "docs/ops/evidence/all_changes_inventory",
@@ -72,7 +76,79 @@ PROHIBITED_ACTIVE_DOCS = {
     "docs/LOGIC_AND_PERFORMANCE_AUDIT.md": (
         "Historical audit snapshots belong under docs/archive/reviews/."
     ),
+    "docs/evidence/ci-green-2026-02-27.md": (
+        "Historical CI green-run promotion packet belongs under docs/archive/evidence/2026-q1/."
+    ),
+    "docs/ops/drills/enforcement_incident_drill_2026-02-23.md": (
+        "Historical enforcement incident drill record belongs under docs/archive/ops/2026-q1/drills/."
+    ),
+    "docs/ops/enforcement_stress_evidence_2026-02-25.md": (
+        "Use docs/ops/enforcement_stress_evidence.md for the canonical active protocol."
+    ),
+    "docs/ops/enforcement_post_closure_sanity_2026-02-26.md": (
+        "Use docs/ops/enforcement_post_closure_sanity.md for the canonical active policy."
+    ),
+    "docs/ops/enforcement_failure_injection_matrix_2026-02-25.md": (
+        "Use docs/ops/enforcement_failure_injection_matrix.md for the canonical active matrix."
+    ),
+    "docs/ops/benchmark_alignment_profiles_2026-02-27.md": (
+        "Use docs/ops/benchmark_alignment_profiles.md for the canonical active benchmark profile."
+    ),
+    "docs/ops/alert-evidence-2026-02-25.md": (
+        "Use docs/ops/alert-evidence.md for the canonical active evidence contract."
+    ),
+    "docs/ops/feature_enforceability_matrix_2026-02-27.json": (
+        "Use docs/ops/feature_enforceability_matrix.json for the canonical active matrix."
+    ),
+    "docs/security/jwt_bcp_checklist_2026-02-27.json": (
+        "Use docs/security/jwt_bcp_checklist.json for the canonical active checklist."
+    ),
+    "docs/security/ssdf_traceability_matrix_2026-02-25.json": (
+        "Use docs/security/ssdf_traceability_matrix.json for the canonical active matrix."
+    ),
+    "docs/ops/landing_funnel_alerting_2026-03-10.md": (
+        "Use docs/ops/landing_funnel_alerting.md for the canonical active contract."
+    ),
+    "docs/ops/incident_response_runbook.md": (
+        "Use docs/runbooks/incident_response.md for the canonical active incident runbook."
+    ),
+    "docs/guides/aws_scp_setup.md": (
+        "Legacy AWS SCP setup guidance is not part of the current active docs surface; archive it under docs/archive/reference/ or remove it."
+    ),
+    "docs/guides/cicd_security.md": (
+        "Legacy CI/CD hardening narrative is superseded by active workflow/runbook contracts; archive it under docs/archive/reference/ or remove it."
+    ),
+    "docs/architecture/identity_blueprint.md": (
+        "Historical identity reference belongs under docs/archive/reference/2026-q2/architecture/."
+    ),
+    "docs/architecture/discovery_wizard.md": (
+        "Historical discovery wizard note belongs under docs/archive/reference/2026-q2/architecture/."
+    ),
+    "docs/product/personas.md": (
+        "Historical product persona note belongs under docs/archive/reference/2026-q2/product/."
+    ),
+    "docs/runbooks/aws_first_operator_flow.md": (
+        "Provider-specific AWS tenant smoke belongs under docs/archive/runbooks/2026-q2/."
+    ),
+    "docs/ops/landing_page_audit_closure_2026-03-02.md": (
+        "Historical landing audit closure belongs under docs/archive/ops/2026-q1/."
+    ),
+    "docs/ops/pricing_packaging_correction_closure_2026-03-09.md": (
+        "Historical pricing/package correction closure belongs under docs/archive/ops/2026-q1/."
+    ),
 }
+PROHIBITED_ACTIVE_DOC_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(r"^docs/ops/all_changes_categorization_\d{4}-\d{2}-\d{2}(?:_followup)?\.md$"),
+        "Dated change-categorization snapshots belong under docs/archive/ops/<quarter>/.",
+    ),
+    (
+        re.compile(
+            r"^docs/ops/evidence/all_changes_inventory(?:_followup2?|)?_\d{4}-\d{2}-\d{2}\.txt$"
+        ),
+        "Historical all-changes inventory snapshots belong under docs/archive/ops/<quarter>/evidence/.",
+    ),
+)
 
 
 def _repo_root() -> Path:
@@ -161,21 +237,43 @@ def _is_weak_reference(relative_path: str) -> bool:
 def verify_docs_archive_hygiene(*, root: Path) -> list[str]:
     _validate_root(root)
     errors: list[str] = []
+    prohibited_active_matches: set[str] = set()
 
     for path_str, replacement in sorted(PROHIBITED_ACTIVE_DOCS.items()):
         if (root / path_str).exists():
+            prohibited_active_matches.add(path_str)
             errors.append(
                 f"{path_str}: prohibited active duplicate/orphan doc. {replacement}"
             )
+
+    docs_root = root / "docs"
+    if docs_root.exists():
+        for candidate in docs_root.rglob("*"):
+            if not candidate.is_file():
+                continue
+            rel = candidate.relative_to(root).as_posix()
+            if rel.startswith("docs/archive/"):
+                continue
+            for pattern, replacement in PROHIBITED_ACTIVE_DOC_PATTERNS:
+                if pattern.match(rel):
+                    prohibited_active_matches.add(rel)
+                    errors.append(
+                        f"{rel}: prohibited active duplicate/orphan doc. {replacement}"
+                    )
+                    break
 
     search_index = _build_search_index(root)
     dated_candidates: list[Path] = []
     dated_set: set[str] = set()
     for candidate in _dated_docs(root):
         rel = candidate.relative_to(root).as_posix()
-        if rel in ALLOWED_ORPHANED_DATED_DOCS:
+        if rel in prohibited_active_matches:
             continue
-        if rel.startswith(ALLOWED_ORPHANED_DATED_DOC_PREFIXES):
+        if rel not in REGISTERED_ACTIVE_DATED_DOCS:
+            errors.append(
+                f"{rel}: active dated doc is not explicitly registered; "
+                "archive it or add it to REGISTERED_ACTIVE_DATED_DOCS."
+            )
             continue
         dated_candidates.append(candidate)
         dated_set.add(rel)

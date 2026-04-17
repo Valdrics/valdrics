@@ -197,6 +197,90 @@ def test_verify_managed_deployment_bundle_detects_missing_artifact_and_report_en
     assert any("deployment artifact missing on disk" in error for error in errors)
 
 
+def test_verify_managed_deployment_bundle_accepts_non_secret_release_artifact_bundle(
+    tmp_path: Path,
+) -> None:
+    runtime_report, migrate_report, deployment_report = _build_bundle(tmp_path)
+    runtime_payload = json.loads(runtime_report.read_text(encoding="utf-8"))
+    migration_payload = json.loads(migrate_report.read_text(encoding="utf-8"))
+    runtime_payload["runtime_validation_blockers"] = []
+    runtime_payload["declared_external_placeholders"] = []
+    runtime_payload["unresolved_external_keys"] = []
+    runtime_payload["required_operator_input_keys"] = []
+    runtime_payload["validation_ready"] = True
+    runtime_report.write_text(
+        json.dumps(runtime_payload, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    deployment_payload = json.loads(deployment_report.read_text(encoding="utf-8"))
+    deployment_payload["runtime_validation_blockers"] = []
+    deployment_payload["secret_manager_secret_value_blockers"] = []
+    deployment_payload["terraform_remaining_inputs"] = []
+    deployment_payload["terraform_value_blockers"] = []
+    deployment_payload["ready_for_unified_platform"] = True
+    deployment_payload["ready_for_release_promotion"] = True
+    deployment_payload["ready_for_terraform"] = True
+    deployment_report.write_text(
+        json.dumps(deployment_payload, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    operator_handoff = deployment_report.parent / "operator-handoff.md"
+    operator_handoff.write_text("# handoff\n", encoding="utf-8")
+    (deployment_report.parent / "secret-manager-runtime-secrets.json").unlink()
+    (deployment_report.parent / "terraform.runtime.auto.tfvars.json").unlink()
+    Path(runtime_payload["output_path"]).unlink()
+    Path(migration_payload["output_path"]).unlink()
+
+    errors = verify_managed_deployment_bundle(
+        environment="production",
+        runtime_report_path=runtime_report,
+        migration_report_path=migrate_report,
+        deployment_report_path=deployment_report,
+        allow_non_secret_artifact_bundle=True,
+    )
+
+    assert errors == []
+
+
+def test_verify_managed_deployment_bundle_rejects_missing_operator_handoff_in_non_secret_bundle(
+    tmp_path: Path,
+) -> None:
+    runtime_report, migrate_report, deployment_report = _build_bundle(tmp_path)
+    runtime_payload = json.loads(runtime_report.read_text(encoding="utf-8"))
+    migration_payload = json.loads(migrate_report.read_text(encoding="utf-8"))
+    runtime_payload["runtime_validation_blockers"] = []
+    runtime_payload["declared_external_placeholders"] = []
+    runtime_payload["unresolved_external_keys"] = []
+    runtime_payload["required_operator_input_keys"] = []
+    runtime_payload["validation_ready"] = True
+    runtime_report.write_text(
+        json.dumps(runtime_payload, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    deployment_payload = json.loads(deployment_report.read_text(encoding="utf-8"))
+    deployment_payload["runtime_validation_blockers"] = []
+    deployment_payload["secret_manager_secret_value_blockers"] = []
+    deployment_payload["terraform_remaining_inputs"] = []
+    deployment_payload["terraform_value_blockers"] = []
+    deployment_payload["ready_for_unified_platform"] = True
+    deployment_payload["ready_for_release_promotion"] = True
+    deployment_payload["ready_for_terraform"] = True
+    deployment_report.write_text(
+        json.dumps(deployment_payload, indent=2, sort_keys=True), encoding="utf-8"
+    )
+    (deployment_report.parent / "secret-manager-runtime-secrets.json").unlink()
+    (deployment_report.parent / "terraform.runtime.auto.tfvars.json").unlink()
+    Path(runtime_payload["output_path"]).unlink()
+    Path(migration_payload["output_path"]).unlink()
+
+    errors = verify_managed_deployment_bundle(
+        environment="production",
+        runtime_report_path=runtime_report,
+        migration_report_path=migrate_report,
+        deployment_report_path=deployment_report,
+        allow_non_secret_artifact_bundle=True,
+    )
+
+    assert any("operator-handoff.md" in error for error in errors)
+
+
 def test_verify_managed_deployment_bundle_rejects_artifact_path_outside_output_dir(
     tmp_path: Path,
 ) -> None:

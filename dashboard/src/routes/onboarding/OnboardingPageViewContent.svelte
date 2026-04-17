@@ -1,7 +1,6 @@
 <script lang="ts">
 	/* eslint-disable svelte/no-navigation-without-resolve */
 	import { page } from '$app/stores';
-	import { resolveSessionTenantId } from '$lib/auth/sessionTenant';
 	import { buildProductFunnelAttributionContext } from '$lib/funnel/productFunnelTelemetry';
 	import {
 		applyCloudPlusVendorDefaults as applyCloudPlusVendorDefaultsHelper,
@@ -23,40 +22,18 @@
 		type OnboardingProvider
 	} from './onboardingTypesUtils';
 	import {
-		canUseCloudPlusFeaturesForTier,
-		canUseMultiCloudFeaturesForTier,
-		canUseIdpDeepScanForTier
-	} from './onboardingTierAccess';
+		canUseCloudPlusFeaturesForView,
+		canUseIdpDeepScanForView,
+		canUseMultiCloudFeaturesForView,
+		loadOnboardingApiModule,
+		loadOnboardingDiscoveryActionsModule,
+		loadOnboardingFlowActionsModule,
+		loadOnboardingPageViewBody,
+		loadOnboardingSetupActionsModule,
+		loadOnboardingUiActionsModule,
+		resolveOnboardingTenantId
+	} from './onboardingViewSupport';
 	import './OnboardingPageViewContent.css';
-
-	function createModuleLoader<T>(loader: () => Promise<T>): () => Promise<T> {
-		let promise: Promise<T> | null = null;
-
-		return () => {
-			if (!promise) {
-				promise = loader().catch((error) => {
-					promise = null;
-					throw error;
-				});
-			}
-			return promise;
-		};
-	}
-
-	const loadOnboardingApiModule = createModuleLoader(() => import('./onboardingApi'));
-	const loadOnboardingSetupActionsModule = createModuleLoader(
-		() => import('./onboardingSetupActions')
-	);
-	const loadOnboardingFlowActionsModule = createModuleLoader(
-		() => import('./onboardingFlowActions')
-	);
-	const loadOnboardingDiscoveryActionsModule = createModuleLoader(
-		() => import('./onboardingDiscoveryActions')
-	);
-	const loadOnboardingUiActionsModule = createModuleLoader(() => import('./onboardingUiActions'));
-	const loadOnboardingPageViewBody = createModuleLoader(
-		() => import('./OnboardingPageViewBody.svelte')
-	);
 
 	let { data } = $props();
 	let currentStep = $state(0),
@@ -103,41 +80,23 @@
 	let discoveryError = $state(''),
 		discoveryInfo = $state('');
 	$effect(() => {
-		if (discoveryEmail.trim().length > 0) {
-			return;
-		}
-		if (typeof data?.user?.email !== 'string') {
-			return;
-		}
+		if (discoveryEmail.trim().length > 0 || typeof data?.user?.email !== 'string') return;
 		const normalized = data.user.email.trim();
-		if (normalized.length > 0) {
-			discoveryEmail = normalized;
-		}
+		if (normalized.length > 0) discoveryEmail = normalized;
 	});
 	let isLoading = $state(false),
 		isVerifying = $state(false),
 		error = $state(''),
 		success = $state(false),
 		copied = $state(false);
-	const canUseMultiCloudFeatures = (): boolean =>
-		canUseMultiCloudFeaturesForTier(data?.subscription?.tier);
-	const canUseCloudPlusFeatures = (): boolean =>
-		canUseCloudPlusFeaturesForTier(data?.subscription?.tier);
-	const canUseIdpDeepScan = (): boolean => canUseIdpDeepScanForTier(data?.subscription?.tier);
-	const resolveTenantId = (): string | undefined =>
-		resolveSessionTenantId({ session: data.session, user: data.user });
-	const applyDiscoveryCandidateLocally = (updated: DiscoveryCandidate): void => {
-		discoveryCandidates = applyDiscoveryCandidateLocallyHelper(discoveryCandidates, updated);
-	};
-	const upsertDiscoveryCandidates = (candidates: DiscoveryCandidate[]): void => {
-		discoveryCandidates = upsertDiscoveryCandidatesHelper(discoveryCandidates, candidates);
-	};
-	function applyDiscoveryFlowResult(result: {
-		info?: string;
-		domain: string;
-		warnings: string[];
-		candidates: DiscoveryCandidate[];
-	}): void {
+	const canUseMultiCloudFeatures = (): boolean => canUseMultiCloudFeaturesForView(data);
+	const canUseCloudPlusFeatures = (): boolean => canUseCloudPlusFeaturesForView(data);
+	const canUseIdpDeepScan = (): boolean => canUseIdpDeepScanForView(data);
+	const applyDiscoveryCandidateLocally = (updated: DiscoveryCandidate): void =>
+		(discoveryCandidates = applyDiscoveryCandidateLocallyHelper(discoveryCandidates, updated));
+	const upsertDiscoveryCandidates = (candidates: DiscoveryCandidate[]): void =>
+		(discoveryCandidates = upsertDiscoveryCandidatesHelper(discoveryCandidates, candidates));
+	function applyDiscoveryFlowResult(result: { info?: string; domain: string; warnings: string[]; candidates: DiscoveryCandidate[] }): void {
 		if (!result.info) return;
 		discoveryDomain = result.domain;
 		discoveryWarnings = result.warnings;
@@ -403,7 +362,7 @@
 			if (result.success) {
 				trackOnboardingConnectionVerified({
 					accessToken: data.session?.access_token,
-					tenantId: resolveTenantId(),
+					tenantId: resolveOnboardingTenantId(data),
 					url: $page.url,
 					currentTier: data.subscription?.tier,
 					persona: String(data?.profile?.persona ?? ''),
@@ -436,7 +395,7 @@
 			currentStep = 3;
 			trackOnboardingConnectionVerified({
 				accessToken: data.session?.access_token,
-				tenantId: await resolveTenantId(),
+				tenantId: resolveOnboardingTenantId(data),
 				url: $page.url,
 				currentTier: data.subscription?.tier,
 				persona: String(data?.profile?.persona ?? ''),

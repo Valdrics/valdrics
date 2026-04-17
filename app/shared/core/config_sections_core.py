@@ -14,22 +14,18 @@ class CoreRuntimeSettings:
     ENVIRONMENT: str = "development"
     API_URL: str = "http://localhost:8000"  # Base URL for OIDC and Magic Links
     PLATFORM_RUNTIME_PROFILE: str = "gcp"  # gcp
-    OBSERVABILITY_BACKEND: str = "auto"  # auto, otlp, gcp
-    OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None  # Added for D5: Telemetry Sink
-    OTEL_EXPORTER_OTLP_INSECURE: bool = False  # SEC-07: Secure Tracing
-    OTEL_LOGS_EXPORT_ENABLED: bool = True
+    OBSERVABILITY_BACKEND: str = "gcp"  # gcp
     INTERNAL_METRICS_AUTH_TOKEN: str | None = None
     CSRF_SECRET_KEY: str | None = None  # SEC-01: CSRF
     CSRF_TEST_SECRET_KEY: str | None = None
     TESTING: bool = False
     PYTEST_CURRENT_TEST: str | None = None
-    SENTRY_DSN: str | None = None
     EXPOSE_API_DOCUMENTATION_PUBLICLY: bool = False
     APP_RUNTIME_DATA_DIR: str = str(Path(tempfile.gettempdir()) / "valdrics")
-    RATELIMIT_ENABLED: bool = True
-    # Supported managed GCP runtime: Cloudflare edge with RATELIMIT_ENABLED=false.
-    # Redis remains available only for explicit local/non-managed shared limiter paths.
-    PUBLIC_API_RATE_LIMITING_BACKEND: str = "redis"  # redis, cloudflare
+    RATELIMIT_ENABLED: bool = False
+    # Supported managed GCP runtime delegates public API throttling to Cloudflare
+    # WAF rate limiting rules and keeps the in-app limiter disabled by default.
+    PUBLIC_API_RATE_LIMITING_BACKEND: str = "cloudflare"
     ANALYSIS_RATE_LIMIT_FREE_PER_HOUR: int = 1
     ANALYSIS_RATE_LIMIT_STARTER_PER_HOUR: int = 2
     ANALYSIS_RATE_LIMIT_GROWTH_PER_HOUR: int = 10

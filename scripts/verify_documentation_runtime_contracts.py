@@ -64,9 +64,8 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
         forbidden_phrases=(
             "Zero external dependencies",
             "`k8s/`",
-            "Redis-backed local cache infrastructure",
-            "optional Redis cache service",
-            "REDIS_URL=redis://redis:6379",
+            "local cache infrastructure",
+            "optional cache service",
         ),
     ),
     DocumentationContract(
@@ -83,9 +82,11 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
             "artifact-registry-release.json",
             "cloudflare-pages-env.json",
             "unified-platform-manifest.json",
+            "operator-handoff.md",
             "managed-release-blockers.md",
+            "managed-release-blocker-summary-<release-tag>",
             "verify_codebase_audit_report.py",
-            "Cloudflare edge rate limiting",
+            "Cloudflare WAF rate limiting rules",
             "GCP external HTTPS load balancer",
             "PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare",
             "Cloud Run custom audiences",
@@ -93,9 +94,8 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
         forbidden_phrases=(
             "Vercel",
             "Cloudflare Pages + Koyeb",
-            "Redis-backed local cache infrastructure",
-            "optional Redis cache service",
-            "REDIS_URL=redis://redis:6379",
+            "local cache infrastructure",
+            "optional cache service",
             "Helm/Terraform material for future scale research",
             "OBSERVABILITY_BACKEND=otlp",
             "OTEL_EXPORTER_OTLP_ENDPOINT",
@@ -124,6 +124,18 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
             "managed bundle verification",
         ),
         forbidden_phrases=("Latest Sprint Shipped", "Sprint Status (Current)"),
+    ),
+    DocumentationContract(
+        path="docs/ops/enforcement_control_plane_gap_register_2026-02-23.md",
+        required_phrases=(
+            "terraform/main.tf",
+            "google_project_iam_member",
+            "google_service_account_iam_member",
+        ),
+        forbidden_phrases=(
+            "terraform/modules/iam/main.tf",
+            "terraform/modules/iam/variables.tf",
+        ),
     ),
     DocumentationContract(
         path="docs/architecture/tiering-2026.md",
@@ -201,12 +213,13 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
         required_phrases=(
             "Settings -> Notifications",
             "strict SaaS mode",
-            "Cloudflare edge rate limiting is healthy",
-            "local drill or explicit break-glass shared-state cache backend",
+            "Cloudflare WAF rate limiting rules are healthy",
+            "application-level throttling fallbacks are not tripping unexpectedly",
         ),
         forbidden_phrases=(
             "specified in `SLACK_CHANNEL_ID`",
             "optional cache backends are either healthy or falling back cleanly",
+            "explicit break-glass shared cache backend",
         ),
     ),
     DocumentationContract(
@@ -214,11 +227,9 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
         required_phrases=(
             "ENFORCEMENT_APPROVAL_TOKEN_SECRET",
             "PAYSTACK_SECRET_KEY",
-            "`REDIS_URL` credentials only if an explicit local drill or break-glass shared-state backend is enabled",
+            "Google Secret Manager or other provider-managed secret store",
         ),
-        forbidden_phrases=(
-            "optional local-only or break-glass `REDIS_URL` credentials, if explicitly configured",
-        ),
+        forbidden_phrases=("optional cache provider",),
     ),
     DocumentationContract(
         path="docs/runbooks/production_env_checklist.md",
@@ -229,7 +240,6 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
             "FRONTEND_URL=https://",
             "PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare",
             "RATELIMIT_ENABLED=false",
-            "CIRCUIT_BREAKER_DISTRIBUTED_STATE=false",
             "SUPABASE_ANON_KEY=...",
             "PLATFORM_RUNTIME_PROFILE=gcp",
             "OBSERVABILITY_BACKEND=gcp",
@@ -248,12 +258,16 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
             "publish-artifact-registry-images.yml",
             "deploy-unified-platform.yml",
             "--api-promotion-ref <repo@sha256:...>",
+            "--batch-promotion-ref <repo@sha256:...>",
             "run_public_frontend_quality_gate.py",
             "deployment.report.json",
             "cloudflare-pages-env.json",
             "artifact-registry-release.json",
             "unified-platform-manifest.json",
+            "operator-handoff.md",
             "managed-release-blockers.md",
+            "managed-release-blocker-summary-<release-tag>",
+            "make render-managed-release-blockers",
             "Cloud Run custom audiences",
             "verify_codebase_audit_report.py",
             "--env-file .runtime/production.env",
@@ -282,6 +296,10 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
             "release-unified-platform.yml",
             "publish-artifact-registry-images.yml",
             "deploy-unified-platform.yml",
+            "managed-release-blocker-summary-<release-tag>",
+            "promote_production=true",
+            "REPLACE_WITH_REAL_STAGING_FRONTEND",
+            "make render-managed-release-blockers NON_SECRET_BUNDLE=true",
         ),
     ),
     DocumentationContract(
@@ -334,7 +352,7 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
         forbidden_phrases=("Helm deployment profile (recommended)",),
     ),
     DocumentationContract(
-        path="docs/ops/benchmark_alignment_profiles_2026-02-27.md",
+        path="docs/ops/benchmark_alignment_profiles.md",
         required_phrases=(
             "Kubernetes AdmissionReview guidance profile",
             "Archived self-managed Helm reference remains outside the supported deployment contract.",

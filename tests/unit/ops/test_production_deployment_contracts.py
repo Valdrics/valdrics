@@ -19,6 +19,9 @@ def test_release_artifacts_are_immutable_and_workflows_target_unified_platform()
     release_workflow = (
         REPO_ROOT / ".github/workflows/release-unified-platform.yml"
     ).read_text(encoding="utf-8")
+    deploy_upload_section = deploy_workflow.split(
+        "Upload non-secret deployment evidence bundle", maxsplit=1
+    )[1].split("Terraform apply unified platform", maxsplit=1)[0]
 
     assert "VERSION must be set to an immutable release tag" in makefile_text
     assert (
@@ -37,7 +40,19 @@ def test_release_artifacts_are_immutable_and_workflows_target_unified_platform()
     assert "generate_managed_migration_env.py" in deploy_workflow
     assert "generate_managed_deployment_artifacts.py" in deploy_workflow
     assert "verify_managed_deployment_bundle.py" in deploy_workflow
+    assert "render_managed_deployment_handoff.py" in deploy_workflow
+    assert "refresh_codebase_audit_report.py" in deploy_workflow
+    assert "verify_managed_release_readiness.py" in deploy_workflow
     assert "actions/upload-artifact@" in deploy_workflow
+    assert ".runtime/${{ inputs.environment }}.report.json" in deploy_upload_section
+    assert (
+        ".runtime/${{ inputs.environment }}.migrate.report.json"
+        in deploy_upload_section
+    )
+    assert "deployment.report.json" in deploy_upload_section
+    assert "operator-handoff.md" in deploy_upload_section
+    assert "secret-manager-runtime-secrets.json" not in deploy_upload_section
+    assert "terraform.runtime.auto.tfvars.json" not in deploy_upload_section
     assert "terraform -chdir=terraform apply -auto-approve tfplan" in deploy_workflow
     assert "terraform.runtime.auto.tfvars.json" in deploy_workflow
     assert "secrets.DATABASE_URL" not in deploy_workflow
@@ -46,6 +61,17 @@ def test_release_artifacts_are_immutable_and_workflows_target_unified_platform()
     assert "/health/live" in deploy_workflow
     assert "needs.publish.outputs.api_promotion_ref" in release_workflow
     assert "needs.publish.outputs.batch_promotion_ref" in release_workflow
+    assert "actions/download-artifact@" in release_workflow
+    assert "verify_managed_release_readiness.py" in release_workflow
+    assert "--non-secret-deployment-bundle" in release_workflow
+    assert "render-release-blocker-summary:" in release_workflow
+    assert "Render Managed Release Blocker Summary" in release_workflow
+    assert "render_managed_release_blocker_summary.py" in release_workflow
+    assert "managed-deployment-bundle-staging-${{ inputs.release_tag }}" in release_workflow
+    assert "managed-deployment-bundle-production-${{ inputs.release_tag }}" in release_workflow
+    assert "managed-release-blocker-summary-${{ inputs.release_tag }}" in release_workflow
+    assert "verify-staging-readiness:" in release_workflow
+    assert "verify-production-readiness:" in release_workflow
     assert "deploy-production:" in release_workflow
 
 
@@ -93,7 +119,7 @@ def test_deployment_docs_match_unified_platform_contracts() -> None:
     assert "/health/live" in ops_doc
     assert "configured max break-glass window" in ops_doc
     assert "Google Cloud Run + Cloudflare Pages + Supabase" in ops_doc
-    assert "Cloudflare edge rate limiting" in ops_doc
+    assert "Cloudflare WAF rate limiting rules" in ops_doc
     assert "GCP external HTTPS load balancer" in ops_doc
     assert ".github/workflows/release-unified-platform.yml" in ops_doc
     assert ".github/workflows/publish-artifact-registry-images.yml" in ops_doc
@@ -107,6 +133,15 @@ def test_deployment_docs_match_unified_platform_contracts() -> None:
     assert "deploy-unified-platform.yml" in production_checklist
     assert "PUBLIC_API_RATE_LIMITING_BACKEND=cloudflare" in production_checklist
     assert "CLOUDFLARE_ZONE_ID" in production_checklist
+    assert "api_promotion_ref=repo@sha256:..." in production_checklist
+    assert "batch_promotion_ref=repo@sha256:..." in production_checklist
+    assert "--api-promotion-ref <repo@sha256:...>" in production_checklist
+    assert "--batch-promotion-ref <repo@sha256:...>" in production_checklist
+    assert "operator-handoff.md" in ops_doc
+    assert "operator-handoff.md" in production_checklist
+    assert "managed-release-blocker-summary-<release-tag>" in ops_doc
+    assert "managed-release-blocker-summary-<release-tag>" in production_checklist
+    assert "make render-managed-release-blockers" in production_checklist
 
 
 def test_root_legacy_deployment_files_are_removed() -> None:
@@ -124,7 +159,9 @@ def test_unsupported_regional_failover_operator_artifacts_are_removed() -> None:
 
 
 def test_archived_helm_contract_test_is_removed_from_active_ops_surface() -> None:
-    assert not (REPO_ROOT / "tests/unit/ops/test_enforcement_webhook_helm_contract.py").exists()
+    assert not (
+        REPO_ROOT / "tests/unit/ops/test_enforcement_webhook_helm_contract.py"
+    ).exists()
 
 
 def test_frontend_ci_node_version_matches_dashboard_container() -> None:

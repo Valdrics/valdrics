@@ -101,7 +101,7 @@ def _protected_output_paths(repo_root: Path) -> set[Path]:
         repo_root,
         repo_root / "scripts" / "generate_provenance_manifest.py",
         ".github/workflows/sbom.yml",
-        "docs/ops/feature_enforceability_matrix_2026-02-27.json",
+        "docs/ops/feature_enforceability_matrix.json",
         "docs/ops/key-rotation-drill-2026-02-27.md",
         "docs/ops/evidence/finance_guardrails_TEMPLATE.json",
         "docs/ops/evidence/valdrics_disposition_register_2026-02-28.json",

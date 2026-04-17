@@ -10,7 +10,6 @@ from app.shared.core.rate_limit import (
     global_rate_limit,
     get_analysis_limit,
     setup_rate_limiting,
-    get_redis_client,
 )
 
 
@@ -105,22 +104,6 @@ def test_get_analysis_limit_uses_settings_overrides() -> None:
         )
 
 
-def test_redis_client_lazy_init():
-    """Test lazy loading of redis client."""
-    with (
-        patch("app.shared.core.rate_limit._redis_client", None),
-        patch("app.shared.core.rate_limit._redis_client_loop_marker", None),
-        patch("app.shared.core.rate_limit._redis_client_url", None),
-        patch("app.shared.core.rate_limit.get_settings") as mock_settings,
-    ):
-        mock_settings.return_value.REDIS_URL = "redis://localhost:6379"
-
-        with patch("app.shared.core.rate_limit.from_url") as mock_from_url:
-            client = get_redis_client()
-            assert client is not None
-            mock_from_url.assert_called_once()
-
-
 def test_global_limit_key_is_stable_across_requests() -> None:
     key_func = global_limit_key("enforcement_gate")
     req_a = mock_request(state_attrs={"tenant_id": "tenant-a"})
@@ -132,7 +115,6 @@ def test_global_limit_key_is_stable_across_requests() -> None:
 @pytest.mark.asyncio
 async def test_global_rate_limit_throttles_cross_tenant_requests() -> None:
     settings = SimpleNamespace(
-        REDIS_URL=None,
         ENVIRONMENT="development",
         ALLOW_IN_MEMORY_RATE_LIMITS=False,
         RATELIMIT_ENABLED=True,

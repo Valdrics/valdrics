@@ -219,7 +219,8 @@ We're paranoid, so you don't have to be:
 ### Runtime Dependency Policy (Prod/Staging)
 
 - `tiktoken` is required for accurate token accounting and LLM budget enforcement.
-- If `SENTRY_DSN` is configured, `sentry-sdk` is required.
+- The Cloud Trace exporter is required in staging/production.
+- Cloud Run ingests structured JSON logs from `stdout`/`stderr`; no separate log-export client path is part of the supported runtime contract.
 - `prophet` is required by default in staging/production.
 - Temporary break-glass fallback is allowed only with:
   - `FORECASTER_ALLOW_HOLT_WINTERS_FALLBACK=true`
@@ -251,10 +252,8 @@ make env-compose
 ```
 
 `.env.compose.dev` is local-only, ignored by git, and is the expected input for the
-checked-in `docker compose` workflow. The default compose path is cacheless. If you need
-the isolated local Redis drill overlay, use `make docker-up-redis`, which applies
-`docker-compose.redis.yml` on top of the base stack instead of baking Redis into the
-default topology. If you need
+checked-in `docker compose` workflow. The checked-in compose topology is cacheless by
+default and is the only supported local compose path in this repository. If you need
 provider keys locally, edit the generated file and add values such as `OPENAI_API_KEY`,
 `GROQ_API_KEY`, or `SLACK_BOT_TOKEN`.
 
@@ -269,16 +268,10 @@ make dev
 If `.env.dev` exists, `make dev` auto-loads it and bootstraps the local sqlite schema before
 starting the API.
 
-Local development only: default dockerized Postgres path without Redis:
+Local development only: default dockerized Postgres path with the checked-in cacheless compose topology:
 
 ```bash
 make docker-up
-```
-
-Optional local Redis drill overlay for cache/coordinator tests:
-
-```bash
-make docker-up-redis
 ```
 
 Optional observability stack:
@@ -356,7 +349,7 @@ but they are not the active operating model.
 
 Archived reference only:
 
-- `Helm Chart (archived, not part of the supported deployment)`: `helm/valdrics/`
+- `Helm Chart (archived, not part of the supported deployment)`: `docs/archive/reference/2026-q2/helm/valdrics/`
 
 ### CI/CD Pipeline
 

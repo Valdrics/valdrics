@@ -261,7 +261,7 @@ async def test_check_background_jobs_degrades_when_workers_are_not_responding():
         new=AsyncMock(
             return_value={
                 "status": "degraded",
-                "message": "No Celery workers responded to the heartbeat probe",
+                "message": "No managed background workers responded to the heartbeat probe",
                 "worker_count": 0,
                 "workers": [],
             }

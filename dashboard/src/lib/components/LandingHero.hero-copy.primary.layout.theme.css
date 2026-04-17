@@ -1,0 +1,34 @@
+.public-site-shell[data-public-theme='dark'] .landing-copy--public .landing-kicker-text {
+	color: var(--color-ink-300);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy--public .landing-title {
+	color: var(--color-ink-50);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy--public .landing-subtitle {
+	color: var(--color-ink-300);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy--public .landing-cta-secondary {
+	border-color: rgb(255 255 255 / 0.14);
+	background: rgb(255 255 255 / 0.04);
+	color: var(--color-ink-50);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy--public .landing-cta-secondary:hover {
+	border-color: rgb(34 211 238 / 0.28);
+	background: rgb(34 211 238 / 0.14);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy-point {
+	border-color: rgb(255 255 255 / 0.08);
+	background:
+		radial-gradient(560px 200px at 18% 0%, rgb(18 158 192 / 0.16), transparent 54%),
+		linear-gradient(145deg, rgb(9 19 28 / 0.96), rgb(11 17 25 / 0.95));
+	box-shadow: 0 24px 56px rgb(4 11 17 / 0.22);
+}
+
+.public-site-shell[data-public-theme='dark'] .landing-copy-point-detail {
+	color: var(--color-ink-300);
+}

@@ -3,9 +3,9 @@ import structlog
 import logging
 from typing import Any, cast
 from uuid import UUID
+from opentelemetry import trace
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.shared.core.config import get_settings
-from app.shared.core.log_exporter import configure_otlp_log_export, mirror_event_to_otel
 from app.shared.core.async_utils import maybe_await
 
 
@@ -90,21 +90,59 @@ def pii_redactor(
     return {}
 
 
-def add_otel_trace_id(
+def add_managed_runtime_log_fields(
     _logger: Any, _method_name: str, event_dict: dict[str, Any]
 ) -> dict[str, Any]:
-    """Integrate OTel Trace IDs into structured logs."""
-    from app.shared.core.tracing import get_current_trace_id
+    """
+    Enrich JSON logs for Cloud Run integrated logging and Cloud Logging UX.
 
-    trace_id = get_current_trace_id()
-    if trace_id:
-        event_dict["trace_id"] = trace_id
+    Cloud Run automatically ingests structured stdout/stderr JSON into
+    Cloud Logging. Adding the special trace/span fields lets Logs Explorer
+    correlate application logs with traces without a direct client-library
+    export path.
+    """
+    level_name = str(event_dict.get("level", "info") or "info").strip().lower()
+    severity = {
+        "debug": "DEBUG",
+        "info": "INFO",
+        "warning": "WARNING",
+        "error": "ERROR",
+        "critical": "CRITICAL",
+    }.get(level_name, "INFO")
+    event_dict.setdefault("severity", severity)
+
+    message = event_dict.get("message")
+    event_name = event_dict.get("event")
+    if (not isinstance(message, str) or not message.strip()) and isinstance(
+        event_name, str
+    ):
+        stripped_event_name = event_name.strip()
+        if stripped_event_name:
+            event_dict["message"] = stripped_event_name
+
+    span = trace.get_current_span()
+    span_context = span.get_span_context()
+    if not span_context.is_valid:
+        return event_dict
+
+    trace_id = format(span_context.trace_id, "032x")
+    event_dict.setdefault("trace_id", trace_id)
+
+    project_id = str(getattr(get_settings(), "GCP_PROJECT_ID", "") or "").strip()
+    if project_id:
+        event_dict.setdefault(
+            "logging.googleapis.com/trace",
+            f"projects/{project_id}/traces/{trace_id}",
+        )
+    event_dict.setdefault(
+        "logging.googleapis.com/spanId",
+        format(span_context.span_id, "016x"),
+    )
     return event_dict
 
 
 def setup_logging() -> None:
     settings = get_settings()
-    configure_otlp_log_export(settings)
 
     # 1. Configure the common processors (Middleware Pipeline for Logs)
     base_processors = [
@@ -112,9 +150,8 @@ def setup_logging() -> None:
         structlog.processors.add_log_level,  # Add "level": "info"
         structlog.processors.TimeStamper(fmt="iso"),  # Add "timestamp": "2026..."
         structlog.processors.StackInfoRenderer(),
-        add_otel_trace_id,  # Observability: Add Trace IDs
+        add_managed_runtime_log_fields,  # Cloud Run structured logging
         pii_redactor,  # Security: Redact PII before rendering
-        mirror_event_to_otel,  # Centralized collector export
     ]
 
     # 2. Choose the renderer based on environment
