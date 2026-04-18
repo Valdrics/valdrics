@@ -695,7 +695,15 @@
 	}
 }
 
-@media (max-width: 500px) {
+@media (max-width: 639px) {
+	.public-nav-mobile {
+		gap: 0.5rem;
+	}
+
+	.public-nav-mobile .public-theme-toggle--icon-only {
+		display: none;
+	}
+
 	.public-nav-menu-label {
 		display: none;
 	}
