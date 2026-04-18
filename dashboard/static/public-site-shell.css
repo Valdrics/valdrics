@@ -444,6 +444,7 @@
 .public-nav-mobile {
 	display: inline-flex;
 	align-items: center;
+	flex-shrink: 0;
 }
 
 .public-theme-toggle {
@@ -694,7 +695,7 @@
 	}
 }
 
-@media (max-width: 389px) {
+@media (max-width: 500px) {
 	.public-nav-menu-label {
 		display: none;
 	}
