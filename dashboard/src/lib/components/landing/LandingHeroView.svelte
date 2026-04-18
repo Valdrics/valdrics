@@ -11,6 +11,7 @@
 	} from '$lib/landing/landingSignalSnapshots';
 	import { createLazyComponent } from '$lib/lazyComponent';
 	import LandingHeroCopy from '$lib/components/landing/LandingHeroCopy.svelte';
+	import LandingHeroBelowFold from '$lib/components/landing/LandingHeroBelowFold.svelte';
 	import './LandingMarketingShared.css';
 	import '../LandingHero.footer.css';
 	import './LandingHeroView.public.css';
@@ -23,32 +24,6 @@
 		onTrackCta: (action: string, section: string, value: string) => void;
 	};
 
-	type LandingHeroBelowFoldProps = {
-		activeSnapshot: LandingSignalSnapshot;
-		activeSignalLane: LandingSignalLaneSnapshot;
-		roiMonthlySpendUsd: number;
-		scenarioWasteWithoutPct: number;
-		scenarioWasteWithPct: number;
-		scenarioWindowMonths: number;
-		currencyCode: LandingCurrencyCode | string;
-		localCurrencyCode: LandingCurrencyCode;
-		onCurrencyCodeChange?: (value: LandingCurrencyCode) => void;
-		onTrackScenarioAdjust: (control: string) => void;
-		onScenarioWasteWithoutChange: (value: number) => void;
-		onScenarioWasteWithChange: (value: number) => void;
-		onScenarioWindowChange: (value: number) => void;
-		roiPlannerHref: string;
-		freeTierCtaHref: string;
-		trustEnterpriseHref: string;
-		aboutHref: string;
-		docsHref: string;
-		statusHref: string;
-		proofHref?: string;
-		requestValidationBriefingHref: string;
-		onePagerHref: string;
-		onTrackCta: (action: string, section: string, value: string) => void;
-	};
-
 	type LandingCookieConsentProps = {
 		visible: boolean;
 		onAccept: () => void;
@@ -58,9 +33,6 @@
 
 	const loadLandingExitIntentPrompt = createLazyComponent<LandingExitIntentPromptProps>(
 		() => import('$lib/components/landing/LandingExitIntentPrompt.svelte')
-	);
-	const loadLandingHeroBelowFold = createLazyComponent<LandingHeroBelowFoldProps>(
-		() => import('$lib/components/landing/LandingHeroBelowFold.svelte')
 	);
 	const loadLandingCookieConsent = createLazyComponent<LandingCookieConsentProps>(
 		() => import('$lib/components/landing/LandingCookieConsent.svelte')
@@ -310,34 +282,31 @@
 		</div>
 	</section>
 
-	{#await loadLandingHeroBelowFold() then module}
-		{@const LandingHeroBelowFold = module.default}
-		<LandingHeroBelowFold
-			{activeSnapshot}
-			{activeSignalLane}
-			{roiMonthlySpendUsd}
-			{scenarioWasteWithoutPct}
-			{scenarioWasteWithPct}
-			{scenarioWindowMonths}
-			{currencyCode}
-			{localCurrencyCode}
-			{onCurrencyCodeChange}
-			{onTrackScenarioAdjust}
-			{onScenarioWasteWithoutChange}
-			{onScenarioWasteWithChange}
-			{onScenarioWindowChange}
-			{roiPlannerHref}
-			{freeTierCtaHref}
-			{trustEnterpriseHref}
-			{aboutHref}
-			{docsHref}
-			{statusHref}
-			{proofHref}
-			{requestValidationBriefingHref}
-			{onePagerHref}
-			{onTrackCta}
-		/>
-	{/await}
+	<LandingHeroBelowFold
+		{activeSnapshot}
+		{activeSignalLane}
+		{roiMonthlySpendUsd}
+		{scenarioWasteWithoutPct}
+		{scenarioWasteWithPct}
+		{scenarioWindowMonths}
+		{currencyCode}
+		{localCurrencyCode}
+		{onCurrencyCodeChange}
+		{onTrackScenarioAdjust}
+		{onScenarioWasteWithoutChange}
+		{onScenarioWasteWithChange}
+		{onScenarioWindowChange}
+		{roiPlannerHref}
+		{freeTierCtaHref}
+		{trustEnterpriseHref}
+		{aboutHref}
+		{docsHref}
+		{statusHref}
+		{proofHref}
+		{requestValidationBriefingHref}
+		{onePagerHref}
+		{onTrackCta}
+	/>
 
 	{#if showBackToTop}
 		<a
