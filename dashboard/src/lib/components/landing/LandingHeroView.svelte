@@ -350,6 +350,7 @@
 	{/if}
 
 	{#if cookieBannerVisible}
+		<div class="landing-cookie-banner-spacer" aria-hidden="true"></div>
 		{#await loadLandingCookieConsent() then { default: LandingCookieConsent }}
 			<LandingCookieConsent
 				visible={cookieBannerVisible}
@@ -378,3 +379,15 @@
 		{/await}
 	{/if}
 </div>
+
+<style>
+	.landing-cookie-banner-spacer {
+		height: 13rem;
+	}
+
+	@media (max-width: 768px) {
+		.landing-cookie-banner-spacer {
+			height: 16rem;
+		}
+	}
+</style>

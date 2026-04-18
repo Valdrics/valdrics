@@ -183,7 +183,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          uv run python scripts/generate_local_compose_env.py --output-path .env.compose.dev --seed security-scan-dast-compose-v1
+          python3 scripts/generate_local_compose_env.py --output-path .env.compose.dev --seed security-scan-dast-compose-v1
           python3 - <<'PY'
           from pathlib import Path
 
@@ -253,4 +253,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker compose --env-file .env.compose.dev down -v
+          if [ -f .env.compose.dev ]; then
+            docker compose --env-file .env.compose.dev down -v
+          fi

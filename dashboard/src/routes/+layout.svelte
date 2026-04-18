@@ -19,6 +19,8 @@
 	import { canAccessAdminHealth } from '$lib/entitlements';
 	import { allowedNavHrefs, normalizePersona } from '$lib/persona';
 	import { createLazyComponent } from '$lib/lazyComponent';
+	import PublicSiteShell from './layout/PublicSiteShell.svelte';
+	import AppAuthenticatedShell from './layout/AppAuthenticatedShell.svelte';
 
 	type ToastComponentProps = { toast: Toast };
 	type PublicTone = 'default' | 'landing';
@@ -27,37 +29,9 @@
 		tier?: string | null;
 		status?: string | null;
 	} | null;
-	type PublicShellProps = {
-		currentYear: number;
-		toAppPath: (path: string) => string;
-		publicTone: PublicTone;
-		children: Snippet;
-	};
-	type AuthenticatedShellProps = {
-		user: {
-			email?: string | null;
-		};
-		role: string;
-		platformOperator: boolean;
-		subscription?: SubscriptionSummary;
-		primaryNavItems: NavItem[];
-		secondaryNavItems: NavItem[];
-		activeSecondaryNavItems: NavItem[];
-		persona: string;
-		toAppPath: (path: string) => string;
-		isActive: (href: string) => boolean;
-		children: Snippet;
-	};
 	const loadToastComponent = createLazyComponent<ToastComponentProps>(
 		() => import('$lib/components/Toast.svelte')
 	);
-	const loadPublicShell = createLazyComponent<PublicShellProps>(
-		() => import('./layout/PublicSiteShell.svelte')
-	);
-	const loadAuthenticatedShell = createLazyComponent<AuthenticatedShellProps>(
-		() => import('./layout/AppAuthenticatedShell.svelte')
-	);
-
 	let { data, children } = $props();
 
 	const currentYear = new Date().getFullYear();
@@ -145,28 +119,24 @@
 		</div>
 	</noscript>
 	{#if data.user}
-		{#await loadAuthenticatedShell() then { default: AppAuthenticatedShell }}
-			<AppAuthenticatedShell
-				user={data.user}
-				subscription={data.subscription}
-				{primaryNavItems}
-				{secondaryNavItems}
-				{activeSecondaryNavItems}
-				{persona}
-				{role}
-				{platformOperator}
-				{toAppPath}
-				{isActive}
-			>
-				{@render children()}
-			</AppAuthenticatedShell>
-		{/await}
+		<AppAuthenticatedShell
+			user={data.user}
+			subscription={data.subscription}
+			{primaryNavItems}
+			{secondaryNavItems}
+			{activeSecondaryNavItems}
+			{persona}
+			{role}
+			{platformOperator}
+			{toAppPath}
+			{isActive}
+		>
+			{@render children()}
+		</AppAuthenticatedShell>
 	{:else}
-		{#await loadPublicShell() then { default: PublicSiteShell }}
-			<PublicSiteShell {currentYear} {toAppPath} {publicTone}>
-				{@render children()}
-			</PublicSiteShell>
-		{/await}
+		<PublicSiteShell {currentYear} {toAppPath} {publicTone}>
+			{@render children()}
+		</PublicSiteShell>
 	{/if}
 </div>
 

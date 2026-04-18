@@ -61,7 +61,9 @@ test.describe('Landing layout audit regressions', () => {
 			await expect(page.locator(sectionId)).toBeVisible();
 		}
 
-		await expect(page.locator('#hero')).toContainText(/what the first workflow looks like/i);
+		await expect(page.locator('#hero')).toContainText(
+			/control cloud spend without slowing delivery/i
+		);
 		await expect(page.locator('#hero .landing-public-proof-item')).toHaveCount(3);
 		await expect(page.locator('#product .landing-public-pillar-card')).toHaveCount(3);
 		await expect(page.locator('#plans .landing-public-plan-card')).toHaveCount(3);
