@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import importlib
 import json
 import os
 import sys
@@ -28,7 +29,9 @@ SCRIPT_DIR = str(Path(__file__).resolve().parent)
 if SCRIPT_DIR not in sys.path:
     sys.path.insert(0, SCRIPT_DIR)
 
-from env_generation_common import repo_root_for, resolve_cli_path_from_root
+_ENV_GENERATION_COMMON = importlib.import_module("env_generation_common")
+repo_root_for = _ENV_GENERATION_COMMON.repo_root_for
+resolve_cli_path_from_root = _ENV_GENERATION_COMMON.resolve_cli_path_from_root
 
 DEFAULT_SIGN_PHRASE = "I have read the CLA Document and I hereby sign the CLA"
 DEFAULT_SIGNATURES_PATH = "signatures/version1/cla.json"
