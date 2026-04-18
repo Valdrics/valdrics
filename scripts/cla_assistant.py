@@ -24,7 +24,11 @@ from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-from scripts.env_generation_common import repo_root_for, resolve_cli_path_from_root
+SCRIPT_DIR = str(Path(__file__).resolve().parent)
+if SCRIPT_DIR not in sys.path:
+    sys.path.insert(0, SCRIPT_DIR)
+
+from env_generation_common import repo_root_for, resolve_cli_path_from_root
 
 DEFAULT_SIGN_PHRASE = "I have read the CLA Document and I hereby sign the CLA"
 DEFAULT_SIGNATURES_PATH = "signatures/version1/cla.json"
