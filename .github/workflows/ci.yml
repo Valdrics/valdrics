@@ -20,6 +20,7 @@ env:
   NODE_VERSION: "24.14.0"
   PNPM_VERSION: "10.32.1"
   UV_VERSION: "0.10.9"
+  COVERAGE_VERSION: "7.13.4"
   TRIVY_IMAGE: "docker.io/aquasec/trivy:0.69.3"
 
 jobs:
@@ -368,9 +369,6 @@ jobs:
           enable-cache: true
           version: ${{ env.UV_VERSION }}
 
-      - name: Install Dependencies
-        run: uv sync --locked --dev
-
       - name: Download Coverage Data
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -380,22 +378,22 @@ jobs:
 
       - name: Combine Coverage Data
         run: |
-          uv run coverage combine reports/coverage/shards
-          uv run coverage xml -o coverage.xml
+          uvx --from "coverage[toml]==${{ env.COVERAGE_VERSION }}" coverage combine reports/coverage/shards
+          uvx --from "coverage[toml]==${{ env.COVERAGE_VERSION }}" coverage xml -o coverage.xml
 
       - name: Enforce Global Coverage Gate (90%)
         run: |
-          uv run coverage report --include="app/*" --fail-under=90
+          uvx --from "coverage[toml]==${{ env.COVERAGE_VERSION }}" coverage report --include="app/*" --fail-under=90
 
       - name: Run Focused Coverage Gate (Optimization/Reporting/LLM Scheduler)
         run: |
-          uv run coverage report \
+          uvx --from "coverage[toml]==${{ env.COVERAGE_VERSION }}" coverage report \
             --include="*/app/modules/optimization/domain/remediation*.py,*/app/modules/optimization/domain/cloud_api_budget.py" \
             --fail-under=80
-          uv run coverage report \
+          uvx --from "coverage[toml]==${{ env.COVERAGE_VERSION }}" coverage report \
             --include="*/app/modules/reporting/domain/anomaly_detection.py,*/app/modules/reporting/domain/budget_alerts.py,*/app/modules/reporting/domain/calculator.py,*/app/modules/reporting/domain/leadership_kpis.py,*/app/modules/reporting/domain/service.py" \
             --fail-under=85
-          uv run coverage report \
+          uvx --from "coverage[toml]==${{ env.COVERAGE_VERSION }}" coverage report \
             --include="*/app/shared/llm/hybrid_scheduler.py" \
             --fail-under=95
 
@@ -544,6 +542,19 @@ jobs:
         working-directory: ./dashboard
         run: pnpm run build
 
+      - name: Package Dashboard Preview Build
+        working-directory: ./dashboard
+        run: |
+          tar -czf "${RUNNER_TEMP}/dashboard-preview-output.tar.gz" .svelte-kit/output
+
+      - name: Upload Dashboard Preview Build
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: dashboard-preview-output
+          path: ${{ runner.temp }}/dashboard-preview-output.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+
       - name: Verify Dashboard Managed Runtime Contract
         run: python3 scripts/verify_dashboard_runtime_contract.py
 
@@ -604,6 +615,18 @@ jobs:
         working-directory: ./dashboard
         run: pnpm install --frozen-lockfile
 
+      - name: Download Dashboard Preview Build
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dashboard-preview-output
+          path: ${{ runner.temp }}/dashboard-preview-output
+
+      - name: Restore Dashboard Preview Build
+        working-directory: ./dashboard
+        run: |
+          rm -rf .svelte-kit/output
+          tar -xzf "${RUNNER_TEMP}/dashboard-preview-output/dashboard-preview-output.tar.gz"
+
       - name: Cache Playwright Browsers
         uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
         id: playwright-cache-public
@@ -621,6 +644,7 @@ jobs:
         run: pnpm exec playwright test ${{ matrix.spec }} --reporter=html
         env:
           PLAYWRIGHT_PUBLIC_ONLY: "1"
+          PLAYWRIGHT_USE_PREBUILT_PREVIEW: "1"
           DASHBOARD_URL: http://localhost:4173
 
       - name: Upload Public Playwright Report

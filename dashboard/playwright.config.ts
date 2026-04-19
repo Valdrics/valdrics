@@ -6,6 +6,7 @@ delete process.env.NO_COLOR;
 
 const isPublicOnly = process.env.PLAYWRIGHT_PUBLIC_ONLY === '1';
 const skipManagedWebServer = process.env.PLAYWRIGHT_SKIP_WEBSERVER === '1';
+const usePrebuiltPreview = process.env.PLAYWRIGHT_USE_PREBUILT_PREVIEW === '1';
 
 function readDashboardEnvValue(name: string): string {
 	try {
@@ -110,7 +111,9 @@ const backendEnv = buildShellEnv({
 
 const webServer = [
 	{
-		command: `${frontendEnv} pnpm run build && ${frontendEnv} pnpm run preview`,
+		command: usePrebuiltPreview
+			? `${frontendEnv} pnpm run preview`
+			: `${frontendEnv} pnpm run build && ${frontendEnv} pnpm run preview`,
 		port: 4173,
 		reuseExistingServer: false
 	}

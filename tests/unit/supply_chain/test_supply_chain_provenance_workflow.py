@@ -112,6 +112,14 @@ def test_ci_workflow_has_enterprise_tdd_quality_gate_job() -> None:
 
 def test_ci_workflow_shards_backend_pytest_and_combines_coverage() -> None:
     text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    coverage_lock_text = (REPO_ROOT / "uv.lock").read_text(encoding="utf-8")
+    coverage_match = re.search(
+        r'\[\[package\]\]\nname = "coverage"\nversion = "([^"]+)"',
+        coverage_lock_text,
+    )
+
+    assert coverage_match is not None
+    coverage_version = coverage_match.group(1)
 
     assert "classify-changes:" in text
     assert "name: Classify CI Surfaces" in text
@@ -126,6 +134,8 @@ def test_ci_workflow_shards_backend_pytest_and_combines_coverage() -> None:
     assert "if: always() && (github.event_name != 'pull_request' || needs.classify-changes.outputs.backend_ci == 'true')" in text
     assert "Require Successful Backend Pytest Shards" in text
     assert "needs.pytest.result != 'success'" in text
+    assert f'COVERAGE_VERSION: "{coverage_version}"' in text
+    assert 'uvx --from "coverage[toml]==${{ env.COVERAGE_VERSION }}" coverage combine reports/coverage/shards' in text
     assert "backend-coverage-${{ matrix.shard_id }}" in text
     assert "pattern: backend-coverage-*" in text
     assert "merge-multiple: true" in text
@@ -228,6 +238,22 @@ def test_dashboard_mainline_browser_workflow_keeps_authenticated_playwright_matr
     assert "e2e/a11y.spec.ts" in text
     assert "e2e/performance.spec.ts" in text
     assert "pnpm exec playwright test" in text
+
+
+def test_ci_workflow_reuses_dashboard_preview_build_for_public_browser_gates() -> None:
+    ci_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    playwright_text = (REPO_ROOT / "dashboard/playwright.config.ts").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Package Dashboard Preview Build" in ci_text
+    assert "Upload Dashboard Preview Build" in ci_text
+    assert "name: dashboard-preview-output" in ci_text
+    assert "Download Dashboard Preview Build" in ci_text
+    assert "Restore Dashboard Preview Build" in ci_text
+    assert 'PLAYWRIGHT_USE_PREBUILT_PREVIEW: "1"' in ci_text
+    assert "const usePrebuiltPreview = process.env.PLAYWRIGHT_USE_PREBUILT_PREVIEW === '1';" in playwright_text
+    assert "? `${frontendEnv} pnpm run preview`" in playwright_text
 
 
 def test_strict_runtime_preflight_is_hermetic_and_explicit_in_workflows() -> None:
