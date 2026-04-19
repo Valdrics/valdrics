@@ -61,6 +61,12 @@ def _window_bounds(
     return start_dt, end_dt_exclusive
 
 
+def _as_naive_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+
 async def compute_acceptance_kpis_payload(
     *,
     start_date: date,
@@ -97,6 +103,8 @@ async def compute_acceptance_kpis_payload(
     tier = resolve_user_tier(current_user)
     metrics: list[AcceptanceKpiMetric] = []
     window_start, window_end_exclusive = _window_bounds(start_date, end_date)
+    db_window_start = _as_naive_utc(window_start)
+    db_window_end_exclusive = _as_naive_utc(window_end_exclusive)
 
     if is_feature_enabled_fn(tier, FeatureFlag.INGESTION_SLA):
         ingestion = await compute_ingestion_sla_metrics_fn(
@@ -199,8 +207,8 @@ async def compute_acceptance_kpis_payload(
             AuditLog.tenant_id == tenant_id,
             AuditLog.event_type
             == AuditEventType.TENANCY_ISOLATION_VERIFICATION_CAPTURED.value,
-            AuditLog.event_timestamp >= window_start,
-            AuditLog.event_timestamp < window_end_exclusive,
+            AuditLog.event_timestamp >= db_window_start,
+            AuditLog.event_timestamp < db_window_end_exclusive,
         )
         .order_by(AuditLog.event_timestamp.desc())
         .limit(1)
@@ -287,8 +295,8 @@ async def compute_acceptance_kpis_payload(
     remediation_stmt = select(func.count(AuditLog.id)).where(
         AuditLog.tenant_id == tenant_id,
         AuditLog.event_type == AuditEventType.REMEDIATION_EXECUTED.value,
-        AuditLog.event_timestamp >= window_start,
-        AuditLog.event_timestamp < window_end_exclusive,
+        AuditLog.event_timestamp >= db_window_start,
+        AuditLog.event_timestamp < db_window_end_exclusive,
         AuditLog.success,
     )
     remediation_count = await db.scalar(remediation_stmt) or 0

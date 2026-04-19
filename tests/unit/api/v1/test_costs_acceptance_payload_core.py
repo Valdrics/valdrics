@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.modules.reporting.api.v1 import costs as costs_api
+from app.modules.reporting.api.v1 import costs_acceptance_payload as acceptance_payload
 from tests.unit.api.v1.costs_acceptance_test_helpers import (
     ExecResult,
     FakeDB,
@@ -30,6 +31,15 @@ def _audit_event(*, success: bool = True) -> SimpleNamespace:
         event_timestamp=event_time(),
         correlation_id="run-1",
     )
+
+
+def test_as_naive_utc_normalizes_aware_datetimes_for_db_filters() -> None:
+    aware = datetime(2026, 3, 19, 0, 0, tzinfo=timezone.utc)
+
+    normalized = acceptance_payload._as_naive_utc(aware)
+
+    assert normalized == datetime(2026, 3, 19, 0, 0)
+    assert normalized.tzinfo is None
 
 
 @pytest.mark.asyncio
@@ -399,8 +409,9 @@ async def test_compute_acceptance_payload_bounds_change_governance_window() -> N
     remediation_stmt = db.scalar.await_args_list[1].args[0]
     compiled = str(remediation_stmt.compile(compile_kwargs={"literal_binds": True}))
 
-    assert "2026-01-01 00:00:00+00:00" in compiled
-    assert "2026-02-01 00:00:00+00:00" in compiled
+    assert "2026-01-01 00:00:00" in compiled
+    assert "2026-02-01 00:00:00" in compiled
+    assert "+00:00" not in compiled
     assert "event_timestamp <" in compiled
     assert {metric.key: metric for metric in payload.metrics}[
         "change_governance_proof"

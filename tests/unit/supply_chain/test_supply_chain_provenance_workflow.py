@@ -8,6 +8,10 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 PINNED_WORKFLOW_PATHS = (
     REPO_ROOT / ".github/workflows/ci.yml",
     REPO_ROOT / ".github/workflows/security-scan.yml",
+    REPO_ROOT / ".github/workflows/performance-mainline.yml",
+    REPO_ROOT / ".github/workflows/carbon-footprint.yml",
+    REPO_ROOT / ".github/workflows/dashboard-browser-mainline.yml",
+    REPO_ROOT / ".github/workflows/dependency-review.yml",
     REPO_ROOT / ".github/workflows/sbom.yml",
     REPO_ROOT / ".github/workflows/release-unified-platform.yml",
     REPO_ROOT / ".github/workflows/publish-artifact-registry-images.yml",
@@ -31,6 +35,21 @@ def test_sbom_workflow_verifies_dependency_locks_before_attestation() -> None:
     assert "uv lock --check" in text
     assert "pnpm install --frozen-lockfile" in text
     assert "pnpm audit --audit-level=high" in text
+    assert "actions/dependency-review-action@" not in text
+
+
+def test_dependency_review_workflow_runs_on_pull_requests_for_manifest_changes() -> None:
+    text = (REPO_ROOT / ".github/workflows/dependency-review.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "pull_request:" in text
+    assert "pyproject.toml" in text
+    assert "uv.lock" in text
+    assert "dashboard/package.json" in text
+    assert "dashboard/pnpm-lock.yaml" in text
+    assert "actions/dependency-review-action@" in text
+    assert "contents: read" in text
 
 
 def test_sbom_workflow_attests_provenance_subjects() -> None:
@@ -111,6 +130,7 @@ def test_ci_workflow_shards_backend_pytest_and_combines_coverage() -> None:
 
     assert "pytest:" in text
     assert "Backend Pytest Shard ${{ matrix.shard_id }}" in text
+    assert "name: Run Unit Tests" in text
     assert "backend-coverage-${{ matrix.shard_id }}" in text
     assert "pattern: backend-coverage-*" in text
     assert "merge-multiple: true" in text
@@ -135,7 +155,9 @@ def test_performance_gate_supports_reuse_and_ci_automation() -> None:
     perf_text = (REPO_ROOT / ".github/workflows/performance-gate.yml").read_text(
         encoding="utf-8"
     )
-    ci_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    perf_mainline_text = (
+        REPO_ROOT / ".github/workflows/performance-mainline.yml"
+    ).read_text(encoding="utf-8")
 
     assert "workflow_call:" in perf_text
     assert "start_local_api:" in perf_text
@@ -169,23 +191,48 @@ def test_performance_gate_supports_reuse_and_ci_automation() -> None:
         "uv run celery -A app.shared.core.celery_app:celery_app worker -l info"
         not in perf_text
     )
-    assert "performance-health-gate:" in ci_text
-    assert "performance-dashboard-gate:" in ci_text
-    assert "performance-ops-gate:" in ci_text
-    assert "uses: ./.github/workflows/performance-gate.yml" in ci_text
+    assert "performance-health-gate:" in perf_mainline_text
+    assert "performance-dashboard-gate:" in perf_mainline_text
+    assert "performance-ops-gate:" in perf_mainline_text
+    assert "uses: ./.github/workflows/performance-gate.yml" in perf_mainline_text
     assert "performance.owner@valdrics.local" not in perf_text
     assert "performance.owner@valdrics.ai" in perf_text
     assert "performance.owner@valdrics.ai" in (
         REPO_ROOT / "scripts/bootstrap_performance_tenant.py"
     ).read_text(encoding="utf-8")
-    assert 'p95_target: "1.25"' in ci_text
+    assert 'p95_target: "1.25"' in perf_mainline_text
     assert "bootstrap_tier:" in perf_text
     assert '--tier "${{ inputs.bootstrap_tier }}"' in perf_text
     assert "tail -n 1 | tr -d" in perf_text
-    assert 'bootstrap_tier: "pro"' in ci_text
+    assert 'bootstrap_tier: "pro"' in perf_mainline_text
     assert "name: perf-gate-evidence-${{ inputs.profile }}" in perf_text
     assert "name: perf-gate-api-log-${{ inputs.profile }}" in perf_text
     assert "name: perf-gate-worker-log-${{ inputs.profile }}" in perf_text
+
+
+def test_carbon_footprint_workflow_runs_codecarbon_benchmark() -> None:
+    text = (REPO_ROOT / ".github/workflows/carbon-footprint.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "CodeCarbon" in text
+    assert "EmissionsTracker" in text
+    assert "carbon-emissions-report" in text
+    assert "pytest" in text
+
+
+def test_dashboard_mainline_browser_workflow_keeps_authenticated_playwright_matrix() -> (
+    None
+):
+    text = (
+        REPO_ROOT / ".github/workflows/dashboard-browser-mainline.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "Authenticated Shell" in text
+    assert "E2E Critical Paths" in text
+    assert "e2e/a11y.spec.ts" in text
+    assert "e2e/performance.spec.ts" in text
+    assert "pnpm exec playwright test" in text
 
 
 def test_strict_runtime_preflight_is_hermetic_and_explicit_in_workflows() -> None:
@@ -261,6 +308,7 @@ def test_security_scan_uses_hermetic_compose_env_for_dast() -> None:
         encoding="utf-8"
     )
 
+    assert "github.event_name != 'pull_request'" in text
     assert (
         "scripts/generate_local_compose_env.py --output-path .env.compose.dev" in text
     )

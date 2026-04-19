@@ -163,11 +163,6 @@ jobs:
       # Intentionally do not push directly to main from CI.
       # SBOM artifacts are published through workflow artifacts/releases.
       
-      # Upload to GitHub Security
-      - name: Upload to GitHub Dependency Graph
-        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48 # v4.9.0
-        if: github.event_name == 'pull_request'
-
   compliance-report:
     name: Generate Compliance Report
     needs: generate-sbom

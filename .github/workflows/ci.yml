@@ -276,7 +276,8 @@ jobs:
           retention-days: 7
 
   test:
-    name: Backend Test Aggregate / Coverage
+    # Keep this name aligned with the required branch-protection check.
+    name: Run Unit Tests
     runs-on: ubuntu-24.04
     needs: [pytest]
     steps:
@@ -550,100 +551,7 @@ jobs:
           path: dashboard/playwright-report/
           retention-days: 7
 
-  performance-health-gate:
-    name: Performance Gate - Health
-    needs: [quality, test]
-    uses: ./.github/workflows/performance-gate.yml
-    with:
-      url: "http://127.0.0.1:8000"
-      profile: "health_deep"
-      duration: "15"
-      users: "5"
-      ramp: "2"
-      p95_target: "1.25"
-      max_error_rate: "0.0"
-      start_local_api: true
-
-  performance-dashboard-gate:
-    name: Performance Gate - Dashboard
-    needs: [quality, test, dashboard-quality]
-    uses: ./.github/workflows/performance-gate.yml
-    with:
-      url: "http://127.0.0.1:8000"
-      profile: "dashboard"
-      duration: "12"
-      users: "4"
-      ramp: "2"
-      p95_target: "2.0"
-      max_error_rate: "0.0"
-      min_throughput: "1.0"
-      start_local_api: true
-      bootstrap_tenant: true
-
-  performance-ops-gate:
-    name: Performance Gate - Ops
-    needs: [quality, test]
-    uses: ./.github/workflows/performance-gate.yml
-    with:
-      url: "http://127.0.0.1:8000"
-      profile: "ops"
-      duration: "12"
-      users: "4"
-      ramp: "2"
-      p95_target: "2.0"
-      max_error_rate: "0.0"
-      min_throughput: "1.0"
-      start_local_api: true
-      bootstrap_tenant: true
-      bootstrap_tier: "pro"
-
-  # JOB 2: CARBON EMISSIONS (GreenOps 2.0)
-  emissions:
-    name: Carbon Footprint Report
-    runs-on: ubuntu-24.04
-    needs: [quality, test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82 # v7.5.0
-        with:
-          enable-cache: true
-          version: ${{ env.UV_VERSION }}
-
-      - name: Install Dependencies
-        run: uv sync --locked --dev
-
-      - name: Run CodeCarbon Benchmark
-        env:
-          CODECARBON_LOG_LEVEL: "info"
-        run: |
-          uv run python -c "
-          from codecarbon import EmissionsTracker
-          tracker = EmissionsTracker(project_name='Valdrics-CI', output_dir='.')
-          tracker.start()
-          import subprocess
-          subprocess.run(['uv', 'run', 'pytest', 'tests/', '-x', '--no-cov'], check=False)
-          emissions = tracker.stop()
-          print(f'🌍 Carbon Emissions: {emissions:.6f} kgCO2eq')
-          print(f'📊 Emissions saved to emissions.csv')
-          "
-
-      - name: Upload Emissions Report
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        with:
-          name: carbon-emissions-report
-          path: emissions.csv
-          retention-days: 30
-
-  # JOB 3: SECURITY CHECKS
+  # JOB 2: SECURITY CHECKS
   security:
     name: Security Audits
     runs-on: ubuntu-24.04
@@ -727,7 +635,7 @@ jobs:
         working-directory: ./dashboard
         run: pnpm install --frozen-lockfile && pnpm audit --audit-level=high
 
-  # JOB 4: ENTERPRISE TDD RELEASE GATE
+  # JOB 3: ENTERPRISE TDD RELEASE GATE
   enterprise-tdd-quality-gate:
     name: Enterprise TDD Quality Gate
     runs-on: ubuntu-24.04
@@ -843,96 +751,3 @@ jobs:
           name: enterprise-tdd-gate-coverage
           path: coverage-enterprise-gate.xml
           retention-days: 30
-
-  # JOB 5: DASHBOARD BROWSER GATES (split e2e/a11y/perf)
-  dashboard-browser-gates:
-    name: Dashboard ${{ matrix.label }}
-    runs-on: ubuntu-24.04
-    needs: [quality, test]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    env:
-      PUBLIC_API_URL: "https://api.example.com/api/v1"
-      PUBLIC_SUPABASE_URL: "https://example.supabase.co"
-      PUBLIC_SUPABASE_ANON_KEY: "ci-public-anon-key"
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: Authenticated Shell
-            spec: e2e/authenticated-shell.spec.ts
-            artifact: playwright-report-authenticated-shell
-          - label: E2E Critical Paths
-            spec: e2e/critical-paths.spec.ts
-            artifact: playwright-report-critical
-          - label: Accessibility Gate
-            spec: e2e/a11y.spec.ts
-            artifact: playwright-report-a11y
-          - label: Performance Gate
-            spec: e2e/performance.spec.ts
-            artifact: playwright-report-perf
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup Python (for backend)
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82 # v7.5.0
-        with:
-          enable-cache: true
-          version: ${{ env.UV_VERSION }}
-
-      - name: Install Backend Dependencies
-        run: uv sync --locked --dev
-
-      - name: Setup Node
-        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-
-      - name: Setup pnpm via Corepack
-        run: |
-          corepack enable
-          corepack prepare pnpm@${{ env.PNPM_VERSION }} --activate
-
-      - name: Cache pnpm dependencies
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
-        with:
-          path: ~/.pnpm-store
-          key: pnpm-${{ runner.os }}-${{ hashFiles('dashboard/pnpm-lock.yaml') }}
-          restore-keys: pnpm-${{ runner.os }}-
-
-      - name: Install Dashboard Dependencies
-        working-directory: ./dashboard
-        run: pnpm install --frozen-lockfile
-
-      - name: Cache Playwright Browsers
-        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('dashboard/pnpm-lock.yaml') }}
-
-      - name: Install Playwright Browsers
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        working-directory: ./dashboard
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run Playwright Suite
-        working-directory: ./dashboard
-        run: pnpm exec playwright test ${{ matrix.spec }} --reporter=html
-        env:
-          # Playwright webServer config boots `vite preview` on 4173
-          DASHBOARD_URL: http://localhost:4173
-          API_URL: http://127.0.0.1:8000
-
-      - name: Upload Playwright Report
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
-        if: always()
-        with:
-          name: ${{ matrix.artifact }}
-          path: dashboard/playwright-report/
-          retention-days: 7

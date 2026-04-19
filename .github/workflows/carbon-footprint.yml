@@ -1,0 +1,68 @@
+name: Carbon Footprint Report
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "tests/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/carbon-footprint.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+  UV_VERSION: "0.10.9"
+
+jobs:
+  emissions:
+    name: Carbon Footprint Report
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e06108dd0aef18192324c70427afc47652e63a82 # v7.5.0
+        with:
+          enable-cache: true
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install Dependencies
+        run: uv sync --locked --dev
+
+      - name: Run CodeCarbon Benchmark
+        env:
+          CODECARBON_LOG_LEVEL: "info"
+        run: |
+          uv run python -c "
+          from codecarbon import EmissionsTracker
+          tracker = EmissionsTracker(project_name='Valdrics-CI', output_dir='.')
+          tracker.start()
+          import subprocess
+          subprocess.run(['uv', 'run', 'pytest', 'tests/', '-x', '--no-cov'], check=False)
+          emissions = tracker.stop()
+          print(f'🌍 Carbon Emissions: {emissions:.6f} kgCO2eq')
+          print(f'📊 Emissions saved to emissions.csv')
+          "
+
+      - name: Upload Emissions Report
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: carbon-emissions-report
+          path: emissions.csv
+          retention-days: 30
+

@@ -1,0 +1,67 @@
+name: Mainline Performance Gates
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "dashboard/**"
+      - "migrations/**"
+      - "scripts/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/performance-gate.yml"
+      - ".github/workflows/performance-mainline.yml"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  performance-health-gate:
+    name: Performance Gate - Health
+    uses: ./.github/workflows/performance-gate.yml
+    with:
+      url: "http://127.0.0.1:8000"
+      profile: "health_deep"
+      duration: "15"
+      users: "5"
+      ramp: "2"
+      p95_target: "1.25"
+      max_error_rate: "0.0"
+      start_local_api: true
+
+  performance-dashboard-gate:
+    name: Performance Gate - Dashboard
+    uses: ./.github/workflows/performance-gate.yml
+    with:
+      url: "http://127.0.0.1:8000"
+      profile: "dashboard"
+      duration: "12"
+      users: "4"
+      ramp: "2"
+      p95_target: "2.0"
+      max_error_rate: "0.0"
+      min_throughput: "1.0"
+      start_local_api: true
+      bootstrap_tenant: true
+
+  performance-ops-gate:
+    name: Performance Gate - Ops
+    uses: ./.github/workflows/performance-gate.yml
+    with:
+      url: "http://127.0.0.1:8000"
+      profile: "ops"
+      duration: "12"
+      users: "4"
+      ramp: "2"
+      p95_target: "2.0"
+      max_error_rate: "0.0"
+      min_throughput: "1.0"
+      start_local_api: true
+      bootstrap_tenant: true
+      bootstrap_tier: "pro"
+
