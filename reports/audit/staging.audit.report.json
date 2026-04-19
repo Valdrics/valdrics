@@ -19,10 +19,10 @@
   "incorrect_claims": [
     {
       "claim": "Testing has 5,358 tests",
-      "correction": "A fresh backend collection run reported 6372 tests collected.",
+      "correction": "A fresh backend collection run reported 6375 tests collected.",
       "evidence": [
         {
-          "line": 6372,
+          "line": 6375,
           "path": "pytest --collect-only"
         }
       ]
@@ -42,7 +42,7 @@
     "Live cutover evidence and operator sign-off are validated outside this repository."
   ],
   "measured_facts": {
-    "backend_tests_collected": 6372,
+    "backend_tests_collected": 6375,
     "direct_audit_logger_call_sites": 33,
     "fastapi_requirement": "~=0.128.0",
     "frontend_svelte_version": "^5.51.5",
@@ -66,14 +66,14 @@
   ],
   "product_name": "Valdrics",
   "repository": "CloudSentinel-AI",
-  "snapshot_date": "2026-04-18",
+  "snapshot_date": "2026-04-19",
   "source_report_label": "Repository-generated Codebase Audit Baseline",
   "summary": {
     "high_confidence_findings": [
       "The dashboard uses SvelteKit, Svelte 5, TypeScript, Tailwind CSS v4, Vitest, and Playwright."
     ],
     "important_corrections": [
-      "Backend tests collected currently total 6372, not 5358.",
+      "Backend tests collected currently total 6375, not 5358.",
       "Zombie detection plugin classes total 56 across providers, not 11."
     ],
     "overall": "Repository audit baseline refreshed from live measured facts."
