@@ -126,6 +126,9 @@ def test_enterprise_tdd_mainline_workflow_hosts_the_enterprise_gate() -> None:
     assert "enterprise-tdd-quality-gate:" in enterprise_text
     assert "Enterprise TDD Quality Gate" in enterprise_text
     assert "scripts/run_enterprise_tdd_gate.py" in enterprise_text
+    assert "postgres:16.13-alpine" in enterprise_text
+    assert "--database-url" in enterprise_text
+    assert "ENTERPRISE_GATE_DATABASE_URL" in enterprise_text
     assert 'branches: [main]' in enterprise_text
     assert "workflow_dispatch:" in enterprise_text
 
@@ -337,6 +340,8 @@ def test_dashboard_mainline_browser_workflow_keeps_authenticated_playwright_matr
     assert "E2E Critical Paths" in text
     assert "e2e/a11y.spec.ts" in text
     assert "e2e/performance.spec.ts" in text
+    assert 'PRIVATE_API_ORIGIN: "http://127.0.0.1:8000"' in text
+    assert 'PLAYWRIGHT_BACKEND_URL: "http://127.0.0.1:8000"' in text
     assert "pnpm exec playwright test" in text
 
 

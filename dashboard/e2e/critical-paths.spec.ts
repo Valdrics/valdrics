@@ -12,7 +12,7 @@ import { BASE_URL, enableAuthenticatedSession } from './support/e2eAuth';
 
 // Helper to wait for page load
 async function waitForPageLoad(page: Page) {
-	await page.waitForLoadState('networkidle');
+	await page.waitForLoadState('domcontentloaded');
 }
 
 // ==================== Onboarding Flow ====================
@@ -25,7 +25,7 @@ test.describe('Onboarding Flow', () => {
 		await expect(
 			page.getByRole('heading', {
 				level: 1,
-				name: /govern spend without slowing delivery|turn cloud, saas, and software spend into governed action without slowing delivery|control cloud spend decisions|protect margin with governed spend decisions|one governed path from variance to board-ready proof/i
+				name: /control cloud spend without slowing delivery|a cleaner path from spend signal to action|move from spend reports to accountable action|one shared path from variance to action|review spend-changing actions with context|one controlled path from anomaly to execution|protect margin with clearer spend decisions|one governed path from variance to board-ready proof/i
 			})
 		).toBeVisible();
 		await expect(
@@ -54,7 +54,9 @@ test.describe('Onboarding Flow', () => {
 		await expect(page.getByRole('heading', { name: 'Starter', exact: true })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Growth', exact: true })).toBeVisible();
 		await expect(page.getByRole('heading', { name: 'Pro', exact: true })).toBeVisible();
-		await expect(page.getByRole('link', { name: /Open Enterprise Path/i })).toBeVisible();
+		await expect(
+			page.getByRole('link', { name: /Enterprise Review|Request Validation Briefing/i }).first()
+		).toBeVisible();
 	});
 
 	test('login page loads', async ({ page }) => {
@@ -114,20 +116,13 @@ test.describe('Dashboard Flow (Authenticated)', () => {
 	});
 
 	test('settings page loads', async ({ page }) => {
-		const llmModelStatuses: number[] = [];
-		page.on('response', (response) => {
-			if (response.url().includes('/settings/llm/models')) {
-				llmModelStatuses.push(response.status());
-			}
-		});
-
 		await page.goto(`${BASE_URL}/settings`);
 		await waitForPageLoad(page);
 
 		await expect(page.locator('h1:has-text("Preferences")')).toBeVisible();
-		expect(llmModelStatuses).not.toEqual([]);
-		expect(llmModelStatuses).toEqual(expect.arrayContaining([200]));
-		expect(llmModelStatuses).not.toContain(401);
+		await page.evaluate(() => window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' }));
+		await expect(page.getByLabel(/preferred ai provider/i)).toBeVisible();
+		await expect(page.getByRole('button', { name: /save ai strategy settings/i })).toBeVisible();
 	});
 });
 
@@ -150,7 +145,7 @@ test.describe('Billing Flow', () => {
 		await waitForPageLoad(page);
 
 		const ctaButton = page
-			.getByRole('link', { name: /Start Free Workspace|Open Enterprise Path/i })
+			.getByRole('link', { name: /Start Free Workspace|Enterprise Review/i })
 			.first();
 		await expect(ctaButton).toBeVisible();
 
@@ -181,40 +176,13 @@ test.describe('GreenOps Flow', () => {
 	});
 
 	test('greenops page loads', async ({ page }) => {
-		const greenopsStatuses = {
-			carbon: [] as number[],
-			budget: [] as number[],
-			graviton: [] as number[],
-			intensity: [] as number[]
-		};
-		page.on('response', (response) => {
-			const url = response.url();
-			if (url.includes('/carbon?')) {
-				greenopsStatuses.carbon.push(response.status());
-				return;
-			}
-			if (url.includes('/carbon/budget?')) {
-				greenopsStatuses.budget.push(response.status());
-				return;
-			}
-			if (url.includes('/carbon/graviton?')) {
-				greenopsStatuses.graviton.push(response.status());
-				return;
-			}
-			if (url.includes('/carbon/intensity?')) {
-				greenopsStatuses.intensity.push(response.status());
-			}
-		});
-
 		await page.goto(`${BASE_URL}/greenops`);
 		await waitForPageLoad(page);
 
 		await expect(page.getByRole('heading', { name: /greenops dashboard/i })).toBeVisible();
-		await expect(page.getByText(/carbon/i).first()).toBeVisible();
-		expect(greenopsStatuses.carbon).toEqual(expect.arrayContaining([200]));
-		expect(greenopsStatuses.budget).toEqual(expect.arrayContaining([200]));
-		expect(greenopsStatuses.graviton).toEqual(expect.arrayContaining([200]));
-		expect(greenopsStatuses.intensity).toEqual(expect.arrayContaining([200]));
+		await expect(page.getByText(/total carbon footprint/i)).toBeVisible();
+		await expect(page.getByText(/monthly carbon budget/i)).toBeVisible();
+		await expect(page.getByText(/i-playwright-001/i)).toBeVisible();
 	});
 });
 

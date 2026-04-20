@@ -36,6 +36,8 @@ jobs:
       PUBLIC_API_URL: "https://api.example.com/api/v1"
       PUBLIC_SUPABASE_URL: "https://example.supabase.co"
       PUBLIC_SUPABASE_ANON_KEY: "ci-public-anon-key"
+      PRIVATE_API_ORIGIN: "http://127.0.0.1:8000"
+      PLAYWRIGHT_BACKEND_URL: "http://127.0.0.1:8000"
     strategy:
       fail-fast: false
       matrix:

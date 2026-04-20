@@ -29,6 +29,23 @@ jobs:
     name: Enterprise TDD Quality Gate
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16.13-alpine
+        env:
+          POSTGRES_DB: valdrics_enterprise_gate
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d valdrics_enterprise_gate"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DB_SSL_MODE: "disable"
+      ENTERPRISE_GATE_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/valdrics_enterprise_gate"
     steps:
       - name: Checkout Code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -49,6 +66,7 @@ jobs:
 
           DEBUG=false uv run python3 scripts/generate_enforcement_stress_evidence.py \
             --output "${EVIDENCE_DIR}/enforcement_stress_artifact.json" \
+            --database-url "${ENTERPRISE_GATE_DATABASE_URL}" \
             --duration-seconds 30 \
             --concurrent-users 10 \
             --ramp-seconds 5 \

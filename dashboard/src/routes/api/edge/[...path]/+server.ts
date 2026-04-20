@@ -6,6 +6,18 @@ const EDGE_CACHE_S_MAXAGE_SECONDS = 30;
 const EDGE_CACHE_STALE_WHILE_REVALIDATE_SECONDS = 30;
 const EDGE_CACHE_NAMESPACE = 'valdrics-edge-proxy';
 const JOB_STREAM_SUFFIX = '/jobs/stream';
+const RESPONSE_HEADERS_TO_STRIP = [
+	'connection',
+	'content-encoding',
+	'content-length',
+	'keep-alive',
+	'proxy-authenticate',
+	'proxy-authorization',
+	'te',
+	'trailer',
+	'transfer-encoding',
+	'upgrade'
+];
 
 function isSafeCacheableRequest(
 	method: string,
@@ -41,6 +53,15 @@ function buildUpstreamHeaders(requestHeaders: Headers): Headers {
 		}
 	}
 
+	headers.set('x-valdrics-edge-proxy', '1');
+	return headers;
+}
+
+function sanitizeUpstreamResponseHeaders(upstreamHeaders: Headers): Headers {
+	const headers = new Headers(upstreamHeaders);
+	for (const headerName of RESPONSE_HEADERS_TO_STRIP) {
+		headers.delete(headerName);
+	}
 	headers.set('x-valdrics-edge-proxy', '1');
 	return headers;
 }
@@ -98,8 +119,7 @@ async function proxyRequest(event: Parameters<RequestHandler>[0]): Promise<Respo
 		throw error(502, `Edge proxy upstream request failed: ${message}`);
 	}
 
-	const responseHeaders = new Headers(upstreamResponse.headers);
-	responseHeaders.set('x-valdrics-edge-proxy', '1');
+	const responseHeaders = sanitizeUpstreamResponseHeaders(upstreamResponse.headers);
 
 	const isCacheable = isSafeCacheableRequest(
 		method,

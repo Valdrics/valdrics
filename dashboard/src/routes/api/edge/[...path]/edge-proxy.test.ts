@@ -85,4 +85,38 @@ describe('edge proxy auth forwarding', () => {
 			status: 502
 		});
 	});
+
+	it('strips stale content-encoding and hop-by-hop headers from upstream responses', async () => {
+		upstreamFetch.mockResolvedValueOnce(
+			new Response(JSON.stringify({ ok: true }), {
+				status: 200,
+				headers: {
+					connection: 'keep-alive',
+					'content-encoding': 'gzip',
+					'content-length': '999',
+					'content-type': 'application/json',
+					'transfer-encoding': 'chunked'
+				}
+			})
+		);
+		const event = {
+			request: new Request('http://localhost:4173/api/edge/api/v1/carbon'),
+			params: { path: 'api/v1/carbon' },
+			locals: {
+				safeGetSession: vi.fn().mockResolvedValue({
+					session: null
+				})
+			},
+			platform: undefined
+		};
+
+		const response = await GET(event as unknown as Parameters<typeof GET>[0]);
+		expect(response.status).toBe(200);
+		expect(await response.json()).toEqual({ ok: true });
+		expect(response.headers.get('content-encoding')).toBeNull();
+		expect(response.headers.get('content-length')).toBeNull();
+		expect(response.headers.get('transfer-encoding')).toBeNull();
+		expect(response.headers.get('connection')).toBeNull();
+		expect(response.headers.get('x-valdrics-edge-proxy')).toBe('1');
+	});
 });

@@ -9,7 +9,11 @@ import {
 } from './support/e2eAuth';
 
 async function waitForIdle(page: Page) {
-	await page.waitForLoadState('networkidle');
+	await page.waitForLoadState('domcontentloaded');
+}
+
+function fixtureTierPattern() {
+	return new RegExp(`${E2E_FIXTURE.tier}\\s+plan`, 'i');
 }
 
 test.describe('Authenticated shell', () => {
@@ -56,7 +60,7 @@ test.describe('Authenticated shell', () => {
 		const sidebar = page.locator('#sidebar');
 		await expect(sidebar).toBeVisible();
 		await expect(sidebar).toContainText(E2E_FIXTURE.email);
-		await expect(sidebar).toContainText(/growth plan/i);
+		await expect(sidebar).toContainText(fixtureTierPattern());
 		await expect(sidebar.getByRole('link', { name: /dashboard/i })).toHaveAttribute(
 			'aria-current',
 			'page'
@@ -76,13 +80,13 @@ test.describe('Authenticated shell', () => {
 		await page.goto(`${BASE_URL}/dashboard`);
 		await waitForIdle(page);
 
-		await page.keyboard.press('Control+k');
+		await page.getByRole('button', { name: /open command palette/i }).click();
 		const dialog = page.getByRole('dialog', { name: /command palette/i });
 		await expect(dialog).toBeVisible();
 
 		const input = dialog.getByPlaceholder(/search actions, routes, or documentation/i);
 		await input.fill('llm');
-		await page.keyboard.press('Enter');
+		await dialog.getByRole('button', { name: /llm usage/i }).click();
 
 		await expect(page).toHaveURL(/\/llm(?:\?.*)?$/);
 		await expect(page.getByRole('heading', { level: 1, name: /^llm usage$/i })).toBeVisible();
