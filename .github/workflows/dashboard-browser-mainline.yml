@@ -12,6 +12,7 @@ on:
       - "dashboard/package.json"
       - "dashboard/pnpm-lock.yaml"
       - ".github/workflows/dashboard-browser-mainline.yml"
+      - ".github/actions/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -30,6 +31,7 @@ jobs:
   dashboard-browser-gates:
     name: Dashboard ${{ matrix.label }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     env:
       PUBLIC_API_URL: "https://api.example.com/api/v1"
       PUBLIC_SUPABASE_URL: "https://example.supabase.co"

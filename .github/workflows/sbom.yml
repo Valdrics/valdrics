@@ -7,6 +7,9 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - 'Dockerfile'
+      - 'dashboard/package.json'
+      - 'dashboard/pnpm-lock.yaml'
+      - '.github/workflows/sbom.yml'
   release:
     types: [published]
   workflow_dispatch:
@@ -33,6 +36,7 @@ jobs:
   generate-sbom:
     name: Generate Software Bill of Materials
     runs-on: ubuntu-24.04
+    timeout-minutes: 40
     
     steps:
       - name: Checkout code
@@ -167,6 +171,7 @@ jobs:
     name: Generate Compliance Report
     needs: generate-sbom
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     
     steps:
       - name: Download SBOM

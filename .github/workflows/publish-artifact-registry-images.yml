@@ -61,6 +61,10 @@ on:
       GCP_ARTIFACT_PUBLISHER_SERVICE_ACCOUNT:
         required: true
 
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   id-token: write
@@ -69,6 +73,7 @@ jobs:
   publish-backend-image:
     name: Publish Digest-Pinned Backend Image
     runs-on: ubuntu-24.04
+    timeout-minutes: 35
     outputs:
       api_promotion_ref: ${{ steps.release_metadata.outputs.api_promotion_ref }}
       batch_promotion_ref: ${{ steps.release_metadata.outputs.batch_promotion_ref }}

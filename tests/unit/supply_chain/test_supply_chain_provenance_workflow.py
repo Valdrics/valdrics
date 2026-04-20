@@ -59,6 +59,14 @@ def test_sbom_workflow_verifies_attestations_before_promotion() -> None:
     assert "--artifact ./provenance/supply-chain-manifest.json" in text
 
 
+def test_sbom_workflow_push_paths_cover_frontend_dependency_surface() -> None:
+    text = (REPO_ROOT / ".github/workflows/sbom.yml").read_text(encoding="utf-8")
+
+    assert "dashboard/package.json" in text
+    assert "dashboard/pnpm-lock.yaml" in text
+    assert ".github/workflows/sbom.yml" in text
+
+
 def test_publish_artifact_registry_workflow_uses_digest_promotion_contract() -> None:
     text = (
         REPO_ROOT / ".github/workflows/publish-artifact-registry-images.yml"
@@ -169,7 +177,7 @@ def test_workflows_pin_uv_bootstrap_version() -> None:
         assert "${{ env.UV_VERSION }}" in text
 
 
-def test_ci_related_workflows_use_local_setup_composite_actions() -> None:
+def test_ci_and_release_related_workflows_use_local_setup_composite_actions() -> None:
     ci_text = (REPO_ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
     security_text = (REPO_ROOT / ".github/workflows/security-scan.yml").read_text(
         encoding="utf-8"
@@ -180,6 +188,12 @@ def test_ci_related_workflows_use_local_setup_composite_actions() -> None:
     enterprise_text = (
         REPO_ROOT / ".github/workflows/enterprise-tdd-mainline.yml"
     ).read_text(encoding="utf-8")
+    release_text = (
+        REPO_ROOT / ".github/workflows/release-unified-platform.yml"
+    ).read_text(encoding="utf-8")
+    deploy_text = (
+        REPO_ROOT / ".github/workflows/deploy-unified-platform.yml"
+    ).read_text(encoding="utf-8")
 
     assert "uses: ./.github/actions/setup-python-uv" in ci_text
     assert "uses: ./.github/actions/setup-dashboard" in ci_text
@@ -187,6 +201,59 @@ def test_ci_related_workflows_use_local_setup_composite_actions() -> None:
     assert "uses: ./.github/actions/setup-python-uv" in browser_text
     assert "uses: ./.github/actions/setup-dashboard" in browser_text
     assert "uses: ./.github/actions/setup-python-uv" in enterprise_text
+    assert "uses: ./.github/actions/setup-python-uv" in release_text
+    assert "uses: ./.github/actions/setup-dashboard" in release_text
+    assert "uses: ./.github/actions/setup-python-uv" in deploy_text
+    assert "uses: ./.github/actions/setup-dashboard" in deploy_text
+
+
+def test_workflow_triggers_cover_local_composite_actions_and_container_entrypoints() -> (
+    None
+):
+    security_text = (REPO_ROOT / ".github/workflows/security-scan.yml").read_text(
+        encoding="utf-8"
+    )
+    browser_text = (
+        REPO_ROOT / ".github/workflows/dashboard-browser-mainline.yml"
+    ).read_text(encoding="utf-8")
+    enterprise_text = (
+        REPO_ROOT / ".github/workflows/enterprise-tdd-mainline.yml"
+    ).read_text(encoding="utf-8")
+
+    assert '.github/actions/**' in security_text
+    assert '.github/actions/**' in browser_text
+    assert '.github/actions/**' in enterprise_text
+    assert '.github/actions/*/action.yml' in security_text
+    assert '.dockerignore' in security_text
+    assert 'scripts/docker-entrypoint.sh' in security_text
+
+
+def test_long_running_workflows_define_timeouts_and_serialized_release_concurrency() -> (
+    None
+):
+    timeout_workflow_paths = (
+        REPO_ROOT / ".github/workflows/ci.yml",
+        REPO_ROOT / ".github/workflows/security-scan.yml",
+        REPO_ROOT / ".github/workflows/dashboard-browser-mainline.yml",
+        REPO_ROOT / ".github/workflows/enterprise-tdd-mainline.yml",
+        REPO_ROOT / ".github/workflows/sbom.yml",
+        REPO_ROOT / ".github/workflows/publish-artifact-registry-images.yml",
+        REPO_ROOT / ".github/workflows/release-unified-platform.yml",
+        REPO_ROOT / ".github/workflows/deploy-unified-platform.yml",
+    )
+
+    for workflow_path in timeout_workflow_paths:
+        text = workflow_path.read_text(encoding="utf-8")
+        assert "timeout-minutes:" in text
+
+    for workflow_path in (
+        REPO_ROOT / ".github/workflows/publish-artifact-registry-images.yml",
+        REPO_ROOT / ".github/workflows/release-unified-platform.yml",
+        REPO_ROOT / ".github/workflows/deploy-unified-platform.yml",
+    ):
+        text = workflow_path.read_text(encoding="utf-8")
+        assert "concurrency:" in text
+        assert "cancel-in-progress: false" in text
 
 
 def test_performance_gate_supports_reuse_and_ci_automation() -> None:

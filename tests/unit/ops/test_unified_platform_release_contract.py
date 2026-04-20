@@ -123,6 +123,9 @@ def test_publish_artifact_registry_workflow_uses_wif_and_digest_promotion() -> N
     assert "artifact-registry-release.json" in workflow
     assert "artifact-registry-release.env" in workflow
     assert "immutable_artifact_registry_promotion" in workflow
+    assert "concurrency:" in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert "timeout-minutes: 35" in workflow
 
 
 def test_deploy_unified_platform_workflow_applies_terraform_and_cloudflare_pages() -> (
@@ -138,8 +141,13 @@ def test_deploy_unified_platform_workflow_applies_terraform_and_cloudflare_pages
     assert "workflow_call:" in workflow
     assert "release_tag:" in workflow
     assert "batch_promotion_ref:" in workflow
+    assert "concurrency:" in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert "timeout-minutes: 90" in workflow
     assert "hashicorp/setup-terraform@" in workflow
     assert "b9cd54a3c349d3f38e8881555d616ced269862dd # v3" in workflow
+    assert "uses: ./.github/actions/setup-python-uv" in workflow
+    assert "uses: ./.github/actions/setup-dashboard" in workflow
     assert "RUNTIME_PLAIN_ENV_JSON" in workflow
     assert "RUNTIME_SECRET_ENV_JSON" in workflow
     assert "generate_managed_runtime_env.py" in workflow
@@ -180,9 +188,12 @@ def test_release_unified_platform_workflow_promotes_one_digest_through_environme
         encoding="utf-8"
     )
 
-    assert (
-        "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5" in workflow
-    )
+    assert "concurrency:" in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert "timeout-minutes: 20" in workflow
+    assert "timeout-minutes: 35" in workflow
+    assert "uses: ./.github/actions/setup-python-uv" in workflow
+    assert "uses: ./.github/actions/setup-dashboard" in workflow
     assert "Publish Backend Artifact" in workflow
     assert "./.github/workflows/publish-artifact-registry-images.yml" in workflow
     assert "./.github/workflows/deploy-unified-platform.yml" in workflow

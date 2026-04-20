@@ -62,14 +62,25 @@ on:
       RUNTIME_SECRET_ENV_JSON:
         required: true
 
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.environment }}-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   id-token: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "24.14.0"
+  PNPM_VERSION: "10.32.1"
+  UV_VERSION: "0.10.9"
 
 jobs:
   deploy:
     name: Deploy Backend, Infra, and Frontend
     runs-on: ubuntu-24.04
+    timeout-minutes: 90
     environment: ${{ inputs.environment }}
     env:
       DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
@@ -98,36 +109,18 @@ jobs:
       - name: Set up Terraform
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
 
-      - name: Set up Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - name: Setup Backend Toolchain
+        uses: ./.github/actions/setup-python-uv
         with:
-          node-version: "24.14.0"
-          cache: "pnpm"
-          cache-dependency-path: dashboard/pnpm-lock.yaml
+          python-version: ${{ env.PYTHON_VERSION }}
+          uv-version: ${{ env.UV_VERSION }}
+          dependency-install-command: uv sync --locked --dev
 
-      - name: Install pnpm
-        shell: bash
-        run: |
-          set -euo pipefail
-          corepack enable
-          corepack prepare pnpm@10.32.1 --activate
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - name: Setup Dashboard Toolchain
+        uses: ./.github/actions/setup-dashboard
         with:
-          python-version-file: .python-version
-
-      - name: Install uv
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m pip install --upgrade pip uv
-
-      - name: Install backend dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          uv sync --locked --dev
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
 
       - name: Materialize managed runtime env from GitHub contract
         shell: bash
@@ -329,12 +322,6 @@ jobs:
           source "${{ steps.managed_bundle.outputs.migration_env_path }}"
           set +a
           uv run alembic upgrade head
-
-      - name: Install dashboard dependencies
-        shell: bash
-        run: |
-          set -euo pipefail
-          pnpm --dir dashboard install --frozen-lockfile
 
       - name: Build dashboard
         shell: bash

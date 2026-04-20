@@ -10,10 +10,12 @@ on:
       - "Dockerfile"
       - "Dockerfile.dashboard"
       - ".dockerignore"
+      - "scripts/docker-entrypoint.sh"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/security-scan.yml"
       - ".github/workflows/ci.yml"
+      - ".github/actions/**"
   pull_request:
     branches: [ main ]
     paths:
@@ -22,10 +24,13 @@ on:
       - "terraform/**"
       - "Dockerfile"
       - "Dockerfile.dashboard"
+      - ".dockerignore"
+      - "scripts/docker-entrypoint.sh"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/security-scan.yml"
       - ".github/workflows/ci.yml"
+      - ".github/actions/**"
   schedule:
     - cron: '0 0 * * *' # Daily at midnight
 
@@ -48,6 +53,7 @@ jobs:
   classify-changes:
     name: Classify Security Scan Surfaces
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     outputs:
       backend_container: ${{ steps.classify.outputs.backend_container }}
       dashboard_container: ${{ steps.classify.outputs.dashboard_container }}
@@ -93,7 +99,7 @@ jobs:
             else
               for path in "${changed_files[@]}"; do
                 case "${path}" in
-                  .github/workflows/security-scan.yml|.github/workflows/ci.yml|.dockerignore)
+                  .github/workflows/security-scan.yml|.github/workflows/ci.yml|.github/actions/*/action.yml|.dockerignore)
                     backend_container=true
                     dashboard_container=true
                     terraform=true
@@ -120,6 +126,7 @@ jobs:
 
   security-scan:
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Checkout Code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -164,6 +171,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [classify-changes]
     if: needs.classify-changes.outputs.terraform == 'true'
+    timeout-minutes: 20
     steps:
       - name: Checkout Code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -202,6 +210,7 @@ jobs:
     runs-on: ubuntu-24.04
     needs: [classify-changes]
     if: needs.classify-changes.outputs.backend_container == 'true' || needs.classify-changes.outputs.dashboard_container == 'true'
+    timeout-minutes: 40
     steps:
       - name: Checkout Code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
