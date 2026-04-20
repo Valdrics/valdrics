@@ -23,6 +23,7 @@ def build_isolated_test_environment_values(*, database_url: str) -> dict[str, st
         raise ValueError("database_url must be provided for isolated in-process runtime")
 
     return {
+        "ALLOW_TEST_DATABASE_URL": "true",
         "CSRF_SECRET_KEY": _build_synthetic_secret("csrf-secret"),
         "DATABASE_URL": resolved_database_url,
         "DB_SSL_MODE": "disable",
