@@ -8,6 +8,8 @@ import pytest
 import scripts.verify_supply_chain_attestations as attestation_verifier
 from scripts.verify_supply_chain_attestations import (
     DEFAULT_ARTIFACT_PATHS,
+    DEFAULT_VERIFY_INITIAL_RETRY_DELAY_SECONDS,
+    DEFAULT_VERIFY_MAX_ATTEMPTS,
     MIN_GH_VERSION,
     _repo_slug_from_remote_url,
     _resolve_repo_from_git_remote,
@@ -450,7 +452,11 @@ def test_verify_attestations_raises_after_transient_retry_budget_exhausted(
             dry_run=False,
         )
 
-    assert sleep_delays == [2.0, 4.0, 8.0]
+    expected_delays = [
+        DEFAULT_VERIFY_INITIAL_RETRY_DELAY_SECONDS * (2**index)
+        for index in range(DEFAULT_VERIFY_MAX_ATTEMPTS - 1)
+    ]
+    assert sleep_delays == expected_delays
 
 
 def test_verify_attestations_runs_gh_commands_from_repo_root(

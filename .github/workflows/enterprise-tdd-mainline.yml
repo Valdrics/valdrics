@@ -45,6 +45,7 @@ jobs:
           --health-retries 5
     env:
       DB_SSL_MODE: "disable"
+      CSRF_SECRET_KEY: "ci-csrf-secret-key-32-chars-min-000000"
       ENTERPRISE_GATE_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/valdrics_enterprise_gate"
     steps:
       - name: Checkout Code

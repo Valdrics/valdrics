@@ -19,7 +19,7 @@ from scripts.env_generation_common import (
 
 MIN_GH_VERSION: tuple[int, int, int] = (2, 67, 0)
 DEFAULT_SIGNER_WORKFLOW = ".github/workflows/sbom.yml"
-DEFAULT_VERIFY_MAX_ATTEMPTS = 4
+DEFAULT_VERIFY_MAX_ATTEMPTS = 7
 DEFAULT_VERIFY_INITIAL_RETRY_DELAY_SECONDS = 2.0
 DEFAULT_ARTIFACT_PATHS: tuple[Path, ...] = (
     Path("sbom/valdrics-python-sbom.json"),
