@@ -193,7 +193,7 @@ def test_list_manual_feed_activity_consolidates_latest_records() -> None:
     assert by_id["u-2"]["suspended"] is True
     assert by_id["u-2"]["is_admin"] is True
     assert by_id["u-2"]["email"] == "bob@example.com"
-    assert isinstance(by_id["u-3"]["last_active_at"], datetime)
+    assert by_id["u-3"]["last_active_at"] is None
 
 
 @pytest.mark.asyncio

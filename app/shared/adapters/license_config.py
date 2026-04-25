@@ -20,12 +20,18 @@ def parse_google_workspace_license_config(
     if isinstance(sku_prices_raw, dict):
         for key, value in sku_prices_raw.items():
             if isinstance(key, str) and key.strip():
-                sku_prices[key.strip()] = as_float(value)
+                try:
+                    sku_prices[key.strip()] = as_float(value)
+                except ValueError:
+                    continue
 
-    default_price = as_float(
-        connector_config.get("default_seat_price_usd"),
-        default=12.0,  # Business Standard fallback
-    )
+    try:
+        default_price = as_float(
+            connector_config.get("default_seat_price_usd"),
+            default=12.0,  # Business Standard fallback
+        )
+    except ValueError:
+        default_price = 12.0
     currency = str(connector_config.get("currency") or "USD").upper()
     target_skus = list(sku_prices.keys()) or [
         "Google-Apps-For-Business",

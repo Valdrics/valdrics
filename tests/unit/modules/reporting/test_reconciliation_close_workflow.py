@@ -21,6 +21,20 @@ def _result_with_all(rows: list[object]) -> MagicMock:
     return result
 
 
+def test_stable_hash_rejects_non_json_and_non_finite_payloads() -> None:
+    with pytest.raises(
+        ValueError,
+        match="Reconciliation integrity payload must be JSON serializable",
+    ):
+        CostReconciliationService._stable_hash({"broken": object()})
+
+    with pytest.raises(
+        ValueError,
+        match="Reconciliation integrity payload must be JSON serializable",
+    ):
+        CostReconciliationService._stable_hash({"total_cost_usd": float("nan")})
+
+
 @pytest.mark.asyncio
 async def test_generate_close_package_blocks_when_preliminary_records_exist() -> None:
     tenant_id = uuid4()

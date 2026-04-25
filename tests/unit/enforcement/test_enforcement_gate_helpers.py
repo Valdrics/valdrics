@@ -198,6 +198,35 @@ def test_build_cloud_event_gate_input_derivation_and_extensions() -> None:
         )
 
 
+def test_build_cloud_event_gate_input_rejects_non_json_data() -> None:
+    payload = CloudEventGateRequest.model_validate(
+        {
+            "cloud_event": {
+                "specversion": "1.0",
+                "id": "evt-bad",
+                "source": "aws.ec2",
+                "type": "instance.update",
+                "subject": "i-456",
+                "data": object(),
+            },
+            "project_id": "TeamA",
+            "environment": "prod",
+            "action": "cloud_event.observe",
+            "estimated_monthly_delta_usd": "0",
+            "estimated_hourly_delta_usd": "0",
+        }
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        enforcement._build_cloud_event_gate_input(
+            payload=payload,
+            idempotency_key="cloud-idem-bad-1",
+        )
+
+    assert exc.value.status_code == 422
+    assert "json serializable" in str(exc.value.detail).lower()
+
+
 @pytest.mark.asyncio
 async def test_run_gate_input_handles_fingerprint_and_failsafe_paths(monkeypatch) -> None:
     current_user = CurrentUser(

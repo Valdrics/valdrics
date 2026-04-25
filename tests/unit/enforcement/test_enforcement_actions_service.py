@@ -468,6 +468,33 @@ async def test_create_action_request_validation_and_lookup_errors(db) -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_action_request_rejects_non_json_request_payload(db) -> None:
+    tenant = await _seed_tenant(db)
+    actor_id = uuid4()
+    _, decision = await _seed_approved_decision(
+        db=db,
+        tenant_id=tenant.id,
+        actor_id=actor_id,
+        idempotency_key="actions-invalid-payload-decision-1",
+    )
+    orchestrator = EnforcementActionOrchestrator(db)
+
+    with pytest.raises(EnforcementActionError) as exc:
+        await orchestrator.create_action_request(
+            tenant_id=tenant.id,
+            actor_id=actor_id,
+            decision_id=decision.id,
+            action_type="terraform.apply.execute",
+            target_reference=decision.resource_reference,
+            request_payload={"broken": object()},
+            idempotency_key="action-invalid-payload-1",
+        )
+
+    assert exc.value.status_code == 422
+    assert "json serializable" in str(exc.value.detail).lower()
+
+
+@pytest.mark.asyncio
 async def test_action_retry_is_policy_governed_and_terminal_after_max_attempts(db) -> None:
     tenant = await _seed_tenant(db)
     actor_id = uuid4()

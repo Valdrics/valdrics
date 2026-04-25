@@ -312,7 +312,7 @@ class LicenseAdapter(BaseAdapter):
         """
         return list_manual_feed_activity(
             feed=self.credentials.license_feed,
-            parse_timestamp_fn=parse_timestamp,
+            parse_timestamp_fn=parse_required_timestamp,
         )
 
     async def discover_resources(

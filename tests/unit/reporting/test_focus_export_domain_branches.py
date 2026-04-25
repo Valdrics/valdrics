@@ -59,7 +59,10 @@ def test_focus_export_helper_branches() -> None:
     )
     assert focus_export_module._focus_charge_frequency("Adjustment") == "One-Time"
     assert focus_export_module._format_cost(None) == "0"
-    assert focus_export_module._format_cost(object()) == "0"
+    with pytest.raises(ValueError, match="FOCUS export cost must be numeric"):
+        focus_export_module._format_cost(object())
+    with pytest.raises(ValueError, match="FOCUS export cost must be finite"):
+        focus_export_module._format_cost(Decimal("NaN"))
     assert focus_export_module._format_currency(" eur ") == "EUR"
     assert focus_export_module._format_currency(None) == "USD"
     assert focus_export_module._tags_json([]) == ""
@@ -249,3 +252,23 @@ def test_row_to_focus_handles_non_dict_metadata_tags_and_cloud_hour_window() -> 
     assert row["ChargePeriodStart"] == "2026-02-14T06:30:00Z"
     assert row["ChargePeriodEnd"] == "2026-02-14T07:30:00Z"
     assert row["Tags"] == ""
+
+
+def test_row_to_focus_rejects_non_finite_cost() -> None:
+    service = _service_with_mock_db()
+    account_id = uuid4()
+    account = SimpleNamespace(id=account_id, provider="aws", name="AWS")
+    cost_record = SimpleNamespace(
+        recorded_at=date(2026, 2, 14),
+        timestamp=datetime(2026, 2, 14, 6, 30, tzinfo=timezone.utc),
+        service="AmazonS3",
+        usage_type="Requests",
+        canonical_charge_category="storage",
+        region="us-east-1",
+        tags={"env": "prod"},
+        ingestion_metadata=None,
+        cost_usd=Decimal("Infinity"),
+    )
+
+    with pytest.raises(ValueError, match="FOCUS export cost must be finite"):
+        service._row_to_focus(cost_record, account, contexts={})

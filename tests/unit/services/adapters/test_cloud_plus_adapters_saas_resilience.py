@@ -80,10 +80,14 @@ def test_saas_helper_branches() -> None:
     assert saas_module.parse_timestamp("invalid").tzinfo == timezone.utc
     assert saas_module.parse_timestamp(1700000000).tzinfo == timezone.utc
     assert saas_module.as_float(None, default=9.1) == 9.1
-    assert saas_module.as_float("bad", default=3.2) == 3.2
+    with pytest.raises(ValueError, match="value must be numeric"):
+        saas_module.as_float("bad", default=3.2)
+    with pytest.raises(ValueError, match="value must be finite"):
+        saas_module.as_float(float("nan"))
     assert saas_module.as_float("10", divisor=0) == 10.0
     assert saas_module.is_number("12.5") is True
     assert saas_module.is_number("not-a-number") is False
+    assert saas_module.is_number(float("inf")) is False
 
 
 @pytest.mark.asyncio

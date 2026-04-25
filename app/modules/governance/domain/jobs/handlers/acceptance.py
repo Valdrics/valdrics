@@ -2,7 +2,8 @@
 Acceptance Suite Evidence Capture Job Handler
 
 Runs on a schedule to capture audit-grade evidence that the system is healthy
-enough for production sign-off (ingestion reliability, allocation coverage, etc).
+enough for tenant-facing audit and operational review (ingestion reliability,
+allocation coverage, etc).
 
 Important: this handler must be non-invasive for tenant integrations. It should
 avoid creating Jira issues or sending Slack/Teams messages during automated runs.

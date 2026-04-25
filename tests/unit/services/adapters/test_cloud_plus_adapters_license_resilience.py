@@ -62,9 +62,13 @@ def test_license_helper_branches() -> None:
     assert license_module.parse_timestamp("invalid").tzinfo == timezone.utc
     assert license_module.parse_timestamp(1700000000).tzinfo == timezone.utc
     assert license_module.as_float(None, default=8.8) == 8.8
-    assert license_module.as_float("bad", default=2.4) == 2.4
+    with pytest.raises(ValueError, match="value must be numeric"):
+        license_module.as_float("bad", default=2.4)
+    with pytest.raises(ValueError, match="value must be finite"):
+        license_module.as_float(float("nan"))
     assert license_module.is_number("12.5") is True
     assert license_module.is_number("not-a-number") is False
+    assert license_module.is_number(float("inf")) is False
 
 
 @pytest.mark.asyncio

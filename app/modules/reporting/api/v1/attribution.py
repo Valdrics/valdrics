@@ -257,15 +257,21 @@ async def simulate_rule(
     if start_date > end_date:
         raise HTTPException(status_code=400, detail="start_date must be <= end_date")
 
-    response = await engine.simulate_rule(
-        tenant_id,
-        rule_type=payload.rule_type,
-        conditions=payload.conditions,
-        allocation=payload.allocation,
-        start_date=start_date,
-        end_date=end_date,
-        sample_limit=payload.sample_limit,
-    )
+    try:
+        response = await engine.simulate_rule(
+            tenant_id,
+            rule_type=payload.rule_type,
+            conditions=payload.conditions,
+            allocation=payload.allocation,
+            start_date=start_date,
+            end_date=end_date,
+            sample_limit=payload.sample_limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Attribution simulation failed due to invalid cost data.",
+        ) from exc
     audit = AuditLogger(db, tenant_id=tenant_id)
     await _write_attribution_audit_or_500(
         audit=audit,

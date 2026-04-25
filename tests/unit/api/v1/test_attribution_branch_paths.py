@@ -442,6 +442,37 @@ async def test_simulate_rule_success_logs_and_commits() -> None:
 
 
 @pytest.mark.asyncio
+async def test_simulate_rule_returns_500_for_invalid_finance_data() -> None:
+    user = _user()
+    db = MagicMock()
+    payload = attribution_api.RuleSimulationRequest(
+        rule_type="DIRECT",
+        conditions={"service": "AmazonEC2"},
+        allocation={"bucket": "Platform"},
+        start_date=date(2026, 2, 1),
+        end_date=date(2026, 2, 1),
+        sample_limit=100,
+    )
+
+    with patch.object(attribution_api, "AttributionEngine") as engine_cls:
+        engine = MagicMock()
+        engine.validate_rule_payload = MagicMock(return_value=[])
+        engine.simulate_rule = AsyncMock(side_effect=ValueError("matched_cost must be finite"))
+        engine_cls.return_value = engine
+
+        with pytest.raises(HTTPException) as exc:
+            await attribution_api.simulate_rule(
+                request=_request("/api/v1/attribution/simulate"),
+                payload=payload,
+                db=db,
+                current_user=user,
+            )
+
+    assert exc.value.status_code == 500
+    assert exc.value.detail == "Attribution simulation failed due to invalid cost data."
+
+
+@pytest.mark.asyncio
 async def test_apply_rules_invalid_window_and_success() -> None:
     user = _user()
     payload_bad = attribution_api.ApplyAttributionRequest(

@@ -103,12 +103,17 @@ def _annotation_decimal(
 
 
 def _cloud_event_data_sha256(value: Any) -> str:
-    serialized = json.dumps(
-        value,
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-    )
+    try:
+        serialized = json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422,
+            detail="CloudEvent data must be JSON serializable",
+        ) from exc
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 

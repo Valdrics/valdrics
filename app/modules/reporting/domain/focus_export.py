@@ -124,12 +124,13 @@ def _next_month_start(day: date) -> datetime:
 def _format_cost(value: Any) -> str:
     if value is None:
         return "0"
-    if isinstance(value, Decimal):
-        return format(value, "f")
     try:
-        return format(Decimal(str(value)), "f")
-    except FOCUS_EXPORT_COST_PARSE_RECOVERABLE_EXCEPTIONS:
-        return "0"
+        amount = value if isinstance(value, Decimal) else Decimal(str(value))
+    except FOCUS_EXPORT_COST_PARSE_RECOVERABLE_EXCEPTIONS as exc:
+        raise ValueError("FOCUS export cost must be numeric") from exc
+    if not amount.is_finite():
+        raise ValueError("FOCUS export cost must be finite")
+    return format(amount, "f")
 
 
 def _format_currency(value: Any) -> str:

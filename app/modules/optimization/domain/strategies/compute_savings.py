@@ -1,4 +1,5 @@
 from statistics import fmean
+from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Sequence
 from uuid import UUID
 
@@ -34,20 +35,34 @@ class ComputeSavingsStrategy(BaseOptimizationStrategy):
         recommendations: List[StrategyRecommendation] = []
 
         # 1. Compute Savings Plan logic anchored on observed baseline spend.
-        baseline_spend = float(usage_data.get("baseline_hourly_spend") or 0.0)
-        min_hourly_threshold = float(self.config.get("min_hourly_threshold", 0.05))
+        baseline_spend = self._coerce_finite_float(
+            usage_data.get("baseline_hourly_spend") or 0.0,
+            field_name="baseline_hourly_spend",
+        )
+        min_hourly_threshold = self._coerce_finite_float(
+            self.config.get("min_hourly_threshold", 0.05),
+            field_name="min_hourly_threshold",
+        )
         if baseline_spend <= min_hourly_threshold:
             return recommendations
 
-        savings_mid = float(self.config.get("savings_rate", 0.25))
-        savings_low = float(
-            self.config.get("savings_rate_low", max(savings_mid - 0.05, 0.0))
+        savings_mid = self._coerce_finite_float(
+            self.config.get("savings_rate", 0.25),
+            field_name="savings_rate",
         )
-        savings_high = float(
-            self.config.get("savings_rate_high", min(savings_mid + 0.05, 0.95))
+        savings_low = self._coerce_finite_float(
+            self.config.get("savings_rate_low", max(savings_mid - 0.05, 0.0)),
+            field_name="savings_rate_low",
+        )
+        savings_high = self._coerce_finite_float(
+            self.config.get("savings_rate_high", min(savings_mid + 0.05, 0.95)),
+            field_name="savings_rate_high",
         )
 
-        hours_per_month = float(self.config.get("hours_per_month", 730.0))
+        hours_per_month = self._coerce_finite_float(
+            self.config.get("hours_per_month", 730.0),
+            field_name="hours_per_month",
+        )
         on_demand_monthly = baseline_spend * hours_per_month
 
         monthly_savings_low = on_demand_monthly * savings_low
@@ -55,19 +70,31 @@ class ComputeSavingsStrategy(BaseOptimizationStrategy):
         monthly_savings_high = on_demand_monthly * savings_high
         monthly_commitment_cost = on_demand_monthly - monthly_savings
 
-        upfront_cost = float(self.config.get("upfront_cost", 0.0))
+        upfront_cost = self._coerce_finite_float(
+            self.config.get("upfront_cost", 0.0),
+            field_name="upfront_cost",
+        )
         break_even_months = 0.0
         if upfront_cost > 0 and monthly_savings > 0:
             break_even_months = upfront_cost / monthly_savings
 
         confidence = self._bounded_confidence(
-            usage_confidence=float(usage_data.get("confidence_score", 0.7)),
-            coverage_ratio=float(usage_data.get("coverage_ratio", 0.0)),
+            usage_confidence=self._coerce_finite_float(
+                usage_data.get("confidence_score", 0.7),
+                field_name="confidence_score",
+            ),
+            coverage_ratio=self._coerce_finite_float(
+                usage_data.get("coverage_ratio", 0.0),
+                field_name="coverage_ratio",
+            ),
         )
 
         hourly_series = usage_data.get("hourly_cost_series")
         if isinstance(hourly_series, list) and hourly_series:
-            tolerance = float(self.config.get("backtest_tolerance", 0.30))
+            tolerance = self._coerce_finite_float(
+                self.config.get("backtest_tolerance", 0.30),
+                field_name="backtest_tolerance",
+            )
             backtest = self.backtest_hourly_series(hourly_series, tolerance=tolerance)
             if not backtest.get("within_tolerance", True):
                 confidence = round(max(0.0, confidence * 0.7), 3)
@@ -113,8 +140,20 @@ class ComputeSavingsStrategy(BaseOptimizationStrategy):
                 "reason": "insufficient_history",
             }
 
-        train = [max(float(x), 0.0) for x in hourly_costs[:-24]]
-        actual = [max(float(x), 0.0) for x in hourly_costs[-24:]]
+        train = [
+            max(
+                self._coerce_finite_float(x, field_name="hourly_cost_series"),
+                0.0,
+            )
+            for x in hourly_costs[:-24]
+        ]
+        actual = [
+            max(
+                self._coerce_finite_float(x, field_name="hourly_cost_series"),
+                0.0,
+            )
+            for x in hourly_costs[-24:]
+        ]
 
         non_zero_train = [v for v in train if v > 0]
         if not non_zero_train:
@@ -154,7 +193,10 @@ class ComputeSavingsStrategy(BaseOptimizationStrategy):
         """Linear interpolation percentile for deterministic baseline estimation."""
         if not values:
             return 0.0
-        ordered = sorted(float(v) for v in values)
+        ordered = sorted(
+            self._coerce_finite_float(v, field_name="percentile_values")
+            for v in values
+        )
         if len(ordered) == 1:
             return ordered[0]
         pct = max(0.0, min(percentile, 1.0))
@@ -173,3 +215,17 @@ class ComputeSavingsStrategy(BaseOptimizationStrategy):
 
         savings = on_demand_cost - commitment_cost
         return (savings / on_demand_cost) * 100
+
+    def _coerce_finite_float(self, value: Any, *, field_name: str) -> float:
+        try:
+            if isinstance(value, Decimal):
+                amount = value
+            elif isinstance(value, (int, float, str)):
+                amount = Decimal(str(value))
+            else:
+                amount = Decimal(str(float(value)))
+        except (InvalidOperation, TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"{field_name} must be numeric") from exc
+        if not amount.is_finite():
+            raise ValueError(f"{field_name} must be finite")
+        return float(amount)

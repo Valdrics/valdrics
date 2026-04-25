@@ -143,10 +143,17 @@ class WebhookRetryService:
             if normalized:
                 return normalized
 
+        try:
+            serialized_payload = json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Webhook payload must be JSON serializable") from exc
         payload_fingerprint = hashlib.sha256(
-            json.dumps(
-                payload, sort_keys=True, separators=(",", ":"), default=str
-            ).encode("utf-8")
+            serialized_payload.encode("utf-8")
         ).hexdigest()
         return f"payload_sha256:{payload_fingerprint[:24]}"
 
@@ -243,6 +250,11 @@ class WebhookRetryService:
         Returns:
             BackgroundJob if new, None if duplicate
         """
+        try:
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Webhook payload must be JSON serializable") from exc
+
         # Generate idempotency key
         ref = self._resolve_reference(payload=payload, reference=reference)
         idempotency_key = self._generate_idempotency_key(provider, event_type, ref)

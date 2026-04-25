@@ -164,6 +164,37 @@ async def test_simulate_rule_projects_allocations(
 
 
 @pytest.mark.asyncio
+async def test_simulate_rule_rejects_non_finite_finance_values(
+    engine: AttributionEngine, db: AsyncMock
+) -> None:
+    tenant_id = uuid4()
+    record = MagicMock(spec=CostRecord)
+    record.id = uuid4()
+    record.tenant_id = tenant_id
+    record.cost_usd = Decimal("NaN")
+    record.recorded_at = datetime.now(timezone.utc)
+    record.service = "S3"
+    record.region = "us-east-1"
+    record.account_id = "123"
+    record.ingestion_metadata = {}
+
+    result = MagicMock()
+    result.scalars.return_value.all.return_value = [record]
+    db.execute.return_value = result
+
+    with pytest.raises(ValueError, match="matched_cost must be finite"):
+        await engine.simulate_rule(
+            tenant_id,
+            rule_type="DIRECT",
+            conditions={},
+            allocation={"bucket": "Ops"},
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 31),
+            sample_limit=10,
+        )
+
+
+@pytest.mark.asyncio
 async def test_apply_rules_to_tenant_no_records_and_summary_filters(
     engine: AttributionEngine, db: AsyncMock
 ) -> None:

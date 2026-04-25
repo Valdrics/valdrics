@@ -191,24 +191,18 @@ async def test_backtest_strategies_handles_invalid_tolerance_and_no_series_path(
         service._aggregate_usage = AsyncMock(return_value=usage_data)
         service_cls.return_value = service
 
-        out = await strategies_api.backtest_strategies(
-            tenant_id=tenant_id,
-            user=user,
-            db=db,
-            provider=" AWS ",
-            strategy_type=" RESERVED_INSTANCE ",
-            days=14,
-        )
+        with pytest.raises(HTTPException) as exc:
+            await strategies_api.backtest_strategies(
+                tenant_id=tenant_id,
+                user=user,
+                db=db,
+                provider=" AWS ",
+                strategy_type=" RESERVED_INSTANCE ",
+                days=14,
+            )
 
-    assert out.status == "success"
-    assert len(out.strategies) == 1
-    item = out.strategies[0]
-    assert item.provider == "unknown"
-    assert item.strategy_type == "unknown"
-    assert item.backtest == {"reason": "no_series"}
-    assert service._aggregate_usage.await_args.kwargs["provider"] is None
-    assert service._aggregate_usage.await_args.kwargs["canonical_charge_category"] is None
-    impl.backtest_hourly_series.assert_not_called()
+    assert exc.value.status_code == 500
+    assert exc.value.detail == "Strategy backtest failed due to invalid strategy config."
 
 
 @pytest.mark.asyncio
@@ -406,3 +400,49 @@ async def test_apply_recommendation_direct_not_found_raises_resource_not_found()
                 user=_user(),
                 db=db,
             )
+
+
+@pytest.mark.asyncio
+async def test_apply_recommendation_rejects_non_finite_savings_data() -> None:
+    tenant_id = uuid4()
+    recommendation_id = uuid4()
+    db = MagicMock()
+    db.execute = AsyncMock()
+    db.commit = AsyncMock()
+
+    recommendation = SimpleNamespace(
+        id=recommendation_id,
+        tenant_id=tenant_id,
+        strategy_id=uuid4(),
+        estimated_monthly_savings=float("nan"),
+        region="us-east-1",
+        resource_type="m5.large",
+        status="open",
+        applied_at=None,
+    )
+    db.execute.return_value = _scalar_result(recommendation)
+
+    request = SimpleNamespace(
+        method="POST",
+        url=SimpleNamespace(path=f"/api/v1/strategies/apply/{recommendation_id}"),
+    )
+
+    with (
+        patch.object(strategies_api, "set_session_tenant_id", new=AsyncMock()),
+        patch.object(strategies_api, "AuditLogger") as audit_cls,
+    ):
+        audit = MagicMock()
+        audit.log = AsyncMock()
+        audit_cls.return_value = audit
+
+        with pytest.raises(HTTPException) as exc:
+            await strategies_api.apply_recommendation(
+                request=request,
+                recommendation_id=recommendation_id,
+                tenant_id=tenant_id,
+                user=_user(),
+                db=db,
+            )
+
+    assert exc.value.status_code == 500
+    assert exc.value.detail == "Recommendation contains invalid savings data."

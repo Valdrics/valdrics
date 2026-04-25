@@ -192,6 +192,33 @@ async def test_process_single_job_truncates_oversized_result(
 
 
 @pytest.mark.asyncio
+async def test_process_single_job_rejects_non_json_result(
+    job_processor, mock_db_session
+):
+    job = BackgroundJob(
+        id=uuid4(),
+        job_type="test_job",
+        attempts=0,
+        max_attempts=3,
+        status=JobStatus.PENDING.value,
+    )
+
+    with patch(
+        "app.modules.governance.domain.jobs.processor.get_handler_factory"
+    ) as mock_factory:
+        mock_handler = AsyncMock()
+        mock_handler.execute.return_value = {"broken": object()}
+        mock_factory.return_value.return_value = mock_handler
+
+        await job_processor._process_single_job(job)
+
+    assert job.status == JobStatus.PENDING.value
+    assert "json serializable" in (job.error_message or "").lower()
+    assert job.attempts == 1
+    mock_db_session.commit.assert_awaited()
+
+
+@pytest.mark.asyncio
 async def test_process_single_job_retry(job_processor, mock_db_session):
     """Test job failure and backoff."""
     job = BackgroundJob(

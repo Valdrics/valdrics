@@ -85,7 +85,10 @@ def _validate_webhook_url(
 
 
 def _serialize_payload(payload: dict[str, Any]) -> str:
-    return json.dumps(payload, default=str, separators=(",", ":"), sort_keys=True)
+    try:
+        return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Workflow payload must be JSON serializable") from exc
 
 
 @dataclass(slots=True)

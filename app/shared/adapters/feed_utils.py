@@ -44,8 +44,10 @@ def as_float(value: Any, default: float = 0.0, *, divisor: int = 1) -> float:
         return default
     try:
         amount = Decimal(str(value))
-    except (InvalidOperation, TypeError, ValueError):
-        return default
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError("value must be numeric") from exc
+    if not amount.is_finite():
+        raise ValueError("value must be finite")
     if divisor <= 0:
         divisor = 1
     return float(amount / Decimal(divisor))
@@ -53,7 +55,7 @@ def as_float(value: Any, default: float = 0.0, *, divisor: int = 1) -> float:
 
 def is_number(value: Any) -> bool:
     try:
-        Decimal(str(value))
+        amount = Decimal(str(value))
     except (InvalidOperation, TypeError, ValueError):
         return False
-    return True
+    return amount.is_finite()

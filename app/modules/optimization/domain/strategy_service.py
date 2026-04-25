@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time as dt_time, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from statistics import fmean, pstdev
 from typing import Any, Dict, List, TYPE_CHECKING
 from uuid import UUID
@@ -16,6 +17,21 @@ if TYPE_CHECKING:
     from app.models.optimization import StrategyRecommendation
 
 logger = structlog.get_logger()
+
+
+def _coerce_finite_float(value: Any, *, field_name: str) -> float:
+    try:
+        if isinstance(value, Decimal):
+            amount = value
+        elif isinstance(value, (int, float, str)):
+            amount = Decimal(str(value))
+        else:
+            amount = Decimal(str(float(value)))
+    except (InvalidOperation, TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{field_name} must be numeric") from exc
+    if not amount.is_finite():
+        raise ValueError(f"{field_name} must be finite")
+    return float(amount)
 
 def build_default_strategies(
     *,
@@ -202,7 +218,7 @@ async def aggregate_usage_baseline(
     for timestamp_value, recorded_at, region_value, cost_raw in rows:
         if cost_raw is None:
             continue
-        cost = float(cost_raw)
+        cost = _coerce_finite_float(cost_raw, field_name="cost_usd")
         total_spend += cost
 
         region_key = str(region_value or "Unknown")
@@ -229,7 +245,10 @@ async def aggregate_usage_baseline(
     if is_daily_resolution:
         daily_totals: dict[date, float] = {}
         for key, cost in bucket_totals.items():
-            daily_totals[key.date()] = daily_totals.get(key.date(), 0.0) + float(cost)
+            daily_totals[key.date()] = daily_totals.get(key.date(), 0.0) + _coerce_finite_float(
+                cost,
+                field_name="bucket_cost",
+            )
 
         values = list(daily_totals.values())
         non_zero = [v for v in values if v > 0]
@@ -252,7 +271,10 @@ async def aggregate_usage_baseline(
 
         hourly_cost_series: list[float] = []
         for day_key in sorted(daily_totals):
-            per_hour = float(daily_totals[day_key]) / 24.0
+            per_hour = _coerce_finite_float(
+                daily_totals[day_key],
+                field_name="daily_total",
+            ) / 24.0
             hourly_cost_series.extend([per_hour] * 24)
     else:
         values = list(bucket_totals.values())
@@ -276,7 +298,12 @@ async def aggregate_usage_baseline(
             cursor = sorted_keys[0]
             end = sorted_keys[-1]
             while cursor <= end:
-                hourly_cost_series.append(float(bucket_totals.get(cursor, 0.0) or 0.0))
+                hourly_cost_series.append(
+                    _coerce_finite_float(
+                        bucket_totals.get(cursor, 0.0) or 0.0,
+                        field_name="hourly_bucket_cost",
+                    )
+                )
                 cursor = cursor + timedelta(hours=1)
 
     confidence_score = round(
@@ -295,14 +322,29 @@ async def aggregate_usage_baseline(
         top_region = max(region_totals.items(), key=lambda kv: kv[1])[0]
 
     return {
-        "total_monthly_spend": float(total_spend),
-        "average_hourly_spend": float(average_hourly_spend),
-        "baseline_hourly_spend": float(baseline_hourly_spend),
+        "total_monthly_spend": _coerce_finite_float(
+            total_spend,
+            field_name="total_monthly_spend",
+        ),
+        "average_hourly_spend": _coerce_finite_float(
+            average_hourly_spend,
+            field_name="average_hourly_spend",
+        ),
+        "baseline_hourly_spend": _coerce_finite_float(
+            baseline_hourly_spend,
+            field_name="baseline_hourly_spend",
+        ),
         "observed_buckets": int(observed_buckets),
         "expected_buckets": int(expected_buckets),
-        "coverage_ratio": float(coverage_ratio),
-        "volatility": float(volatility),
-        "confidence_score": float(confidence_score),
+        "coverage_ratio": _coerce_finite_float(
+            coverage_ratio,
+            field_name="coverage_ratio",
+        ),
+        "volatility": _coerce_finite_float(volatility, field_name="volatility"),
+        "confidence_score": _coerce_finite_float(
+            confidence_score,
+            field_name="confidence_score",
+        ),
         "granularity": granularity,
         "provider": provider_key,
         "canonical_charge_category": category_key,
@@ -375,13 +417,7 @@ class OptimizationService(BaseService):
 
             try:
                 recs = await strategy_impl.analyze(tenant_id, usage_data)
-            except (
-                RuntimeError,
-                ValueError,
-                TypeError,
-                KeyError,
-                AttributeError,
-            ) as exc:
+            except RuntimeError as exc:
                 logger.error(
                     "strategy_analysis_failed",
                     strategy=str(getattr(strategy, "name", "unknown")),

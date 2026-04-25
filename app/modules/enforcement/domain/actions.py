@@ -45,13 +45,15 @@ def _as_utc(value: datetime) -> datetime:
 
 
 def _json_sha256(payload: Mapping[str, Any] | None) -> str:
-    serialized = json.dumps(
-        dict(payload or {}),
-        sort_keys=True,
-        separators=(",", ":"),
-        default=str,
-        ensure_ascii=True,
-    )
+    try:
+        serialized = json.dumps(
+            dict(payload or {}),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Action request payload must be JSON serializable") from exc
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
 
@@ -242,7 +244,13 @@ class EnforcementActionOrchestrator:
             )
 
         normalized_payload = dict(request_payload or {})
-        payload_sha256 = _json_sha256(normalized_payload)
+        try:
+            payload_sha256 = _json_sha256(normalized_payload)
+        except ValueError as exc:
+            raise EnforcementActionError(
+                status_code=422,
+                detail="request_payload must be JSON serializable",
+            ) from exc
         normalized_idempotency_key = _normalized_idempotency_key(idempotency_key)
         if normalized_idempotency_key is None:
             normalized_idempotency_key = hashlib.sha256(

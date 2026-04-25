@@ -8,6 +8,7 @@ from app.shared.adapters.license_feed_ops import (
     normalize_email,
     normalize_text,
 )
+from app.shared.adapters.feed_utils import parse_required_timestamp
 
 _DISCOVERY_RESOURCE_TYPE_ALIASES = {
     "all",
@@ -44,11 +45,18 @@ def _normalize_resource_key(value: Any) -> str | None:
 
 
 def _normalize_timestamp(value: Any) -> datetime | None:
-    if not isinstance(value, datetime):
+    if value is None:
         return None
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        return parse_required_timestamp(normalized)
+    raise TypeError("last_active_at must be datetime or ISO timestamp")
 
 
 def _normalize_currency(value: Any) -> str:
@@ -260,19 +268,10 @@ def build_license_usage_rows(
 
         metadata = resource.get("metadata")
         metadata_dict = metadata if isinstance(metadata, dict) else {}
-        last_active_iso = metadata_dict.get("last_active_at")
         timestamp = resolved_now
-        if isinstance(last_active_iso, str) and last_active_iso.strip():
-            iso_candidate = last_active_iso.strip().replace("Z", "+00:00")
-            try:
-                parsed = datetime.fromisoformat(iso_candidate)
-                timestamp = (
-                    parsed
-                    if parsed.tzinfo is not None
-                    else parsed.replace(tzinfo=timezone.utc)
-                )
-            except ValueError:
-                timestamp = resolved_now
+        last_active_raw = metadata_dict.get("last_active_at")
+        if last_active_raw not in (None, ""):
+            timestamp = _normalize_timestamp(last_active_raw) or resolved_now
 
         rows.append(
             {

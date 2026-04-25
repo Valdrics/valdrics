@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 from statistics import fmean
 from typing import Any, Dict, List, Sequence
 from uuid import UUID
@@ -41,12 +42,21 @@ class BaselineCommitmentStrategy(BaseOptimizationStrategy):
     ) -> List[StrategyRecommendation]:
         recommendations: List[StrategyRecommendation] = []
 
-        baseline_spend = float(usage_data.get("baseline_hourly_spend") or 0.0)
-        min_hourly_threshold = float(self.config.get("min_hourly_threshold", 0.05))
+        baseline_spend = self._coerce_finite_float(
+            usage_data.get("baseline_hourly_spend") or 0.0,
+            field_name="baseline_hourly_spend",
+        )
+        min_hourly_threshold = self._coerce_finite_float(
+            self.config.get("min_hourly_threshold", 0.05),
+            field_name="min_hourly_threshold",
+        )
         if baseline_spend <= min_hourly_threshold:
             return recommendations
 
-        hours_per_month = float(self.config.get("hours_per_month", 730.0))
+        hours_per_month = self._coerce_finite_float(
+            self.config.get("hours_per_month", 730.0),
+            field_name="hours_per_month",
+        )
         on_demand_monthly = baseline_spend * hours_per_month
 
         label = str(self.config.get("commitment_label") or "Compute Commitment")
@@ -56,8 +66,14 @@ class BaselineCommitmentStrategy(BaseOptimizationStrategy):
         else:
             region = "Global"
 
-        usage_confidence = float(usage_data.get("confidence_score", 0.7))
-        coverage_ratio = float(usage_data.get("coverage_ratio", 0.0))
+        usage_confidence = self._coerce_finite_float(
+            usage_data.get("confidence_score", 0.7),
+            field_name="confidence_score",
+        )
+        coverage_ratio = self._coerce_finite_float(
+            usage_data.get("coverage_ratio", 0.0),
+            field_name="coverage_ratio",
+        )
         confidence = self._bounded_confidence(
             usage_confidence=usage_confidence, coverage_ratio=coverage_ratio
         )
@@ -66,7 +82,10 @@ class BaselineCommitmentStrategy(BaseOptimizationStrategy):
         hourly_series = usage_data.get("hourly_cost_series")
         backtest = None
         if isinstance(hourly_series, list) and hourly_series:
-            tolerance = float(self.config.get("backtest_tolerance", 0.30))
+            tolerance = self._coerce_finite_float(
+                self.config.get("backtest_tolerance", 0.30),
+                field_name="backtest_tolerance",
+            )
             backtest = self.backtest_hourly_series(hourly_series, tolerance=tolerance)
             if not backtest.get("within_tolerance", True):
                 confidence = round(max(0.0, confidence * 0.7), 3)
@@ -77,22 +96,42 @@ class BaselineCommitmentStrategy(BaseOptimizationStrategy):
                 {
                     "term": CommitmentTerm.ONE_YEAR,
                     "payment_option": PaymentOption.NO_UPFRONT,
-                    "savings_rate": float(self.config.get("savings_rate", 0.20)),
-                    "savings_rate_low": float(
-                        self.config.get("savings_rate_low", 0.15)
+                    "savings_rate": self._coerce_finite_float(
+                        self.config.get("savings_rate", 0.20),
+                        field_name="savings_rate",
                     ),
-                    "savings_rate_high": float(
-                        self.config.get("savings_rate_high", 0.25)
+                    "savings_rate_low": self._coerce_finite_float(
+                        self.config.get("savings_rate_low", 0.15),
+                        field_name="savings_rate_low",
                     ),
-                    "upfront_cost": float(self.config.get("upfront_cost", 0.0)),
+                    "savings_rate_high": self._coerce_finite_float(
+                        self.config.get("savings_rate_high", 0.25),
+                        field_name="savings_rate_high",
+                    ),
+                    "upfront_cost": self._coerce_finite_float(
+                        self.config.get("upfront_cost", 0.0),
+                        field_name="upfront_cost",
+                    ),
                 }
             ]
 
         for offer in offers:
-            savings_mid = float(offer["savings_rate"])
-            savings_low = float(offer["savings_rate_low"])
-            savings_high = float(offer["savings_rate_high"])
-            upfront_cost = float(offer.get("upfront_cost", 0.0))
+            savings_mid = self._coerce_finite_float(
+                offer["savings_rate"],
+                field_name="savings_rate",
+            )
+            savings_low = self._coerce_finite_float(
+                offer["savings_rate_low"],
+                field_name="savings_rate_low",
+            )
+            savings_high = self._coerce_finite_float(
+                offer["savings_rate_high"],
+                field_name="savings_rate_high",
+            )
+            upfront_cost = self._coerce_finite_float(
+                offer.get("upfront_cost", 0.0),
+                field_name="upfront_cost",
+            )
 
             monthly_savings_low = on_demand_monthly * savings_low
             monthly_savings = on_demand_monthly * savings_mid
@@ -136,16 +175,16 @@ class BaselineCommitmentStrategy(BaseOptimizationStrategy):
             return []
 
         offers: list[dict[str, Any]] = []
-        for item in raw:
+        for idx, item in enumerate(raw):
             if not isinstance(item, dict):
-                continue
+                raise ValueError(f"offers[{idx}] must be an object")
             term_raw = str(item.get("term") or "").strip().lower()
             if term_raw in {"1_year", "one_year", "1y"}:
                 term = CommitmentTerm.ONE_YEAR
             elif term_raw in {"3_year", "three_year", "3y"}:
                 term = CommitmentTerm.THREE_YEAR
             else:
-                continue
+                raise ValueError(f"offers[{idx}].term is invalid")
 
             payment_raw = str(item.get("payment_option") or "").strip().lower()
             if payment_raw in {"no_upfront", "none"}:
@@ -155,14 +194,20 @@ class BaselineCommitmentStrategy(BaseOptimizationStrategy):
             elif payment_raw in {"all_upfront", "all"}:
                 payment = PaymentOption.ALL_UPFRONT
             else:
-                continue
+                raise ValueError(f"offers[{idx}].payment_option is invalid")
 
-            try:
-                savings_mid = float(item.get("savings_rate") or 0.0)
-                savings_low = float(item.get("savings_rate_low", savings_mid))
-                savings_high = float(item.get("savings_rate_high", savings_mid))
-            except (TypeError, ValueError, OverflowError):
-                continue
+            savings_mid = self._coerce_finite_float(
+                item.get("savings_rate") or 0.0,
+                field_name=f"offers[{idx}].savings_rate",
+            )
+            savings_low = self._coerce_finite_float(
+                item.get("savings_rate_low", savings_mid),
+                field_name=f"offers[{idx}].savings_rate_low",
+            )
+            savings_high = self._coerce_finite_float(
+                item.get("savings_rate_high", savings_mid),
+                field_name=f"offers[{idx}].savings_rate_high",
+            )
 
             offers.append(
                 {
@@ -171,7 +216,10 @@ class BaselineCommitmentStrategy(BaseOptimizationStrategy):
                     "savings_rate": savings_mid,
                     "savings_rate_low": savings_low,
                     "savings_rate_high": savings_high,
-                    "upfront_cost": float(item.get("upfront_cost", 0.0) or 0.0),
+                    "upfront_cost": self._coerce_finite_float(
+                        item.get("upfront_cost", 0.0) or 0.0,
+                        field_name=f"offers[{idx}].upfront_cost",
+                    ),
                 }
             )
         return offers
@@ -190,8 +238,20 @@ class BaselineCommitmentStrategy(BaseOptimizationStrategy):
                 "reason": "insufficient_history",
             }
 
-        train = [max(float(x), 0.0) for x in hourly_costs[:-24]]
-        actual = [max(float(x), 0.0) for x in hourly_costs[-24:]]
+        train = [
+            max(
+                self._coerce_finite_float(x, field_name="hourly_cost_series"),
+                0.0,
+            )
+            for x in hourly_costs[:-24]
+        ]
+        actual = [
+            max(
+                self._coerce_finite_float(x, field_name="hourly_cost_series"),
+                0.0,
+            )
+            for x in hourly_costs[-24:]
+        ]
 
         non_zero_train = [v for v in train if v > 0]
         if not non_zero_train:
@@ -229,7 +289,10 @@ class BaselineCommitmentStrategy(BaseOptimizationStrategy):
     def _percentile(self, values: Sequence[float], percentile: float) -> float:
         if not values:
             return 0.0
-        ordered = sorted(float(v) for v in values)
+        ordered = sorted(
+            self._coerce_finite_float(v, field_name="percentile_values")
+            for v in values
+        )
         if len(ordered) == 1:
             return ordered[0]
         pct = max(0.0, min(percentile, 1.0))
@@ -244,3 +307,17 @@ class BaselineCommitmentStrategy(BaseOptimizationStrategy):
             return 0.0
         savings = on_demand_cost - commitment_cost
         return (savings / on_demand_cost) * 100.0
+
+    def _coerce_finite_float(self, value: Any, *, field_name: str) -> float:
+        try:
+            if isinstance(value, Decimal):
+                amount = value
+            elif isinstance(value, (int, float, str)):
+                amount = Decimal(str(value))
+            else:
+                amount = Decimal(str(float(value)))
+        except (InvalidOperation, TypeError, ValueError, OverflowError) as exc:
+            raise ValueError(f"{field_name} must be numeric") from exc
+        if not amount.is_finite():
+            raise ValueError(f"{field_name} must be finite")
+        return float(amount)

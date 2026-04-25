@@ -2,6 +2,14 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from datetime import date, datetime, timezone
+from types import SimpleNamespace
+
+from app.modules.optimization.domain.strategies.compute_savings import (
+    ComputeSavingsStrategy,
+)
+from app.modules.optimization.domain.strategies.baseline_commitment import (
+    BaselineCommitmentStrategy,
+)
 
 from app.modules.optimization.domain.service import OptimizationService
 
@@ -177,3 +185,104 @@ async def test_aggregate_usage_uses_requested_lookback_for_daily_coverage():
     assert out["expected_buckets"] == 7
     assert out["observed_buckets"] == 7
     assert out["coverage_ratio"] == 1.0
+
+
+@pytest.mark.asyncio
+async def test_aggregate_usage_rejects_non_finite_cost_rows():
+    db = AsyncMock()
+    result = MagicMock()
+    result.all.return_value = [
+        (
+            datetime(2026, 2, 10, 10, 0, tzinfo=timezone.utc),
+            date(2026, 2, 10),
+            "us-east-1",
+            float("nan"),
+        )
+    ]
+    db.execute = AsyncMock(return_value=result)
+
+    service = OptimizationService(db)
+
+    with pytest.raises(ValueError, match="cost_usd must be finite"):
+        await service._aggregate_usage(uuid4())
+
+
+@pytest.mark.asyncio
+async def test_generate_recommendations_does_not_swallow_invalid_usage_data():
+    db = AsyncMock()
+    db.add_all = MagicMock()
+    db.commit = AsyncMock()
+
+    mock_strategy = MagicMock()
+    mock_strategy.id = uuid4()
+    mock_strategy.name = "Compute Savings Plan"
+    mock_strategy.type = "savings_plan"
+    mock_strategy.provider = "aws"
+    mock_strategy.config = {}
+
+    strategies_result = MagicMock()
+    strategies_result.scalars.return_value.all.return_value = [mock_strategy]
+    db.execute = AsyncMock(return_value=strategies_result)
+
+    with patch(
+        "app.modules.optimization.domain.strategies.compute_savings.ComputeSavingsStrategy"
+    ) as mock_strategy_cls:
+        mock_strategy_cls.return_value.analyze = AsyncMock(
+            side_effect=ValueError("baseline_hourly_spend must be finite")
+        )
+
+        service = OptimizationService(db)
+        with patch.object(
+            service, "_aggregate_usage", AsyncMock(return_value={"avg": 1.0})
+        ):
+            with pytest.raises(ValueError, match="baseline_hourly_spend must be finite"):
+                await service.generate_recommendations(uuid4())
+
+
+@pytest.mark.asyncio
+async def test_compute_savings_strategy_rejects_non_finite_usage_data():
+    strategy = ComputeSavingsStrategy(
+        SimpleNamespace(id=uuid4(), config={"min_hourly_threshold": 0.05})
+    )
+
+    with pytest.raises(ValueError, match="baseline_hourly_spend must be finite"):
+        await strategy.analyze(
+            uuid4(),
+            {
+                "baseline_hourly_spend": float("nan"),
+                "confidence_score": 0.9,
+                "coverage_ratio": 1.0,
+                "hourly_cost_series": [],
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_baseline_commitment_strategy_rejects_invalid_offer_config():
+    strategy = BaselineCommitmentStrategy(
+        SimpleNamespace(
+            id=uuid4(),
+            config={
+                "min_hourly_threshold": 0.05,
+                "offers": [
+                    {
+                        "term": "1_year",
+                        "payment_option": "no_upfront",
+                        "savings_rate": float("inf"),
+                    }
+                ],
+            },
+        )
+    )
+
+    with pytest.raises(ValueError, match="offers\\[0\\]\\.savings_rate must be finite"):
+        await strategy.analyze(
+            uuid4(),
+            {
+                "baseline_hourly_spend": 5.0,
+                "confidence_score": 0.9,
+                "coverage_ratio": 1.0,
+                "top_region": "us-east-1",
+                "hourly_cost_series": [],
+            },
+        )

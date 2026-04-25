@@ -12,6 +12,7 @@ from app.modules.notifications.domain.workflows import (
     GitLabCIDispatcher,
     get_workflow_dispatchers,
     get_tenant_workflow_dispatchers,
+    _serialize_payload,
 )
 
 
@@ -204,6 +205,28 @@ async def test_github_dispatch_payload_serialization_value_error_bubbles() -> No
                 "policy.block",
                 {"tenant_id": "t1", "request_id": "r1"},
             )
+
+
+def test_serialize_payload_rejects_non_json_objects() -> None:
+    with pytest.raises(ValueError, match="Workflow payload must be JSON serializable"):
+        _serialize_payload({"tenant_id": "t1", "broken": object()})
+
+
+@pytest.mark.asyncio
+async def test_gitlab_dispatch_payload_serialization_value_error_bubbles() -> None:
+    dispatcher = GitLabCIDispatcher(
+        base_url="https://gitlab.com",
+        project_id="123",
+        ref="main",
+        trigger_token="gl-token",
+        timeout_seconds=5.0,
+    )
+
+    with pytest.raises(ValueError, match="Workflow payload must be JSON serializable"):
+        await dispatcher.dispatch(
+            "remediation.completed",
+            {"tenant_id": "t1", "request_id": "r1", "broken": object()},
+        )
 
 
 def test_get_workflow_dispatchers_returns_all_enabled() -> None:

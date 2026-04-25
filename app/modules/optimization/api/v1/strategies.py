@@ -1,6 +1,7 @@
 from typing import Annotated, Any, Dict, List
 from uuid import UUID
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 from fastapi import APIRouter, Depends, Query, Request, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -21,6 +22,21 @@ from app.models.optimization import (
 from app.modules.governance.domain.security.audit_log import AuditEventType, AuditLogger
 
 router = APIRouter(tags=["FinOps Strategy (RI/SP)"])
+
+
+def _coerce_finite_float(value: Any, *, field_name: str) -> float:
+    try:
+        if isinstance(value, Decimal):
+            amount = value
+        elif isinstance(value, (int, float, str)):
+            amount = Decimal(str(value))
+        else:
+            amount = Decimal(str(float(value)))
+    except (InvalidOperation, TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(f"{field_name} must be numeric") from exc
+    if not amount.is_finite():
+        raise ValueError(f"{field_name} must be finite")
+    return float(amount)
 
 
 # --- Schemas ---
@@ -213,9 +229,15 @@ async def backtest_strategies(
         cfg = getattr(strat, "config", None)
         if isinstance(cfg, dict) and "backtest_tolerance" in cfg:
             try:
-                tolerance = float(cfg.get("backtest_tolerance") or tolerance)
-            except (TypeError, ValueError, OverflowError):
-                tolerance = 0.30
+                tolerance = _coerce_finite_float(
+                    cfg.get("backtest_tolerance") or tolerance,
+                    field_name="backtest_tolerance",
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Strategy backtest failed due to invalid strategy config.",
+                ) from exc
 
         backtest: Dict[str, Any] = {"reason": "no_series"}
         if (
@@ -288,21 +310,30 @@ async def apply_recommendation(
     rec.applied_at = datetime.now(timezone.utc)
 
     audit = AuditLogger(db, tenant_id=tenant_id)
-    await audit.log(
-        event_type=AuditEventType.OPTIMIZATION_RECOMMENDATION_APPLIED,
-        actor_id=user.id,
-        actor_email=user.email,
-        resource_type="strategy_recommendation",
-        resource_id=str(recommendation_id),
-        details={
-            "strategy_id": str(rec.strategy_id),
-            "estimated_monthly_savings": float(rec.estimated_monthly_savings or 0.0),
-            "region": rec.region,
-            "resource_type": rec.resource_type,
-        },
-        request_method=request.method,
-        request_path=str(request.url.path),
-    )
+    try:
+        await audit.log(
+            event_type=AuditEventType.OPTIMIZATION_RECOMMENDATION_APPLIED,
+            actor_id=user.id,
+            actor_email=user.email,
+            resource_type="strategy_recommendation",
+            resource_id=str(recommendation_id),
+            details={
+                "strategy_id": str(rec.strategy_id),
+                "estimated_monthly_savings": _coerce_finite_float(
+                    rec.estimated_monthly_savings or 0.0,
+                    field_name="estimated_monthly_savings",
+                ),
+                "region": rec.region,
+                "resource_type": rec.resource_type,
+            },
+            request_method=request.method,
+            request_path=str(request.url.path),
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="Recommendation contains invalid savings data.",
+        ) from exc
 
     await db.commit()
 

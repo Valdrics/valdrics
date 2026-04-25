@@ -813,6 +813,7 @@ async def test_hybrid_ledger_stream_skips_invalid_timestamp_and_amount_rows() ->
             return_value={
                 "records": [
                     {"timestamp": "bad-ts", "cost_usd": 1.0},
+                    {"timestamp": "2026-01-09T00:00:00Z", "cost_usd": float("nan")},
                     {"timestamp": "2026-01-10T00:00:00Z", "amount_raw": "bad"},
                     {"timestamp": "2026-01-11T00:00:00Z", "cost_usd": 4.5},
                 ]

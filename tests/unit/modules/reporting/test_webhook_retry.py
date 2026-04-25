@@ -570,6 +570,36 @@ class TestWebhookPayloadValidation:
         assert dedup_keys[0] == dedup_keys[1]
         assert dedup_keys[0].startswith("webhook:paystack:")
 
+    @pytest.mark.asyncio
+    async def test_store_webhook_rejects_non_json_payload_before_enqueue(
+        self, mock_db, webhook_service
+    ):
+        payload = {
+            "event": "charge.success",
+            "data": {"reference": "txn_bad_shape", "broken": object()},
+        }
+
+        with patch(
+            "app.modules.billing.domain.billing.webhook_retry.enqueue_job"
+        ) as mock_enqueue:
+            with pytest.raises(ValueError, match="Webhook payload must be JSON serializable"):
+                await webhook_service.store_webhook(
+                    provider="paystack",
+                    event_type="charge.success",
+                    payload=payload,
+                )
+
+        mock_enqueue.assert_not_called()
+
+    def test_resolve_reference_rejects_non_finite_payload_hash_fallback(
+        self, webhook_service
+    ):
+        with pytest.raises(ValueError, match="Webhook payload must be JSON serializable"):
+            webhook_service._resolve_reference(
+                payload={"event": "charge.success", "amount": float("nan")},
+                reference=None,
+            )
+
 
 class TestProcessPaystackWebhook:
     """Test Paystack webhook processing."""

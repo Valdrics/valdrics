@@ -209,10 +209,9 @@ class JobProcessor:
             return None
 
         try:
-            serialized = json.dumps(result, default=str, separators=(",", ":"))
+            serialized = json.dumps(result, separators=(",", ":"))
         except JOB_RESULT_SERIALIZATION_ERRORS:
-            serialized = json.dumps(str(result))
-            result = str(result)
+            raise ValueError("Job result must be JSON serializable")
 
         result_bytes = len(serialized.encode("utf-8"))
         if result_bytes <= MAX_JOB_RESULT_BYTES:

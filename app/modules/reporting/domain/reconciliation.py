@@ -149,9 +149,17 @@ class CostReconciliationService:
 
     @staticmethod
     def _stable_hash(payload: Dict[str, Any]) -> str:
-        canonical = json.dumps(
-            payload, sort_keys=True, separators=(",", ":"), default=str
-        )
+        try:
+            canonical = json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "Reconciliation integrity payload must be JSON serializable"
+            ) from exc
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     @staticmethod

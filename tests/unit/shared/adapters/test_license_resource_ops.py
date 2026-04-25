@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import pytest
 
 from app.shared.adapters.license_resource_ops import (
     build_discovered_license_resources,
@@ -55,6 +56,31 @@ def test_build_discovered_license_resources_deduplicates_and_merges() -> None:
     assert resources[1]["metadata"]["last_active_at"] == "2026-01-05T00:00:00+00:00"
 
 
+def test_build_discovered_license_resources_accepts_iso_timestamp_and_rejects_bad_values() -> None:
+    resources = build_discovered_license_resources(
+        activity_rows=[
+            {
+                "user_id": "u-1",
+                "email": "first@example.com",
+                "last_active_at": "2026-01-05T00:00:00Z",
+            }
+        ],
+        vendor="microsoft_365",
+        resource_type="license",
+        region="eu-west-1",
+    )
+
+    assert resources[0]["metadata"]["last_active_at"] == "2026-01-05T00:00:00+00:00"
+
+    with pytest.raises(ValueError):
+        build_discovered_license_resources(
+            activity_rows=[{"user_id": "u-2", "last_active_at": "not-a-timestamp"}],
+            vendor="microsoft_365",
+            resource_type="license",
+            region="eu-west-1",
+        )
+
+
 def test_build_license_usage_rows_filters_by_resource_and_normalizes_defaults() -> None:
     rows = build_license_usage_rows(
         activity_rows=[
@@ -85,6 +111,25 @@ def test_build_license_usage_rows_filters_by_resource_and_normalizes_defaults() 
     assert row["tags"]["email"] == "first@example.com"
     assert row["tags"]["mfa_enabled"] is True
     assert row["tags"]["admin_role"] == "delegated_admin"
+
+
+def test_build_license_usage_rows_rejects_invalid_last_active_timestamp() -> None:
+    with pytest.raises(ValueError):
+        build_license_usage_rows(
+            activity_rows=[
+                {
+                    "user_id": "u-1",
+                    "email": "first@example.com",
+                    "last_active_at": "not-a-timestamp",
+                }
+            ],
+            vendor="google_workspace",
+            service_name="license",
+            resource_id="u-1",
+            default_seat_price_usd=10.0,
+            currency="USD",
+            now=datetime(2026, 2, 2, tzinfo=timezone.utc),
+        )
 
 
 def test_build_license_usage_rows_returns_empty_for_unsupported_service() -> None:

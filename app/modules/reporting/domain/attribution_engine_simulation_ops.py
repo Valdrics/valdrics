@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 import uuid
 
@@ -12,6 +12,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attribution import AttributionRule
 from app.models.cloud import CostRecord
+
+
+def _coerce_finite_decimal(value: Any, *, field_name: str) -> Decimal:
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be numeric") from exc
+    if not amount.is_finite():
+        raise ValueError(f"{field_name} must be finite")
+    return amount
 
 
 async def simulate_rule(
@@ -57,15 +67,30 @@ async def simulate_rule(
         if not match_conditions_fn(record, conditions):
             continue
         matched_records += 1
-        matched_cost += record.cost_usd
+        matched_cost += _coerce_finite_decimal(
+            record.cost_usd,
+            field_name="matched_cost",
+        )
         allocations = await apply_rules_fn(record, [simulated_rule])
         for alloc in allocations:
+            alloc_amount = _coerce_finite_decimal(
+                alloc.amount,
+                field_name="projected_allocation_amount",
+            )
             projected_by_bucket[alloc.allocated_to] = (
-                projected_by_bucket.get(alloc.allocated_to, Decimal("0")) + alloc.amount
+                projected_by_bucket.get(alloc.allocated_to, Decimal("0")) + alloc_amount
             )
 
     allocation_rows = [
-        {"bucket": bucket, "amount": float(amount)}
+        {
+            "bucket": bucket,
+            "amount": float(
+                _coerce_finite_decimal(
+                    amount,
+                    field_name="projected_allocation_amount",
+                )
+            ),
+        }
         for bucket, amount in sorted(
             projected_by_bucket.items(),
             key=lambda item: item[1],
@@ -75,13 +100,20 @@ async def simulate_rule(
 
     sampled_records = len(records)
     match_rate = round((matched_records / sampled_records), 4) if sampled_records else 0.0
-    projected_total = float(sum(projected_by_bucket.values(), Decimal("0")))
+    projected_total = float(
+        _coerce_finite_decimal(
+            sum(projected_by_bucket.values(), Decimal("0")),
+            field_name="projected_allocation_total",
+        )
+    )
 
     return {
         "sampled_records": sampled_records,
         "matched_records": matched_records,
         "match_rate": match_rate,
-        "matched_cost": float(matched_cost),
+        "matched_cost": float(
+            _coerce_finite_decimal(matched_cost, field_name="matched_cost")
+        ),
         "projected_allocation_total": projected_total,
         "projected_allocations": allocation_rows,
         "start_date": start_date.isoformat(),
