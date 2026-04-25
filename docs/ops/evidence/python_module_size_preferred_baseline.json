@@ -17,6 +17,11 @@
       "preferred_max_lines": 500
     },
     {
+      "path": "app/modules/enforcement/domain/actions.py",
+      "lines": 505,
+      "preferred_max_lines": 500
+    },
+    {
       "path": "app/modules/enforcement/domain/policy_contract_ops.py",
       "lines": 525,
       "preferred_max_lines": 500
@@ -48,7 +53,7 @@
     },
     {
       "path": "app/modules/governance/domain/jobs/processor.py",
-      "lines": 603,
+      "lines": 602,
       "preferred_max_lines": 500
     },
     {
@@ -74,6 +79,11 @@
     {
       "path": "app/modules/optimization/domain/remediation_workflow.py",
       "lines": 695,
+      "preferred_max_lines": 500
+    },
+    {
+      "path": "app/modules/optimization/domain/strategy_service.py",
+      "lines": 529,
       "preferred_max_lines": 500
     },
     {
