@@ -11,6 +11,7 @@ from app.shared.adapters.feed_utils import (
     as_float,
     is_number,
     parse_required_timestamp,
+    parse_timestamp,
 )
 from app.shared.adapters.http_retry import execute_with_http_retry
 from app.shared.adapters.license_feed_ops import (
@@ -311,7 +312,7 @@ class LicenseAdapter(BaseAdapter):
         """
         return list_manual_feed_activity(
             feed=self.credentials.license_feed,
-            parse_timestamp_fn=parse_required_timestamp,
+            parse_timestamp_fn=parse_timestamp,
         )
 
     async def discover_resources(
