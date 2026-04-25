@@ -133,6 +133,8 @@ def test_enterprise_tdd_mainline_workflow_hosts_the_enterprise_gate() -> None:
     assert "scripts/run_enterprise_tdd_gate.py" in enterprise_text
     assert "postgres:16.13-alpine" in enterprise_text
     assert 'CSRF_SECRET_KEY: "ci-csrf-secret-key-32-chars-min-000000"' in enterprise_text
+    assert 'ENCRYPTION_KEY: "ci-encryption-key-32-chars-min-00000000"' in enterprise_text
+    assert 'SUPABASE_JWT_SECRET: "ci-supabase-jwt-secret-32-chars-0000"' in enterprise_text
     assert "--database-url" in enterprise_text
     assert "ENTERPRISE_GATE_DATABASE_URL" in enterprise_text
     assert 'branches: [main]' in enterprise_text

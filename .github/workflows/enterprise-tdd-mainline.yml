@@ -46,6 +46,9 @@ jobs:
     env:
       DB_SSL_MODE: "disable"
       CSRF_SECRET_KEY: "ci-csrf-secret-key-32-chars-min-000000"
+      ENCRYPTION_KEY: "ci-encryption-key-32-chars-min-00000000"
+      KDF_SALT: "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+      SUPABASE_JWT_SECRET: "ci-supabase-jwt-secret-32-chars-0000"
       ENTERPRISE_GATE_DATABASE_URL: "postgresql+asyncpg://postgres:postgres@127.0.0.1:5432/valdrics_enterprise_gate"
     steps:
       - name: Checkout Code

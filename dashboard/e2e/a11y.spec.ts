@@ -37,8 +37,8 @@ async function expectNoCriticalOrSeriousViolations(
 		await enableAuthenticatedSession(page.context());
 	}
 
-	await page.goto(routeCase.path);
-	await page.waitForLoadState('networkidle');
+	await page.goto(routeCase.path, { waitUntil: 'domcontentloaded' });
+	await expect(page.locator('main')).toBeVisible({ timeout: 15000 });
 	await page.waitForTimeout(1400);
 	await injectAxe(page);
 	const violations = await getViolations(page);
