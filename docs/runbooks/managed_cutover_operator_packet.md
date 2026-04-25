@@ -291,20 +291,21 @@ Notes:
 
 ## 7. `RUNTIME_SECRET_ENV_JSON` template
 
-This value must also be a JSON object with string values only.
+This value must also be a JSON object with string values only. Keep the source
+template empty, then paste real values only into the GitHub environment secret.
 
 ```json
 {
-  "SUPABASE_JWT_SECRET": "replace-with-supabase-jwt-secret",
-  "PAYSTACK_SECRET_KEY": "replace-with-paystack-secret",
-  "PAYSTACK_PUBLIC_KEY": "replace-with-paystack-public-key",
-  "INTERNAL_METRICS_AUTH_TOKEN": "replace-with-32-plus-char-secret",
-  "CSRF_SECRET_KEY": "replace-with-csrf-secret",
-  "ENCRYPTION_KEY": "replace-with-encryption-key",
-  "KDF_SALT": "replace-with-kdf-salt",
-  "ENFORCEMENT_APPROVAL_TOKEN_SECRET": "replace-with-enforcement-approval-secret",
-  "ENFORCEMENT_EXPORT_SIGNING_SECRET": "replace-with-enforcement-export-signing-secret",
-  "GROQ_API_KEY": "replace-with-selected-llm-provider-key"
+  "SUPABASE_JWT_SECRET": "",
+  "PAYSTACK_SECRET_KEY": "",
+  "PAYSTACK_PUBLIC_KEY": "",
+  "INTERNAL_METRICS_AUTH_TOKEN": "",
+  "CSRF_SECRET_KEY": "",
+  "ENCRYPTION_KEY": "",
+  "KDF_SALT": "",
+  "ENFORCEMENT_APPROVAL_TOKEN_SECRET": "",
+  "ENFORCEMENT_EXPORT_SIGNING_SECRET": "",
+  "GROQ_API_KEY": ""
 }
 ```
 
