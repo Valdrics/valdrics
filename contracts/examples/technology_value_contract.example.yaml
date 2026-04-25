@@ -1,0 +1,106 @@
+apiVersion: tvc.valdrics.io/v0alpha1
+kind: TechnologyValueContract
+metadata:
+  name: valdrics-llm-analysis
+  version: 0.1.0
+  owners:
+    - product-platform
+    - finops
+  tags:
+    - ai
+    - finops
+    - greenops
+  description: Keep tenant-facing LLM analysis economically healthy without trading away latency or residency controls.
+subject:
+  type: service
+  system: valdrics
+  service: llm-analysis
+  environment: production
+  cost_centers:
+    - engineering-ai
+    - customer-platform
+intent:
+  summary: Operate tenant-facing LLM analysis with predictable unit economics and clear value attribution.
+  change_type: continuous_operation
+  business_value_hypotheses:
+    - id: faster-triage
+      statement: Lower analysis latency improves analyst throughput and tenant retention.
+      metric: analyst_case_turnaround_minutes
+      expected_direction: decrease
+    - id: higher-margin-analysis
+      statement: Lower cost per analysis increases gross margin on paid plans.
+      metric: gross_margin_per_analysis
+      expected_direction: increase
+unit_economics:
+  primary_metric:
+    name: cost_per_analysis
+    unit: usd_per_analysis
+    direction: decrease
+    target:
+      max: 0.14
+    business_metric: gross_margin_per_analysis
+  supporting_metrics:
+    - name: cost_per_1k_tokens
+      unit: usd_per_1k_tokens
+      direction: decrease
+      target:
+        max: 0.02
+    - name: analyses_per_gpu_hour
+      unit: analyses_per_gpu_hour
+      direction: increase
+      target:
+        min: 140
+guardrails:
+  cost:
+    currency: USD
+    monthly_limit: 12000
+    per_unit_limit: 0.14
+    alert_threshold_percent: 80
+  carbon:
+    accounting_boundary: operational
+    monthly_kgco2e_limit: 480
+    per_unit_kgco2e_limit: 0.005
+  compliance:
+    data_residency:
+      allowed_regions:
+        - eu-west-1
+        - eu-central-1
+      prohibited_regions:
+        - us-east-1
+    frameworks:
+      - GDPR
+      - ISO27001
+  performance:
+    slo_refs:
+      - openslo://valdrics/llm-analysis/latency
+    max_p95_latency_ms: 2500
+  commitment:
+    strategy: spot_allowed
+    regret_budget_percent: 8
+measurement:
+  cost_sources:
+    - focus://tenant-ledger/export/focus
+  allocation_sources:
+    - opencost://cluster/valdrics-prod/hourly
+  telemetry_sources:
+    - otel://metrics/llm.request.latency
+    - otel://metrics/llm.request.tokens
+  business_sources:
+    - analytics://product/analyst-throughput
+    - finance://gross-margin/per-analysis
+governance:
+  approval_tier: committee
+  approvers:
+    - finance-owner@valdrics.local
+    - platform-owner@valdrics.local
+    - product-owner@valdrics.local
+  receipt_frequency: PT1H
+  enforcement_mode: hard_fail
+  rollback_policy:
+    required_on:
+      - cost_guardrail_breach
+      - compliance_breach
+    workflow_ref: docs/runbooks/emergency_disconnect.md
+extensions:
+  valdrics:
+    package_boundary: growth_and_above

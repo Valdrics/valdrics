@@ -1,7 +1,7 @@
 # Valdrics Makefile
 # Developer convenience commands using uv
 
-.PHONY: help install dev test lint format security clean docker-build docker-up docker-down observability observability-down env-dev env-compose bootstrap-local-db clean-local-db smoke-local-db verify-managed-bundle render-managed-release-blockers public-quality docs-hygiene
+.PHONY: help install dev test lint format security clean docker-build docker-up docker-down observability observability-down env-dev env-compose bootstrap-local-db clean-local-db smoke-local-db verify-managed-bundle render-managed-release-blockers verify-value-contracts public-quality docs-hygiene ship-baseline ship-backend-slice ship-dashboard-slice ship-managed-bundle
 
 # Default target
 help:
@@ -15,8 +15,13 @@ help:
 	@echo "  make smoke-local-db - Prove the local sqlite bootstrap path reaches a healthy app state"
 	@echo "  make verify-managed-bundle ENVIRONMENT=<staging|production> - Verify runtime, migration, and deployment artifacts stay coherent"
 	@echo "  make render-managed-release-blockers [NON_SECRET_BUNDLE=true] - Render the cross-environment blocker summary from staging + production bundles"
+	@echo "  make verify-value-contracts - Validate the draft TVC schema, example contract, and example receipt"
 	@echo "  make public-quality [DASHBOARD_URL=http://localhost:5174] - Run public smoke + a11y + perf + visual gates"
 	@echo "  make docs-hygiene - Fail on orphaned dated docs/reports and prohibited active duplicates"
+	@echo "  make ship-baseline - Run the fast repo-wide shipping baseline (audit, env/docs contracts, TVC, archive hygiene)"
+	@echo "  make ship-backend-slice PY_PATHS=\"...\" [PYTEST_TARGETS=\"...\"] - Run changed-backend lint + focused tests only"
+	@echo "  make ship-dashboard-slice [DASHBOARD_URL=http://localhost:5174] - Run the public dashboard quality slice"
+	@echo "  make ship-managed-bundle ENVIRONMENT=<staging|production> VERSION=<tag> API_PROMOTION_REF=<repo@sha256:...> [BATCH_PROMOTION_REF=<repo@sha256:...>] - Generate + verify the managed deployment bundle"
 	@echo "  make dev         - Start development servers (auto-uses .env.dev when present)"
 	@echo "  make test        - Run test suite"
 	@echo "  make lint        - Run linters"
@@ -60,12 +65,36 @@ verify-managed-bundle:
 render-managed-release-blockers:
 	@/bin/bash -lc 'ARGS=""; if [ "$(NON_SECRET_BUNDLE)" = "true" ]; then ARGS="--non-secret-deployment-bundle"; fi; uv run python3 scripts/render_managed_release_blocker_summary.py $$ARGS'
 
+verify-value-contracts:
+	uv run python3 scripts/verify_technology_value_contract.py --contract-path contracts/examples/technology_value_contract.example.yaml --receipt-path contracts/examples/execution_receipt.example.json
+	uv run python3 scripts/verify_technology_value_contract.py --contract-path contracts/examples/unified-platform-deploy-staging.yaml
+	uv run python3 scripts/verify_technology_value_contract.py --contract-path contracts/examples/unified-platform-deploy-production.yaml
+
 public-quality:
 	@/bin/bash -lc 'ARGS=""; if [ -n "$(DASHBOARD_URL)" ]; then ARGS="--dashboard-url $(DASHBOARD_URL) --skip-webserver"; fi; uv run python3 scripts/run_public_frontend_quality_gate.py $$ARGS'
 
 docs-hygiene:
 	uv run python3 scripts/verify_docs_archive_hygiene.py
 	uv run python3 scripts/verify_reports_archive_hygiene.py
+
+ship-baseline:
+	uv run python3 scripts/verify_codebase_audit_report.py --report reports/audit/staging.audit.report.json
+	uv run python3 scripts/verify_env_hygiene.py
+	uv run python3 scripts/verify_dependency_locking.py
+	uv run python3 scripts/verify_documentation_runtime_contracts.py
+	$(MAKE) verify-value-contracts
+	$(MAKE) docs-hygiene
+
+ship-backend-slice:
+	@test -n "$(PY_PATHS)" || (echo "PY_PATHS must point to the changed backend Python files or directories" && exit 1)
+	uv run ruff check $(PY_PATHS)
+	@/bin/bash -lc 'if [ -n "$(PYTEST_TARGETS)" ]; then uv run pytest -q --tb=short --no-cov $(PYTEST_TARGETS); else echo "Skipping pytest. Set PYTEST_TARGETS to the focused test targets for this change."; fi'
+
+ship-dashboard-slice:
+	$(MAKE) public-quality DASHBOARD_URL="$(DASHBOARD_URL)"
+
+ship-managed-bundle:
+	$(MAKE) deploy ENVIRONMENT=$(ENVIRONMENT) VERSION=$(VERSION) API_PROMOTION_REF=$(API_PROMOTION_REF) BATCH_PROMOTION_REF=$(BATCH_PROMOTION_REF)
 
 dev:
 	@if [ -f .env.dev ]; then \

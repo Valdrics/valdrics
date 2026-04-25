@@ -1,0 +1,69 @@
+apiVersion: tvc.valdrics.io/v0alpha1
+kind: TechnologyValueContract
+metadata:
+  name: unified-platform-deploy-staging
+  version: 0.1.0
+  owners:
+    - platform
+    - sre
+    - finops
+  tags:
+    - deployment
+    - platform
+    - managed-release
+  description: Guard the staging managed deployment lane so release artifacts remain promotion-safe and auditable.
+subject:
+  type: pipeline
+  system: valdrics
+  service: unified-platform-deploy
+  environment: staging
+  cost_centers:
+    - platform-engineering
+intent:
+  summary: Keep staging deployments deterministic, promotion-ready, and policy-valid before production cutover.
+  change_type: continuous_operation
+  business_value_hypotheses:
+    - id: safer-staging-cutovers
+      statement: Strong admission control in staging reduces failed production changes and operator rework.
+      metric: successful_deployment_ratio
+      expected_direction: increase
+unit_economics:
+  primary_metric:
+    name: successful_deployment_ratio
+    unit: ratio
+    direction: increase
+    target:
+      exact: 1
+    business_metric: failed_change_rate
+guardrails:
+  cost:
+    currency: USD
+    monthly_limit: 2500
+    per_unit_limit: 25
+    alert_threshold_percent: 80
+  compliance:
+    data_residency:
+      allowed_regions:
+        - us-central1
+    frameworks:
+      - SOC2
+      - ISO27001
+measurement:
+  cost_sources:
+    - focus://tenant-ledger/export/focus
+  telemetry_sources:
+    - github-actions://deploy-unified-platform/staging
+  business_sources:
+    - analytics://delivery/failed-change-rate
+governance:
+  approval_tier: director
+  approvers:
+    - platform-owner@valdrics.local
+    - sre-owner@valdrics.local
+  receipt_frequency: PT1H
+  enforcement_mode: soft_fail
+  rollback_policy:
+    required_on:
+      - compliance_breach
+      - performance_regression
+    workflow_ref: docs/runbooks/unified_platform_release.md

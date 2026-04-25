@@ -121,8 +121,14 @@ def _render_handoff_markdown(
         f"- Runtime report: `{runtime_report_path}`",
         f"- Migration report: `{migration_report_path}`",
         f"- Deployment report: `{deployment_report_path}`",
+        "- Technology Value admission receipt: "
+        f"`{deployment_report.get('artifacts', {}).get('technology_value_receipt_json', '')}`",
         "- Cross-environment blocker rollup target: "
         "`.runtime/deploy/managed-release-blockers.md` (rendered after both staging and production bundles are available)",
+        "- Supplemental evidence boundary: "
+        "`scripts/capture_acceptance_evidence.py` and `GET /api/v1/audit/compliance-pack` "
+        "remain procurement/audit artifacts only; they do not replace this managed deployment bundle or "
+        "`uv run python scripts/verify_managed_release_readiness.py`.",
         "",
         "## Root Operator Gaps",
         "",

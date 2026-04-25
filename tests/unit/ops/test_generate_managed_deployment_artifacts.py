@@ -8,6 +8,7 @@ import pytest
 from scripts.generate_managed_deployment_artifacts import (
     generate_managed_deployment_artifacts,
 )
+from scripts.verify_technology_value_contract import verify_contract_and_receipts
 
 
 def _write_env(path: Path, lines: list[str]) -> None:
@@ -108,6 +109,11 @@ def test_generate_managed_deployment_artifacts_outputs_unified_platform_bundle(
     terraform_tfvars = json.loads(
         (output_dir / "terraform.runtime.auto.tfvars.json").read_text(encoding="utf-8")
     )
+    technology_value_receipt = json.loads(
+        (output_dir / "technology-value-admission-receipt.json").read_text(
+            encoding="utf-8"
+        )
+    )
     operator_handoff = output_dir / "operator-handoff.md"
 
     assert report["ready_for_unified_platform"] is True
@@ -177,7 +183,18 @@ def test_generate_managed_deployment_artifacts_outputs_unified_platform_bundle(
         report["artifacts"]["operator_handoff_markdown"]
         == operator_handoff.as_posix()
     )
+    assert (
+        report["artifacts"]["technology_value_receipt_json"]
+        == (output_dir / "technology-value-admission-receipt.json").as_posix()
+    )
     assert not operator_handoff.exists()
+    assert technology_value_receipt["data"]["phase"] == "admission"
+    assert technology_value_receipt["data"]["subject"]["environment"] == "production"
+    assert technology_value_receipt["data"]["evaluations"]["recommendation"] == "accept"
+    verify_contract_and_receipts(
+        contract_path=Path("contracts/examples/unified-platform-deploy-production.yaml"),
+        receipt_paths=[output_dir / "technology-value-admission-receipt.json"],
+    )
 
 
 def test_generate_managed_deployment_artifacts_reports_placeholder_blockers_for_staging(

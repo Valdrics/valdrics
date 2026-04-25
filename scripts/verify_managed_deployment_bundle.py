@@ -36,6 +36,10 @@ from scripts.managed_deployment_contract import (
     required_migration_operator_input_keys as _migration_required_operator_input_keys,
     required_runtime_operator_input_keys as _runtime_required_operator_input_keys,
 )
+from scripts.verify_technology_value_contract import (
+    TechnologyValueContractVerificationError,
+    verify_contract_and_receipts,
+)
 
 EXPECTED_DEPLOYMENT_ARTIFACT_KEYS = (
     "unified_platform_manifest",
@@ -43,12 +47,14 @@ EXPECTED_DEPLOYMENT_ARTIFACT_KEYS = (
     "cloudflare_pages_env_json",
     "artifact_registry_release_metadata",
     "terraform_runtime_tfvars",
+    "technology_value_receipt_json",
     "operator_handoff_markdown",
 )
 NON_SECRET_RELEASE_ARTIFACT_KEYS = (
     "unified_platform_manifest",
     "cloudflare_pages_env_json",
     "artifact_registry_release_metadata",
+    "technology_value_receipt_json",
     "operator_handoff_markdown",
 )
 FULL_BUNDLE_ARTIFACT_KEYS_REQUIRED_ON_DISK = (
@@ -57,6 +63,7 @@ FULL_BUNDLE_ARTIFACT_KEYS_REQUIRED_ON_DISK = (
     "cloudflare_pages_env_json",
     "artifact_registry_release_metadata",
     "terraform_runtime_tfvars",
+    "technology_value_receipt_json",
 )
 EXPECTED_DEPLOYMENT_ARTIFACT_FILENAMES = {
     artifact_key: artifact_path.name
@@ -64,6 +71,7 @@ EXPECTED_DEPLOYMENT_ARTIFACT_FILENAMES = {
         EXPECTED_DEPLOYMENT_ARTIFACT_KEYS,
         (
             *_artifact_output_paths(Path("/tmp/verify-managed-deployment-bundle"))[:5],
+            Path("/tmp/verify-managed-deployment-bundle/technology-value-admission-receipt.json"),
             Path("/tmp/verify-managed-deployment-bundle/operator-handoff.md"),
         ),
         strict=True,
@@ -171,6 +179,11 @@ def verify_managed_deployment_bundle(
     deployment_runtime_env_path = _normalize_path(
         deployment_report.get("runtime_env_file", ""),
         base_dir=deployment_report_path.parent,
+    )
+    technology_value_contract_path = resolve_cli_path_from_root(
+        _repo_root(),
+        Path(str(deployment_report.get("technology_value_contract_path", ""))),
+        field_name="technology_value_contract_path",
     )
     deployment_output_dir = _normalize_path(
         deployment_report.get("output_dir", ""),
@@ -520,6 +533,10 @@ def verify_managed_deployment_bundle(
         str(artifacts["artifact_registry_release_metadata"]),
         base_dir=deployment_report_path.parent,
     )
+    technology_value_receipt_path = _normalize_path(
+        str(artifacts["technology_value_receipt_json"]),
+        base_dir=deployment_report_path.parent,
+    )
 
     unified_platform_manifest = _load_json(unified_platform_manifest_path)
     cloudflare_pages_env = _load_json(cloudflare_pages_env_path)
@@ -622,6 +639,29 @@ def verify_managed_deployment_bundle(
             ),
             errors=errors,
         )
+    _expect(
+        technology_value_contract_path.exists(),
+        (
+            "Technology Value Contract referenced by deployment report is missing: "
+            f"{technology_value_contract_path.as_posix()}"
+        ),
+        errors=errors,
+    )
+    _expect(
+        technology_value_contract_path.is_file(),
+        (
+            "Technology Value Contract referenced by deployment report must be a file: "
+            f"{technology_value_contract_path.as_posix()}"
+        ),
+        errors=errors,
+    )
+    try:
+        verify_contract_and_receipts(
+            contract_path=technology_value_contract_path,
+            receipt_paths=[technology_value_receipt_path],
+        )
+    except TechnologyValueContractVerificationError as exc:
+        errors.append(f"technology value receipt verification failed: {exc}")
     _expect(
         _sorted_strings(deployment_report.get("cloudflare_pages_public_env_keys"))
         == sorted(str(key) for key in cloudflare_pages_env),

@@ -1,0 +1,516 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:valdrics:schemas:technology_value_contract:v0.1",
+  "title": "Technology Value Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "apiVersion",
+    "kind",
+    "metadata",
+    "subject",
+    "intent",
+    "unit_economics",
+    "guardrails",
+    "measurement",
+    "governance"
+  ],
+  "properties": {
+    "apiVersion": {
+      "const": "tvc.valdrics.io/v0alpha1"
+    },
+    "kind": {
+      "const": "TechnologyValueContract"
+    },
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "version",
+        "owners"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+        },
+        "owners": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "system",
+        "service",
+        "environment"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "service",
+            "workload",
+            "pipeline",
+            "model",
+            "product-capability"
+          ]
+        },
+        "system": {
+          "type": "string",
+          "minLength": 1
+        },
+        "service": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "enum": [
+            "development",
+            "staging",
+            "production"
+          ]
+        },
+        "cost_centers": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "intent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "change_type",
+        "business_value_hypotheses"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "change_type": {
+          "enum": [
+            "continuous_operation",
+            "new_launch",
+            "migration",
+            "optimization",
+            "experiment"
+          ]
+        },
+        "business_value_hypotheses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "statement",
+              "metric",
+              "expected_direction"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+              },
+              "statement": {
+                "type": "string",
+                "minLength": 1
+              },
+              "metric": {
+                "type": "string",
+                "minLength": 1
+              },
+              "expected_direction": {
+                "enum": [
+                  "increase",
+                  "decrease",
+                  "stabilize"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "unit_economics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "primary_metric"
+      ],
+      "properties": {
+        "primary_metric": {
+          "$ref": "#/$defs/unit_metric"
+        },
+        "supporting_metrics": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/unit_metric"
+          }
+        }
+      }
+    },
+    "guardrails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cost",
+        "compliance"
+      ],
+      "properties": {
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "currency",
+            "monthly_limit",
+            "alert_threshold_percent"
+          ],
+          "properties": {
+            "currency": {
+              "type": "string",
+              "pattern": "^[A-Z]{3}$"
+            },
+            "monthly_limit": {
+              "type": "number",
+              "minimum": 0
+            },
+            "per_unit_limit": {
+              "type": "number",
+              "minimum": 0
+            },
+            "alert_threshold_percent": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "carbon": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "accounting_boundary",
+            "monthly_kgco2e_limit"
+          ],
+          "properties": {
+            "accounting_boundary": {
+              "enum": [
+                "operational",
+                "market_based",
+                "location_based",
+                "scope_3_estimated"
+              ]
+            },
+            "monthly_kgco2e_limit": {
+              "type": "number",
+              "minimum": 0
+            },
+            "per_unit_kgco2e_limit": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        },
+        "compliance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "data_residency"
+          ],
+          "properties": {
+            "data_residency": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "allowed_regions"
+              ],
+              "properties": {
+                "allowed_regions": {
+                  "type": "array",
+                  "minItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "prohibited_regions": {
+                  "type": "array",
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                }
+              }
+            },
+            "frameworks": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "performance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "slo_refs"
+          ],
+          "properties": {
+            "slo_refs": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "max_p95_latency_ms": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "commitment": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "strategy",
+            "regret_budget_percent"
+          ],
+          "properties": {
+            "strategy": {
+              "enum": [
+                "on_demand_only",
+                "spot_allowed",
+                "commitment_optimized"
+              ]
+            },
+            "regret_budget_percent": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            }
+          }
+        }
+      }
+    },
+    "measurement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cost_sources",
+        "telemetry_sources"
+      ],
+      "properties": {
+        "cost_sources": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "allocation_sources": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "telemetry_sources": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "business_sources": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "approval_tier",
+        "approvers",
+        "receipt_frequency",
+        "enforcement_mode"
+      ],
+      "properties": {
+        "approval_tier": {
+          "enum": [
+            "service_owner",
+            "director",
+            "committee"
+          ]
+        },
+        "approvers": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "receipt_frequency": {
+          "type": "string",
+          "minLength": 2
+        },
+        "enforcement_mode": {
+          "enum": [
+            "advisory",
+            "soft_fail",
+            "hard_fail"
+          ]
+        },
+        "rollback_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "required_on",
+            "workflow_ref"
+          ],
+          "properties": {
+            "required_on": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "cost_guardrail_breach",
+                  "carbon_guardrail_breach",
+                  "compliance_breach",
+                  "performance_regression",
+                  "security_anomaly"
+                ]
+              }
+            },
+            "workflow_ref": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    },
+    "extensions": {
+      "type": "object"
+    }
+  },
+  "$defs": {
+    "metric_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "exact": {
+          "type": "number"
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "min"
+          ]
+        },
+        {
+          "required": [
+            "max"
+          ]
+        },
+        {
+          "required": [
+            "exact"
+          ]
+        }
+      ]
+    },
+    "unit_metric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "unit",
+        "direction",
+        "target"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1
+        },
+        "direction": {
+          "enum": [
+            "increase",
+            "decrease",
+            "stabilize"
+          ]
+        },
+        "target": {
+          "$ref": "#/$defs/metric_target"
+        },
+        "business_metric": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    }
+  }
+}

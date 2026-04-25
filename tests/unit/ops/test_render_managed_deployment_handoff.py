@@ -171,9 +171,13 @@ def test_render_managed_deployment_handoff_renders_blocked_bundle_summary(
     assert "verify_managed_release_readiness.py" in content
     assert "verify_codebase_audit_report.py" in content
     assert "verify_dashboard_runtime_contract.py" in content
+    assert "technology-value-admission-receipt.json" in content
     assert "render_managed_release_blocker_summary.py" in content
     assert "after both staging and production bundles are available" in content
     assert "--non-secret-deployment-bundle" in content
+    assert "procurement/audit artifacts only" in content
+    assert "capture_acceptance_evidence.py" in content
+    assert "audit/compliance-pack" in content
     assert "run_public_frontend_quality_gate.py" in content
     assert "release-unified-platform.yml" in content
     assert "publish-artifact-registry-images.yml" in content
@@ -212,6 +216,7 @@ def test_render_managed_deployment_handoff_marks_unified_release_ready(
     assert "Unified runtime deploy contract: READY" in content
     assert "Artifact Registry promotion contract: READY" in content
     assert "Terraform infrastructure contract: READY" in content
+    assert "Technology Value admission receipt" in content
     assert (
         "verify_codebase_audit_report.py --report .runtime/production.audit.report.json"
         in content

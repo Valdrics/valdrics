@@ -31,6 +31,13 @@ from scripts.managed_deployment_contract import (
     selected_llm_provider as _selected_llm_provider_shared,
     selected_llm_provider_env_key as _selected_llm_provider_env_key,
 )
+from scripts.technology_value_contract_receipts import (
+    DEFAULT_DEPLOYMENT_TVC_BY_ENV,
+    DEFAULT_GIT_SHA,
+    build_managed_deployment_admission_receipt,
+    load_technology_value_contract,
+)
+from scripts.verify_technology_value_contract import verify_contract_and_receipts
 
 DEFAULT_OUTPUT_ROOT = Path(".runtime/deploy")
 DEFAULT_RELEASE_TAG = "REPLACE_WITH_RELEASE_TAG"
@@ -118,6 +125,7 @@ MANAGED_OUTPUT_FILENAME_ALLOWLIST = frozenset(
         # Rendered by scripts/render_managed_deployment_handoff.py and kept alongside
         # the generated deployment bundle for operator use.
         "operator-handoff.md",
+        "technology-value-admission-receipt.json",
     }
 )
 
@@ -290,8 +298,30 @@ def _artifact_output_paths(output_dir: Path) -> tuple[Path, ...]:
         output_dir / "cloudflare-pages-env.json",
         output_dir / "artifact-registry-release.json",
         output_dir / "terraform.runtime.auto.tfvars.json",
+        output_dir / "technology-value-admission-receipt.json",
         output_dir / "deployment.report.json",
     )
+
+
+def _resolve_technology_value_contract_path(
+    *,
+    environment: str,
+    contract_path: Path | None,
+) -> Path:
+    candidate = (
+        _resolve_cli_path(contract_path, field_name="technology_value_contract_path")
+        if contract_path is not None
+        else _resolve_default_path(DEFAULT_DEPLOYMENT_TVC_BY_ENV[environment])
+    )
+    if not candidate.exists():
+        raise FileNotFoundError(
+            f"Technology Value Contract does not exist: {candidate.as_posix()}"
+        )
+    if not candidate.is_file():
+        raise ValueError(
+            f"technology_value_contract_path must be a file: {candidate.as_posix()}"
+        )
+    return candidate
 
 
 def _prune_unmanaged_output_files(output_dir: Path) -> None:
@@ -506,6 +536,8 @@ def generate_managed_deployment_artifacts(
     supabase_organization_id: str | None = None,
     supabase_project_name: str | None = None,
     supabase_region: str | None = None,
+    technology_value_contract_path: Path | None = None,
+    git_sha: str = DEFAULT_GIT_SHA,
 ) -> dict[str, Any]:
     normalized_environment = str(environment or "").strip().lower()
     if normalized_environment not in SUPPORTED_ENVIRONMENTS:
@@ -520,6 +552,11 @@ def generate_managed_deployment_artifacts(
         raise ValueError(
             f"runtime_env_file must be a file: {runtime_env_file.as_posix()}"
         )
+    normalized_git_sha = str(git_sha or "").strip() or DEFAULT_GIT_SHA
+    if len(normalized_git_sha) < 7 or any(
+        ch not in "0123456789abcdef" for ch in normalized_git_sha.lower()
+    ):
+        raise ValueError("git_sha must be a hexadecimal git revision")
     if output_dir.exists() and not output_dir.is_dir():
         raise ValueError(
             f"output_dir must be a directory path: {output_dir.as_posix()}"
@@ -541,6 +578,13 @@ def generate_managed_deployment_artifacts(
             raise ValueError(
                 "runtime_env_file must not overwrite generated deployment artifacts"
             )
+    resolved_technology_value_contract_path = _resolve_technology_value_contract_path(
+        environment=normalized_environment,
+        contract_path=technology_value_contract_path,
+    )
+    technology_value_contract = load_technology_value_contract(
+        resolved_technology_value_contract_path
+    )
 
     values = parse_env_file(runtime_env_file)
     runtime_blockers = _runtime_blockers(values)
@@ -639,6 +683,7 @@ def generate_managed_deployment_artifacts(
         cloudflare_pages_env_path,
         artifact_registry_release_path,
         terraform_tfvars_path,
+        technology_value_receipt_path,
         report_path,
     ) = _artifact_output_paths(output_dir)
     operator_handoff_path = output_dir / "operator-handoff.md"
@@ -652,6 +697,7 @@ def generate_managed_deployment_artifacts(
         "environment": normalized_environment,
         "runtime_env_file": runtime_env_file.as_posix(),
         "output_dir": output_dir.as_posix(),
+        "technology_value_contract_path": resolved_technology_value_contract_path.as_posix(),
         "runtime_validation_blockers": runtime_blockers,
         "secret_manager_secret_keys": secret_manager_secret_keys,
         "secret_manager_secret_value_blockers": secret_manager_secret_value_blockers,
@@ -675,6 +721,7 @@ def generate_managed_deployment_artifacts(
                 artifact_registry_release_path.as_posix()
             ),
             "terraform_runtime_tfvars": terraform_tfvars_path.as_posix(),
+            "technology_value_receipt_json": technology_value_receipt_path.as_posix(),
             "operator_handoff_markdown": operator_handoff_path.as_posix(),
         },
         "ready_for_unified_platform": (
@@ -694,6 +741,19 @@ def generate_managed_deployment_artifacts(
         ),
         "ready_for_terraform": not terraform_value_blockers,
     }
+    technology_value_receipt = build_managed_deployment_admission_receipt(
+        contract=technology_value_contract,
+        environment=normalized_environment,
+        release_tag=str(release_tag or "").strip() or DEFAULT_RELEASE_TAG,
+        git_sha=normalized_git_sha.lower(),
+        deployment_report=report,
+        evidence_refs=[
+            runtime_env_file.as_posix(),
+            unified_platform_manifest_path.as_posix(),
+            artifact_registry_release_path.as_posix(),
+            report_path.as_posix(),
+        ],
+    )
 
     artifact_contents = {
         unified_platform_manifest_path.name: json.dumps(
@@ -710,6 +770,9 @@ def generate_managed_deployment_artifacts(
         ),
         terraform_tfvars_path.name: json.dumps(
             terraform_tfvars_payload, indent=2, sort_keys=True
+        ),
+        technology_value_receipt_path.name: json.dumps(
+            technology_value_receipt, indent=2, sort_keys=True
         ),
         report_path.name: json.dumps(report, indent=2, sort_keys=True),
     }
@@ -729,6 +792,16 @@ def generate_managed_deployment_artifacts(
                 encoding="utf-8",
             )
             staged_paths.append((staged_path, final_path))
+
+        staged_receipt_path = next(
+            staged_path
+            for staged_path, final_path in staged_paths
+            if final_path.name == technology_value_receipt_path.name
+        )
+        verify_contract_and_receipts(
+            contract_path=resolved_technology_value_contract_path,
+            receipt_paths=[staged_receipt_path],
+        )
 
         output_dir.mkdir(parents=True, exist_ok=True)
         for staged_path, final_path in staged_paths:
@@ -799,6 +872,20 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--supabase-organization-id", default=None)
     parser.add_argument("--supabase-project-name", default=None)
     parser.add_argument("--supabase-region", default=None)
+    parser.add_argument(
+        "--technology-value-contract-path",
+        type=Path,
+        default=None,
+        help=(
+            "Optional path to an environment-specific Technology Value Contract. "
+            "Defaults to contracts/examples/unified-platform-deploy-<environment>.yaml."
+        ),
+    )
+    parser.add_argument(
+        "--git-sha",
+        default=DEFAULT_GIT_SHA,
+        help="Git SHA recorded in the generated TVC admission receipt.",
+    )
     return parser
 
 
@@ -830,6 +917,8 @@ def main(argv: list[str] | None = None) -> int:
         supabase_organization_id=args.supabase_organization_id,
         supabase_project_name=args.supabase_project_name,
         supabase_region=args.supabase_region,
+        technology_value_contract_path=args.technology_value_contract_path,
+        git_sha=str(args.git_sha),
     )
     print(
         "[managed-deployment-artifacts] ok "

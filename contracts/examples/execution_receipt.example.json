@@ -1,0 +1,72 @@
+{
+  "specversion": "1.0",
+  "id": "urn:uuid:3f9d6a8a-4a8b-4ec7-93ff-07158e8132d0",
+  "source": "urn:valdrics:runtime:receipts",
+  "type": "io.valdrics.tvc.execution.receipt.v1",
+  "subject": "valdrics-llm-analysis",
+  "time": "2026-04-20T10:00:00Z",
+  "dataschema": "urn:valdrics:schemas:execution_receipt:v0.1",
+  "datacontenttype": "application/json",
+  "data": {
+    "phase": "runtime",
+    "contract_ref": {
+      "api_version": "tvc.valdrics.io/v0alpha1",
+      "kind": "TechnologyValueContract",
+      "name": "valdrics-llm-analysis",
+      "version": "0.1.0"
+    },
+    "subject": {
+      "system": "valdrics",
+      "service": "llm-analysis",
+      "environment": "production",
+      "deployment_id": "deploy-2026-04-20-001",
+      "git_sha": "0123456789abcdef0123456789abcdef01234567"
+    },
+    "window": {
+      "start": "2026-04-20T09:00:00Z",
+      "end": "2026-04-20T10:00:00Z"
+    },
+    "actuals": {
+      "cost": {
+        "currency": "USD",
+        "total": 347.25,
+        "per_unit": 0.112,
+        "unit_count": 3100,
+        "evidence_ref": "focus://tenant-ledger/2026-04-20/09"
+      },
+      "carbon": {
+        "kgco2e": 10.8,
+        "per_unit_kgco2e": 0.0035,
+        "accounting_boundary": "operational"
+      },
+      "unit_economics": {
+        "metric": "cost_per_analysis",
+        "value": 0.112,
+        "direction": "decrease",
+        "business_metric": "gross_margin_per_analysis",
+        "business_value_delta": 0.06
+      },
+      "performance": {
+        "p95_latency_ms": 1820,
+        "slo_status": "pass"
+      }
+    },
+    "evaluations": {
+      "cost_status": "pass",
+      "carbon_status": "pass",
+      "compliance_status": "pass",
+      "performance_status": "pass",
+      "recommendation": "accept"
+    },
+    "anomalies": [],
+    "provenance": {
+      "generated_at": "2026-04-20T10:01:32Z",
+      "generator": "valdrics.runtime.reconciler",
+      "evidence_refs": [
+        "focus://tenant-ledger/2026-04-20/09",
+        "otel://metrics/llm.request.latency",
+        "opencost://cluster/valdrics-prod/hourly"
+      ]
+    }
+  }
+}

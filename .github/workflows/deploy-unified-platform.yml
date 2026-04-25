@@ -230,6 +230,7 @@ jobs:
             --runtime-env-file ".runtime/${DEPLOY_ENVIRONMENT}.env" \
             --output-dir "${DEPLOY_DIR}" \
             --release-tag "${RELEASE_TAG}" \
+            --git-sha "${{ github.sha }}" \
             --api-promotion-ref "${API_PROMOTION_REF}" \
             --batch-promotion-ref "${BATCH_PROMOTION_REF}" \
             --gcp-project-id "${{ vars.GCP_PROJECT_ID }}" \
@@ -297,6 +298,7 @@ jobs:
             .runtime/deploy/${{ inputs.environment }}/cloudflare-pages-env.json
             .runtime/deploy/${{ inputs.environment }}/artifact-registry-release.json
             .runtime/deploy/${{ inputs.environment }}/deployment.report.json
+            .runtime/deploy/${{ inputs.environment }}/technology-value-admission-receipt.json
             .runtime/deploy/${{ inputs.environment }}/operator-handoff.md
           retention-days: 30
 

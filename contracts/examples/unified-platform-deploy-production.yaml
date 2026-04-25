@@ -1,0 +1,71 @@
+apiVersion: tvc.valdrics.io/v0alpha1
+kind: TechnologyValueContract
+metadata:
+  name: unified-platform-deploy-production
+  version: 0.1.0
+  owners:
+    - platform
+    - sre
+    - finops
+  tags:
+    - deployment
+    - platform
+    - managed-release
+  description: Guard the production managed deployment lane so immutable promotion, rollout, and evidence capture stay coherent.
+subject:
+  type: pipeline
+  system: valdrics
+  service: unified-platform-deploy
+  environment: production
+  cost_centers:
+    - platform-engineering
+intent:
+  summary: Keep production deployments deterministic, promotion-safe, and recoverable under explicit release governance.
+  change_type: continuous_operation
+  business_value_hypotheses:
+    - id: safer-production-cutovers
+      statement: Strong production admission control reduces failed change rate and operator recovery time.
+      metric: successful_deployment_ratio
+      expected_direction: increase
+unit_economics:
+  primary_metric:
+    name: successful_deployment_ratio
+    unit: ratio
+    direction: increase
+    target:
+      exact: 1
+    business_metric: failed_change_rate
+guardrails:
+  cost:
+    currency: USD
+    monthly_limit: 5000
+    per_unit_limit: 50
+    alert_threshold_percent: 80
+  compliance:
+    data_residency:
+      allowed_regions:
+        - us-central1
+    frameworks:
+      - SOC2
+      - ISO27001
+measurement:
+  cost_sources:
+    - focus://tenant-ledger/export/focus
+  telemetry_sources:
+    - github-actions://deploy-unified-platform/production
+  business_sources:
+    - analytics://delivery/failed-change-rate
+governance:
+  approval_tier: committee
+  approvers:
+    - platform-owner@valdrics.local
+    - sre-owner@valdrics.local
+    - finance-owner@valdrics.local
+  receipt_frequency: PT1H
+  enforcement_mode: hard_fail
+  rollback_policy:
+    required_on:
+      - compliance_breach
+      - performance_regression
+      - security_anomaly
+    workflow_ref: docs/runbooks/unified_platform_release.md

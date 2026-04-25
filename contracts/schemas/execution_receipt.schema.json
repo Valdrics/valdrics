@@ -1,0 +1,391 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:valdrics:schemas:execution_receipt:v0.1",
+  "title": "Technology Value Contract Execution Receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "specversion",
+    "id",
+    "source",
+    "type",
+    "subject",
+    "time",
+    "dataschema",
+    "datacontenttype",
+    "data"
+  ],
+  "properties": {
+    "specversion": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^[A-Za-z][A-Za-z0-9+.-]*:.+$"
+    },
+    "type": {
+      "const": "io.valdrics.tvc.execution.receipt.v1"
+    },
+    "subject": {
+      "type": "string",
+      "minLength": 1
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "dataschema": {
+      "const": "urn:valdrics:schemas:execution_receipt:v0.1"
+    },
+    "datacontenttype": {
+      "const": "application/json"
+    },
+    "data": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "phase",
+        "contract_ref",
+        "subject",
+        "window",
+        "actuals",
+        "evaluations",
+        "provenance"
+      ],
+      "properties": {
+        "phase": {
+          "enum": [
+            "admission",
+            "runtime"
+          ]
+        },
+        "contract_ref": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "api_version",
+            "kind",
+            "name",
+            "version"
+          ],
+          "properties": {
+            "api_version": {
+              "const": "tvc.valdrics.io/v0alpha1"
+            },
+            "kind": {
+              "const": "TechnologyValueContract"
+            },
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{1,62}$"
+            },
+            "version": {
+              "type": "string",
+              "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+            }
+          }
+        },
+        "subject": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "system",
+            "service",
+            "environment",
+            "deployment_id",
+            "git_sha"
+          ],
+          "properties": {
+            "system": {
+              "type": "string",
+              "minLength": 1
+            },
+            "service": {
+              "type": "string",
+              "minLength": 1
+            },
+            "environment": {
+              "enum": [
+                "development",
+                "staging",
+                "production"
+              ]
+            },
+            "deployment_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "git_sha": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{7,40}$"
+            }
+          }
+        },
+        "window": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "start",
+            "end"
+          ],
+          "properties": {
+            "start": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "end": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        },
+        "actuals": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "unit_economics"
+          ],
+          "properties": {
+            "cost": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "currency",
+                "total",
+                "per_unit",
+                "unit_count",
+                "evidence_ref"
+              ],
+              "properties": {
+                "currency": {
+                  "type": "string",
+                  "pattern": "^[A-Z]{3}$"
+                },
+                "total": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "per_unit": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "unit_count": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "evidence_ref": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "carbon": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kgco2e",
+                "per_unit_kgco2e",
+                "accounting_boundary"
+              ],
+              "properties": {
+                "kgco2e": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "per_unit_kgco2e": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "accounting_boundary": {
+                  "enum": [
+                    "operational",
+                    "market_based",
+                    "location_based",
+                    "scope_3_estimated"
+                  ]
+                }
+              }
+            },
+            "unit_economics": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "metric",
+                "value",
+                "direction"
+              ],
+              "properties": {
+                "metric": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "value": {
+                  "type": "number"
+                },
+                "direction": {
+                  "enum": [
+                    "increase",
+                    "decrease",
+                    "stabilize"
+                  ]
+                },
+                "business_metric": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "business_value_delta": {
+                  "type": "number"
+                }
+              }
+            },
+            "performance": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "p95_latency_ms": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "slo_status": {
+                  "enum": [
+                    "pass",
+                    "warn",
+                    "fail",
+                    "not_measured"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "evaluations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "cost_status",
+            "compliance_status",
+            "recommendation"
+          ],
+          "properties": {
+            "cost_status": {
+              "$ref": "#/$defs/status"
+            },
+            "carbon_status": {
+              "$ref": "#/$defs/status"
+            },
+            "compliance_status": {
+              "$ref": "#/$defs/status"
+            },
+            "performance_status": {
+              "$ref": "#/$defs/status"
+            },
+            "recommendation": {
+              "enum": [
+                "accept",
+                "review",
+                "rollback",
+                "throttle"
+              ]
+            }
+          }
+        },
+        "anomalies": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "admission": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "ready_for_unified_platform",
+            "ready_for_release_promotion",
+            "ready_for_terraform"
+          ],
+          "properties": {
+            "ready_for_unified_platform": {
+              "type": "boolean"
+            },
+            "ready_for_release_promotion": {
+              "type": "boolean"
+            },
+            "ready_for_terraform": {
+              "type": "boolean"
+            },
+            "runtime_validation_blockers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "cloudflare_pages_public_env_blockers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "artifact_registry_release_value_blockers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "terraform_value_blockers": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "generated_at",
+            "generator",
+            "evidence_refs"
+          ],
+          "properties": {
+            "generated_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "generator": {
+              "type": "string",
+              "minLength": 1
+            },
+            "evidence_refs": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "status": {
+      "enum": [
+        "pass",
+        "warn",
+        "fail",
+        "not_measured"
+      ]
+    }
+  }
+}
