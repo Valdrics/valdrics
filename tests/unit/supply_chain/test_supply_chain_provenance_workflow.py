@@ -62,6 +62,8 @@ def test_sbom_workflow_verifies_attestations_before_promotion() -> None:
 def test_sbom_workflow_push_paths_cover_frontend_dependency_surface() -> None:
     text = (REPO_ROOT / ".github/workflows/sbom.yml").read_text(encoding="utf-8")
 
+    assert "scripts/generate_provenance_manifest.py" in text
+    assert "scripts/verify_supply_chain_attestations.py" in text
     assert "dashboard/package.json" in text
     assert "dashboard/pnpm-lock.yaml" in text
     assert ".github/workflows/sbom.yml" in text
