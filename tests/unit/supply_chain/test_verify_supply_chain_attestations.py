@@ -36,8 +36,18 @@ def test_build_verify_command_includes_repo_workflow_and_json_output() -> None:
     assert "--repo" in cmd
     assert "acme/valdrics" in cmd
     assert "--signer-workflow" in cmd
-    assert ".github/workflows/sbom.yml" in cmd
+    assert "acme/valdrics/.github/workflows/sbom.yml" in cmd
     assert cmd[-2:] == ["--format", "json"]
+
+
+def test_build_verify_command_preserves_fully_qualified_signer_workflow() -> None:
+    cmd = build_verify_command(
+        artifact=Path("/tmp/sbom.json"),
+        repo="acme/valdrics",
+        signer_workflow="acme/valdrics/.github/workflows/sbom.yml",
+    )
+
+    assert "acme/valdrics/.github/workflows/sbom.yml" in cmd
 
 
 def test_verify_attestations_requires_repo(tmp_path: Path) -> None:

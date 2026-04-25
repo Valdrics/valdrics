@@ -168,6 +168,10 @@ def build_verify_command(
     repo: str,
     signer_workflow: str,
 ) -> list[str]:
+    normalized_signer_workflow = _normalize_signer_workflow(
+        repo=repo,
+        signer_workflow=signer_workflow,
+    )
     return [
         "gh",
         "attestation",
@@ -176,10 +180,23 @@ def build_verify_command(
         "--repo",
         repo,
         "--signer-workflow",
-        signer_workflow,
+        normalized_signer_workflow,
         "--format",
         "json",
     ]
+
+
+def _normalize_signer_workflow(*, repo: str, signer_workflow: str) -> str:
+    workflow = str(signer_workflow or "").strip()
+    if not workflow:
+        raise ValueError("`signer_workflow` must be non-empty.")
+    if workflow.startswith("https://github.com/"):
+        return workflow.removeprefix("https://github.com/").split("@", 1)[0]
+    if workflow.startswith("./"):
+        workflow = workflow[2:]
+    if workflow.startswith(".github/"):
+        return f"{repo}/{workflow}"
+    return workflow
 
 
 def _assert_verification_output(stdout: str, *, artifact: Path) -> None:
