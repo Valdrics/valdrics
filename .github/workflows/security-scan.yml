@@ -194,6 +194,7 @@ jobs:
           working_directory: ./terraform
           soft_fail: false
           additional_args: --minimum-severity HIGH
+          github_token: ${{ github.token }}
 
       - name: Terraform Lint (tflint)
         uses: terraform-linters/setup-tflint@4cb9feea73331a35b422df102992a03a44a3bb33 # v6.2.1
