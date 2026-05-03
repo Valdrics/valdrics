@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 from uuid import UUID
@@ -13,10 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attribution import CostAllocation
 from app.models.cloud import CloudAccount, CostRecord
-from app.models.llm import LLMUsage
 from app.modules.reporting.domain.allocation_ledger import (
     cost_allocation_rollup_subquery,
     unallocated_amount_expr,
+)
+from app.modules.reporting.domain.spend_ledger_ai import (
+    AI_LEDGER_PROVIDER,
+    ai_spend_entries,
+    ai_spend_summary,
 )
 
 SPEND_LEDGER_DECIMAL_PARSE_EXCEPTIONS: tuple[type[Exception], ...] = (
@@ -24,8 +28,6 @@ SPEND_LEDGER_DECIMAL_PARSE_EXCEPTIONS: tuple[type[Exception], ...] = (
     TypeError,
     ValueError,
 )
-AI_LEDGER_PROVIDER = "ai"
-
 
 def _decimal_string(value: Any, *, places: int = 8) -> str:
     if value is None:
@@ -66,13 +68,6 @@ def _allocation_key(allocation: CostAllocation) -> tuple[date, datetime, str, st
     )
 
 
-def _date_window_bounds(start_date: date, end_date: date) -> tuple[datetime, datetime]:
-    return (
-        datetime.combine(start_date, time.min, tzinfo=timezone.utc),
-        datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=timezone.utc),
-    )
-
-
 async def list_spend_ledger_entries(
     *,
     db: AsyncSession,
@@ -100,7 +95,7 @@ async def list_spend_ledger_entries(
         else _empty_summary()
     )
     ai_summary = (
-        await _ai_spend_summary(
+        await ai_spend_summary(
             db=db,
             tenant_id=tenant_id,
             start_date=start_date,
@@ -122,7 +117,7 @@ async def list_spend_ledger_entries(
             offset=offset,
         )
     elif include_ai_spend and not include_origin_spend:
-        entries = await _ai_spend_entries(
+        entries = await ai_spend_entries(
             db=db,
             tenant_id=tenant_id,
             start_date=start_date,
@@ -143,7 +138,7 @@ async def list_spend_ledger_entries(
                 limit=fetch_limit,
                 offset=0,
             ),
-            *await _ai_spend_entries(
+            *await ai_spend_entries(
                 db=db,
                 tenant_id=tenant_id,
                 start_date=start_date,
@@ -328,57 +323,6 @@ async def _origin_spend_entries(
     ]
 
 
-async def _ai_spend_summary(
-    *,
-    db: AsyncSession,
-    tenant_id: UUID,
-    start_date: date,
-    end_date: date,
-) -> dict[str, Decimal | int]:
-    window_start, window_end = _date_window_bounds(start_date, end_date)
-    stmt = select(
-        func.count(LLMUsage.id).label("record_count"),
-        func.coalesce(func.sum(LLMUsage.cost_usd), Decimal("0")).label("total_cost"),
-    ).where(
-        LLMUsage.tenant_id == tenant_id,
-        LLMUsage.created_at >= window_start,
-        LLMUsage.created_at < window_end,
-    )
-    row = (await db.execute(stmt)).one()
-    total_cost = Decimal(str(row.total_cost or 0))
-    return {
-        "record_count": int(row.record_count or 0),
-        "total_cost": total_cost,
-        "total_allocated": Decimal("0"),
-        "total_unallocated": total_cost,
-    }
-
-
-async def _ai_spend_entries(
-    *,
-    db: AsyncSession,
-    tenant_id: UUID,
-    start_date: date,
-    end_date: date,
-    limit: int,
-    offset: int,
-) -> list[dict[str, Any]]:
-    window_start, window_end = _date_window_bounds(start_date, end_date)
-    stmt = (
-        select(LLMUsage)
-        .where(
-            LLMUsage.tenant_id == tenant_id,
-            LLMUsage.created_at >= window_start,
-            LLMUsage.created_at < window_end,
-        )
-        .order_by(LLMUsage.created_at.asc(), LLMUsage.id.asc())
-        .limit(limit)
-        .offset(offset)
-    )
-    rows = (await db.execute(stmt)).scalars().all()
-    return [_serialize_llm_usage_row(row) for row in rows]
-
-
 def _ledger_entry_sort_key(entry: dict[str, Any]) -> tuple[str, str, str, str]:
     return (
         str(entry.get("recorded_at") or ""),
@@ -476,45 +420,6 @@ def _serialize_allocation(allocation: CostAllocation) -> dict[str, Any]:
         "percentage": _optional_decimal_string(allocation.percentage, places=2),
         "recorded_at": allocation.recorded_at.isoformat(),
         "timestamp": allocation.timestamp.isoformat(),
-    }
-
-
-def _serialize_llm_usage_row(usage: LLMUsage) -> dict[str, Any]:
-    provider = (usage.provider or "unknown").strip().lower() or "unknown"
-    request_type = usage.request_type or "inference"
-    created_at = usage.created_at
-    return {
-        "id": str(usage.id),
-        "recorded_at": created_at.date().isoformat(),
-        "timestamp": created_at.isoformat(),
-        "provider": AI_LEDGER_PROVIDER,
-        "account_id": f"ai:{provider}",
-        "account_name": f"AI Spend ({provider})",
-        "service": "LLM",
-        "region": None,
-        "usage_type": request_type,
-        "resource_id": usage.operation_id or None,
-        "usage_amount": _decimal_string(usage.total_tokens),
-        "usage_unit": "tokens",
-        "cost_usd": _decimal_string(usage.cost_usd),
-        "amount_raw": _decimal_string(usage.cost_usd),
-        "currency": "USD",
-        "cost_status": "FINAL",
-        "canonical_charge_category": "ai",
-        "canonical_charge_subcategory": "llm_inference",
-        "canonical_mapping_version": "valdrics-ai-spend-v1",
-        "allocation_status": "unallocated",
-        "allocated_amount_usd": _decimal_string(Decimal("0")),
-        "unallocated_amount_usd": _decimal_string(usage.cost_usd),
-        "allocation_count": 0,
-        "tags": {
-            "source": "llm_usage",
-            "llm_provider": provider,
-            "model": usage.model,
-            "is_byok": usage.is_byok,
-            "request_type": request_type,
-        },
-        "allocations": [],
     }
 
 

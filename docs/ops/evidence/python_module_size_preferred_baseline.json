@@ -47,11 +47,6 @@
       "preferred_max_lines": 500
     },
     {
-      "path": "app/modules/governance/domain/jobs/handlers/costs.py",
-      "lines": 518,
-      "preferred_max_lines": 500
-    },
-    {
       "path": "app/modules/governance/domain/jobs/processor.py",
       "lines": 602,
       "preferred_max_lines": 500

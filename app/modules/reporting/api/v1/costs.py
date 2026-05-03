@@ -68,6 +68,12 @@ from app.modules.reporting.api.v1.costs_models import (
     UnitEconomicsSettingsResponse,
     UnitEconomicsSettingsUpdate,
 )
+from app.modules.reporting.api.v1.costs_provider_filters import (
+    SUPPORTED_ANOMALY_SEVERITIES,
+    normalize_focus_export_provider_filter as _normalize_focus_export_provider_filter,
+    normalize_provider_filter as _normalize_provider_filter,
+    normalize_spend_ledger_provider_filter as _normalize_spend_ledger_provider_filter,
+)
 from app.modules.reporting.api.v1.costs_reconciliation_routes import (
     delete_provider_invoice_impl,
     export_focus_v13_costs_csv_impl,
@@ -104,13 +110,24 @@ from app.shared.llm.factory import LLMFactory
 from app.shared.db.session import get_db
 
 __all__ = [
+    "AcceptanceKpiEvidenceCaptureResponse",
+    "AcceptanceKpiEvidenceListResponse",
+    "CostAnomaly",
+    "CostAnomalyItem",
     "CostAggregator",
     "CostAnomalyDetectionService",
+    "FeatureFlag",
     "FinOpsAnalyzer",
     "LARGE_DATASET_THRESHOLD",
     "LLMFactory",
     "NotificationDispatcher",
+    "ProviderInvoiceStatusUpdateRequest",
+    "ProviderInvoiceUpsertRequest",
     "SymbolicForecaster",
+    "UnitEconomicsMetric",
+    "UnitEconomicsResponse",
+    "UnitEconomicsSettings",
+    "UnitEconomicsSettingsResponse",
     "UnitEconomicsSettingsUpdate",
     "analyze_costs_impl",
     "dispatch_cost_anomaly_alerts",
@@ -150,45 +167,6 @@ async def get_costs_root(
         current_user=current_user,
     )
 
-_PATCHABLE_TEST_SEAMS = (
-    NotificationDispatcher,
-    CostAggregator,
-    FeatureFlag,
-    CostAnomaly,
-    CostAnomalyDetectionService,
-    dispatch_cost_anomaly_alerts,
-    UnitEconomicsSettings,
-    FinOpsAnalyzer,
-    LLMFactory,
-    AcceptanceKpiEvidenceCaptureResponse,
-    AcceptanceKpiEvidenceListResponse,
-    AcceptanceKpiMetric,
-    AcceptanceKpisResponse,
-    CostAnomalyItem,
-    CostAnomalyResponse,
-    IngestionSLAResponse,
-    ProviderInvoiceStatusUpdateRequest,
-    ProviderInvoiceUpsertRequest,
-    ProviderRecencyResponse,
-    SpendLedgerResponse,
-    UnitEconomicsMetric,
-    UnitEconomicsResponse,
-    UnitEconomicsSettingsResponse,
-    UnitEconomicsSettingsUpdate,
-)
-SUPPORTED_PROVIDER_FILTERS = {
-    "aws",
-    "azure",
-    "gcp",
-    "saas",
-    "license",
-    "platform",
-    "hybrid",
-}
-SUPPORTED_SPEND_LEDGER_PROVIDER_FILTERS = {*SUPPORTED_PROVIDER_FILTERS, "ai"}
-SUPPORTED_FOCUS_EXPORT_PROVIDER_FILTERS = {*SUPPORTED_PROVIDER_FILTERS, "ai"}
-SUPPORTED_ANOMALY_SEVERITIES = {"low", "medium", "high", "critical"}
-
 def _require_tenant_id(user: CurrentUser) -> UUID:
     if user.tenant_id is None:
         raise HTTPException(status_code=403, detail="Tenant context is required")
@@ -197,48 +175,6 @@ def _require_tenant_id(user: CurrentUser) -> UUID:
 
 def _resolve_user_tier(user: CurrentUser) -> PricingTier:
     return normalize_tier(getattr(user, "tier", PricingTier.FREE))
-
-
-def _normalize_provider_filter(provider: str | None) -> str | None:
-    if provider is None:
-        return None
-    normalized = provider.strip().lower()
-    if not normalized:
-        return None
-    if normalized not in SUPPORTED_PROVIDER_FILTERS:
-        supported = ", ".join(sorted(SUPPORTED_PROVIDER_FILTERS))
-        raise HTTPException(status_code=400, detail=f"Unsupported provider '{provider}'. Use one of: {supported}")
-    return normalized
-
-
-def _normalize_spend_ledger_provider_filter(provider: str | None) -> str | None:
-    if provider is None:
-        return None
-    normalized = provider.strip().lower()
-    if not normalized:
-        return None
-    if normalized not in SUPPORTED_SPEND_LEDGER_PROVIDER_FILTERS:
-        supported = ", ".join(sorted(SUPPORTED_SPEND_LEDGER_PROVIDER_FILTERS))
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported provider '{provider}'. Use one of: {supported}",
-        )
-    return normalized
-
-
-def _normalize_focus_export_provider_filter(provider: str | None) -> str | None:
-    if provider is None:
-        return None
-    normalized = provider.strip().lower()
-    if not normalized:
-        return None
-    if normalized not in SUPPORTED_FOCUS_EXPORT_PROVIDER_FILTERS:
-        supported = ", ".join(sorted(SUPPORTED_FOCUS_EXPORT_PROVIDER_FILTERS))
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported provider '{provider}'. Use one of: {supported}",
-        )
-    return normalized
 
 
 _sanitize_csv_cell = sanitize_csv_cell

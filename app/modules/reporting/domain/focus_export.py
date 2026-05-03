@@ -57,20 +57,7 @@ FOCUS_EXPORT_STREAM_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     ValueError,
     AttributeError,
 )
-__all__ = (
-    "FOCUS_V13_CORE_COLUMNS",
-    "FocusV13ExportService",
-    "_format_cost",
-    "_format_currency",
-    "_format_optional_decimal",
-    "_humanize_vendor",
-    "_next_month_start",
-    "_service_provider_display",
-    "_focus_charge_category",
-    "_focus_charge_frequency",
-    "_focus_service_category",
-    "_tags_json",
-)
+__all__ = ("FOCUS_V13_CORE_COLUMNS", "FocusV13ExportService", "_format_cost", "_format_currency", "_format_optional_decimal", "_humanize_vendor", "_next_month_start", "_service_provider_display", "_focus_charge_category", "_focus_charge_frequency", "_focus_service_category", "_tags_json")
 
 
 class FocusV13ExportService:
@@ -276,18 +263,12 @@ class FocusV13ExportService:
         await self._enrich_cloud_accounts(contexts, ids_by_provider.get("aws", []))
         await self._enrich_cloud_accounts(contexts, ids_by_provider.get("azure", []))
         await self._enrich_cloud_accounts(contexts, ids_by_provider.get("gcp", []))
-        await self._enrich_cloud_plus_accounts(
-            contexts, "saas", ids_by_provider.get("saas", [])
-        )
-        await self._enrich_cloud_plus_accounts(
-            contexts, "license", ids_by_provider.get("license", [])
-        )
-        await self._enrich_cloud_plus_accounts(
-            contexts, "platform", ids_by_provider.get("platform", [])
-        )
-        await self._enrich_cloud_plus_accounts(
-            contexts, "hybrid", ids_by_provider.get("hybrid", [])
-        )
+        for cloud_plus_provider in ("saas", "license", "platform", "hybrid"):
+            await self._enrich_cloud_plus_accounts(
+                contexts,
+                cloud_plus_provider,
+                ids_by_provider.get(cloud_plus_provider, []),
+            )
 
         return contexts
 
