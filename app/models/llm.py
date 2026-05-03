@@ -23,6 +23,7 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     func,
+    Index,
     Uuid as PG_UUID,
 )
 
@@ -119,6 +120,10 @@ class LLMUsage(Base):
     def __repr__(self) -> str:
         """String representation for debugging."""
         return f"<LLMUsage {self.model} ${self.cost_usd:.6f}>"
+
+    __table_args__ = (
+        Index("ix_llm_usage_tenant_created_id", "tenant_id", "created_at", "id"),
+    )
 
 
 class LLMBudget(Base):

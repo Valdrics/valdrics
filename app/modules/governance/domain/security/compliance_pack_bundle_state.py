@@ -2,6 +2,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Awaitable, Callable
 
 from app.modules.governance.domain.security.compliance_pack_support import (
+    SUPPORTED_FOCUS_EXPORT_PROVIDERS,
     normalize_optional_provider,
     resolve_window,
 )
@@ -164,6 +165,7 @@ def resolve_optional_export_scopes(
     normalized_focus_provider = normalize_optional_provider(
         provider=focus_provider,
         provider_name="focus_provider",
+        supported_providers=SUPPORTED_FOCUS_EXPORT_PROVIDERS,
     )
     focus_export_info["provider"] = normalized_focus_provider
 

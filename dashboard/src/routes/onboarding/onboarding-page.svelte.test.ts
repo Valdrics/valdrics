@@ -100,6 +100,7 @@ function renderPage(tier: string = 'pro') {
 }
 
 const ASYNC_RENDER_TIMEOUT = 5000;
+const COLD_LAZY_ONBOARDING_TEST_TIMEOUT = 10000;
 
 async function enterSaasStep(container: HTMLElement) {
 	await fireEvent.click(
@@ -136,21 +137,25 @@ describe('onboarding cloud+ flow', () => {
 		cleanup();
 	});
 
-	it('renders native connector metadata and required field UI', async () => {
-		renderPage();
-		await enterSaasStep(document.body);
+	it(
+		'renders native connector metadata and required field UI',
+		async () => {
+			renderPage();
+			await enterSaasStep(document.body);
 
-		expect(screen.getByText(/Native Connectors/i)).toBeTruthy();
-		expect(screen.getByRole('button', { name: 'Stripe' })).toBeTruthy();
-		expect(screen.getByRole('button', { name: 'Salesforce' })).toBeTruthy();
+			expect(screen.getByText(/Native Connectors/i)).toBeTruthy();
+			expect(screen.getByRole('button', { name: 'Stripe' })).toBeTruthy();
+			expect(screen.getByRole('button', { name: 'Salesforce' })).toBeTruthy();
 
-		await fireEvent.click(screen.getByRole('button', { name: 'Salesforce' }));
-		await screen.findByLabelText('connector_config.instance_url');
-		await waitFor(() => {
-			const authMethod = screen.getByLabelText('Auth Method') as HTMLSelectElement;
-			expect(authMethod.value).toBe('oauth');
-		});
-	});
+			await fireEvent.click(screen.getByRole('button', { name: 'Salesforce' }));
+			await screen.findByLabelText('connector_config.instance_url');
+			await waitFor(() => {
+				const authMethod = screen.getByLabelText('Auth Method') as HTMLSelectElement;
+				expect(authMethod.value).toBe('oauth');
+			});
+		},
+		COLD_LAZY_ONBOARDING_TEST_TIMEOUT
+	);
 
 	it('sends connector_config in create payload for cloud+ onboarding', async () => {
 		const { container } = renderPage();

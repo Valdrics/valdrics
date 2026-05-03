@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
-from decimal import Decimal, InvalidOperation
+from datetime import date
+from decimal import Decimal
 from typing import Any, AsyncIterator
 from uuid import UUID
 
@@ -12,12 +10,14 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.attribution import CostAllocation
 from app.models.aws_connection import AWSConnection
 from app.models.azure_connection import AzureConnection
 from app.models.cloud import CloudAccount, CostRecord
 from app.models.gcp_connection import GCPConnection
 from app.models.hybrid_connection import HybridConnection
 from app.models.license_connection import LicenseConnection
+from app.models.llm import LLMUsage
 from app.models.platform_connection import PlatformConnection
 from app.models.saas_connection import SaaSConnection
 from app.modules.reporting.domain.focus_export_helpers import (
@@ -25,9 +25,26 @@ from app.modules.reporting.domain.focus_export_helpers import (
     _focus_charge_category,
     _focus_charge_frequency,
     _focus_service_category,
-    _focus_service_subcategory,
     _humanize_vendor,
     _service_provider_display,
+)
+from app.modules.reporting.domain.focus_export_rows import (
+    AI_FOCUS_PROVIDER,
+    FOCUS_V13_CORE_COLUMNS,
+    FocusAccountContext,
+    FocusAllocation,
+    FocusAllocationKey,
+    FocusSyntheticAllocation,
+    _allocation_bucket,
+    _date_window_bounds,
+    _format_cost,
+    _format_currency,
+    _format_optional_decimal,
+    _next_month_start,
+    _tags_json,
+    _to_decimal,
+    llm_usage_to_focus,
+    row_to_focus,
 )
 
 logger = structlog.get_logger()
@@ -40,113 +57,7 @@ FOCUS_EXPORT_STREAM_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
     ValueError,
     AttributeError,
 )
-FOCUS_EXPORT_COST_PARSE_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
-    InvalidOperation,
-    TypeError,
-    ValueError,
-)
-FOCUS_EXPORT_TAG_SERIALIZATION_RECOVERABLE_EXCEPTIONS: tuple[type[Exception], ...] = (
-    TypeError,
-    ValueError,
-)
-
-# FOCUS 1.3 core export: subset that is both high-value and fully derivable from our normalized ledger
-# without pretending to include SKU/unit-price fields we do not store yet.
-FOCUS_V13_CORE_COLUMNS: list[str] = [
-    "BilledCost",
-    "BillingAccountId",
-    "BillingAccountName",
-    "BillingCurrency",
-    "BillingPeriodStart",
-    "BillingPeriodEnd",
-    "ChargeCategory",
-    "ChargeClass",
-    "ChargeDescription",
-    "ChargeFrequency",
-    "ChargePeriodStart",
-    "ChargePeriodEnd",
-    "ContractedCost",
-    "EffectiveCost",
-    "InvoiceIssuerName",
-    "ListCost",
-    "ProviderName",
-    "PublisherName",
-    "RegionId",
-    "RegionName",
-    "ServiceProviderName",
-    "ServiceCategory",
-    "ServiceSubcategory",
-    "ServiceName",
-    "Tags",
-]
-
-__all__ = (
-    "FOCUS_V13_CORE_COLUMNS",
-    "FocusV13ExportService",
-    "_humanize_vendor",
-    "_service_provider_display",
-    "_focus_charge_category",
-)
-
-
-@dataclass(frozen=True)
-class FocusAccountContext:
-    provider_key: str
-    billing_account_id: str
-    billing_account_name: str
-    provider_name: str
-    publisher_name: str
-    service_provider_name: str
-    invoice_issuer_name: str
-
-
-def _as_utc(dt: datetime) -> datetime:
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
-
-
-def _focus_datetime(dt: datetime) -> str:
-    # RFC 3339 / ISO 8601 with Z suffix (timezone-agnostic and stable in CSV).
-    return _as_utc(dt).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _month_start(day: date) -> datetime:
-    return datetime(day.year, day.month, 1, tzinfo=timezone.utc)
-
-
-def _next_month_start(day: date) -> datetime:
-    if day.month == 12:
-        return datetime(day.year + 1, 1, 1, tzinfo=timezone.utc)
-    return datetime(day.year, day.month + 1, 1, tzinfo=timezone.utc)
-
-
-def _format_cost(value: Any) -> str:
-    if value is None:
-        return "0"
-    try:
-        amount = value if isinstance(value, Decimal) else Decimal(str(value))
-    except FOCUS_EXPORT_COST_PARSE_RECOVERABLE_EXCEPTIONS as exc:
-        raise ValueError("FOCUS export cost must be numeric") from exc
-    if not amount.is_finite():
-        raise ValueError("FOCUS export cost must be finite")
-    return format(amount, "f")
-
-
-def _format_currency(value: Any) -> str:
-    if not isinstance(value, str) or not value.strip():
-        return "USD"
-    return value.strip().upper()
-
-
-def _tags_json(value: Any) -> str:
-    if not isinstance(value, dict):
-        return ""
-    # Stable JSON for diffs and deterministic exports.
-    try:
-        return json.dumps(value, separators=(",", ":"), sort_keys=True)
-    except FOCUS_EXPORT_TAG_SERIALIZATION_RECOVERABLE_EXCEPTIONS:
-        return ""
+__all__ = ("FOCUS_V13_CORE_COLUMNS", "FocusV13ExportService", "_format_cost", "_format_currency", "_format_optional_decimal", "_humanize_vendor", "_next_month_start", "_service_provider_display", "_focus_charge_category", "_focus_charge_frequency", "_focus_service_category", "_tags_json")
 
 
 class FocusV13ExportService:
@@ -161,6 +72,34 @@ class FocusV13ExportService:
         provider: str | None = None,
         include_preliminary: bool = False,
     ) -> AsyncIterator[dict[str, str]]:
+        include_origin_spend = provider != AI_FOCUS_PROVIDER
+        include_ai_spend = provider in (None, AI_FOCUS_PROVIDER)
+
+        if include_origin_spend:
+            async for row in self._export_origin_rows(
+                tenant_id=tenant_id,
+                start_date=start_date,
+                end_date=end_date,
+                provider=provider,
+                include_preliminary=include_preliminary,
+            ):
+                yield row
+        if include_ai_spend:
+            async for row in self._export_ai_rows(
+                tenant_id=tenant_id,
+                start_date=start_date,
+                end_date=end_date,
+            ):
+                yield row
+
+    async def _export_origin_rows(
+        self,
+        tenant_id: UUID,
+        start_date: date,
+        end_date: date,
+        provider: str | None,
+        include_preliminary: bool,
+    ) -> AsyncIterator[dict[str, str]]:
         contexts = await self._load_account_contexts(
             tenant_id=tenant_id,
             start_date=start_date,
@@ -168,7 +107,6 @@ class FocusV13ExportService:
             provider=provider,
             include_preliminary=include_preliminary,
         )
-
         filters: list[Any] = [
             CostRecord.tenant_id == tenant_id,
             CostRecord.recorded_at >= start_date,
@@ -180,26 +118,104 @@ class FocusV13ExportService:
             filters.append(CloudAccount.provider == provider)
 
         stmt = (
-            select(CostRecord, CloudAccount)
+            select(CostRecord, CloudAccount, CostAllocation)
             .join(CloudAccount, CostRecord.account_id == CloudAccount.id)
+            .outerjoin(
+                CostAllocation,
+                (CostAllocation.cost_record_id == CostRecord.id)
+                & (CostAllocation.recorded_at == CostRecord.recorded_at),
+            )
             .where(*filters)
-            .order_by(CostRecord.recorded_at.asc(), CostRecord.timestamp.asc())
-            .execution_options(stream_results=True)
+            .order_by(
+                CostRecord.recorded_at.asc(),
+                CostRecord.timestamp.asc(),
+                CostRecord.id.asc(),
+                CostAllocation.timestamp.asc(),
+                CostAllocation.id.asc(),
+            )
+            .execution_options(yield_per=500)
         )
 
         # Use streaming where supported; SQLite in tests still works with execute().
         try:
             result = await self.db.stream(stmt)
-            async for row in result:
-                cost_record, account = row
-                yield self._row_to_focus(cost_record, account, contexts)
+            current_key: FocusAllocationKey | None = None
+            current_record: CostRecord | None = None
+            current_account: CloudAccount | None = None
+            current_allocations: list[CostAllocation] = []
+            async for cost_record, account, allocation in result:
+                record_key = self._allocation_key_for_record(cost_record)
+                if current_key is not None and record_key != current_key:
+                    if current_record is not None and current_account is not None:
+                        for focus_row in self._rows_for_cost_record(
+                            current_record,
+                            current_account,
+                            contexts,
+                            {current_key: current_allocations},
+                        ):
+                            yield focus_row
+                    current_allocations = []
+                current_key = record_key
+                current_record = cost_record
+                current_account = account
+                if allocation is not None:
+                    current_allocations.append(allocation)
+
+            if (
+                current_key is not None
+                and current_record is not None
+                and current_account is not None
+            ):
+                for focus_row in self._rows_for_cost_record(
+                    current_record,
+                    current_account,
+                    contexts,
+                    {current_key: current_allocations},
+                ):
+                    yield focus_row
             return
         except FOCUS_EXPORT_STREAM_RECOVERABLE_EXCEPTIONS:
             logger.debug("focus_export_stream_fallback_to_execute")
 
         sync_result = await self.db.execute(stmt)
-        for cost_record, account in sync_result:
-            yield self._row_to_focus(cost_record, account, contexts)
+        for cost_record, account, allocations in self._group_origin_rows(sync_result):
+            record_key = self._allocation_key_for_record(cost_record)
+            for focus_row in self._rows_for_cost_record(
+                cost_record,
+                account,
+                contexts,
+                {record_key: allocations},
+            ):
+                yield focus_row
+
+    async def _export_ai_rows(
+        self,
+        tenant_id: UUID,
+        start_date: date,
+        end_date: date,
+    ) -> AsyncIterator[dict[str, str]]:
+        window_start, window_end = _date_window_bounds(start_date, end_date)
+        stmt = (
+            select(LLMUsage)
+            .where(
+                LLMUsage.tenant_id == tenant_id,
+                LLMUsage.created_at >= window_start,
+                LLMUsage.created_at < window_end,
+            )
+            .order_by(LLMUsage.created_at.asc(), LLMUsage.id.asc())
+            .execution_options(stream_results=True)
+        )
+        try:
+            result = await self.db.stream(stmt)
+            async for usage in result.scalars():
+                yield self._llm_usage_to_focus(usage)
+            return
+        except FOCUS_EXPORT_STREAM_RECOVERABLE_EXCEPTIONS:
+            logger.debug("focus_export_ai_stream_fallback_to_execute")
+
+        rows = (await self.db.execute(stmt)).scalars().all()
+        for usage in rows:
+            yield self._llm_usage_to_focus(usage)
 
     async def _load_account_contexts(
         self,
@@ -247,20 +263,109 @@ class FocusV13ExportService:
         await self._enrich_cloud_accounts(contexts, ids_by_provider.get("aws", []))
         await self._enrich_cloud_accounts(contexts, ids_by_provider.get("azure", []))
         await self._enrich_cloud_accounts(contexts, ids_by_provider.get("gcp", []))
-        await self._enrich_cloud_plus_accounts(
-            contexts, "saas", ids_by_provider.get("saas", [])
-        )
-        await self._enrich_cloud_plus_accounts(
-            contexts, "license", ids_by_provider.get("license", [])
-        )
-        await self._enrich_cloud_plus_accounts(
-            contexts, "platform", ids_by_provider.get("platform", [])
-        )
-        await self._enrich_cloud_plus_accounts(
-            contexts, "hybrid", ids_by_provider.get("hybrid", [])
-        )
+        for cloud_plus_provider in ("saas", "license", "platform", "hybrid"):
+            await self._enrich_cloud_plus_accounts(
+                contexts,
+                cloud_plus_provider,
+                ids_by_provider.get(cloud_plus_provider, []),
+            )
 
         return contexts
+
+    def _rows_for_cost_record(
+        self,
+        cost_record: CostRecord,
+        account: CloudAccount,
+        contexts: dict[UUID, FocusAccountContext],
+        allocations_by_record_key: dict[FocusAllocationKey, list[CostAllocation]],
+    ) -> list[dict[str, str]]:
+        allocations = allocations_by_record_key.get(
+            self._allocation_key_for_record(cost_record), []
+        )
+        if not allocations:
+            return [self._row_to_focus(cost_record, account, contexts)]
+
+        # A single synthetic Unallocated row from the attribution engine is not
+        # a split allocation, so keep the export at the origin-charge level.
+        if (
+            len(allocations) == 1
+            and allocations[0].rule_id is None
+            and _allocation_bucket(allocations[0].allocated_to).lower()
+            == "unallocated"
+        ):
+            return [self._row_to_focus(cost_record, account, contexts)]
+
+        allocations_for_export: list[FocusAllocation] = [*allocations]
+        origin_cost = _to_decimal(getattr(cost_record, "cost_usd", None), field_name="origin cost")
+        allocated_cost = sum(
+            (
+                _to_decimal(allocation.amount, field_name="allocation amount")
+                for allocation in allocations
+            ),
+            Decimal("0"),
+        )
+        unallocated_cost = origin_cost - allocated_cost
+        if unallocated_cost > Decimal("0"):
+            percentage = (
+                Decimal("0")
+                if origin_cost == Decimal("0")
+                else (unallocated_cost / origin_cost) * Decimal("100")
+            )
+            allocations_for_export.append(
+                FocusSyntheticAllocation(
+                    id=(
+                        f"{getattr(cost_record, 'id', 'unknown')}:"
+                        f"{getattr(cost_record, 'recorded_at', 'unknown')}:"
+                        "unallocated-remainder"
+                    ),
+                    rule_id=None,
+                    allocated_to="Unallocated",
+                    amount=unallocated_cost,
+                    percentage=percentage,
+                )
+            )
+
+        return [
+            self._row_to_focus(cost_record, account, contexts, allocation=allocation)
+            for allocation in allocations_for_export
+        ]
+
+    def _allocation_key_for_record(self, cost_record: CostRecord) -> FocusAllocationKey:
+        record_id = getattr(cost_record, "id", None)
+        recorded_at = getattr(cost_record, "recorded_at", None)
+        if not isinstance(record_id, UUID) or not isinstance(recorded_at, date):
+            raise ValueError("FOCUS export cost records require id and recorded_at")
+        return (record_id, recorded_at)
+
+    def _group_origin_rows(
+        self,
+        rows: Any,
+    ) -> list[tuple[CostRecord, CloudAccount, list[CostAllocation]]]:
+        grouped: list[tuple[CostRecord, CloudAccount, list[CostAllocation]]] = []
+        current_key: FocusAllocationKey | None = None
+        current_record: CostRecord | None = None
+        current_account: CloudAccount | None = None
+        current_allocations: list[CostAllocation] = []
+
+        for cost_record, account, allocation in rows:
+            record_key = self._allocation_key_for_record(cost_record)
+            if current_key is not None and record_key != current_key:
+                if current_record is not None and current_account is not None:
+                    grouped.append((current_record, current_account, current_allocations))
+                current_allocations = []
+            current_key = record_key
+            current_record = cost_record
+            current_account = account
+            if allocation is not None:
+                current_allocations.append(allocation)
+
+        if (
+            current_key is not None
+            and current_record is not None
+            and current_account is not None
+        ):
+            grouped.append((current_record, current_account, current_allocations))
+        return grouped
 
     async def _enrich_cloud_accounts(
         self,
@@ -383,83 +488,9 @@ class FocusV13ExportService:
         cost_record: CostRecord,
         account: CloudAccount,
         contexts: dict[UUID, FocusAccountContext],
+        allocation: FocusAllocation | None = None,
     ) -> dict[str, str]:
-        recorded_day = getattr(cost_record, "recorded_at", None) or date.today()
-        billing_start = _month_start(recorded_day)
-        billing_end = _next_month_start(recorded_day)
+        return row_to_focus(cost_record, account, contexts, allocation=allocation)
 
-        provider_key = str(getattr(account, "provider", "") or "").strip().lower()
-        charge_start: datetime
-        charge_end: datetime
-        ts = getattr(cost_record, "timestamp", None)
-        if isinstance(ts, datetime):
-            ts = _as_utc(ts)
-        if provider_key in {"aws", "azure", "gcp"} and isinstance(ts, datetime):
-            charge_start = ts
-            charge_end = ts + timedelta(hours=1)
-        else:
-            charge_start = datetime.combine(recorded_day, time.min, tzinfo=timezone.utc)
-            charge_end = charge_start + timedelta(days=1)
-
-        service = getattr(cost_record, "service", None)
-        usage_type = getattr(cost_record, "usage_type", None)
-        charge_category = _focus_charge_category(service, usage_type)
-        service_category = _focus_service_category(
-            getattr(cost_record, "canonical_charge_category", None)
-        )
-        service_subcategory = _focus_service_subcategory(service_category)
-
-        raw_tags = getattr(cost_record, "tags", None)
-        if not isinstance(raw_tags, dict) or not raw_tags:
-            meta = getattr(cost_record, "ingestion_metadata", None)
-            if isinstance(meta, dict):
-                raw_tags = meta.get("tags")
-
-        ctx = contexts.get(account.id)
-        if ctx is None:
-            display = _service_provider_display(provider_key)
-            ctx = FocusAccountContext(
-                provider_key=provider_key,
-                billing_account_id=str(account.id),
-                billing_account_name=str(getattr(account, "name", "") or ""),
-                provider_name=display,
-                publisher_name=display,
-                service_provider_name=display,
-                invoice_issuer_name=display,
-            )
-
-        region_value = str(getattr(cost_record, "region", "") or "").strip()
-        cost_value = _format_cost(getattr(cost_record, "cost_usd", None))
-        # Our ledger stores `cost_usd` in USD. For exports, keep currency aligned with the cost value.
-        currency_value = "USD"
-
-        focus_row = {
-            "BilledCost": cost_value,
-            "BillingAccountId": ctx.billing_account_id,
-            "BillingAccountName": ctx.billing_account_name,
-            "BillingCurrency": currency_value,
-            "BillingPeriodStart": _focus_datetime(billing_start),
-            "BillingPeriodEnd": _focus_datetime(billing_end),
-            "ChargeCategory": charge_category,
-            "ChargeClass": "Regular",
-            "ChargeDescription": str(usage_type or service or "").strip(),
-            "ChargeFrequency": _focus_charge_frequency(charge_category),
-            "ChargePeriodStart": _focus_datetime(charge_start),
-            "ChargePeriodEnd": _focus_datetime(charge_end),
-            "ContractedCost": cost_value,
-            "EffectiveCost": cost_value,
-            "InvoiceIssuerName": ctx.invoice_issuer_name,
-            "ListCost": cost_value,
-            "ProviderName": ctx.provider_name,
-            "PublisherName": ctx.publisher_name,
-            "RegionId": region_value,
-            "RegionName": region_value,
-            "ServiceProviderName": ctx.service_provider_name,
-            "ServiceCategory": service_category,
-            "ServiceSubcategory": service_subcategory,
-            "ServiceName": str(service or "Unknown").strip() or "Unknown",
-            "Tags": _tags_json(raw_tags),
-        }
-
-        # Ensure stable presence for all expected columns (avoid accidental KeyError).
-        return {col: str(focus_row.get(col, "")) for col in FOCUS_V13_CORE_COLUMNS}
+    def _llm_usage_to_focus(self, usage: LLMUsage) -> dict[str, str]:
+        return llm_usage_to_focus(usage)

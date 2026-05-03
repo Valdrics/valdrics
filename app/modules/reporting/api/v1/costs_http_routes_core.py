@@ -6,7 +6,11 @@ from typing import Any, Optional, cast
 from fastapi import APIRouter, Depends, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.reporting.api.v1.costs_models import CostAnomalyResponse, IngestionSLAResponse
+from app.modules.reporting.api.v1.costs_models import (
+    CostAnomalyResponse,
+    IngestionSLAResponse,
+    SpendLedgerResponse,
+)
 from app.shared.core.auth import (
     CurrentUser,
     get_current_user_with_db_context,
@@ -52,7 +56,7 @@ async def get_cost_breakdown(
     end_date: date = Query(...),
     provider: Optional[str] = None,
     limit: int = Query(default=100, ge=1, le=1000),
-    offset: int = Query(default=0, ge=0),
+    offset: int = Query(default=0, ge=0, le=10000),
     db: AsyncSession = Depends(get_db),
     current_user: CurrentUser = Depends(get_current_user_with_db_context),
 ) -> Any:
@@ -108,6 +112,35 @@ async def get_cost_attribution_coverage(
         end_date=end_date,
         db=db,
         current_user=current_user,
+        ),
+    )
+
+
+@router.get("/ledger", response_model=SpendLedgerResponse)
+async def get_spend_ledger(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    provider: Optional[str] = Query(default=None),
+    include_preliminary: bool = Query(default=False),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0, le=10000),
+    db: AsyncSession = Depends(get_db),
+    current_user: CurrentUser = Depends(
+        requires_feature(FeatureFlag.COMPLIANCE_EXPORTS, required_role="admin")
+    ),
+) -> SpendLedgerResponse:
+    costs_api = _costs_api()
+    return cast(
+        SpendLedgerResponse,
+        await costs_api.get_spend_ledger(
+            start_date=start_date,
+            end_date=end_date,
+            provider=provider,
+            include_preliminary=include_preliminary,
+            limit=limit,
+            offset=offset,
+            db=db,
+            current_user=current_user,
         ),
     )
 

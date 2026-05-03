@@ -139,6 +139,58 @@ class CostAnomalyResponse(BaseModel):
     anomalies: list[CostAnomalyItem]
 
 
+class SpendLedgerAllocation(BaseModel):
+    id: str
+    rule_id: Optional[str]
+    allocated_to: str
+    amount_usd: str
+    percentage: Optional[str]
+    recorded_at: str
+    timestamp: str
+
+
+class SpendLedgerEntry(BaseModel):
+    id: str
+    recorded_at: str
+    timestamp: Optional[str]
+    provider: str
+    account_id: str
+    account_name: str
+    service: str
+    region: Optional[str]
+    usage_type: Optional[str]
+    resource_id: Optional[str]
+    usage_amount: Optional[str]
+    usage_unit: Optional[str]
+    cost_usd: str
+    amount_raw: Optional[str]
+    currency: str
+    cost_status: str
+    canonical_charge_category: str
+    canonical_charge_subcategory: Optional[str]
+    canonical_mapping_version: str
+    allocation_status: str
+    allocated_amount_usd: str
+    unallocated_amount_usd: str
+    allocation_count: int
+    tags: Dict[str, Any] = Field(default_factory=dict)
+    allocations: list[SpendLedgerAllocation] = Field(default_factory=list)
+
+
+class SpendLedgerResponse(BaseModel):
+    start_date: str
+    end_date: str
+    provider: Optional[str]
+    include_preliminary: bool
+    limit: int
+    offset: int
+    record_count: int
+    total_cost_usd: str
+    total_allocated_usd: str
+    total_unallocated_usd: str
+    entries: list[SpendLedgerEntry]
+
+
 class ProviderInvoiceUpsertRequest(BaseModel):
     provider: str
     start_date: date

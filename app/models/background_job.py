@@ -56,7 +56,7 @@ class JobType(str, Enum):
     RECURRING_BILLING = "recurring_billing"
     ZOMBIE_ANALYSIS = "zombie_analysis"
     COST_FORECAST = "cost_forecast"
-    COST_EXPORT = "cost_export"  # Phase 4.2: Async export for >10M records
+    COST_EXPORT = "cost_export"  # Bounded async FOCUS export artifact
     COST_AGGREGATION = (
         "cost_aggregation"  # Phase 4.2: Async aggregation for large datasets
     )

@@ -22,6 +22,19 @@ describe('buildCompliancePackPath', () => {
 		);
 	});
 
+	it('allows AI for the bundled FOCUS export filter', () => {
+		expect(
+			buildCompliancePackPath({
+				includeFocusExport: true,
+				focusProvider: 'ai',
+				focusStartDate: '2026-01-01',
+				focusEndDate: '2026-01-31'
+			})
+		).toBe(
+			'/audit/compliance-pack?include_focus_export=true&focus_provider=ai&focus_start_date=2026-01-01&focus_end_date=2026-01-31'
+		);
+	});
+
 	it('includes savings + close add-ons when enabled', () => {
 		expect(
 			buildCompliancePackPath({

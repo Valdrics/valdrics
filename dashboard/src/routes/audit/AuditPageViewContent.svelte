@@ -2,6 +2,7 @@
 	import AuthGate from '$lib/components/AuthGate.svelte';
 	import UpgradeNotice from '$lib/components/UpgradeNotice.svelte';
 	import type { AuditDetail, AuditLog } from './auditTypes';
+	import { FOCUS_EXPORT_PROVIDER_OPTIONS } from './auditExportContracts';
 	import AuditDetailModal from './AuditDetailModal.svelte';
 	import AuditEventsTable from './AuditEventsTable.svelte';
 
@@ -196,14 +197,9 @@
 							>Provider</label
 						>
 						<select id="focus-provider" bind:value={focusProvider} class="select-input">
-							<option value="">All providers</option>
-							<option value="aws">AWS</option>
-							<option value="azure">Azure</option>
-							<option value="gcp">GCP</option>
-							<option value="saas">SaaS</option>
-							<option value="license">License</option>
-							<option value="platform">Platform</option>
-							<option value="hybrid">Hybrid</option>
+							{#each FOCUS_EXPORT_PROVIDER_OPTIONS as option (option.value)}
+								<option value={option.value}>{option.label}</option>
+							{/each}
 						</select>
 					</div>
 					<label class="flex items-center gap-2 text-xs text-ink-400">
@@ -227,7 +223,8 @@
 				<div class="mt-5 border-t border-ink-700/40 pt-4">
 					<h3 class="text-sm font-semibold mb-2">Compliance Pack Add-ons</h3>
 					<p class="text-ink-400 text-xs mb-3">
-						Optional exports included inside the ZIP. Uses the same date/provider filters above.
+						Optional exports included inside the ZIP. FOCUS uses the selected provider; Savings
+						Proof and Close Package ignore the AI filter until AI close evidence is available.
 					</p>
 					<div class="flex flex-wrap gap-4 items-center">
 						<label class="flex items-center gap-2 text-xs text-ink-300">

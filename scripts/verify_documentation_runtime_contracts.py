@@ -116,20 +116,6 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
         forbidden_phrases=("future scale path",),
     ),
     DocumentationContract(
-        path="docs/roadmap.md",
-        required_phrases=(
-            "redirect only",
-            "phase, and ship-gate source of",
-            "reports/roadmap/",
-        ),
-        forbidden_phrases=(
-            "Latest Sprint Shipped",
-            "Sprint Status (Current)",
-            "Current Focus",
-            "active planning document",
-        ),
-    ),
-    DocumentationContract(
         path="docs/ops/README.md",
         required_phrases=(
             "active operational material only",

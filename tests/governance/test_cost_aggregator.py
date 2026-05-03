@@ -1,9 +1,10 @@
 import pytest
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.attribution import CostAllocation
 from app.models.cloud import CostRecord, CloudAccount
 from app.modules.reporting.domain.aggregator import CostAggregator
 
@@ -145,3 +146,71 @@ async def test_cost_aggregator_tenant_isolation(db: AsyncSession):
         db, tenant_b, date(2026, 1, 1), date(2026, 1, 1), provider="aws"
     )
     assert breakdown_b["total_cost"] == 20.0
+
+
+@pytest.mark.asyncio
+async def test_governance_report_uses_cost_allocations_as_canonical_source(
+    db: AsyncSession,
+) -> None:
+    from app.models.tenant import Tenant
+
+    tenant_id = uuid4()
+    db.add(Tenant(id=tenant_id, name="Canonical Allocation Tenant", plan="enterprise"))
+    await db.flush()
+
+    account = CloudAccount(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        provider="aws",
+        name="Production AWS",
+        is_active=True,
+    )
+    db.add(account)
+    await db.flush()
+
+    allocated_record = CostRecord(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        account_id=account.id,
+        service="EC2",
+        cost_usd=Decimal("100.00"),
+        recorded_at=date(2026, 1, 1),
+        allocated_to=None,
+    )
+    unallocated_record = CostRecord(
+        id=uuid4(),
+        tenant_id=tenant_id,
+        account_id=account.id,
+        service="S3",
+        cost_usd=Decimal("50.00"),
+        recorded_at=date(2026, 1, 1),
+        allocated_to="Team-That-Should-Be-Ignored",
+    )
+    db.add_all([allocated_record, unallocated_record])
+    await db.flush()
+
+    db.add(
+        CostAllocation(
+            cost_record_id=allocated_record.id,
+            recorded_at=allocated_record.recorded_at,
+            rule_id=None,
+            allocated_to="Platform",
+            amount=Decimal("100.00"),
+            percentage=Decimal("100.00"),
+            timestamp=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+    )
+    await db.commit()
+
+    report = await CostAggregator.get_governance_report(
+        db,
+        tenant_id,
+        start_date=date(2026, 1, 1),
+        end_date=date(2026, 1, 31),
+    )
+
+    assert report["total_cost"] == 150.0
+    assert report["unallocated_cost"] == 50.0
+    assert report["resource_count"] == 1
+    assert report["insights"][0]["service"] == "S3"
+    assert report["insights"][0]["amount"] == 50.0

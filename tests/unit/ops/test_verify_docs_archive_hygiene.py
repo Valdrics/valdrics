@@ -78,7 +78,7 @@ def test_verify_docs_archive_hygiene_ignores_weak_inventory_reference(
 
     errors = verify_docs_archive_hygiene(root=tmp_path)
     assert sorted(errors) == [
-        "docs/ops/evidence/all_changes_inventory_2026-03-02.txt: prohibited active duplicate/orphan doc. Historical all-changes inventory snapshots belong under docs/archive/ops/<quarter>/evidence/.",
+        "docs/ops/evidence/all_changes_inventory_2026-03-02.txt: prohibited active duplicate/orphan doc. Historical all-changes inventory snapshots — remove them.",
         "docs/ops/workstream_categorization_all_changes_2026-03-02.md: active dated doc is not explicitly registered; archive it or add it to REGISTERED_ACTIVE_DATED_DOCS.",
     ]
 
@@ -122,7 +122,7 @@ def test_verify_docs_archive_hygiene_flags_active_dated_change_categorization_do
 
     errors = verify_docs_archive_hygiene(root=tmp_path)
     assert errors == [
-        "docs/ops/all_changes_categorization_2026-04-12.md: prohibited active duplicate/orphan doc. Dated change-categorization snapshots belong under docs/archive/ops/<quarter>/."
+        "docs/ops/all_changes_categorization_2026-04-12.md: prohibited active duplicate/orphan doc. Dated change-categorization snapshots — remove them."
     ]
 
 
@@ -140,8 +140,8 @@ def test_verify_docs_archive_hygiene_flags_historical_closure_docs_in_active_ops
 
     errors = verify_docs_archive_hygiene(root=tmp_path)
     assert errors == [
-        "docs/ops/landing_page_audit_closure_2026-03-02.md: prohibited active duplicate/orphan doc. Historical landing audit closure belongs under docs/archive/ops/2026-q1/.",
-        "docs/ops/pricing_packaging_correction_closure_2026-03-09.md: prohibited active duplicate/orphan doc. Historical pricing/package correction closure belongs under docs/archive/ops/2026-q1/.",
+        "docs/ops/landing_page_audit_closure_2026-03-02.md: prohibited active duplicate/orphan doc. Historical landing audit closure — remove it.",
+        "docs/ops/pricing_packaging_correction_closure_2026-03-09.md: prohibited active duplicate/orphan doc. Historical pricing/package correction closure — remove it.",
     ]
 
 
@@ -155,7 +155,7 @@ def test_verify_docs_archive_hygiene_flags_provider_specific_aws_smoke_runbook_i
 
     errors = verify_docs_archive_hygiene(root=tmp_path)
     assert errors == [
-        "docs/runbooks/aws_first_operator_flow.md: prohibited active duplicate/orphan doc. Provider-specific AWS tenant smoke belongs under docs/archive/runbooks/2026-q2/."
+        "docs/runbooks/aws_first_operator_flow.md: prohibited active duplicate/orphan doc. Provider-specific AWS tenant smoke runbook — remove it."
     ]
 
 
@@ -181,8 +181,8 @@ def test_verify_docs_archive_hygiene_flags_legacy_guides_not_in_active_tree(
 
     errors = verify_docs_archive_hygiene(root=tmp_path)
     assert errors == [
-        "docs/guides/aws_scp_setup.md: prohibited active duplicate/orphan doc. Legacy AWS SCP setup guidance is not part of the current active docs surface; archive it under docs/archive/reference/ or remove it.",
-        "docs/guides/cicd_security.md: prohibited active duplicate/orphan doc. Legacy CI/CD hardening narrative is superseded by active workflow/runbook contracts; archive it under docs/archive/reference/ or remove it.",
+        "docs/guides/aws_scp_setup.md: prohibited active duplicate/orphan doc. Legacy AWS SCP setup guidance is not part of the current active docs surface — remove it.",
+        "docs/guides/cicd_security.md: prohibited active duplicate/orphan doc. Legacy CI/CD hardening narrative is superseded by active workflow/runbook contracts — remove it.",
     ]
 
 
@@ -201,9 +201,9 @@ def test_verify_docs_archive_hygiene_flags_archived_reference_notes_not_in_activ
 
     errors = verify_docs_archive_hygiene(root=tmp_path)
     assert errors == [
-        "docs/architecture/discovery_wizard.md: prohibited active duplicate/orphan doc. Historical discovery wizard note belongs under docs/archive/reference/2026-q2/architecture/.",
-        "docs/architecture/identity_blueprint.md: prohibited active duplicate/orphan doc. Historical identity reference belongs under docs/archive/reference/2026-q2/architecture/.",
-        "docs/product/personas.md: prohibited active duplicate/orphan doc. Historical product persona note belongs under docs/archive/reference/2026-q2/product/.",
+        "docs/architecture/discovery_wizard.md: prohibited active duplicate/orphan doc. Historical discovery wizard note — remove it.",
+        "docs/architecture/identity_blueprint.md: prohibited active duplicate/orphan doc. Historical identity reference — remove it.",
+        "docs/product/personas.md: prohibited active duplicate/orphan doc. Historical product persona note — remove it.",
     ]
 
 
@@ -269,21 +269,21 @@ def test_verify_docs_archive_hygiene_flags_archived_and_legacy_relocated_paths(
 
     errors = verify_docs_archive_hygiene(root=tmp_path)
     assert errors == [
-        "docs/architecture/discovery_wizard.md: prohibited active duplicate/orphan doc. Historical discovery wizard note belongs under docs/archive/reference/2026-q2/architecture/.",
-        "docs/architecture/identity_blueprint.md: prohibited active duplicate/orphan doc. Historical identity reference belongs under docs/archive/reference/2026-q2/architecture/.",
-        "docs/evidence/ci-green-2026-02-27.md: prohibited active duplicate/orphan doc. Historical CI green-run promotion packet belongs under docs/archive/evidence/2026-q1/.",
-        "docs/guides/aws_scp_setup.md: prohibited active duplicate/orphan doc. Legacy AWS SCP setup guidance is not part of the current active docs surface; archive it under docs/archive/reference/ or remove it.",
-        "docs/guides/cicd_security.md: prohibited active duplicate/orphan doc. Legacy CI/CD hardening narrative is superseded by active workflow/runbook contracts; archive it under docs/archive/reference/ or remove it.",
+        "docs/architecture/discovery_wizard.md: prohibited active duplicate/orphan doc. Historical discovery wizard note — remove it.",
+        "docs/architecture/identity_blueprint.md: prohibited active duplicate/orphan doc. Historical identity reference — remove it.",
+        "docs/evidence/ci-green-2026-02-27.md: prohibited active duplicate/orphan doc. Historical CI green-run promotion packet — remove it.",
+        "docs/guides/aws_scp_setup.md: prohibited active duplicate/orphan doc. Legacy AWS SCP setup guidance is not part of the current active docs surface — remove it.",
+        "docs/guides/cicd_security.md: prohibited active duplicate/orphan doc. Legacy CI/CD hardening narrative is superseded by active workflow/runbook contracts — remove it.",
         "docs/ops/alert-evidence-2026-02-25.md: prohibited active duplicate/orphan doc. Use docs/ops/alert-evidence.md for the canonical active evidence contract.",
         "docs/ops/benchmark_alignment_profiles_2026-02-27.md: prohibited active duplicate/orphan doc. Use docs/ops/benchmark_alignment_profiles.md for the canonical active benchmark profile.",
-        "docs/ops/drills/enforcement_incident_drill_2026-02-23.md: prohibited active duplicate/orphan doc. Historical enforcement incident drill record belongs under docs/archive/ops/2026-q1/drills/.",
+        "docs/ops/drills/enforcement_incident_drill_2026-02-23.md: prohibited active duplicate/orphan doc. Historical enforcement incident drill record — remove it.",
         "docs/ops/enforcement_failure_injection_matrix_2026-02-25.md: prohibited active duplicate/orphan doc. Use docs/ops/enforcement_failure_injection_matrix.md for the canonical active matrix.",
         "docs/ops/enforcement_post_closure_sanity_2026-02-26.md: prohibited active duplicate/orphan doc. Use docs/ops/enforcement_post_closure_sanity.md for the canonical active policy.",
         "docs/ops/enforcement_stress_evidence_2026-02-25.md: prohibited active duplicate/orphan doc. Use docs/ops/enforcement_stress_evidence.md for the canonical active protocol.",
         "docs/ops/feature_enforceability_matrix_2026-02-27.json: prohibited active duplicate/orphan doc. Use docs/ops/feature_enforceability_matrix.json for the canonical active matrix.",
         "docs/ops/incident_response_runbook.md: prohibited active duplicate/orphan doc. Use docs/runbooks/incident_response.md for the canonical active incident runbook.",
         "docs/ops/landing_funnel_alerting_2026-03-10.md: prohibited active duplicate/orphan doc. Use docs/ops/landing_funnel_alerting.md for the canonical active contract.",
-        "docs/product/personas.md: prohibited active duplicate/orphan doc. Historical product persona note belongs under docs/archive/reference/2026-q2/product/.",
+        "docs/product/personas.md: prohibited active duplicate/orphan doc. Historical product persona note — remove it.",
         "docs/security/jwt_bcp_checklist_2026-02-27.json: prohibited active duplicate/orphan doc. Use docs/security/jwt_bcp_checklist.json for the canonical active checklist.",
         "docs/security/ssdf_traceability_matrix_2026-02-25.json: prohibited active duplicate/orphan doc. Use docs/security/ssdf_traceability_matrix.json for the canonical active matrix.",
     ]
@@ -299,7 +299,7 @@ def test_verify_docs_archive_hygiene_flags_active_inventory_snapshot_in_ops_evid
 
     errors = verify_docs_archive_hygiene(root=tmp_path)
     assert errors == [
-        "docs/ops/evidence/all_changes_inventory_followup_2026-03-02.txt: prohibited active duplicate/orphan doc. Historical all-changes inventory snapshots belong under docs/archive/ops/<quarter>/evidence/."
+        "docs/ops/evidence/all_changes_inventory_followup_2026-03-02.txt: prohibited active duplicate/orphan doc. Historical all-changes inventory snapshots — remove them."
     ]
 
 
@@ -321,26 +321,16 @@ def test_verify_docs_archive_hygiene_rejects_referenced_unregistered_dated_doc(
     ]
 
 
-def test_repo_archives_q2_change_categorization_snapshots_out_of_active_ops_tree() -> None:
+def test_repo_prunes_q2_change_categorization_snapshots_out_of_active_ops_tree() -> None:
     active_docs = sorted((REPO_ROOT / "docs" / "ops").glob("all_changes_categorization_*.md"))
     assert active_docs == []
 
-    archived_q2 = {
-        path.name
-        for path in (REPO_ROOT / "docs" / "archive" / "ops" / "2026-q2").glob(
+    archived_q2 = sorted(
+        (REPO_ROOT / "docs" / "archive" / "ops" / "2026-q2").glob(
             "all_changes_categorization_*.md"
         )
-    }
-    assert {
-        "all_changes_categorization_2026-03-27.md",
-        "all_changes_categorization_2026-04-01.md",
-        "all_changes_categorization_2026-04-04.md",
-        "all_changes_categorization_2026-04-05.md",
-        "all_changes_categorization_2026-04-06.md",
-        "all_changes_categorization_2026-04-06_followup.md",
-        "all_changes_categorization_2026-04-12.md",
-        "all_changes_categorization_2026-04-17.md",
-    } <= archived_q2
+    )
+    assert archived_q2 == []
 
 
 def test_repo_prunes_mechanical_q1_change_categorization_archive_snapshots() -> None:
@@ -364,9 +354,9 @@ def test_repo_registered_active_dated_docs_match_repo_state() -> None:
     assert active_dated_docs == docs_archive_hygiene_verifier.REGISTERED_ACTIVE_DATED_DOCS
 
 
-def test_repo_archives_historical_ci_green_release_packet_and_canonicalizes_landing_contract() -> None:
+def test_repo_prunes_historical_ci_green_release_packet_and_canonicalizes_landing_contract() -> None:
     assert not (REPO_ROOT / "docs" / "evidence" / "ci-green-2026-02-27.md").exists()
-    assert (
+    assert not (
         REPO_ROOT
         / "docs"
         / "archive"
@@ -381,7 +371,7 @@ def test_repo_archives_historical_ci_green_release_packet_and_canonicalizes_land
     assert not (
         REPO_ROOT / "docs" / "ops" / "drills" / "enforcement_incident_drill_2026-02-23.md"
     ).exists()
-    assert (
+    assert not (
         REPO_ROOT
         / "docs"
         / "archive"
@@ -441,14 +431,14 @@ def test_repo_prunes_mechanical_all_changes_inventory_snapshots() -> None:
     assert archived_inventory_snapshots == []
 
 
-def test_repo_archives_historical_landing_and_pricing_closure_snapshots() -> None:
+def test_repo_prunes_historical_landing_and_pricing_closure_snapshots() -> None:
     assert not (
         REPO_ROOT / "docs" / "ops" / "landing_page_audit_closure_2026-03-02.md"
     ).exists()
     assert not (
         REPO_ROOT / "docs" / "ops" / "pricing_packaging_correction_closure_2026-03-09.md"
     ).exists()
-    assert (
+    assert not (
         REPO_ROOT
         / "docs"
         / "archive"
@@ -456,7 +446,7 @@ def test_repo_archives_historical_landing_and_pricing_closure_snapshots() -> Non
         / "2026-q1"
         / "landing_page_audit_closure_2026-03-02.md"
     ).exists()
-    assert (
+    assert not (
         REPO_ROOT
         / "docs"
         / "archive"

@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { ChevronDown, Check, Globe } from '@lucide/svelte';
+	import { ChevronDown, Check, Cpu, Globe } from '@lucide/svelte';
 	import CloudLogo from './CloudLogo.svelte';
 	import { onMount } from 'svelte';
+	import { SPEND_PROVIDER_OPTIONS } from '$lib/spendProviderFilters';
 
 	let { selectedProvider = '', onSelect } = $props<{
 		selectedProvider?: string;
@@ -11,12 +12,7 @@
 	let isOpen = $state(false);
 	let prefersReducedMotion = $state(false);
 
-	const providers = [
-		{ id: '', name: 'All Providers' },
-		{ id: 'aws', name: 'AWS' },
-		{ id: 'azure', name: 'Azure' },
-		{ id: 'gcp', name: 'GCP' }
-	];
+	const providers = SPEND_PROVIDER_OPTIONS;
 
 	let selected = $derived(providers.find((p) => p.id === selectedProvider) || providers[0]);
 
@@ -60,6 +56,8 @@
 		<div class="flex items-center gap-2">
 			{#if selected.id === ''}
 				<Globe size={14} class="text-ink-400 group-hover:text-accent-400 transition-colors" />
+			{:else if selected.id === 'ai'}
+				<Cpu size={14} class="text-accent-300 group-hover:text-accent-200 transition-colors" />
 			{:else}
 				<CloudLogo provider={selected.id} size={14} />
 			{/if}
@@ -91,6 +89,11 @@
 								<Globe
 									size={14}
 									class={selectedProvider === '' ? 'text-accent-400' : 'text-ink-400'}
+								/>
+							{:else if p.id === 'ai'}
+								<Cpu
+									size={14}
+									class={selectedProvider === 'ai' ? 'text-accent-400' : 'text-ink-400'}
 								/>
 							{:else}
 								<CloudLogo provider={p.id} size={14} />

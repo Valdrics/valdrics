@@ -197,13 +197,9 @@ def test_unsupported_db_maintenance_and_seed_scripts_are_removed() -> None:
     assert not (REPO_ROOT / "scripts/optimize_rls_performance.sql").exists()
 
 
-def test_historical_enforcement_gap_register_is_archived() -> None:
+def test_historical_enforcement_gap_register_is_removed_from_active_ops_surface() -> None:
     assert not (
         REPO_ROOT / "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md"
-    ).exists()
-    assert (
-        REPO_ROOT
-        / "docs/archive/ops/2026-q1/enforcement_control_plane_gap_register_2026-02-23.md"
     ).exists()
 
 

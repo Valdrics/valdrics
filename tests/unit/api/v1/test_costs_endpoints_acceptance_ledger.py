@@ -8,6 +8,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.models.cloud import CloudAccount, CostRecord
+from app.models.llm import LLMUsage
 from app.models.tenant import Tenant, User
 from app.modules.reporting.api.v1 import costs as costs_api
 from app.shared.core.auth import CurrentUser, UserRole, get_current_user
@@ -48,6 +49,7 @@ async def test_get_acceptance_kpis_includes_ledger_quality_metrics_when_data_exi
         # - 2 normalized + mapped
         # - 1 unknown service + unmapped
         # - 1 usage_amount present but missing usage_unit (normalization failure)
+        # Plus 1 AI usage row, which is normalized and mapped by the canonical ledger.
         record_days = [date(2026, 1, d) for d in (10, 11, 12, 13)]
         db.add_all(
             [
@@ -181,6 +183,23 @@ async def test_get_acceptance_kpis_includes_ledger_quality_metrics_when_data_exi
                 ),
             ]
         )
+        db.add(
+            LLMUsage(
+                id=uuid.uuid4(),
+                tenant_id=tenant_id,
+                user_id=user_id,
+                provider="groq",
+                model="llama-3.3-70b-versatile",
+                input_tokens=120,
+                output_tokens=80,
+                total_tokens=200,
+                cost_usd=Decimal("0.0042"),
+                request_type="daily_analysis",
+                operation_id="op-acceptance-ai-1",
+                is_byok=False,
+                created_at=datetime(2026, 1, 14, 9, 0, tzinfo=timezone.utc),
+            )
+        )
         await db.commit()
 
         with (
@@ -198,7 +217,7 @@ async def test_get_acceptance_kpis_includes_ledger_quality_metrics_when_data_exi
                         latest_completed_at="2026-02-13T10:00:00+00:00",
                         avg_duration_seconds=60.0,
                         p95_duration_seconds=60.0,
-                        records_ingested=4,
+                        records_ingested=5,
                     )
                 ),
             ),
@@ -260,10 +279,17 @@ async def test_get_acceptance_kpis_includes_ledger_quality_metrics_when_data_exi
 
         assert by_key["ledger_normalization_coverage"]["available"] is True
         assert by_key["canonical_mapping_coverage"]["available"] is True
-        assert by_key["ledger_normalization_coverage"]["actual"] == "50.00%"
-        assert by_key["canonical_mapping_coverage"]["actual"] == "75.00%"
+        assert by_key["ledger_normalization_coverage"]["actual"] == "60.00%"
+        assert by_key["canonical_mapping_coverage"]["actual"] == "80.00%"
         assert by_key["ledger_normalization_coverage"]["meets_target"] is False
         assert by_key["canonical_mapping_coverage"]["meets_target"] is False
+        assert by_key["ledger_normalization_coverage"]["details"]["ai_records"] == 1
+        assert any(
+            item["provider"] == "ai"
+            for item in by_key["canonical_mapping_coverage"]["details"][
+                "provider_breakdown"
+            ]
+        )
         assert payload["all_targets_met"] is False
     finally:
         app.dependency_overrides.pop(get_current_user, None)

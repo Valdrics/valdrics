@@ -33,6 +33,25 @@ def _audit_event(*, success: bool = True) -> SimpleNamespace:
     )
 
 
+def _ai_quality_counts(
+    *,
+    total_records: int = 0,
+    normalized_records: int = 0,
+    mapped_records: int = 0,
+    invalid_provider_records: int = 0,
+    invalid_model_records: int = 0,
+) -> ExecResult:
+    return ExecResult(
+        one_row=SimpleNamespace(
+            total_records=total_records,
+            normalized_records=normalized_records,
+            mapped_records=mapped_records,
+            invalid_provider_records=invalid_provider_records,
+            invalid_model_records=invalid_model_records,
+        )
+    )
+
+
 def test_as_naive_utc_normalizes_aware_datetimes_for_db_filters() -> None:
     aware = datetime(2026, 3, 19, 0, 0, tzinfo=timezone.utc)
 
@@ -44,7 +63,10 @@ def test_as_naive_utc_normalizes_aware_datetimes_for_db_filters() -> None:
 
 @pytest.mark.asyncio
 async def test_compute_acceptance_payload_handles_zero_ledger_records() -> None:
-    db = FakeDB(scalar_values=[_audit_event(), 1, 0])
+    db = FakeDB(
+        scalar_values=[_audit_event(), 1, 0],
+        execute_values=[_ai_quality_counts()],
+    )
 
     with (
         patch.object(
@@ -104,7 +126,7 @@ async def test_compute_acceptance_payload_handles_zero_ledger_records() -> None:
         in by_key["user_access_review_proof"].actual
     )
     assert by_key["ledger_normalization_coverage"].available is False
-    assert by_key["canonical_mapping_coverage"].actual == "No cost records in window"
+    assert by_key["canonical_mapping_coverage"].actual == "No ledger records in window"
 
 
 @pytest.mark.asyncio
@@ -114,6 +136,7 @@ async def test_compute_acceptance_payload_builds_ledger_breakdown_and_unmapped_s
     db = FakeDB(
         scalar_values=[_audit_event(), 1, 10],
         execute_values=[
+            _ai_quality_counts(),
             ExecResult(
                 one_row=SimpleNamespace(
                     total_records=10,
@@ -309,7 +332,10 @@ async def test_compute_acceptance_payload_invalid_window_and_unavailable_feature
         )
     assert exc_info.value.status_code == 400
 
-    db = FakeDB(scalar_values=[None, 0, 0])
+    db = FakeDB(
+        scalar_values=[None, 0, 0],
+        execute_values=[_ai_quality_counts()],
+    )
 
     def _feature_disabled_for_analytics(_tier, feature):
         return feature not in {
@@ -357,6 +383,7 @@ async def test_compute_acceptance_payload_invalid_window_and_unavailable_feature
 async def test_compute_acceptance_payload_bounds_change_governance_window() -> None:
     db = AsyncMock()
     db.scalar.side_effect = [_audit_event(), 2, 0]
+    db.execute = AsyncMock(return_value=_ai_quality_counts())
 
     with (
         patch.object(

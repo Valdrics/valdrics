@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
 from uuid import UUID
 
@@ -9,7 +9,61 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.cloud import CloudAccount, CostRecord
+from app.models.llm import LLMUsage
 from app.modules.reporting.api.v1.costs_models import AcceptanceKpiMetric
+
+
+def _date_window_bounds(start_date: date, end_date: date) -> tuple[datetime, datetime]:
+    return (
+        datetime.combine(start_date, time.min, tzinfo=timezone.utc),
+        datetime.combine(end_date + timedelta(days=1), time.min, tzinfo=timezone.utc),
+    )
+
+
+async def _load_ai_ledger_quality_counts(
+    *,
+    db: AsyncSession,
+    tenant_id: UUID,
+    start_date: date,
+    end_date: date,
+) -> dict[str, int]:
+    window_start, window_end = _date_window_bounds(start_date, end_date)
+    invalid_provider_filter = (
+        (LLMUsage.provider.is_(None))
+        | (LLMUsage.provider == "")
+        | (func.length(func.trim(LLMUsage.provider)) == 0)
+    )
+    invalid_model_filter = (
+        (LLMUsage.model.is_(None))
+        | (LLMUsage.model == "")
+        | (func.length(func.trim(LLMUsage.model)) == 0)
+    )
+    normalized_filter = ~(invalid_provider_filter | invalid_model_filter)
+    stmt = select(
+        func.count(LLMUsage.id).label("total_records"),
+        func.count(LLMUsage.id).filter(normalized_filter).label("normalized_records"),
+        func.count(LLMUsage.id).label("mapped_records"),
+        func.count(LLMUsage.id)
+        .filter(invalid_provider_filter)
+        .label("invalid_provider_records"),
+        func.count(LLMUsage.id)
+        .filter(invalid_model_filter)
+        .label("invalid_model_records"),
+    ).where(
+        LLMUsage.tenant_id == tenant_id,
+        LLMUsage.created_at >= window_start,
+        LLMUsage.created_at < window_end,
+    )
+    row = (await db.execute(stmt)).one()
+    return {
+        "total_records": int(getattr(row, "total_records", 0) or 0),
+        "normalized_records": int(getattr(row, "normalized_records", 0) or 0),
+        "mapped_records": int(getattr(row, "mapped_records", 0) or 0),
+        "invalid_provider_records": int(
+            getattr(row, "invalid_provider_records", 0) or 0
+        ),
+        "invalid_model_records": int(getattr(row, "invalid_model_records", 0) or 0),
+    }
 
 
 async def build_ledger_quality_metrics(
@@ -23,7 +77,7 @@ async def build_ledger_quality_metrics(
     logger: Any,
 ) -> list[AcceptanceKpiMetric]:
     try:
-        total_records = int(
+        origin_total_records = int(
             await db.scalar(
                 select(func.count(CostRecord.id)).where(
                     CostRecord.tenant_id == tenant_id,
@@ -33,6 +87,13 @@ async def build_ledger_quality_metrics(
             )
             or 0
         )
+        ai_quality_counts = await _load_ai_ledger_quality_counts(
+            db=db,
+            tenant_id=tenant_id,
+            start_date=start_date,
+            end_date=end_date,
+        )
+        total_records = origin_total_records + ai_quality_counts["total_records"]
     except (SQLAlchemyError, RuntimeError) as exc:
         logger.warning(
             "acceptance_kpis_ledger_quality_query_failed",
@@ -40,6 +101,14 @@ async def build_ledger_quality_metrics(
             error=str(exc),
             error_type=type(exc).__name__,
         )
+        origin_total_records = 0
+        ai_quality_counts = {
+            "total_records": 0,
+            "normalized_records": 0,
+            "mapped_records": 0,
+            "invalid_provider_records": 0,
+            "invalid_model_records": 0,
+        }
         total_records = 0
 
     if total_records <= 0:
@@ -49,7 +118,7 @@ async def build_ledger_quality_metrics(
                 label="Ledger Normalization Coverage",
                 available=False,
                 target=f">={ledger_normalization_target_percent:.2f}%",
-                actual="No cost records in window",
+                actual="No ledger records in window",
                 meets_target=False,
                 details={"total_records": 0},
             ),
@@ -58,7 +127,7 @@ async def build_ledger_quality_metrics(
                 label="Canonical Mapping Coverage",
                 available=False,
                 target=f">={canonical_mapping_target_percent:.2f}%",
-                actual="No cost records in window",
+                actual="No ledger records in window",
                 meets_target=False,
                 details={"total_records": 0},
             ),
@@ -105,9 +174,15 @@ async def build_ledger_quality_metrics(
     )
     row = (await db.execute(summary_stmt)).one()
 
-    total = int(getattr(row, "total_records", 0) or 0)
-    normalized_count = int(getattr(row, "normalized_records", 0) or 0)
-    mapped_count = int(getattr(row, "mapped_records", 0) or 0)
+    total = int(getattr(row, "total_records", 0) or 0) + ai_quality_counts[
+        "total_records"
+    ]
+    normalized_count = int(
+        getattr(row, "normalized_records", 0) or 0
+    ) + ai_quality_counts["normalized_records"]
+    mapped_count = int(getattr(row, "mapped_records", 0) or 0) + ai_quality_counts[
+        "mapped_records"
+    ]
 
     unknown_service_count = int(getattr(row, "unknown_service_records", 0) or 0)
     invalid_currency_count = int(getattr(row, "invalid_currency_records", 0) or 0)
@@ -158,6 +233,23 @@ async def build_ledger_quality_metrics(
                 ),
             }
         )
+    ai_total = ai_quality_counts["total_records"]
+    if ai_total > 0:
+        provider_breakdown.append(
+            {
+                "provider": "ai",
+                "total_records": ai_total,
+                "normalized_percentage": round(
+                    ai_quality_counts["normalized_records"] / ai_total * 100.0,
+                    2,
+                ),
+                "mapped_percentage": round(
+                    ai_quality_counts["mapped_records"] / ai_total * 100.0,
+                    2,
+                ),
+            }
+        )
+        provider_breakdown.sort(key=lambda item: str(item["provider"]))
 
     top_unmapped_stmt = (
         select(
@@ -210,6 +302,11 @@ async def build_ledger_quality_metrics(
                 "unknown_service_records": unknown_service_count,
                 "invalid_currency_records": invalid_currency_count,
                 "usage_unit_missing_records": usage_unit_missing_count,
+                "ai_records": ai_quality_counts["total_records"],
+                "ai_invalid_provider_records": ai_quality_counts[
+                    "invalid_provider_records"
+                ],
+                "ai_invalid_model_records": ai_quality_counts["invalid_model_records"],
                 "provider_breakdown": provider_breakdown,
             },
         ),

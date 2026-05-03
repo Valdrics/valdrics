@@ -122,7 +122,7 @@ def test_release_gate_contract_snapshot_tokens_include_required_closure_markers(
     required = set(json.loads(contract)["post_closure_sanity"]["required_snapshot_tokens"])
     assert "CI-EVID-001" in required
     assert "BENCH-DOC-001" in required
-    assert "docs/archive/evidence/<quarter>/ci-green-YYYY-MM-DD.md" in required
+    assert "docs/ops/evidence/ci-green-YYYY-MM-DD.md" in required
     assert "docs/evidence/ci-green-YYYY-MM-DD.md" not in required
 
 
@@ -159,7 +159,7 @@ def test_live_release_gate_contract_scopes_removed_helm_refs_out_of_active_surfa
         "deployable webhook template + explicit failure-policy profiles via chart values and runbook contract"
         in forbidden
     )
-    assert "docs/archive/evidence/<quarter>/ci-green-YYYY-MM-DD.md" in raw
+    assert "docs/ops/evidence/ci-green-YYYY-MM-DD.md" in raw
     assert "docs/evidence/ci-green-YYYY-MM-DD.md" not in raw
 
 

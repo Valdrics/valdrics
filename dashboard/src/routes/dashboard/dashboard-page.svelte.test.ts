@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 
 import Page from './+page.svelte';
 import type { PageData } from './$types';
@@ -129,5 +129,16 @@ describe('dashboard page lazy sections', () => {
 		await waitFor(() => {
 			expect(screen.queryByText(/loading finance insights/i)).toBeNull();
 		});
+	});
+
+	it('offers AI in the dashboard spend provider selector', async () => {
+		render(Page, {
+			data: createDashboardData('finance')
+		});
+
+		const providerButton = await screen.findByRole('button', { name: /all providers/i });
+		await fireEvent.click(providerButton);
+
+		expect(await screen.findByRole('option', { name: /^AI$/i })).toBeTruthy();
 	});
 });

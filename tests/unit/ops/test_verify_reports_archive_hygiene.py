@@ -24,7 +24,7 @@ def test_verify_reports_archive_hygiene_flags_active_production_fix_pack(
 
     errors = verify_reports_archive_hygiene(root=tmp_path)
     assert errors == [
-        "reports/production_fixes: prohibited active duplicate/orphan report pack. Historical production hardening pack belongs under reports/archive/2026-q1/production_fixes/."
+        "reports/production_fixes: prohibited active duplicate/orphan report pack. Historical production hardening pack — remove it."
     ]
 
 
@@ -38,7 +38,7 @@ def test_verify_reports_archive_hygiene_flags_active_dated_audit_snapshot(
 
     errors = verify_reports_archive_hygiene(root=tmp_path)
     assert errors == [
-        "reports/audit/LANDING_PUBLIC_IMPLEMENTATION_REPORT_2026-03-21.md: prohibited active duplicate/orphan historical report. Historical dated audit snapshots belong under reports/archive/<quarter>/audit/ or reports/audit/archive/."
+        "reports/audit/LANDING_PUBLIC_IMPLEMENTATION_REPORT_2026-03-21.md: prohibited active duplicate/orphan historical report. Historical dated audit snapshots — remove them."
     ]
 
 

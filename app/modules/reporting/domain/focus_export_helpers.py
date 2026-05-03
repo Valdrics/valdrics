@@ -13,6 +13,7 @@ _VENDOR_DISPLAY_OVERRIDES = {
 }
 
 _CANONICAL_TO_SERVICE_CATEGORY = {
+    "ai": "AI and Machine Learning",
     "compute": "Compute",
     "storage": "Storage",
     "network": "Networking",

@@ -37,10 +37,6 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
         "current supported operating profile is the unified platform\nthere is no parallel capacity track\nGoogle Cloud Run\nCloud Tasks\nCloud Run Jobs\nCloudflare Pages\nSupabase\n",
     )
     _write(
-        tmp_path / "docs/roadmap.md",
-        "redirect only\nphase, and ship-gate source of\nreports/roadmap/\n",
-    )
-    _write(
         tmp_path / "docs/ops/README.md",
         "active operational material only\n"
         "Persistent operational contracts should use undated canonical paths.\n"
@@ -184,10 +180,6 @@ def test_verify_contracts_reports_missing_and_forbidden_phrases(tmp_path: Path) 
             path="docs/CAPACITY_PLAN.md",
             required_phrases=("Google Cloud Run",),
             forbidden_phrases=("future scale path",),
-        ),
-        DocumentationContract(
-            path="docs/roadmap.md",
-            required_phrases=("redirect only",),
         ),
         DocumentationContract(
             path="docs/ops/README.md",

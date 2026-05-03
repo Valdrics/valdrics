@@ -1,5 +1,10 @@
 import { edgeApiPath } from '$lib/edgeProxy';
 import { TimeoutError, fetchWithTimeout } from '$lib/fetchWithTimeout';
+import {
+	normalizeSpendProvider,
+	operationalProviderParam,
+	spendProviderParam
+} from '$lib/spendProviderFilters';
 import type { PageLoad } from './$types';
 
 const DASHBOARD_REQUEST_TIMEOUT_MS = 8000;
@@ -17,12 +22,26 @@ function buildApiPath(
 	return edgeApiPath(suffix.length > 0 ? `${path}?${suffix}` : path);
 }
 
+function ledgerCostSummary(payload: unknown): { total_cost: number } | null {
+	if (!payload || typeof payload !== 'object') return null;
+	const candidate = payload as {
+		total_cost_usd?: unknown;
+		total_cost?: unknown;
+		summary?: { total_cost?: unknown };
+	};
+	const rawTotal =
+		candidate.total_cost_usd ?? candidate.total_cost ?? candidate.summary?.total_cost;
+	const totalCost = typeof rawTotal === 'number' ? rawTotal : Number(String(rawTotal ?? ''));
+	if (!Number.isFinite(totalCost)) return null;
+	return { total_cost: totalCost };
+}
+
 export const load: PageLoad = async ({ fetch, parent, url }) => {
 	const { session, user, subscription, profile } = await parent();
 
 	const startDate = url.searchParams.get('start_date');
 	const endDate = url.searchParams.get('end_date');
-	const provider = url.searchParams.get('provider') || '';
+	const provider = normalizeSpendProvider(url.searchParams.get('provider'));
 	const persona = String(profile?.persona ?? 'engineering').toLowerCase();
 
 	if (!user || !session?.access_token || !startDate || !endDate) {
@@ -55,21 +74,29 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 		const wantsAllocation = persona === 'finance' || persona === 'leadership';
 		const wantsCarbon = persona !== 'engineering';
 		const wantsZombiesAnalysis = persona === 'engineering';
-		type WidgetKey = 'costs' | 'carbon' | 'zombies' | 'allocation' | 'unitEconomics';
+		const spendProvider = spendProviderParam(provider);
+		const operationalProvider = operationalProviderParam(provider);
+		type WidgetKey =
+			| 'spendLedger'
+			| 'costFreshness'
+			| 'carbon'
+			| 'zombies'
+			| 'allocation'
+			| 'unitEconomics';
 
 		const carbonPromise = wantsCarbon
 			? getWithTimeout(
 					buildApiPath('/carbon', {
 						start_date: startDate,
 						end_date: endDate,
-						provider: provider || undefined
+						provider: operationalProvider
 					})
 				)
 			: Promise.resolve(null);
 
 		const zombiesParams = new URLSearchParams();
 		if (wantsZombiesAnalysis) zombiesParams.set('analyze', 'true');
-		if (provider) zombiesParams.set('provider', provider);
+		if (operationalProvider) zombiesParams.set('provider', operationalProvider);
 		const zombiesUrl =
 			zombiesParams.size > 0
 				? `${edgeApiPath('/zombies')}?${zombiesParams.toString()}`
@@ -81,15 +108,30 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 			request: Promise<Response | null>;
 		}> = [
 			{
-				key: 'costs',
-				label: 'costs',
+				key: 'spendLedger',
+				label: 'spend ledger',
 				request: getWithTimeout(
-					buildApiPath('/costs', {
+					buildApiPath('/costs/ledger', {
 						start_date: startDate,
 						end_date: endDate,
-						provider: provider || undefined
+						provider: spendProvider,
+						limit: 1
 					})
 				)
+			},
+			{
+				key: 'costFreshness',
+				label: 'cost freshness',
+				request:
+					provider === 'ai'
+						? Promise.resolve(null)
+						: getWithTimeout(
+								buildApiPath('/costs', {
+									start_date: startDate,
+									end_date: endDate,
+									provider: operationalProvider
+								})
+							)
 			},
 			{
 				key: 'carbon',
@@ -123,7 +165,7 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 								buildApiPath('/costs/unit-economics', {
 									start_date: startDate,
 									end_date: endDate,
-									provider: provider || undefined,
+									provider: operationalProvider,
 									alert_on_anomaly: false
 								})
 							)
@@ -155,20 +197,30 @@ export const load: PageLoad = async ({ fetch, parent, url }) => {
 			}
 		}
 
-		const costsRes = widgetResponses.get('costs') ?? null;
+		const spendLedgerRes = widgetResponses.get('spendLedger') ?? null;
+		const costFreshnessRes = widgetResponses.get('costFreshness') ?? null;
 		const carbonRes = widgetResponses.get('carbon') ?? null;
 		const zombiesRes = widgetResponses.get('zombies') ?? null;
 		const allocationRes = widgetResponses.get('allocation') ?? null;
 		const unitEconomicsRes = widgetResponses.get('unitEconomics') ?? null;
 
-		const costs = costsRes?.ok ? await costsRes.json() : null;
+		const spendLedger = spendLedgerRes?.ok ? await spendLedgerRes.json() : null;
+		const costFreshness = costFreshnessRes?.ok ? await costFreshnessRes.json() : null;
+		const ledgerCosts = ledgerCostSummary(spendLedger);
+		const fallbackCosts = provider === 'ai' ? null : ledgerCostSummary(costFreshness);
+		const costs = ledgerCosts ?? fallbackCosts;
+		if (costs && !ledgerCosts && spendLedgerRes && [401, 403].includes(spendLedgerRes.status)) {
+			const expectedFallbackFailure = `spend ledger (${spendLedgerRes.status})`;
+			const fallbackFailureIndex = failedWidgets.indexOf(expectedFallbackFailure);
+			if (fallbackFailureIndex >= 0) failedWidgets.splice(fallbackFailureIndex, 1);
+		}
 		const carbon = carbonRes?.ok ? await carbonRes.json() : null;
 		const zombies = zombiesRes?.ok ? await zombiesRes.json() : null;
 		const analysis: { analysis?: string } | null = null;
 		const allocation = allocationRes && allocationRes.ok ? await allocationRes.json() : null;
 		const unitEconomics =
 			unitEconomicsRes && unitEconomicsRes.ok ? await unitEconomicsRes.json() : null;
-		const freshness = costs?.data_quality?.freshness ?? null;
+		const freshness = provider === 'ai' ? null : (costFreshness?.data_quality?.freshness ?? null);
 		const timedOutWarning =
 			timedOutCount > 0
 				? `${timedOutCount} dashboard widgets timed out. Partial data shown; refresh to retry.`

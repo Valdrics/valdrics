@@ -1,6 +1,6 @@
 import inspect
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -9,6 +9,10 @@ import pytest
 from fastapi.params import Depends
 from httpx import AsyncClient
 
+from app.models.attribution import CostAllocation
+from app.models.cloud import CloudAccount, CostRecord
+from app.models.llm import LLMUsage
+from app.models.tenant import Tenant
 from app.modules.reporting.api.v1 import costs as costs_api
 from app.modules.reporting.api.v1 import costs_core_endpoints, costs_http_routes_core
 from app.shared.core.auth import (
@@ -218,6 +222,181 @@ async def test_get_cost_attribution_coverage(async_client: AsyncClient, app):
             assert mock_coverage.await_count == 1
     finally:
         _clear_reporting_auth_overrides(app)
+
+
+@pytest.mark.asyncio
+async def test_get_spend_ledger_returns_origin_rows_with_canonical_allocations(
+    async_client: AsyncClient,
+    app,
+    db,
+) -> None:
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    account_id = uuid.uuid4()
+    record_id = uuid.uuid4()
+
+    db.add(Tenant(id=tenant_id, name="Ledger Tenant", plan=PricingTier.PRO.value))
+    db.add(
+        CloudAccount(
+            id=account_id,
+            tenant_id=tenant_id,
+            provider="saas",
+            name="SaaS Spend",
+            is_active=True,
+        )
+    )
+    db.add(
+        CostRecord(
+            id=record_id,
+            tenant_id=tenant_id,
+            account_id=account_id,
+            service="Slack",
+            region="global",
+            usage_type="Seats",
+            resource_id="workspace-1",
+            usage_amount=Decimal("20"),
+            usage_unit="Seat",
+            cost_usd=Decimal("100.00"),
+            amount_raw=Decimal("100.00"),
+            currency="USD",
+            cost_status="FINAL",
+            is_preliminary=False,
+            canonical_charge_category="saas",
+            canonical_charge_subcategory="subscription",
+            canonical_mapping_version="focus-1.3-v1",
+            tags={"department": "shared"},
+            recorded_at=date(2026, 1, 15),
+            timestamp=datetime(2026, 1, 15, 0, 0, tzinfo=timezone.utc),
+        )
+    )
+    db.add_all(
+        [
+            CostAllocation(
+                cost_record_id=record_id,
+                recorded_at=date(2026, 1, 15),
+                allocated_to="Engineering",
+                amount=Decimal("60.00"),
+                percentage=Decimal("60.00"),
+                timestamp=datetime(2026, 1, 15, 0, 0, tzinfo=timezone.utc),
+            ),
+            CostAllocation(
+                cost_record_id=record_id,
+                recorded_at=date(2026, 1, 15),
+                allocated_to="Finance",
+                amount=Decimal("40.00"),
+                percentage=Decimal("40.00"),
+                timestamp=datetime(2026, 1, 15, 0, 0, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    await db.commit()
+
+    mock_user = CurrentUser(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="ledger@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+
+    _override_reporting_auth(app, mock_user)
+    try:
+        response = await async_client.get(
+            "/api/v1/costs/ledger",
+            params={
+                "start_date": "2026-01-01",
+                "end_date": "2026-01-31",
+                "provider": "saas",
+            },
+        )
+    finally:
+        _clear_reporting_auth_overrides(app)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["record_count"] == 1
+    assert payload["total_cost_usd"] == "100.00000000"
+    assert payload["total_allocated_usd"] == "100.00000000"
+    assert payload["total_unallocated_usd"] == "0.00000000"
+    assert payload["entries"][0]["allocation_status"] == "allocated"
+    assert payload["entries"][0]["resource_id"] == "workspace-1"
+    assert payload["entries"][0]["usage_amount"] == "20.00000000"
+    assert [item["allocated_to"] for item in payload["entries"][0]["allocations"]] == [
+        "Engineering",
+        "Finance",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_spend_ledger_includes_ai_usage_provider_filter(
+    async_client: AsyncClient,
+    app,
+    db,
+) -> None:
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    usage_id = uuid.uuid4()
+    db.add(Tenant(id=tenant_id, name="AI Ledger Tenant", plan=PricingTier.PRO.value))
+    db.add(
+        LLMUsage(
+            id=usage_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            provider="groq",
+            model="llama-3.3-70b-versatile",
+            input_tokens=125,
+            output_tokens=75,
+            total_tokens=200,
+            cost_usd=Decimal("0.0042"),
+            request_type="daily_analysis",
+            operation_id="op-ai-ledger-1",
+            is_byok=True,
+            created_at=datetime(2026, 1, 16, 9, 30, tzinfo=timezone.utc),
+        )
+    )
+    await db.commit()
+
+    mock_user = CurrentUser(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="ai-ledger@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+
+    _override_reporting_auth(app, mock_user)
+    try:
+        response = await async_client.get(
+            "/api/v1/costs/ledger",
+            params={
+                "start_date": "2026-01-01",
+                "end_date": "2026-01-31",
+                "provider": "ai",
+            },
+        )
+    finally:
+        _clear_reporting_auth_overrides(app)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["provider"] == "ai"
+    assert payload["record_count"] == 1
+    assert payload["total_cost_usd"] == "0.00420000"
+    assert payload["total_allocated_usd"] == "0.00000000"
+    assert payload["total_unallocated_usd"] == "0.00420000"
+    entry = payload["entries"][0]
+    assert entry["provider"] == "ai"
+    assert entry["account_id"] == "ai:groq"
+    assert entry["service"] == "LLM"
+    assert entry["usage_type"] == "daily_analysis"
+    assert entry["resource_id"] == "op-ai-ledger-1"
+    assert entry["usage_amount"] == "200.00000000"
+    assert entry["usage_unit"] == "tokens"
+    assert entry["canonical_charge_category"] == "ai"
+    assert entry["canonical_charge_subcategory"] == "llm_inference"
+    assert entry["allocation_status"] == "unallocated"
+    assert entry["tags"]["model"] == "llama-3.3-70b-versatile"
+    assert entry["tags"]["is_byok"] is True
 
 
 @pytest.mark.asyncio

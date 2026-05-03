@@ -1,3 +1,6 @@
+import base64
+import csv
+import io
 import pytest
 from uuid import uuid4
 from unittest.mock import MagicMock, patch, AsyncMock
@@ -191,25 +194,70 @@ async def test_export_execute_success(db):
     handler = CostExportHandler()
     job = BackgroundJob(
         tenant_id=uuid4(),
-        payload={"start_date": "2023-01-01", "end_date": "2023-01-31"},
+        payload={
+            "start_date": "2023-01-01",
+            "end_date": "2023-01-31",
+            "provider": "aws",
+            "include_preliminary": "true",
+        },
     )
 
-    with (
-        patch(
-            "app.modules.reporting.domain.aggregator.CostAggregator.get_cached_breakdown"
-        ) as mock_breakdown,
-        patch(
-            "app.modules.reporting.domain.aggregator.CostAggregator.get_summary"
-        ) as mock_summary,
-    ):
-        mock_breakdown.return_value = {}
-        mock_summary.return_value.records = [1, 2, 3]
-        mock_summary.return_value.total_cost = 150.0
+    async def export_rows(*args, **kwargs):
+        assert kwargs["tenant_id"] == job.tenant_id
+        assert kwargs["provider"] == "aws"
+        assert kwargs["include_preliminary"] is True
+        yield {
+            "ProviderName": "AWS",
+            "ServiceName": "AmazonEC2",
+            "BilledCost": "12.34000000",
+            "BillingCurrency": "USD",
+        }
 
+    with patch(
+        "app.modules.reporting.domain.focus_export.FocusV13ExportService.export_rows",
+        new=export_rows,
+    ):
         result = await handler.execute(job, db)
+
         assert result["status"] == "completed"
-        assert result["records_exported"] == 3
-        assert result["total_cost_usd"] == 150.0
+        assert result["export_format"] == "focus_v13_csv"
+        assert result["records_exported"] == 1
+        assert result["provider"] == "aws"
+        assert result["include_preliminary"] is True
+        assert result["artifact"]["storage"] == "background_job.result.inline_base64"
+        assert result["artifact"]["filename"] == (
+            "focus-v1.3-core-2023-01-01-2023-01-31-aws.csv"
+        )
+        assert len(result["artifact"]["sha256"]) == 64
+
+    decoded = base64.b64decode(result["artifact"]["content_base64"]).decode("utf-8")
+    rows = list(csv.DictReader(io.StringIO(decoded)))
+    assert rows[0]["ProviderName"] == "AWS"
+    assert rows[0]["ServiceName"] == "AmazonEC2"
+    assert rows[0]["BilledCost"] == "12.34000000"
+
+
+@pytest.mark.asyncio
+async def test_export_execute_rejects_oversized_inline_result(db):
+    handler = CostExportHandler()
+    job = BackgroundJob(
+        tenant_id=uuid4(),
+        payload={
+            "start_date": "2023-01-01",
+            "end_date": "2023-01-31",
+            "max_inline_bytes": 1,
+        },
+    )
+
+    async def export_rows(*args, **kwargs):
+        yield {"ProviderName": "AWS"}
+
+    with patch(
+        "app.modules.reporting.domain.focus_export.FocusV13ExportService.export_rows",
+        new=export_rows,
+    ):
+        with pytest.raises(PermanentJobError, match="max_inline_bytes"):
+            await handler.execute(job, db)
 
 
 @pytest.mark.asyncio

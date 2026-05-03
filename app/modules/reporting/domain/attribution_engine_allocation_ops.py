@@ -12,6 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.attribution import AttributionRule, CostAllocation
 from app.models.cloud import CostRecord
+from app.modules.reporting.domain.allocation_ledger import (
+    cost_allocation_rollup_subquery,
+    unallocated_amount_expr,
+)
 from app.modules.reporting.domain.attribution_engine_simulation_ops import (
     simulate_rule,
 )
@@ -436,21 +440,33 @@ async def get_unallocated_analysis(
     """Identify top services contributing to unallocated spend."""
     from sqlalchemy import func
 
+    allocation_rollup = cost_allocation_rollup_subquery(
+        tenant_id=tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    unallocated_amount = unallocated_amount_expr(
+        origin_amount=CostRecord.cost_usd,
+        allocated_amount=allocation_rollup.c.allocated_amount,
+        allocation_count=allocation_rollup.c.allocation_count,
+    )
     query = (
         select(
             CostRecord.service,
-            func.sum(CostRecord.cost_usd).label("total_unallocated"),
+            func.sum(unallocated_amount).label("total_unallocated"),
             func.count(CostRecord.id).label("record_count"),
+        )
+        .outerjoin(
+            allocation_rollup,
+            (allocation_rollup.c.cost_record_id == CostRecord.id)
+            & (allocation_rollup.c.recorded_at == CostRecord.recorded_at),
         )
         .where(CostRecord.tenant_id == tenant_id)
         .where(CostRecord.recorded_at >= start_date)
         .where(CostRecord.recorded_at <= end_date)
-        .where(
-            (CostRecord.allocated_to.is_(None))
-            | (CostRecord.allocated_to == "Unallocated")
-        )
+        .where(unallocated_amount > Decimal("0"))
         .group_by(CostRecord.service)
-        .order_by(func.sum(CostRecord.cost_usd).desc())
+        .order_by(func.sum(unallocated_amount).desc())
         .limit(5)
     )
 

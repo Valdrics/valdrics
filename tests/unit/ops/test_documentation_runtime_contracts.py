@@ -91,7 +91,6 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     failover = (REPO_ROOT / "docs/architecture/failover.md").read_text(encoding="utf-8")
     deployment = (REPO_ROOT / "docs/DEPLOYMENT.md").read_text(encoding="utf-8")
     capacity = (REPO_ROOT / "docs/CAPACITY_PLAN.md").read_text(encoding="utf-8")
-    roadmap = (REPO_ROOT / "docs/roadmap.md").read_text(encoding="utf-8")
     external_feedback = (
         REPO_ROOT / "docs/product/external_feedback_validation.md"
     ).read_text(encoding="utf-8")
@@ -173,11 +172,7 @@ def test_rollback_and_recovery_docs_match_supported_platforms() -> None:
     assert "Supabase" in capacity
     assert "future scale path" not in capacity
 
-    assert "redirect only" in roadmap
-    assert "phase, and ship-gate source of" in roadmap
-    assert "reports/roadmap/" in roadmap
-    assert "Current Focus" not in roadmap
-    assert "active planning document" not in roadmap
+    assert not (REPO_ROOT / "docs/roadmap.md").exists()
     assert "Status: Supporting evidence" in external_feedback
     assert "PLAN.md" in external_feedback
     assert "not the canonical shipping plan" in external_feedback
@@ -473,13 +468,9 @@ def test_partition_archival_helpers_match_runtime_maintenance_path() -> None:
     assert "RAISE NOTICE" not in sql_text
 
 
-def test_historical_enforcement_gap_register_is_archived_outside_active_ops_surface() -> None:
+def test_historical_enforcement_gap_register_is_removed_from_active_ops_surface() -> None:
     assert not (
         REPO_ROOT / "docs/ops/enforcement_control_plane_gap_register_2026-02-23.md"
-    ).exists()
-    assert (
-        REPO_ROOT
-        / "docs/archive/ops/2026-q1/enforcement_control_plane_gap_register_2026-02-23.md"
     ).exists()
 
 
@@ -496,5 +487,5 @@ def test_runbooks_with_high_operational_risk_are_covered_by_contract_guard() -> 
     assert "docs/runbooks/enforcement_preprovision_integrations.md" in script_text
     assert "docs/runbooks/partition_maintenance.md" in script_text
     assert "docs/runbooks/secret_rotation_emergency.md" in script_text
-    assert "docs/roadmap.md" in script_text
+    assert "docs/roadmap.md" not in script_text
     assert "docs/architecture/tiering-2026.md" in script_text

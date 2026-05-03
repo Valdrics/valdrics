@@ -44,7 +44,7 @@ async def export_compliance_pack(
     ),
     focus_provider: Optional[str] = Query(
         default=None,
-        description="Optional provider filter for the bundled FOCUS export (aws|azure|gcp|saas|license|platform|hybrid).",
+        description="Optional provider filter for the bundled FOCUS export (aws|azure|gcp|saas|license|platform|hybrid|ai).",
     ),
     focus_include_preliminary: bool = Query(
         default=False,

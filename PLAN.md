@@ -182,10 +182,8 @@ evidence only:
   - `docs/runbooks/disaster_recovery.md`
 - product research and market validation:
   - `docs/product/external_feedback_validation.md`
-- shipping helpers and progress snapshots:
+- shipping helpers:
   - `docs/runbooks/phased_shipping.md`
-  - `docs/roadmap.md`
-  - `reports/roadmap/*`
 
 None of the documents above should introduce a second roadmap.
 
@@ -220,7 +218,7 @@ to a shipping phase here:
 | Phase | Strategy | Ground truth now | Ship state |
 | --- | --- | --- | --- |
 | Phase 1: Managed Platform Live Cutover | `core disruption` | Repo foundations are present; live staging and production cutover evidence are still incomplete | Active |
-| Phase 2: Unified Technology Spend Ledger | `core disruption` | Partial foundations exist through FOCUS-aligned export, normalized reporting, and Cloud+ connectors | Not shipped |
+| Phase 2: Unified Technology Spend Ledger | `core disruption` | Partial foundations exist through the AI-aware canonical spend-ledger API, allocation-aware FOCUS v1.3 export, normalized reporting, and Cloud+ connectors | Not shipped |
 | Phase 3: Audit-Grade Close | `moat expansion` | Reconciliation and close foundations exist, but live end-to-end close proof as the canonical customer path is not established here | Not shipped |
 | Phase 4: Governed Action Loop | `core disruption` | Approvals, enforcement, and remediation foundations exist, but the full action loop is not yet the closed customer operating standard | Not shipped |
 | Phase 5: Technology Value Contract Standard | `core disruption` | Draft TVC schemas, examples, verifier, CI admission checks, and deployment admission receipts exist; runtime receipts and reconciliation views do not | Not shipped |
@@ -290,6 +288,19 @@ In scope:
 - FOCUS-native schema ownership and explicit allocation model
 - shared-cost and tag-less allocation for multi-tenant services
 - canonical ledger API and export contract
+
+Current implementation notes:
+
+- `CostRecord` remains the normalized origin-charge ledger row
+- `CostAllocation` is the canonical split-allocation source for the ledger and
+  FOCUS export
+- `LLMUsage` is projected into the ledger as provider `ai`
+- `/api/v1/costs/ledger` exposes the canonical tenant spend-ledger API
+- FOCUS v1.3 export now emits resource, usage, pricing, allocation, and AI rows
+- `COST_EXPORT` jobs now create bounded inline FOCUS CSV artifacts instead of
+  placeholder download URLs
+- acceptance KPI ledger-quality evidence now counts AI ledger rows alongside
+  origin `CostRecord` rows
 
 Not in scope:
 

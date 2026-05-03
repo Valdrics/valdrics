@@ -9,6 +9,7 @@ from httpx import AsyncClient
 
 from app.models.aws_connection import AWSConnection
 from app.models.cloud import CloudAccount, CostRecord
+from app.models.llm import LLMUsage
 from app.models.tenant import Tenant
 from app.modules.reporting.domain.focus_export import FOCUS_V13_CORE_COLUMNS
 from app.shared.core.auth import CurrentUser, UserRole, get_current_user
@@ -118,6 +119,80 @@ async def test_focus_export_returns_csv_with_expected_columns_and_ids(
         assert data[header.index("Tags")] == '{"env":"prod"}'
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+@pytest.mark.asyncio
+async def test_focus_export_can_filter_ai_usage(
+    async_client: AsyncClient,
+    app,
+    db,
+) -> None:
+    tenant_id = uuid.uuid4()
+    user_id = uuid.uuid4()
+    usage_id = uuid.uuid4()
+
+    db.add(Tenant(id=tenant_id, name="AI Focus Tenant", plan=PricingTier.PRO.value))
+    db.add(
+        LLMUsage(
+            id=usage_id,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            provider="groq",
+            model="llama-3.3-70b-versatile",
+            input_tokens=125,
+            output_tokens=75,
+            total_tokens=200,
+            cost_usd=Decimal("0.0042"),
+            request_type="daily_analysis",
+            operation_id="op-focus-ai-1",
+            is_byok=True,
+            created_at=datetime(2026, 1, 16, 9, 30, tzinfo=timezone.utc),
+        )
+    )
+    await db.commit()
+
+    mock_user = CurrentUser(
+        id=user_id,
+        tenant_id=tenant_id,
+        email="ai-focus-export@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+    app.dependency_overrides[get_current_user] = lambda: mock_user
+    try:
+        response = await async_client.get(
+            "/api/v1/costs/export/focus",
+            params={
+                "start_date": "2026-01-01",
+                "end_date": "2026-01-31",
+                "provider": "ai",
+            },
+        )
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+    assert response.status_code == 200
+    rows = list(csv.DictReader(io.StringIO(response.text)))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["BillingAccountId"] == "ai:groq"
+    assert row["BillingAccountName"] == "AI Spend (Groq)"
+    assert row["ProviderName"] == "Groq"
+    assert row["ServiceProviderName"] == "Groq"
+    assert row["ServiceCategory"] == "AI and Machine Learning"
+    assert row["ServiceSubcategory"] == "Generative AI"
+    assert row["ServiceName"] == "llama-3.3-70b-versatile"
+    assert row["ConsumedQuantity"] == "200"
+    assert row["ConsumedUnit"] == "tokens"
+    assert row["PricingQuantity"] == "200"
+    assert row["PricingUnit"] == "tokens"
+    assert row["BilledCost"] == "0.00420000"
+    assert row["ResourceId"] == "op-focus-ai-1"
+    assert row["Tags"] == (
+        '{"is_byok":true,"llm_provider":"groq",'
+        '"model":"llama-3.3-70b-versatile",'
+        '"request_type":"daily_analysis","source":"llm_usage"}'
+    )
 
 
 @pytest.mark.asyncio

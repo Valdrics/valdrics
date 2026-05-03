@@ -140,6 +140,37 @@ async def get_cost_attribution_coverage_impl(
     )
 
 
+async def get_spend_ledger_impl(
+    *,
+    start_date: date,
+    end_date: date,
+    provider: Optional[str],
+    include_preliminary: bool,
+    limit: int,
+    offset: int,
+    db: AsyncSession,
+    current_user: CurrentUser,
+    require_tenant_id: Any,
+    normalize_provider_filter: Any,
+) -> dict[str, Any]:
+    from app.modules.reporting.domain.spend_ledger import list_spend_ledger_entries
+
+    if start_date > end_date:
+        raise HTTPException(status_code=400, detail="start_date must be <= end_date")
+    tenant_id = require_tenant_id(current_user)
+    normalized_provider = normalize_provider_filter(provider)
+    return await list_spend_ledger_entries(
+        db=db,
+        tenant_id=tenant_id,
+        start_date=start_date,
+        end_date=end_date,
+        provider=normalized_provider,
+        include_preliminary=include_preliminary,
+        limit=limit,
+        offset=offset,
+    )
+
+
 async def get_canonical_quality_impl(
     *,
     start_date: date,

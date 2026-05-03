@@ -10,6 +10,7 @@ from app.modules.governance.domain.security.compliance_pack_contracts import (
     CompliancePackValidationError,
 )
 from app.modules.governance.domain.security.compliance_pack_support import (
+    SUPPORTED_FOCUS_EXPORT_PROVIDERS,
     _project_root,
     load_reference_documents,
     normalize_optional_provider,
@@ -23,6 +24,24 @@ def test_normalize_optional_provider_rejects_unsupported_values() -> None:
         normalize_optional_provider(
             provider="oracle",
             provider_name="focus_provider",
+        )
+
+
+def test_focus_export_provider_allowlist_is_explicitly_broader() -> None:
+    assert (
+        normalize_optional_provider(
+            provider="ai",
+            provider_name="focus_provider",
+            supported_providers=SUPPORTED_FOCUS_EXPORT_PROVIDERS,
+        )
+        == "ai"
+    )
+    with pytest.raises(
+        CompliancePackValidationError, match="Unsupported savings_provider"
+    ):
+        normalize_optional_provider(
+            provider="ai",
+            provider_name="savings_provider",
         )
 
 

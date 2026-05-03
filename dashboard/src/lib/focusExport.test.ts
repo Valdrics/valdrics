@@ -24,4 +24,14 @@ describe('buildFocusExportPath', () => {
 			'/costs/export/focus?start_date=2026-01-01&end_date=2026-01-31&provider=aws&include_preliminary=true'
 		);
 	});
+
+	it('allows the canonical AI provider filter', () => {
+		expect(
+			buildFocusExportPath({
+				startDate: '2026-01-01',
+				endDate: '2026-01-31',
+				provider: 'ai'
+			})
+		).toBe('/costs/export/focus?start_date=2026-01-01&end_date=2026-01-31&provider=ai');
+	});
 });

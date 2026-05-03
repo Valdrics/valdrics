@@ -8,6 +8,7 @@
 	import { buildFocusExportPath } from '$lib/focusExport';
 	import { filenameFromContentDispositionHeader } from '$lib/utils';
 	import type { AuditDetail, AuditLog } from './auditTypes';
+	import { buildAuditCompliancePackOptions } from './auditExportContracts';
 	import AuditPageViewContent from './AuditPageViewContent.svelte';
 
 	let { data } = $props();
@@ -41,8 +42,6 @@
 	let packCloseEnforceFinalized = $state(true);
 	let packCloseMaxRestatements = $state(5000);
 	let canAccessAudit = $derived(canAccessAuditLogs(data.subscription?.tier, data.profile?.role));
-
-	const savingsProviderAllowed = ['aws', 'azure', 'gcp', 'saas', 'license'];
 
 	function getHeaders() {
 		return {
@@ -169,26 +168,19 @@
 		success = '';
 		try {
 			const headers = getHeaders();
-			const selectedSavingsProvider =
-				focusProvider && savingsProviderAllowed.includes(focusProvider) ? focusProvider : undefined;
-			const path = buildCompliancePackPath({
-				includeFocusExport: packIncludeFocus,
-				focusProvider: focusProvider || undefined,
-				focusIncludePreliminary,
-				focusMaxRows: 50000,
-				focusStartDate,
-				focusEndDate,
-				includeSavingsProof: packIncludeSavingsProof,
-				savingsProvider: selectedSavingsProvider,
-				savingsStartDate: focusStartDate,
-				savingsEndDate: focusEndDate,
-				includeClosePackage: packIncludeClosePackage,
-				closeProvider: focusProvider || undefined,
-				closeStartDate: focusStartDate,
-				closeEndDate: focusEndDate,
-				closeEnforceFinalized: packCloseEnforceFinalized,
-				closeMaxRestatements: packCloseMaxRestatements
-			});
+			const path = buildCompliancePackPath(
+				buildAuditCompliancePackOptions({
+					packIncludeFocus,
+					packIncludeSavingsProof,
+					packIncludeClosePackage,
+					packCloseEnforceFinalized,
+					packCloseMaxRestatements,
+					focusProvider,
+					focusIncludePreliminary,
+					focusStartDate,
+					focusEndDate
+				})
+			);
 
 			const res = await getWithTimeout(edgeApiPath(path), headers);
 			if (!res.ok) {

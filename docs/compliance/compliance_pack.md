@@ -103,7 +103,7 @@ General:
 - `evidence_limit` (default `200`, max `2000`): bounds evidence snapshots in the ZIP
 
 FOCUS export (when `include_focus_export=true`):
-- `focus_provider` (optional): `aws|azure|gcp|saas|license|platform|hybrid`
+- `focus_provider` (optional): `aws|azure|gcp|saas|license|platform|hybrid|ai`
 - `focus_include_preliminary` (default `false`)
 - `focus_start_date`, `focus_end_date` (dates): default last 30 days
 - `focus_max_rows` (default `50000`, max `200000`)

@@ -200,7 +200,7 @@ async def export_focus_v13_costs_csv(
         user=user,
         db=db,
         require_tenant_id=costs_module._require_tenant_id,
-        normalize_provider_filter=costs_module._normalize_provider_filter,
+        normalize_provider_filter=costs_module._normalize_focus_export_provider_filter,
         sanitize_csv_cell=costs_module._sanitize_csv_cell,
         get_settings=costs_module.get_settings,
     )

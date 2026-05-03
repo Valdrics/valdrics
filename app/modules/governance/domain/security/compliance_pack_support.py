@@ -17,6 +17,9 @@ logger = structlog.get_logger()
 SUPPORTED_COMPLIANCE_PROVIDERS: frozenset[str] = frozenset(
     {"aws", "azure", "gcp", "hybrid", "license", "platform", "saas"}
 )
+SUPPORTED_FOCUS_EXPORT_PROVIDERS: frozenset[str] = SUPPORTED_COMPLIANCE_PROVIDERS | {
+    "ai"
+}
 
 _REFERENCE_DOC_PATHS: tuple[tuple[str, str], ...] = (
     ("scim_doc", "docs/integrations/scim.md"),

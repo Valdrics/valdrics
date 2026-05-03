@@ -1,6 +1,4 @@
-"""
-Cost Management Job Handlers
-"""
+"""Cost Management Job Handlers."""
 
 import structlog
 from typing import Any, AsyncGenerator, AsyncIterator, Dict
@@ -27,8 +25,6 @@ ATTRIBUTION_TRIGGER_RECOVERABLE_EXCEPTIONS = (
     ImportError,
     OSError,
 )
-
-
 def _normalize_record_timestamp(value: Any) -> datetime:
     if isinstance(value, datetime):
         if value.tzinfo is None:
@@ -429,54 +425,14 @@ class CostAnomalyDetectionHandler(BaseJobHandler):
 
 
 class CostExportHandler(BaseJobHandler):
-    """Handle large cost data exports asynchronously."""
+    """Create bounded canonical cost export artifacts asynchronously."""
 
     async def execute(self, job: BackgroundJob, db: AsyncSession) -> Dict[str, Any]:
-        from app.modules.reporting.domain.aggregator import CostAggregator
-
-        payload = job.payload or {}
-        tenant_id = _require_tenant_id(job)
-        start_date = _require_iso_date(payload, "start_date")
-        end_date = _require_iso_date(payload, "end_date")
-        export_format = payload.get("format", "json")
-
-        logger.info(
-            "cost_export_started",
-            tenant_id=str(tenant_id),
-            start_date=str(start_date),
-            end_date=str(end_date),
+        from app.modules.governance.domain.jobs.handlers.cost_export import (
+            build_cost_export_result,
         )
 
-        # 1. Get cached breakdown for fast aggregation
-        breakdown = await CostAggregator.get_cached_breakdown(
-            db, tenant_id, start_date, end_date
-        )
-
-        # 2. For detailed export, fetch full records
-        summary = await CostAggregator.get_summary(db, tenant_id, start_date, end_date)
-
-        # 3. Prepare export data
-        export_data = {
-            "tenant_id": str(tenant_id),
-            "date_range": {"start": str(start_date), "end": str(end_date)},
-            "summary": breakdown,
-            "records_count": len(summary.records) if summary.records else 0,
-            "total_cost": float(summary.total_cost) if summary.total_cost else 0,
-        }
-
-        logger.info(
-            "cost_export_completed",
-            tenant_id=str(tenant_id),
-            records_exported=export_data["records_count"],
-        )
-
-        return {
-            "status": "completed",
-            "export_format": export_format,
-            "records_exported": export_data["records_count"],
-            "total_cost_usd": export_data["total_cost"],
-            "download_url": None,  # In production: S3 presigned URL
-        }
+        return await build_cost_export_result(job, db)
 
 
 class CostAggregationHandler(BaseJobHandler):
