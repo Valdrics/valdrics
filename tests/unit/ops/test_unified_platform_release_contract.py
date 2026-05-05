@@ -247,6 +247,8 @@ def test_unified_platform_release_runbook_matches_new_control_plane() -> None:
     assert "Artifact Registry" in runbook
     assert "Cloudflare Pages" in runbook
     assert "Supabase" in runbook
+    assert "roles/iam.workloadIdentityUser" in runbook
+    assert "attribute.repository/Arvenqor/valdrics" in runbook
     assert "same `api_promotion_ref`" in runbook
     assert "same `batch_promotion_ref`" in runbook
     assert "verify_managed_release_readiness.py" in runbook

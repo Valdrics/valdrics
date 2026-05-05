@@ -86,6 +86,21 @@ The release pipeline also requires:
 - `secrets.GCP_WORKLOAD_IDENTITY_PROVIDER`
 - `secrets.GCP_ARTIFACT_PUBLISHER_SERVICE_ACCOUNT`
 
+The GitHub Workload Identity principal must be granted
+`roles/iam.workloadIdentityUser` on each service account it impersonates. Grant
+the repository principal to both the deployer and artifact publisher service
+accounts:
+
+```text
+principalSet://iam.googleapis.com/projects/<project-number>/locations/global/workloadIdentityPools/github-actions/attribute.repository/<github-owner>/<github-repo>
+```
+
+For this repository, staging uses:
+
+```text
+principalSet://iam.googleapis.com/projects/772936428016/locations/global/workloadIdentityPools/github-actions/attribute.repository/Arvenqor/valdrics
+```
+
 `RUNTIME_PLAIN_ENV_JSON` is not an arbitrary blob. It must satisfy the managed
 runtime contract consumed by `scripts/generate_managed_deployment_artifacts.py`
 and `scripts/managed_deployment_contract.py`, including keys such as:

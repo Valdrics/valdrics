@@ -136,6 +136,9 @@ Create or verify:
 - Workload Identity Federation provider for GitHub Actions
 - deployer service account for environment deployment
 - artifact publisher service account for image publishing
+- `roles/iam.workloadIdentityUser` on both service accounts for the repository
+  principal:
+  `principalSet://iam.googleapis.com/projects/<project-number>/locations/global/workloadIdentityPools/github-actions/attribute.repository/<github-owner>/<github-repo>`
 - permission grants required by Terraform state bootstrap, API enablement,
   Cloud Run, Cloud Tasks, Cloud Scheduler, Cloud Run Jobs, and load balancer
   management
@@ -476,6 +479,7 @@ Use this when you are filling the GitHub environment forms.
 | Artifact Registry project, region, repository | Google Cloud `Artifact Registry -> Repositories` |
 | Workload Identity Provider resource name | Google Cloud `IAM & Admin -> Workload Identity Federation` |
 | Deployer and publisher service account emails | Google Cloud `IAM & Admin -> Service Accounts` |
+| GitHub WIF principal grant | Service account `Permissions -> Grant Access -> Workload Identity User` |
 | Cloudflare account ID | Cloudflare `Workers & Pages` or `Account Home` |
 | Cloudflare zone ID | Cloudflare `Account Home -> Overview -> API` |
 | Cloudflare Pages project name and production branch | Cloudflare `Workers & Pages -> <project>` |
