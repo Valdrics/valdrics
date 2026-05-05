@@ -197,27 +197,26 @@ jobs:
             --output-path ".runtime/${DEPLOY_ENVIRONMENT}.env" \
             --report-path ".runtime/${DEPLOY_ENVIRONMENT}.report.json"
 
-          MIGRATION_DATABASE_URL="$(
-            python3 - <<'PY'
-            from __future__ import annotations
+          python3 - <<'PY' > ".runtime/${DEPLOY_ENVIRONMENT}.database-url"
+          from __future__ import annotations
 
-            import os
-            from pathlib import Path
-            import shlex
+          import os
+          from pathlib import Path
+          import shlex
 
-            runtime_env = Path(f".runtime/{os.environ['DEPLOY_ENVIRONMENT']}.env")
-            for raw_line in runtime_env.read_text(encoding="utf-8").splitlines():
-                if not raw_line.startswith("DATABASE_URL="):
-                    continue
-                raw_value = raw_line.partition("=")[2].strip()
-                if not raw_value:
-                    raise SystemExit("DATABASE_URL is missing from the materialized runtime env")
-                parsed = shlex.split(raw_value, posix=True)
-                print(parsed[0] if parsed else "")
-                raise SystemExit(0)
-            raise SystemExit("DATABASE_URL is missing from the materialized runtime env")
-            PY
-          )"
+          runtime_env = Path(f".runtime/{os.environ['DEPLOY_ENVIRONMENT']}.env")
+          for raw_line in runtime_env.read_text(encoding="utf-8").splitlines():
+              if not raw_line.startswith("DATABASE_URL="):
+                  continue
+              raw_value = raw_line.partition("=")[2].strip()
+              if not raw_value:
+                  raise SystemExit("DATABASE_URL is missing from the materialized runtime env")
+              parsed = shlex.split(raw_value, posix=True)
+              print(parsed[0] if parsed else "")
+              raise SystemExit(0)
+          raise SystemExit("DATABASE_URL is missing from the materialized runtime env")
+          PY
+          MIGRATION_DATABASE_URL="$(< ".runtime/${DEPLOY_ENVIRONMENT}.database-url")"
 
           uv run python3 scripts/generate_managed_migration_env.py \
             --environment "${DEPLOY_ENVIRONMENT}" \
