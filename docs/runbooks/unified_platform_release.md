@@ -249,6 +249,14 @@ The runtime stack owns:
 - Pages project shell in Cloudflare
 - Supabase project and managed settings
 
+Terraform enables required Google APIs before creating runtime resources. Fresh
+projects still require deployer permission to enable services, and the Compute
+Engine API can take a few minutes to propagate before load balancer resources
+accept creates. Cloudflare rate limiting defaults to 50 requests per 10 seconds
+because some zones are only entitled to the 10-second `http_ratelimit` window.
+Supabase project creation requires available organization project quota, or an
+existing project must be imported into Terraform state before the release run.
+
 Terraform inputs are environment-specific and should be supplied through
 the generated `.runtime/deploy/<environment>/terraform.runtime.auto.tfvars.json`
 plus provider credentials that remain in GitHub environment secrets. The tfvars

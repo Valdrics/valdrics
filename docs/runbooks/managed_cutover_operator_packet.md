@@ -133,6 +133,8 @@ Create or verify:
 - target GCP project for `production`
 - Terraform state bucket for each environment
 - Terraform-managed Artifact Registry repository used by the publish workflow
+- enabled Google APIs, or deployer permissions to enable them during Terraform
+  apply, including `compute.googleapis.com` for the public API load balancer
 - Workload Identity Federation provider for GitHub Actions
 - deployer service account for environment deployment
 - artifact publisher service account for image publishing
@@ -160,6 +162,10 @@ Create or verify:
 - Pages project for the dashboard
 - API token with the minimum permissions needed by Terraform and Pages deploys
 - proxied API hostname and frontend hostname in the target zone
+- rate-limiting entitlement for the configured window. The Terraform default is
+  50 requests per 10 seconds because some zones only allow a 10-second
+  `http_ratelimit` period; use an environment tfvars override only when the
+  zone entitlement supports a longer window.
 
 Where to get it:
 
@@ -177,6 +183,8 @@ Create or verify:
 
 - target organization
 - target project
+- available project quota for Terraform-managed creation, or an imported
+  existing project in Terraform state before the release run
 - project region
 - personal access token for Management API and Terraform
 - project database password

@@ -206,6 +206,8 @@ resource "google_cloud_run_v2_service" "api" {
 
 resource "google_compute_global_address" "api_edge" {
   name = "${var.environment}-valdrics-api-edge"
+
+  depends_on = [google_project_service.required]
 }
 
 resource "tls_private_key" "api_origin" {
@@ -239,6 +241,8 @@ resource "google_compute_ssl_certificate" "api_origin" {
   lifecycle {
     create_before_destroy = true
   }
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_compute_region_network_endpoint_group" "api" {
@@ -249,6 +253,11 @@ resource "google_compute_region_network_endpoint_group" "api" {
   cloud_run {
     service = google_cloud_run_v2_service.api.name
   }
+
+  depends_on = [
+    google_project_service.required,
+    google_cloud_run_v2_service.api,
+  ]
 }
 
 resource "google_compute_security_policy" "api_edge_origin" {
@@ -302,17 +311,23 @@ resource "google_compute_backend_service" "api" {
   backend {
     group = google_compute_region_network_endpoint_group.api.id
   }
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_compute_url_map" "api" {
   name            = "${var.environment}-valdrics-api"
   default_service = google_compute_backend_service.api.id
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_compute_target_https_proxy" "api" {
   name             = "${var.environment}-valdrics-api-https"
   url_map          = google_compute_url_map.api.id
   ssl_certificates = [google_compute_ssl_certificate.api_origin.id]
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_compute_global_forwarding_rule" "api_https" {
@@ -321,6 +336,8 @@ resource "google_compute_global_forwarding_rule" "api_https" {
   ip_address            = google_compute_global_address.api_edge.id
   port_range            = "443"
   target                = google_compute_target_https_proxy.api.id
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_compute_url_map" "api_http_redirect" {
@@ -331,11 +348,15 @@ resource "google_compute_url_map" "api_http_redirect" {
     redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
     strip_query            = false
   }
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_compute_target_http_proxy" "api_http_redirect" {
   name    = "${var.environment}-valdrics-api-http"
   url_map = google_compute_url_map.api_http_redirect.id
+
+  depends_on = [google_project_service.required]
 }
 
 resource "google_compute_global_forwarding_rule" "api_http" {
@@ -344,6 +365,8 @@ resource "google_compute_global_forwarding_rule" "api_http" {
   ip_address            = google_compute_global_address.api_edge.id
   port_range            = "80"
   target                = google_compute_target_http_proxy.api_http_redirect.id
+
+  depends_on = [google_project_service.required]
 }
 
 data "google_iam_policy" "api_public_invoker" {

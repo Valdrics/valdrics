@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from app.shared.orchestration.contracts import ManagedWorkItem
@@ -8,6 +9,20 @@ from app.shared.orchestration.schedules import cloud_scheduler_jobs_payload
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _terraform_resource_block(source: str, resource_type: str, name: str) -> str:
+    pattern = rf'resource "{re.escape(resource_type)}" "{re.escape(name)}" \{{(?P<body>.*?)\n\}}'
+    match = re.search(pattern, source, flags=re.DOTALL)
+    assert match is not None, f"{resource_type}.{name} resource missing"
+    return match.group("body")
+
+
+def _terraform_variable_block(source: str, name: str) -> str:
+    pattern = rf'variable "{re.escape(name)}" \{{(?P<body>.*?)\n\}}'
+    match = re.search(pattern, source, flags=re.DOTALL)
+    assert match is not None, f"{name} variable missing"
+    return match.group("body")
 
 
 def test_terraform_root_targets_gcp_cloudflare_and_supabase() -> None:
@@ -63,6 +78,27 @@ def test_terraform_root_targets_gcp_cloudflare_and_supabase() -> None:
         'managed_scheduler_jobs              = jsondecode(file("${path.module}/managed_scheduler_jobs.json"))'
         in main
     )
+
+    compute_resources = {
+        "api_edge": "google_compute_global_address",
+        "api_origin": "google_compute_ssl_certificate",
+        "api": "google_compute_region_network_endpoint_group",
+        "api_edge_origin": "google_compute_security_policy",
+        "api_http_redirect": "google_compute_url_map",
+    }
+    for resource_name, resource_type in compute_resources.items():
+        block = _terraform_resource_block(main, resource_type, resource_name)
+        assert "depends_on" in block
+        assert "google_project_service.required" in block
+
+    rate_limit_period = _terraform_variable_block(
+        variables, "cloudflare_api_rate_limit_period_seconds"
+    )
+    rate_limit_threshold = _terraform_variable_block(
+        variables, "cloudflare_api_rate_limit_requests_per_period"
+    )
+    assert "default     = 10" in rate_limit_period
+    assert "default     = 50" in rate_limit_threshold
 
 
 def test_terraform_root_excludes_archived_aws_failover_and_secret_rotation_inputs() -> (

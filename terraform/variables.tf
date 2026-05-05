@@ -163,7 +163,7 @@ variable "cloudflare_pages_production_branch" {
 variable "cloudflare_api_rate_limit_requests_per_period" {
   description = "Edge rate-limit threshold for the Cloudflare-proxied public API."
   type        = number
-  default     = 300
+  default     = 50
 
   validation {
     condition     = var.cloudflare_api_rate_limit_requests_per_period >= 1
@@ -174,7 +174,7 @@ variable "cloudflare_api_rate_limit_requests_per_period" {
 variable "cloudflare_api_rate_limit_period_seconds" {
   description = "Edge rate-limit rolling window in seconds for the public API."
   type        = number
-  default     = 60
+  default     = 10
 
   validation {
     condition     = var.cloudflare_api_rate_limit_period_seconds >= 1
