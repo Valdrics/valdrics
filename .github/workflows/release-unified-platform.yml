@@ -61,20 +61,6 @@ jobs:
             tests/unit/ops/test_managed_deployment_contract.py \
             tests/unit/ops/test_generate_managed_deployment_artifacts.py
 
-  publish:
-    name: Publish Backend Artifact
-    needs:
-      - validate
-      - bootstrap-artifact-registry
-    uses: ./.github/workflows/publish-artifact-registry-images.yml
-    with:
-      release_tag: ${{ inputs.release_tag }}
-      git_ref: ${{ inputs.git_ref || github.sha }}
-      gcp_project_id: ${{ vars.ARTIFACT_REGISTRY_PROJECT_ID }}
-      artifact_registry_region: ${{ vars.ARTIFACT_REGISTRY_REGION }}
-      artifact_registry_repository: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
-    secrets: inherit
-
   bootstrap-terraform-state:
     name: Bootstrap Terraform State
     needs: validate
@@ -213,6 +199,20 @@ jobs:
             -var="artifact_registry_repository_id=${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}" \
             -out=tfplan
           terraform -chdir=terraform/artifact-registry apply -auto-approve tfplan
+
+  publish:
+    name: Publish Backend Artifact
+    needs:
+      - validate
+      - bootstrap-artifact-registry
+    uses: ./.github/workflows/publish-artifact-registry-images.yml
+    with:
+      release_tag: ${{ inputs.release_tag }}
+      git_ref: ${{ inputs.git_ref || github.sha }}
+      gcp_project_id: ${{ vars.ARTIFACT_REGISTRY_PROJECT_ID }}
+      artifact_registry_region: ${{ vars.ARTIFACT_REGISTRY_REGION }}
+      artifact_registry_repository: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
+    secrets: inherit
 
   deploy-staging:
     name: Deploy Staging

@@ -208,6 +208,7 @@ def test_release_unified_platform_workflow_promotes_one_digest_through_environme
     assert "uses: ./.github/actions/setup-dashboard" in workflow
     assert "Publish Backend Artifact" in workflow
     assert "./.github/workflows/publish-artifact-registry-images.yml" in workflow
+    assert workflow.index("bootstrap-artifact-registry:") < workflow.index("publish:")
     assert "./.github/workflows/deploy-unified-platform.yml" in workflow
     assert "ARTIFACT_REGISTRY_PROJECT_ID" in workflow
     assert "deploy-staging:" in workflow
