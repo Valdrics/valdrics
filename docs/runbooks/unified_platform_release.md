@@ -101,6 +101,23 @@ For this repository, staging uses:
 principalSet://iam.googleapis.com/projects/772936428016/locations/global/workloadIdentityPools/github-actions/attribute.repository/Arvenqor/valdrics
 ```
 
+The deployer service account also needs project-level permissions for the
+Terraform-managed platform resources. At minimum, grant roles that include:
+
+- `iam.serviceAccounts.create`
+- `iam.serviceAccounts.get`
+- `iam.serviceAccounts.getIamPolicy`
+- `iam.serviceAccounts.setIamPolicy`
+- `resourcemanager.projects.getIamPolicy`
+- `resourcemanager.projects.setIamPolicy`
+
+Typical first-bootstrap grants are `roles/iam.serviceAccountAdmin`,
+`roles/resourcemanager.projectIamAdmin`, `roles/iam.serviceAccountUser`, plus
+the service-specific admin roles for Cloud Run, Cloud Tasks, Cloud Scheduler,
+Secret Manager, Compute, Service Usage, Artifact Registry, and Terraform state
+storage. The release workflow preflights the service-account and project-IAM
+permissions before image publishing so missing bootstrap grants fail early.
+
 `RUNTIME_PLAIN_ENV_JSON` is not an arbitrary blob. It must satisfy the managed
 runtime contract consumed by `scripts/generate_managed_deployment_artifacts.py`
 and `scripts/managed_deployment_contract.py`, including keys such as:
@@ -182,9 +199,11 @@ Required workflow inputs:
 
 Before image publishing, the release workflow runs a managed-platform preflight
 against the target environment. The preflight enables required Google APIs early
-and validates that `SUPABASE_URL` points at an existing Supabase project in the
-configured organization. This catches org/token/project binding issues before
-the expensive Docker build and publish path.
+validates deployer IAM permissions for Terraform service-account and project
+IAM management, and validates that `SUPABASE_URL` points at an existing Supabase
+project in the configured organization. This catches GCP bootstrap and
+org/token/project binding issues before the expensive Docker build and publish
+path.
 
 The deploy workflow performs:
 
@@ -260,7 +279,8 @@ Terraform enables required Google APIs before creating runtime resources. Fresh
 projects still require deployer permission to enable services, and the Compute
 Engine API can take a few minutes to propagate before load balancer resources
 accept creates. Cloudflare rate limiting defaults to 50 requests per 10 seconds
-because some zones are only entitled to the 10-second `http_ratelimit` window.
+with a 10-second mitigation timeout because this zone is only entitled to the
+10-second `http_ratelimit` window and mitigation timeout.
 Supabase projects are expected to exist before release. Terraform imports the
 project ref derived from `SUPABASE_URL` before planning, so an empty existing
 project is sufficient; Alembic owns table creation during the migration step.

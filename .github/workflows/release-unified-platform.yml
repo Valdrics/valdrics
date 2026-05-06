@@ -241,6 +241,13 @@ jobs:
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --quiet
 
+      - name: Validate GCP deployer Terraform IAM permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/preflight_gcp_managed_platform.py \
+            --project-id "${{ vars.GCP_PROJECT_ID }}"
+
       - name: Validate Supabase existing project binding
         shell: bash
         env:
@@ -294,6 +301,13 @@ jobs:
             secretmanager.googleapis.com \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --quiet
+
+      - name: Validate GCP deployer Terraform IAM permissions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/preflight_gcp_managed_platform.py \
+            --project-id "${{ vars.GCP_PROJECT_ID }}"
 
       - name: Validate Supabase existing project binding
         shell: bash

@@ -185,11 +185,11 @@ variable "cloudflare_api_rate_limit_period_seconds" {
 variable "cloudflare_api_rate_limit_mitigation_timeout_seconds" {
   description = "Block duration in seconds when the Cloudflare API rate-limit threshold is exceeded."
   type        = number
-  default     = 60
+  default     = 10
 
   validation {
-    condition     = var.cloudflare_api_rate_limit_mitigation_timeout_seconds >= 1
-    error_message = "cloudflare_api_rate_limit_mitigation_timeout_seconds must be >= 1."
+    condition     = var.cloudflare_api_rate_limit_mitigation_timeout_seconds == 10
+    error_message = "cloudflare_api_rate_limit_mitigation_timeout_seconds must be 10 for the current Cloudflare zone entitlement."
   }
 }
 

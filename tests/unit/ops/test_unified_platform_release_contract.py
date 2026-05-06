@@ -98,8 +98,16 @@ def test_terraform_root_targets_gcp_cloudflare_and_supabase() -> None:
     rate_limit_threshold = _terraform_variable_block(
         variables, "cloudflare_api_rate_limit_requests_per_period"
     )
+    rate_limit_mitigation = _terraform_variable_block(
+        variables, "cloudflare_api_rate_limit_mitigation_timeout_seconds"
+    )
     assert "default     = 10" in rate_limit_period
     assert "default     = 50" in rate_limit_threshold
+    assert "default     = 10" in rate_limit_mitigation
+    assert (
+        "cloudflare_api_rate_limit_mitigation_timeout_seconds must be 10"
+        in rate_limit_mitigation
+    )
 
 
 def test_terraform_root_excludes_archived_aws_failover_and_secret_rotation_inputs() -> (
@@ -259,6 +267,8 @@ def test_release_unified_platform_workflow_promotes_one_digest_through_environme
     assert "Preflight Staging Managed Platform" in workflow
     assert "Preflight Production Managed Platform" in workflow
     assert "preflight_managed_platform.py" in workflow
+    assert "preflight_gcp_managed_platform.py" in workflow
+    assert "Validate GCP deployer Terraform IAM permissions" in workflow
     assert "gcloud services enable" in workflow
     assert "preflight-staging-managed-platform" in workflow
     assert "./.github/workflows/publish-artifact-registry-images.yml" in workflow

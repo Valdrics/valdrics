@@ -141,9 +141,12 @@ Create or verify:
 - `roles/iam.workloadIdentityUser` on both service accounts for the repository
   principal:
   `principalSet://iam.googleapis.com/projects/<project-number>/locations/global/workloadIdentityPools/github-actions/attribute.repository/<github-owner>/<github-repo>`
+- deployer project-level permissions required by Terraform, including
+  `iam.serviceAccounts.create`, service-account IAM policy management, and
+  project IAM policy management
 - permission grants required by Terraform state bootstrap, API enablement,
-  Cloud Run, Cloud Tasks, Cloud Scheduler, Cloud Run Jobs, and load balancer
-  management
+  Cloud Run, Cloud Tasks, Cloud Scheduler, Cloud Run Jobs, Secret Manager,
+  Artifact Registry, and load balancer management
 
 Where to get it:
 
@@ -163,9 +166,10 @@ Create or verify:
 - API token with the minimum permissions needed by Terraform and Pages deploys
 - proxied API hostname and frontend hostname in the target zone
 - rate-limiting entitlement for the configured window. The Terraform default is
-  50 requests per 10 seconds because some zones only allow a 10-second
-  `http_ratelimit` period; use an environment tfvars override only when the
-  zone entitlement supports a longer window.
+  50 requests per 10 seconds with a 10-second mitigation timeout because this
+  zone only allows a 10-second `http_ratelimit` period and mitigation timeout;
+  use an environment tfvars override only after the zone entitlement supports
+  different values.
 
 Where to get it:
 
