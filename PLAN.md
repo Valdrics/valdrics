@@ -63,9 +63,9 @@ Every major idea in this file is assigned one strategy label:
   - `release-unified-platform.yml` for infrastructure changes, Cloudflare policy
     changes, Supabase project settings, and production promotion wiring.
 - Current operational blocker: Cloudflare Bot Fight Mode is challenging public
-  API health probes. WAF Skip rules cannot bypass it; the zone must have Bot
-  Fight Mode disabled manually or the GitHub `CLOUDFLARE_API_TOKEN` must include
-  Zone `Bot Management:Edit` so Terraform can disable it.
+  API health probes. WAF Skip rules cannot bypass it; the GitHub
+  `CLOUDFLARE_API_TOKEN` must include Zone `Bot Management:Edit` so release
+  preflight and Terraform can enforce `fight_mode=false`.
 
 ## What Valdrics Is Building
 

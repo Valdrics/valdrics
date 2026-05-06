@@ -250,27 +250,14 @@ jobs:
           python3 scripts/preflight_gcp_managed_platform.py \
             --project-id "${{ vars.GCP_PROJECT_ID }}"
 
-      - name: Validate Cloudflare Bot Management API access
+      - name: Enforce Cloudflare Bot Fight Mode disabled
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
         run: |
           set -euo pipefail
-          response_body="${RUNNER_TEMP}/cloudflare-bot-management.json"
-          http_status="$(
-            curl --silent --show-error --request GET --max-time 10 \
-              --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-              --output "${response_body}" \
-              --write-out "%{http_code}" \
-              "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/bot_management" || true
-          )"
-
-          if [[ "${http_status}" != "200" ]]; then
-            echo "::error title=Cloudflare Bot Management permission missing::CLOUDFLARE_API_TOKEN must include Zone > Bot Management > Edit for CLOUDFLARE_ZONE_ID=${CLOUDFLARE_ZONE_ID}; Bot Fight Mode cannot be skipped by WAF rules and Terraform must disable it for API health checks. Cloudflare returned HTTP ${http_status:-curl_error}."
-            cat "${response_body}" || true
-            exit 1
-          fi
+          python3 scripts/preflight_cloudflare_bot_management.py \
+            --cloudflare-zone-id "${{ vars.CLOUDFLARE_ZONE_ID }}"
 
       - name: Validate Supabase existing project binding
         shell: bash
@@ -334,27 +321,14 @@ jobs:
           python3 scripts/preflight_gcp_managed_platform.py \
             --project-id "${{ vars.GCP_PROJECT_ID }}"
 
-      - name: Validate Cloudflare Bot Management API access
+      - name: Enforce Cloudflare Bot Fight Mode disabled
         shell: bash
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ZONE_ID: ${{ vars.CLOUDFLARE_ZONE_ID }}
         run: |
           set -euo pipefail
-          response_body="${RUNNER_TEMP}/cloudflare-bot-management.json"
-          http_status="$(
-            curl --silent --show-error --request GET --max-time 10 \
-              --header "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-              --output "${response_body}" \
-              --write-out "%{http_code}" \
-              "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/bot_management" || true
-          )"
-
-          if [[ "${http_status}" != "200" ]]; then
-            echo "::error title=Cloudflare Bot Management permission missing::CLOUDFLARE_API_TOKEN must include Zone > Bot Management > Edit for CLOUDFLARE_ZONE_ID=${CLOUDFLARE_ZONE_ID}; Bot Fight Mode cannot be skipped by WAF rules and Terraform must disable it for API health checks. Cloudflare returned HTTP ${http_status:-curl_error}."
-            cat "${response_body}" || true
-            exit 1
-          fi
+          python3 scripts/preflight_cloudflare_bot_management.py \
+            --cloudflare-zone-id "${{ vars.CLOUDFLARE_ZONE_ID }}"
 
       - name: Validate Supabase existing project binding
         shell: bash

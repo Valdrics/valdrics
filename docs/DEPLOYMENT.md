@@ -58,7 +58,7 @@ GitHub release/deploy secret contract:
 - Artifact publish requires `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_ARTIFACT_PUBLISHER_SERVICE_ACCOUNT`
 - Environment deploy requires `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_DEPLOYER_SERVICE_ACCOUNT`
 - Environment deploy also requires `CLOUDFLARE_API_TOKEN`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DATABASE_PASSWORD`, and `RUNTIME_SECRET_ENV_JSON`
-- `CLOUDFLARE_API_TOKEN` must include Zone `Bot Management:Edit`, DNS, Rulesets/WAF, and Pages permissions; Bot Fight Mode cannot be bypassed by WAF Skip rules, so Terraform disables it for API health probes
+- `CLOUDFLARE_API_TOKEN` must include Zone `Bot Management:Edit`, DNS, Rulesets/WAF, and Pages permissions; Bot Fight Mode cannot be bypassed by WAF Skip rules, so release preflight and Terraform enforce `fight_mode=false` for API health probes
 
 Use `.github/workflows/release-beta-app.yml` for normal beta/product releases
 once infrastructure exists. It skips Terraform/state bootstrap and updates only

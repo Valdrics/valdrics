@@ -94,8 +94,9 @@ At minimum the deployment workflow expects:
 - `secrets.RUNTIME_SECRET_ENV_JSON`
 
 Cloudflare Bot Fight Mode must be disabled for API health checks. WAF Skip rules
-cannot bypass Bot Fight Mode, so the release preflight checks Bot Management API
-access before the slower Terraform/image/deploy stages.
+cannot bypass Bot Fight Mode, so the release preflight enforces
+`fight_mode=false` through the Bot Management API before the slower
+Terraform/image/deploy stages.
 
 The beta app release checks the public API route for a Cloudflare browser
 challenge before publishing/deploying, so this failure surfaces quickly instead

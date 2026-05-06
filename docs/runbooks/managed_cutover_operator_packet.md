@@ -262,8 +262,8 @@ Set the following for both `staging` and `production` environments.
 | `RUNTIME_SECRET_ENV_JSON` | JSON object of runtime secrets | Assemble from the template in section 7 |
 
 Cloudflare Bot Fight Mode cannot be bypassed by WAF Skip rules. The release
-preflight checks Bot Management API access because Terraform must disable Bot
-Fight Mode for API health probes.
+preflight enforces `fight_mode=false` through the Bot Management API because API
+health probes must not receive browser challenges.
 
 For launch/beta iteration after infrastructure is provisioned, run
 `.github/workflows/release-beta-app.yml`. It avoids Terraform and state bootstrap
