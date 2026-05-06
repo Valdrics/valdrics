@@ -76,10 +76,14 @@ At minimum the deployment workflow expects:
 - `vars.RUNTIME_PLAIN_ENV_JSON`
 - `secrets.GCP_WORKLOAD_IDENTITY_PROVIDER`
 - `secrets.GCP_DEPLOYER_SERVICE_ACCOUNT`
-- `secrets.CLOUDFLARE_API_TOKEN`
+- `secrets.CLOUDFLARE_API_TOKEN` with Zone `Bot Management:Edit`, DNS, Rulesets/WAF, and Pages permissions for the target zone/account
 - `secrets.SUPABASE_ACCESS_TOKEN`
 - `secrets.SUPABASE_DATABASE_PASSWORD`
 - `secrets.RUNTIME_SECRET_ENV_JSON`
+
+Cloudflare Bot Fight Mode must be disabled for API health checks. WAF Skip rules
+cannot bypass Bot Fight Mode, so the release preflight checks Bot Management API
+access before the slower Terraform/image/deploy stages.
 
 The release pipeline also requires:
 

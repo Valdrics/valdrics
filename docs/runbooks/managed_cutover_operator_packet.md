@@ -256,10 +256,14 @@ Set the following for both `staging` and `production` environments.
 | `GCP_WORKLOAD_IDENTITY_PROVIDER` | Full Workload Identity Provider resource name | Google Cloud `IAM & Admin -> Workload Identity Federation` |
 | `GCP_DEPLOYER_SERVICE_ACCOUNT` | Service account email used by deploy workflow | Google Cloud `IAM & Admin -> Service Accounts` |
 | `GCP_ARTIFACT_PUBLISHER_SERVICE_ACCOUNT` | Service account email used by publish workflow | Google Cloud `IAM & Admin -> Service Accounts` |
-| `CLOUDFLARE_API_TOKEN` | Token used by Terraform and Pages deploys | Cloudflare API Tokens |
+| `CLOUDFLARE_API_TOKEN` | Token used by Terraform and Pages deploys; include Zone `Bot Management:Edit`, DNS, Rulesets/WAF, and Pages permissions | Cloudflare API Tokens |
 | `SUPABASE_ACCESS_TOKEN` | Supabase personal access token | Supabase `Account -> Access Tokens` |
 | `SUPABASE_DATABASE_PASSWORD` | Database password for the target project | Supabase project database settings / reset flow |
 | `RUNTIME_SECRET_ENV_JSON` | JSON object of runtime secrets | Assemble from the template in section 7 |
+
+Cloudflare Bot Fight Mode cannot be bypassed by WAF Skip rules. The release
+preflight checks Bot Management API access because Terraform must disable Bot
+Fight Mode for API health probes.
 
 ## 6. `RUNTIME_PLAIN_ENV_JSON` template
 

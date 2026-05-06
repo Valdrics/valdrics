@@ -58,6 +58,7 @@ GitHub release/deploy secret contract:
 - Artifact publish requires `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_ARTIFACT_PUBLISHER_SERVICE_ACCOUNT`
 - Environment deploy requires `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_DEPLOYER_SERVICE_ACCOUNT`
 - Environment deploy also requires `CLOUDFLARE_API_TOKEN`, `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DATABASE_PASSWORD`, and `RUNTIME_SECRET_ENV_JSON`
+- `CLOUDFLARE_API_TOKEN` must include Zone `Bot Management:Edit`, DNS, Rulesets/WAF, and Pages permissions; Bot Fight Mode cannot be bypassed by WAF Skip rules, so Terraform disables it for API health probes
 
 The runtime JSON inputs are not free-form. The active contract in
 `scripts/managed_deployment_contract.py` and

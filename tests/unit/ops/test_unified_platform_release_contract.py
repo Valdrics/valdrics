@@ -285,6 +285,10 @@ def test_release_unified_platform_workflow_promotes_one_digest_through_environme
     assert "preflight_managed_platform.py" in workflow
     assert "preflight_gcp_managed_platform.py" in workflow
     assert "Validate GCP deployer Terraform IAM permissions" in workflow
+    assert "Validate Cloudflare Bot Management API access" in workflow
+    assert "/bot_management" in workflow
+    assert "Zone > Bot Management > Edit" in workflow
+    assert "Bot Fight Mode cannot be skipped by WAF rules" in workflow
     assert "gcloud services enable" in workflow
     assert "cloudresourcemanager.googleapis.com" in workflow
     assert "preflight-staging-managed-platform" in workflow
