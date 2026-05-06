@@ -131,10 +131,19 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    result = enforce_bot_fight_mode_disabled(
-        cloudflare_zone_id=str(args.cloudflare_zone_id),
-        cloudflare_api_token=os.environ.get("CLOUDFLARE_API_TOKEN", ""),
-    )
+    try:
+        result = enforce_bot_fight_mode_disabled(
+            cloudflare_zone_id=str(args.cloudflare_zone_id),
+            cloudflare_api_token=os.environ.get("CLOUDFLARE_API_TOKEN", ""),
+        )
+    except (RuntimeError, ValueError) as exc:
+        print(
+            "::error title=Cloudflare Bot Management preflight failed::"
+            f"{exc}",
+            file=sys.stderr,
+        )
+        return 1
+
     _write_github_output(result)
     print(
         "[cloudflare-bot-management-preflight] ok "
