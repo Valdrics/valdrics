@@ -363,7 +363,35 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error "${{ steps.managed_bundle.outputs.api_url }}/health/live" >/dev/null
+          api_health_url="${{ steps.managed_bundle.outputs.api_url }}/health/live"
+          response_headers="${RUNNER_TEMP}/api-health-live.headers"
+          response_body="${RUNNER_TEMP}/api-health-live.json"
+
+          for attempt in $(seq 1 18); do
+            http_status="$(
+              curl --silent --show-error --location --max-time 10 \
+                --dump-header "${response_headers}" \
+                --output "${response_body}" \
+                --write-out "%{http_code}" \
+                "${api_health_url}" || true
+            )"
+            if [[ "${http_status}" == "200" ]]; then
+              cat "${response_body}"
+              exit 0
+            fi
+
+            echo "API liveness not ready yet (attempt ${attempt}/18, status=${http_status:-curl_error})."
+            if [[ "${attempt}" -lt 18 ]]; then
+              sleep 10
+            fi
+          done
+
+          echo "API liveness failed after the bounded retry window."
+          echo "--- response headers ---"
+          cat "${response_headers}" || true
+          echo "--- response body ---"
+          cat "${response_body}" || true
+          exit 1
 
       - name: Refresh codebase audit report
         shell: bash

@@ -4,9 +4,14 @@ on:
   push:
     branches: [main]
     paths:
-      - "app/**"
-      - "tests/**"
-      - "scripts/**"
+      - "app/shared/core/app_runtime.py"
+      - "app/shared/core/ops_metrics.py"
+      - "app/modules/reporting/**"
+      - "tests/unit/core/test_main.py"
+      - "tests/unit/core/test_ops_metrics.py"
+      - "tests/unit/modules/reporting/test_calculator_comprehensive.py"
+      - "tests/unit/modules/reporting/test_carbon_scheduler_comprehensive.py"
+      - "tests/unit/analysis/test_forecaster.py"
       - "pyproject.toml"
       - "uv.lock"
       - ".github/workflows/carbon-footprint.yml"
@@ -26,6 +31,7 @@ jobs:
   emissions:
     name: Carbon Footprint Report
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - name: Checkout Code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -53,7 +59,16 @@ jobs:
           tracker = EmissionsTracker(project_name='Valdrics-CI', output_dir='.')
           tracker.start()
           import subprocess
-          subprocess.run(['uv', 'run', 'pytest', 'tests/', '-x', '--no-cov'], check=False)
+          subprocess.run([
+              'uv', 'run', 'pytest',
+              'tests/unit/core/test_main.py',
+              'tests/unit/core/test_ops_metrics.py',
+              'tests/unit/modules/reporting/test_calculator_comprehensive.py',
+              'tests/unit/modules/reporting/test_carbon_scheduler_comprehensive.py',
+              'tests/unit/analysis/test_forecaster.py',
+              '-x',
+              '--no-cov',
+          ], check=False)
           emissions = tracker.stop()
           print(f'🌍 Carbon Emissions: {emissions:.6f} kgCO2eq')
           print(f'📊 Emissions saved to emissions.csv')
@@ -65,4 +80,3 @@ jobs:
           name: carbon-emissions-report
           path: emissions.csv
           retention-days: 30
-

@@ -225,6 +225,61 @@ async def test_get_cost_attribution_coverage(async_client: AsyncClient, app):
 
 
 @pytest.mark.asyncio
+async def test_get_spend_ledger_wrapper_preserves_models_and_validates_payloads() -> None:
+    tenant_id = uuid.uuid4()
+    user = CurrentUser(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        email="ledger-wrapper@valdrics.io",
+        role=UserRole.ADMIN,
+        tier=PricingTier.PRO,
+    )
+    ledger = costs_api.SpendLedgerResponse(
+        start_date="2026-01-01",
+        end_date="2026-01-31",
+        provider="aws",
+        include_preliminary=False,
+        limit=100,
+        offset=0,
+        record_count=0,
+        total_cost_usd="0.00000000",
+        total_allocated_usd="0.00000000",
+        total_unallocated_usd="0.00000000",
+        entries=[],
+    )
+
+    with patch.object(
+        costs_api,
+        "get_spend_ledger_impl",
+        new=AsyncMock(side_effect=[ledger, ledger.model_dump()]),
+    ) as mock_impl:
+        first = await costs_api.get_spend_ledger(
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 31),
+            provider="aws",
+            db=AsyncMock(),
+            current_user=user,
+        )
+        second = await costs_api.get_spend_ledger(
+            start_date=date(2026, 1, 1),
+            end_date=date(2026, 1, 31),
+            provider="aws",
+            db=AsyncMock(),
+            current_user=user,
+        )
+
+    assert first is ledger
+    assert second == ledger
+    assert mock_impl.await_count == 2
+    assert mock_impl.await_args_list[0].kwargs["require_tenant_id"] is (
+        costs_api._require_tenant_id
+    )
+    assert mock_impl.await_args_list[0].kwargs["normalize_provider_filter"] is (
+        costs_api._normalize_spend_ledger_provider_filter
+    )
+
+
+@pytest.mark.asyncio
 async def test_get_spend_ledger_returns_origin_rows_with_canonical_allocations(
     async_client: AsyncClient,
     app,

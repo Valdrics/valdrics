@@ -237,6 +237,11 @@ def test_deploy_unified_platform_workflow_applies_terraform_and_cloudflare_pages
     assert "uv run alembic upgrade head" in workflow
     assert "wrangler pages deploy" in workflow
     assert "/health/live" in workflow
+    assert "api_health_url=" in workflow
+    assert "for attempt in $(seq 1 18)" in workflow
+    assert "--dump-header" in workflow
+    assert '--write-out "%{http_code}"' in workflow
+    assert "status=${http_status:-curl_error}" in workflow
     assert "GCP_WORKLOAD_IDENTITY_PROVIDER" in workflow
     assert "TF_VAR_runtime_plain_env" not in workflow
     assert "TF_VAR_runtime_secret_env" not in workflow

@@ -306,7 +306,7 @@ jobs:
   dast-zap-baseline:
     name: DAST (OWASP ZAP Baseline)
     runs-on: ubuntu-24.04
-    needs: [container-scan]
+    needs: [security-scan, container-scan]
     # Keep PR security feedback fast; run browser DAST on mainline and schedules.
     if: github.event_name != 'pull_request'
     timeout-minutes: 35

@@ -335,6 +335,9 @@ def test_carbon_footprint_workflow_runs_codecarbon_benchmark() -> None:
     assert "EmissionsTracker" in text
     assert "carbon-emissions-report" in text
     assert "pytest" in text
+    assert "timeout-minutes: 20" in text
+    assert "pytest', 'tests/', '-x'" not in text
+    assert "tests/unit/modules/reporting/test_carbon_scheduler_comprehensive.py" in text
 
 
 def test_dashboard_mainline_browser_workflow_keeps_authenticated_playwright_matrix() -> (
@@ -450,6 +453,7 @@ def test_security_scan_uses_hermetic_compose_env_for_dast() -> None:
     assert "cache-from: type=gha,scope=dashboard-image" in text
     assert "needs.classify-changes.outputs.backend_container == 'true'" in text
     assert "needs.classify-changes.outputs.dashboard_container == 'true'" in text
+    assert "needs: [security-scan, container-scan]" in text
     assert "github.event_name != 'pull_request'" in text
     assert (
         "scripts/generate_local_compose_env.py --output-path .env.compose.dev" in text
