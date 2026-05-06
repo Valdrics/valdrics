@@ -19,6 +19,7 @@ if __package__ in {None, ""}:
 from scripts.generate_managed_deployment_artifacts import supabase_project_ref_from_url
 
 SUPABASE_API_BASE_URL = "https://api.supabase.com"
+SUPABASE_API_USER_AGENT = "CloudSentinel-AI-release-preflight/1.0"
 
 
 def _load_runtime_plain_env(raw_payload: str) -> dict[str, str]:
@@ -37,6 +38,7 @@ def _request_json(url: str, *, access_token: str) -> Any:
         headers={
             "Accept": "application/json",
             "Authorization": f"Bearer {access_token}",
+            "User-Agent": SUPABASE_API_USER_AGENT,
         },
         method="GET",
     )
