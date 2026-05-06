@@ -61,6 +61,12 @@ def test_terraform_root_targets_gcp_cloudflare_and_supabase() -> None:
     assert 'characteristics     = ["cf.colo.id", "ip.src"]' in main
     assert 'expression  = "(http.host eq \\"${local.api_hostname}\\")"' in main
     assert 'resource "cloudflare_ruleset" "api_internal_block"' in main
+    assert "Health probes must bypass Cloudflare browser challenges." in main
+    assert 'action      = "skip"' in main
+    assert 'http.request.uri.path eq \\"/health/live\\"' in main
+    assert '"http_request_sbfm"' in main
+    assert '"securityLevel"' in main
+    assert '"bic"' in main
     assert 'resource "google_cloud_run_v2_job" "batch"' in main
     assert 'resource "google_cloud_tasks_queue" "runtime"' in main
     assert 'resource "google_cloud_scheduler_job" "managed"' in main

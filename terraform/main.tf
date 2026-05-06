@@ -493,6 +493,28 @@ resource "cloudflare_ruleset" "api_internal_block" {
 
   rules = [
     {
+      action      = "skip"
+      enabled     = true
+      description = "Health probes must bypass Cloudflare browser challenges."
+      expression  = "(http.host eq \"${local.api_hostname}\" and (http.request.uri.path eq \"/health\" or http.request.uri.path eq \"/health/live\"))"
+
+      action_parameters = {
+        phases = [
+          "http_ratelimit",
+          "http_request_firewall_managed",
+          "http_request_sbfm",
+        ]
+        products = [
+          "bic",
+          "rateLimit",
+          "securityLevel",
+          "uaBlock",
+          "waf",
+          "zoneLockdown",
+        ]
+      }
+    },
+    {
       action      = "block"
       enabled     = true
       description = "Internal scheduler and task endpoints are not internet-facing."
