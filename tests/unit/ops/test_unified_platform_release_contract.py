@@ -297,6 +297,14 @@ def test_release_unified_platform_workflow_promotes_one_digest_through_environme
     assert "promote_production" in workflow
 
 
+def test_dashboard_package_exposes_wrangler_for_pages_deploy() -> None:
+    package = json.loads(
+        (REPO_ROOT / "dashboard/package.json").read_text(encoding="utf-8")
+    )
+
+    assert "wrangler" in package["devDependencies"]
+
+
 def test_unified_platform_release_runbook_matches_new_control_plane() -> None:
     runbook = (REPO_ROOT / "docs/runbooks/unified_platform_release.md").read_text(
         encoding="utf-8"
