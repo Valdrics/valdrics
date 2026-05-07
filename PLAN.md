@@ -69,7 +69,8 @@ Every major idea in this file is assigned one strategy label:
   release readiness then exposed the remaining frontend edge runtime gap. The
   full release lane now keeps Playwright browser setup explicit and manages the
   Cloudflare Pages custom domain, frontend CNAME, and Pages runtime variables
-  required by the edge proxy.
+  required by the edge proxy; direct-upload Pages deploys render those variables
+  into the Wrangler deployment config from the managed release bundle.
 
 ## What Valdrics Is Building
 

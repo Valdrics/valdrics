@@ -434,6 +434,38 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ steps.managed_bundle.outputs.cloudflare_account_id }}
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from __future__ import annotations
+
+          import json
+          import os
+          from pathlib import Path
+
+          deploy_dir = Path(os.environ["DEPLOY_DIR"])
+          pages = json.loads((deploy_dir / "cloudflare-pages-env.json").read_text(encoding="utf-8"))
+          tfvars = json.loads((deploy_dir / "terraform.runtime.auto.tfvars.json").read_text(encoding="utf-8"))
+
+          def toml_string(value: object) -> str:
+              return json.dumps(str(value))
+
+          api_origin = str(tfvars["api_url"]).rstrip("/")
+          wrangler_config = "\n".join(
+              [
+                  f"name = {toml_string(tfvars['cloudflare_pages_project_name'])}",
+                  'pages_build_output_dir = ".svelte-kit/cloudflare"',
+                  'compatibility_date = "2026-03-01"',
+                  'compatibility_flags = ["nodejs_compat"]',
+                  "",
+                  "[vars]",
+                  f"PRIVATE_API_ORIGIN = {toml_string(api_origin)}",
+                  f"PUBLIC_API_URL = {toml_string(pages['PUBLIC_API_URL'])}",
+                  f"PUBLIC_SUPABASE_URL = {toml_string(pages['PUBLIC_SUPABASE_URL'])}",
+                  f"PUBLIC_SUPABASE_ANON_KEY = {toml_string(pages['PUBLIC_SUPABASE_ANON_KEY'])}",
+                  "",
+              ]
+          )
+          Path("dashboard/wrangler.toml").write_text(wrangler_config, encoding="utf-8")
+          PY
           pnpm --dir dashboard exec wrangler pages deploy .svelte-kit/cloudflare --project-name "${{ steps.managed_bundle.outputs.cloudflare_pages_project_name }}" --branch "${{ steps.managed_bundle.outputs.cloudflare_pages_production_branch }}"
 
       - name: Smoke check API liveness

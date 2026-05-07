@@ -241,7 +241,7 @@ The deploy workflow performs:
 6. Terraform apply for GCP runtime + API load balancer, Cloudflare Pages/DNS/WAF, including the Pages custom domain, frontend CNAME, Pages runtime variables, and Supabase project/settings
 7. Alembic migration from `.runtime/<environment>.migrate.env`
 8. Dashboard build from `.runtime/deploy/<environment>/cloudflare-pages-env.json`; Terraform also applies the matching Cloudflare Pages runtime variables for Pages Functions
-9. Cloudflare Pages direct upload deploy
+9. Cloudflare Pages direct upload deploy with a Wrangler config rendered from the managed release bundle
 10. API liveness smoke check
 11. Cache and install the Playwright Chromium browser required by the public dashboard readiness gate
 12. Refresh the codebase audit report and run the managed release readiness verifier against the uploaded non-secret bundle

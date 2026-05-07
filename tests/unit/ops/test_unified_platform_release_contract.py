@@ -265,6 +265,10 @@ def test_deploy_unified_platform_workflow_applies_terraform_and_cloudflare_pages
     assert 'source "${{ steps.managed_bundle.outputs.migration_env_path }}"' in workflow
     assert "uv run alembic upgrade head" in workflow
     assert "wrangler pages deploy" in workflow
+    assert 'Path("dashboard/wrangler.toml").write_text' in workflow
+    assert "[vars]" in workflow
+    assert "PRIVATE_API_ORIGIN" in workflow
+    assert "PUBLIC_SUPABASE_ANON_KEY" in workflow
     assert "/health/live" in workflow
     assert "api_health_url=" in workflow
     assert "for attempt in $(seq 1 18)" in workflow

@@ -134,7 +134,8 @@ Expected posture:
 - frontend deploys to Cloudflare Pages, with Terraform owning the Pages custom
   domain, proxied CNAME for `FRONTEND_URL`, and Pages runtime variables such as
   `PRIVATE_API_ORIGIN`, `PUBLIC_API_URL`, `PUBLIC_SUPABASE_URL`, and
-  `PUBLIC_SUPABASE_ANON_KEY`
+  `PUBLIC_SUPABASE_ANON_KEY`; direct-upload deploys render the same values into
+  the Wrangler deployment config from the managed release bundle
 - database, auth, and storage run on Supabase
 - backend artifacts are promoted from Artifact Registry using digest-pinned refs
 - production promotion reuses the same tested backend artifact that passed staging
