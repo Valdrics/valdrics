@@ -243,7 +243,8 @@ The deploy workflow performs:
 8. Dashboard build from `.runtime/deploy/<environment>/cloudflare-pages-env.json`
 9. Cloudflare Pages direct upload deploy
 10. API liveness smoke check
-11. Refresh the codebase audit report and run the managed release readiness verifier against the uploaded non-secret bundle
+11. Cache and install the Playwright Chromium browser required by the public dashboard readiness gate
+12. Refresh the codebase audit report and run the managed release readiness verifier against the uploaded non-secret bundle
 
 ## 3a. Staging cutover operator sequence
 

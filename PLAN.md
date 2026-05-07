@@ -1,6 +1,6 @@
 # Valdrics Source of Truth Plan
 
-Last reviewed: 2026-05-06
+Last reviewed: 2026-05-07
 Status: Canonical
 Owner: Product + Engineering
 
@@ -62,10 +62,12 @@ Every major idea in this file is assigned one strategy label:
     app images, database migrations, and Cloudflare Pages.
   - `release-unified-platform.yml` for infrastructure changes, Cloudflare policy
     changes, Supabase project settings, and production promotion wiring.
-- Current operational blocker: Cloudflare Bot Fight Mode is challenging public
-  API health probes. WAF Skip rules cannot bypass it; the GitHub
-  `CLOUDFLARE_API_TOKEN` must include Zone `Bot Management:Edit` so release
-  preflight and Terraform can enforce `fight_mode=false`.
+- Current operational track: Cloudflare Bot Fight Mode is now enforced off by
+  release preflight and Terraform using a GitHub `CLOUDFLARE_API_TOKEN` with
+  Zone `Bot Management:Edit`. The latest staging full-release retry passed
+  Cloudflare preflight, Terraform, Cloudflare Pages deploy, and API liveness;
+  the remaining follow-up is keeping Playwright browser installation explicit
+  in the release readiness jobs before rerunning the full release.
 
 ## What Valdrics Is Building
 

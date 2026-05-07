@@ -218,6 +218,8 @@ def test_deploy_unified_platform_workflow_applies_terraform_and_cloudflare_pages
     assert "b9cd54a3c349d3f38e8881555d616ced269862dd # v3" in workflow
     assert "uses: ./.github/actions/setup-python-uv" in workflow
     assert "uses: ./.github/actions/setup-dashboard" in workflow
+    assert "Cache Playwright Browsers" in workflow
+    assert "pnpm exec playwright install --with-deps chromium" in workflow
     assert "RUNTIME_PLAIN_ENV_JSON" in workflow
     assert "RUNTIME_SECRET_ENV_JSON" in workflow
     assert "generate_managed_runtime_env.py" in workflow
@@ -290,6 +292,8 @@ def test_release_unified_platform_workflow_promotes_one_digest_through_environme
     assert "terraform/artifact-registry" in workflow
     assert "uses: ./.github/actions/setup-python-uv" in workflow
     assert "uses: ./.github/actions/setup-dashboard" in workflow
+    assert workflow.count("Cache Playwright Browsers") >= 2
+    assert workflow.count("pnpm exec playwright install --with-deps chromium") >= 2
     assert "Publish Backend Artifact" in workflow
     assert "Preflight Staging Managed Platform" in workflow
     assert "Preflight Production Managed Platform" in workflow
