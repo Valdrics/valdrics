@@ -1,0 +1,108 @@
+name: Diagnose GitHub OIDC Claims
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_environment:
+        description: "GitHub environment to request claims for."
+        required: true
+        default: production
+        type: choice
+        options:
+          - staging
+          - production
+      audience:
+        description: "Optional OIDC audience to request. Leave blank to use GitHub's default audience."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    name: Print OIDC Claims
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: ${{ inputs.target_environment }}
+
+    steps:
+      - name: Decode selected GitHub OIDC claims
+        shell: bash
+        env:
+          OIDC_AUDIENCE: ${{ inputs.audience }}
+        run: |
+          set -euo pipefail
+
+          request_url="${ACTIONS_ID_TOKEN_REQUEST_URL}"
+          if [[ -n "${OIDC_AUDIENCE}" ]]; then
+            encoded_audience="$(
+              python3 - <<'PY'
+          import os
+          import urllib.parse
+
+          print(urllib.parse.quote(os.environ["OIDC_AUDIENCE"], safe=""))
+          PY
+            )"
+
+            separator="&"
+            if [[ "${request_url}" != *\?* ]]; then
+              separator="?"
+            fi
+            request_url="${request_url}${separator}audience=${encoded_audience}"
+          fi
+
+          response="$(
+            curl -fsSL \
+              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+              "${request_url}"
+          )"
+
+          TOKEN_RESPONSE="${response}" python3 - <<'PY'
+          import base64
+          import json
+          import os
+
+          token = json.loads(os.environ["TOKEN_RESPONSE"])["value"]
+          payload_segment = token.split(".")[1]
+          payload_segment += "=" * (-len(payload_segment) % 4)
+          payload = json.loads(base64.urlsafe_b64decode(payload_segment))
+
+          selected_keys = (
+              "iss",
+              "sub",
+              "aud",
+              "repository",
+              "repository_id",
+              "repository_owner",
+              "repository_owner_id",
+              "repository_visibility",
+              "ref",
+              "ref_type",
+              "ref_protected",
+              "sha",
+              "workflow",
+              "workflow_ref",
+              "workflow_sha",
+              "job_workflow_ref",
+              "job_workflow_sha",
+              "environment",
+              "event_name",
+              "actor",
+              "actor_id",
+              "run_id",
+              "run_number",
+              "run_attempt",
+              "runner_environment",
+              "base_ref",
+              "head_ref",
+          )
+          selected_claims = {
+              key: payload[key]
+              for key in selected_keys
+              if key in payload
+          }
+
+          print(json.dumps(selected_claims, indent=2, sort_keys=True))
+          PY
