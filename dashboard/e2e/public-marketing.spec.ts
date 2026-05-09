@@ -281,7 +281,8 @@ test.describe('Public marketing smoke (desktop)', () => {
 			name: /display currency/i
 		});
 		await expect(simulatorCurrency).toBeVisible();
-		const localCurrencyButton = simulatorCurrency.getByRole('button').first();
+		const currencyButtons = simulatorCurrency.getByRole('button');
+		const localCurrencyButton = currencyButtons.first();
 		await expect(localCurrencyButton).toBeVisible();
 		if (isLocalDashboardUrl) {
 			await expect(localCurrencyButton).toHaveText(/local gbp/i);
@@ -290,7 +291,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await expect(page.locator('#hero')).toContainText(/first workflow typically live/i);
 
 		let assertedExplicitUsdPreference = false;
-		if ((await usdButton.count()) > 0) {
+		if ((await currencyButtons.count()) > 1) {
 			await localCurrencyButton.click();
 			await expect(localCurrencyButton).toHaveAttribute('aria-pressed', 'true');
 			await expect(usdButton).toBeVisible();
