@@ -68,11 +68,15 @@ Every major idea in this file is assigned one strategy label:
   Cloudflare preflight, Terraform, Cloudflare Pages deploy, API liveness,
   public smoke readiness, the in-deploy managed readiness gate, and the
   standalone staging release-readiness verifier. Production promotion was
-  intentionally skipped for that run. The full release lane now keeps
-  Playwright browser setup explicit, manages the Cloudflare Pages custom
-  domain, frontend CNAME, and Pages runtime variables required by the edge
-  proxy, pins the artifact download action to a resolvable commit, restores the
-  `.runtime` artifact extraction path for cross-job readiness checks, and keeps
+  intentionally skipped for that run. The beta app-only release lane has also
+  passed a staging smoke release with Terraform/state bootstrap skipped,
+  including public API preflight, digest-pinned backend image publish, Cloud
+  Run image update, database migrations, Cloudflare Pages deploy, API liveness,
+  and managed release readiness. The full release lane now keeps Playwright
+  browser setup explicit, manages the Cloudflare Pages custom domain, frontend
+  CNAME, and Pages runtime variables required by the edge proxy, pins the
+  artifact download action to a resolvable commit, restores the `.runtime`
+  artifact extraction path for cross-job readiness checks, and keeps
   live-staging public visual baselines committed for the landing hero, product,
   and trust sections.
   Direct-upload Pages deploys render runtime variables into the Wrangler
