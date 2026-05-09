@@ -140,6 +140,36 @@ bindings are not the first suspect. In the target Google Cloud project:
    for the repository principal shown above, using the target project's project
    number.
 
+The observed production-environment GitHub OIDC claims for this repository are:
+
+```json
+{
+  "repository": "Arvenqor/valdrics",
+  "repository_owner": "Arvenqor",
+  "ref": "refs/heads/main",
+  "ref_type": "branch",
+  "ref_protected": "true",
+  "environment": "production",
+  "sub": "repo:Arvenqor/valdrics:environment:production"
+}
+```
+
+A production provider condition should allow those claims while staying scoped to
+the production release path. A typical condition is:
+
+```text
+assertion.repository == "Arvenqor/valdrics" &&
+assertion.ref == "refs/heads/main" &&
+assertion.environment == "production" &&
+assertion.workflow_ref == "Arvenqor/valdrics/.github/workflows/release-unified-platform.yml@refs/heads/main"
+```
+
+If the provider condition is subject-based instead, the production subject is:
+
+```text
+assertion.sub == "repo:Arvenqor/valdrics:environment:production"
+```
+
 The deployer service account also needs project-level permissions for the
 Terraform-managed platform resources. At minimum, grant roles that include:
 
