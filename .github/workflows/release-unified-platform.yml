@@ -410,7 +410,7 @@ jobs:
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
           name: managed-deployment-bundle-staging-${{ inputs.release_tag }}
-          path: .
+          path: .runtime
 
       - name: Refresh codebase audit report
         shell: bash
@@ -561,7 +561,7 @@ jobs:
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
           name: managed-deployment-bundle-production-${{ inputs.release_tag }}
-          path: .
+          path: .runtime
 
       - name: Refresh codebase audit report
         shell: bash
@@ -610,13 +610,13 @@ jobs:
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
           name: managed-deployment-bundle-staging-${{ inputs.release_tag }}
-          path: .
+          path: .runtime
 
       - name: Download production managed deployment bundle
         uses: actions/download-artifact@95815c38cf2ff2164869cbab79da8d1f422bc89e # v4.2.1
         with:
           name: managed-deployment-bundle-production-${{ inputs.release_tag }}
-          path: .
+          path: .runtime
 
       - name: Render cross-environment blocker summary
         shell: bash
