@@ -54,12 +54,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          uv run ruff check scripts/generate_managed_deployment_artifacts.py scripts/managed_deployment_contract.py
+          uv run ruff check scripts/generate_managed_deployment_artifacts.py scripts/managed_deployment_contract.py scripts/preflight_runtime_env_contract.py
           uv run pytest -q --tb=short --no-cov \
             tests/unit/ops/test_unified_platform_release_contract.py \
             tests/unit/ops/test_production_deployment_contracts.py \
             tests/unit/ops/test_managed_deployment_contract.py \
-            tests/unit/ops/test_generate_managed_deployment_artifacts.py
+            tests/unit/ops/test_generate_managed_deployment_artifacts.py \
+            tests/unit/ops/test_preflight_runtime_env_contract.py
 
   bootstrap-terraform-state:
     name: Bootstrap Terraform State
@@ -214,6 +215,16 @@ jobs:
         with:
           ref: ${{ inputs.git_ref || github.sha }}
 
+      - name: Validate managed runtime contract
+        shell: bash
+        env:
+          RUNTIME_PLAIN_ENV_JSON: ${{ vars.RUNTIME_PLAIN_ENV_JSON }}
+          RUNTIME_SECRET_ENV_JSON: ${{ secrets.RUNTIME_SECRET_ENV_JSON }}
+        run: |
+          set -euo pipefail
+          python3 scripts/preflight_runtime_env_contract.py \
+            --environment staging
+
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3
         with:
@@ -284,6 +295,16 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.git_ref || github.sha }}
+
+      - name: Validate managed runtime contract
+        shell: bash
+        env:
+          RUNTIME_PLAIN_ENV_JSON: ${{ vars.RUNTIME_PLAIN_ENV_JSON }}
+          RUNTIME_SECRET_ENV_JSON: ${{ secrets.RUNTIME_SECRET_ENV_JSON }}
+        run: |
+          set -euo pipefail
+          python3 scripts/preflight_runtime_env_contract.py \
+            --environment production
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3

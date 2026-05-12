@@ -324,7 +324,9 @@ def test_release_unified_platform_workflow_promotes_one_digest_through_environme
     assert "preflight_managed_platform.py" in workflow
     assert "preflight_gcp_managed_platform.py" in workflow
     assert "preflight_cloudflare_bot_management.py" in workflow
+    assert "preflight_runtime_env_contract.py" in workflow
     assert "Validate GCP deployer Terraform IAM permissions" in workflow
+    assert "Validate managed runtime contract" in workflow
     assert "Enforce Cloudflare Bot Fight Mode disabled" in workflow
     assert "/bot_management" in cloudflare_preflight
     assert "Zone > Bot Management > Edit" in cloudflare_preflight
@@ -334,9 +336,20 @@ def test_release_unified_platform_workflow_promotes_one_digest_through_environme
     assert "preflight-staging-managed-platform" in workflow
     assert "./.github/workflows/publish-artifact-registry-images.yml" in workflow
     assert workflow.index("bootstrap-artifact-registry:") < workflow.index("publish:")
+    staging_preflight = workflow.split(
+        "preflight-staging-managed-platform:", maxsplit=1
+    )[1].split("preflight-production-managed-platform:", maxsplit=1)[0]
+    production_preflight = workflow.split(
+        "preflight-production-managed-platform:", maxsplit=1
+    )[1].split("publish:", maxsplit=1)[0]
     bootstrap_artifact_registry = workflow.split(
         "bootstrap-artifact-registry:", maxsplit=1
     )[1].split("preflight-staging-managed-platform:", maxsplit=1)[0]
+    assert "preflight_runtime_env_contract.py" in staging_preflight
+    assert "--environment staging" in staging_preflight
+    assert "preflight_runtime_env_contract.py" in production_preflight
+    assert "--environment production" in production_preflight
+    assert "preflight_runtime_env_contract.py" not in bootstrap_artifact_registry
     assert "- preflight-staging-managed-platform" in bootstrap_artifact_registry
     assert "./.github/workflows/deploy-unified-platform.yml" in workflow
     assert "ARTIFACT_REGISTRY_PROJECT_ID" in workflow

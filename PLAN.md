@@ -88,10 +88,14 @@ Every major idea in this file is assigned one strategy label:
   `2026.05.09-production-cutover` reached GitHub Actions production preflight
   and failed before any production mutation because Google STS rejected the
   GitHub OIDC credential against the production Workload Identity Federation
-  provider attribute condition. The next release gate is to update the
-  production provider condition, then verify `roles/iam.workloadIdentityUser`
-  grants on the production deployer and artifact publisher service accounts
-  before rerunning the full unified release lane.
+  provider attribute condition. The production provider condition has since
+  been updated enough for the `2026.05.12-production-cutover-2` run to pass
+  production GCP authentication, production preflight, and production Terraform
+  state bootstrap. That run then failed before production mutation while
+  generating the production managed runtime bundle because the production
+  `RUNTIME_SECRET_ENV_JSON` Paystack credentials were not live `sk_live_...` /
+  `pk_live_...` values. The next release gate is to set release-ready
+  production runtime secrets, then rerun the full unified release lane.
 
 ## What Valdrics Is Building
 

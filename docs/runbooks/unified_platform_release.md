@@ -226,6 +226,10 @@ if they appear in `RUNTIME_SECRET_ENV_JSON`. After that validation it materializ
 generates and verifies the managed deployment bundle before Terraform or
 Alembic run.
 
+The unified release preflight also validates the same runtime JSON contract
+before artifact publishing or deploy work. In production, Paystack credentials
+must be live keys (`sk_live_...` and `pk_live_...`); test keys fail preflight.
+
 The generated migration env defaults to `DB_SSL_MODE=require`, which requires
 TLS but does not verify the database certificate chain. Use `verify-ca` or
 `verify-full` plus `DB_SSL_CA_CERT_PATH` only when you have a pinned Supabase CA
