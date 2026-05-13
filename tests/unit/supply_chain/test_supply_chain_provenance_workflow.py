@@ -439,6 +439,18 @@ def test_security_scan_workflow_fails_on_high_or_critical_infra_and_container_fi
     assert "--minimum-severity HIGH" in security_text
 
 
+def test_security_scan_workflow_keeps_scheduled_trufflehog_verified_only() -> None:
+    security_text = (REPO_ROOT / ".github/workflows/security-scan.yml").read_text(
+        encoding="utf-8"
+    )
+
+    assert "TruffleHog OSS (Commit Range Gate)" in security_text
+    assert "TruffleHog OSS (Scheduled Verified Full Scan)" in security_text
+    assert "if: github.event_name != 'schedule'" in security_text
+    assert "if: github.event_name == 'schedule'" in security_text
+    assert "extra_args: --only-verified" in security_text
+
+
 def test_security_scan_uses_hermetic_compose_env_for_dast() -> None:
     text = (REPO_ROOT / ".github/workflows/security-scan.yml").read_text(
         encoding="utf-8"

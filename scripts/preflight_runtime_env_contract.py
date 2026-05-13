@@ -139,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
             secret=_load_payload_from_env(args.runtime_secret_env_name),
             template_path=args.template_path,
         )
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
         print(f"::error title=Managed runtime contract preflight failed::{exc}")
         return 1
 

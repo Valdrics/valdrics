@@ -146,8 +146,15 @@ jobs:
       - name: Run pip-audit
         run: uv run pip-audit --ignore-vuln CVE-2026-3219
         
-      - name: TruffleHog OSS
+      - name: TruffleHog OSS (Commit Range Gate)
+        if: github.event_name != 'schedule'
         uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d # v3.93.8
+
+      - name: TruffleHog OSS (Scheduled Verified Full Scan)
+        if: github.event_name == 'schedule'
+        uses: trufflesecurity/trufflehog@6c05c4a00b91aa542267d8e32a8254774799d68d # v3.93.8
+        with:
+          extra_args: --only-verified
 
       - name: Gitleaks Secret Scan (OSS, Commit Range Gate)
         shell: bash
