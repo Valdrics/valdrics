@@ -8,6 +8,7 @@ locals {
   artifact_registry_region            = local.artifact_registry_image_match[0]
   artifact_registry_project_id        = local.artifact_registry_image_match[1]
   artifact_registry_repository_id     = local.artifact_registry_image_match[2]
+  manage_artifact_registry_reader_iam = local.artifact_registry_project_id == var.gcp_project_id
   api_hostname                        = split("/", trimprefix(var.api_url, "https://"))[0]
   frontend_hostname                   = split("/", trimprefix(var.frontend_url, "https://"))[0]
   api_origin                          = trimsuffix(var.api_url, "/")
@@ -123,6 +124,8 @@ resource "google_service_account_iam_member" "allow_cloud_tasks_service_agent" {
 }
 
 resource "google_artifact_registry_repository_iam_member" "cloud_run_service_agent_image_reader" {
+  count = local.manage_artifact_registry_reader_iam ? 1 : 0
+
   project    = local.artifact_registry_project_id
   location   = local.artifact_registry_region
   repository = local.artifact_registry_repository_id
@@ -131,6 +134,8 @@ resource "google_artifact_registry_repository_iam_member" "cloud_run_service_age
 }
 
 resource "google_artifact_registry_repository_iam_member" "runtime_image_reader" {
+  count = local.manage_artifact_registry_reader_iam ? 1 : 0
+
   project    = local.artifact_registry_project_id
   location   = local.artifact_registry_region
   repository = local.artifact_registry_repository_id
@@ -139,6 +144,8 @@ resource "google_artifact_registry_repository_iam_member" "runtime_image_reader"
 }
 
 resource "google_artifact_registry_repository_iam_member" "batch_image_reader" {
+  count = local.manage_artifact_registry_reader_iam ? 1 : 0
+
   project    = local.artifact_registry_project_id
   location   = local.artifact_registry_region
   repository = local.artifact_registry_repository_id

@@ -136,6 +136,7 @@ jobs:
       - validate
       - bootstrap-terraform-state
       - preflight-staging-managed-platform
+      - preflight-production-managed-platform
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     environment: staging
@@ -201,6 +202,33 @@ jobs:
             -var="artifact_registry_repository_id=${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}" \
             -out=tfplan
           terraform -chdir=terraform/artifact-registry apply -auto-approve tfplan
+
+      - name: Grant production Artifact Registry readers
+        if: ${{ inputs.promote_production }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          production_project_id="${{ vars.PRODUCTION_GCP_PROJECT_ID }}"
+          production_project_number="${{ vars.PRODUCTION_GCP_PROJECT_NUMBER }}"
+
+          if [[ -z "${production_project_id}" || -z "${production_project_number}" ]]; then
+            echo "PRODUCTION_GCP_PROJECT_ID and PRODUCTION_GCP_PROJECT_NUMBER repository variables are required for production promotion."
+            exit 1
+          fi
+
+          readers=(
+            "serviceAccount:production-valdrics-runtime@${production_project_id}.iam.gserviceaccount.com"
+            "serviceAccount:production-valdrics-batch@${production_project_id}.iam.gserviceaccount.com"
+            "serviceAccount:service-${production_project_number}@serverless-robot-prod.iam.gserviceaccount.com"
+          )
+          for member in "${readers[@]}"; do
+            gcloud artifacts repositories add-iam-policy-binding "${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}" \
+              --location="${{ vars.GCP_REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --member="${member}" \
+              --role="roles/artifactregistry.reader" \
+              --quiet
+          done
 
   preflight-staging-managed-platform:
     name: Preflight Staging Managed Platform

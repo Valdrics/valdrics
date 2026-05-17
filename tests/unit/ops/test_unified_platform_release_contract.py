@@ -58,6 +58,8 @@ def test_terraform_root_targets_gcp_cloudflare_and_supabase() -> None:
     )
     assert "serverless-robot-prod.iam.gserviceaccount.com" in main
     assert "roles/artifactregistry.reader" in main
+    assert "manage_artifact_registry_reader_iam" in main
+    assert "count = local.manage_artifact_registry_reader_iam ? 1 : 0" in main
     assert 'ingress              = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"' in main
     assert "invoker_iam_disabled = true" in main
     assert "custom_audiences     = [var.api_url]" in main
@@ -325,6 +327,11 @@ def test_release_unified_platform_workflow_promotes_one_digest_through_environme
     assert "Bootstrap Terraform State" in workflow
     assert "Bootstrap Production Terraform State" in workflow
     assert "Bootstrap Artifact Registry" in workflow
+    assert "Grant production Artifact Registry readers" in workflow
+    assert "PRODUCTION_GCP_PROJECT_ID" in workflow
+    assert "PRODUCTION_GCP_PROJECT_NUMBER" in workflow
+    assert "serverless-robot-prod.iam.gserviceaccount.com" in workflow
+    assert "gcloud artifacts repositories add-iam-policy-binding" in workflow
     assert "terraform/state-backend" in workflow
     assert "terraform/artifact-registry" in workflow
     assert "uses: ./.github/actions/setup-python-uv" in workflow
