@@ -6,7 +6,7 @@ const stableSectionScreenshotOptions = {
 	caret: 'hide',
 	timeout: 15_000
 } as const;
-const mobileHeroScreenshotOptions = {
+const mobileSectionScreenshotOptions = {
 	...stableSectionScreenshotOptions,
 	maxDiffPixels: 5_000
 } as const;
@@ -59,15 +59,15 @@ test.describe('Landing visual snapshots', () => {
 			await prepareStablePublicPage(page);
 			await expect(page.locator('.landing-public-hero')).toHaveScreenshot(
 				'landing-hero-mobile.png',
-				mobileHeroScreenshotOptions
+				mobileSectionScreenshotOptions
 			);
 			await expect(page.locator('#product')).toHaveScreenshot(
 				'landing-product-mobile.png',
-				stableSectionScreenshotOptions
+				mobileSectionScreenshotOptions
 			);
 			await expect(page.locator('#trust')).toHaveScreenshot(
 				'landing-trust-mobile.png',
-				stableSectionScreenshotOptions
+				mobileSectionScreenshotOptions
 			);
 		});
 	});
