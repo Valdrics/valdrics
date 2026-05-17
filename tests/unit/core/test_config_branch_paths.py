@@ -389,6 +389,22 @@ def test_config_billing_validator_branch_paths() -> None:
 
     s = _settings()
     s.ENVIRONMENT = ENV_PRODUCTION
+    s.PAYSTACK_ACTIVATION_PENDING = True
+    s.PAYSTACK_SECRET_KEY = "sk_test_activation_pending"
+    s.PAYSTACK_PUBLIC_KEY = "pk_test_activation_pending"
+    s._validate_billing_config()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
+    s.PAYSTACK_ACTIVATION_PENDING = True
+    s.PAYSTACK_ENABLE_USD_CHECKOUT = True
+    with pytest.raises(
+        ValueError, match="must be false while Paystack activation is pending"
+    ):
+        s._validate_billing_config()
+
+    s = _settings()
+    s.ENVIRONMENT = ENV_PRODUCTION
     s.ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION = True
     s.PAYSTACK_SECRET_KEY = "example_paystack_secret_branch_path"
     s.PAYSTACK_PUBLIC_KEY = None

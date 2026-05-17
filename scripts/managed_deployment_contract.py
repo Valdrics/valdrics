@@ -86,6 +86,7 @@ GITHUB_RUNTIME_PLAIN_JSON_KEYS = (
     "SUPABASE_URL",
     "SUPABASE_ANON_KEY",
     "LLM_PROVIDER",
+    "PAYSTACK_ACTIVATION_PENDING",
     "EXPOSE_API_DOCUMENTATION_PUBLICLY",
     "SAAS_STRICT_INTEGRATIONS",
     "TRUST_PROXY_HEADERS",
@@ -109,6 +110,8 @@ GITHUB_RUNTIME_SECRET_JSON_KEYS = (
     *INTERNAL_SECRET_KEYS,
     *tuple(LLM_PROVIDER_ENV_KEY.values()),
 )
+
+PAYSTACK_RUNTIME_KEY_NAMES = ("PAYSTACK_SECRET_KEY", "PAYSTACK_PUBLIC_KEY")
 
 SUPPORTED_DB_SSL_MODES = ("disable", "require", "verify-ca", "verify-full")
 MIGRATION_BASE_REQUIRED_OPERATOR_INPUT_KEYS = ("DATABASE_URL",)
@@ -137,6 +140,10 @@ def contains_placeholder(value: str | None) -> bool:
     return PLACEHOLDER_PREFIX in str(value or "")
 
 
+def _is_truthy(value: object) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def selected_llm_provider(values: Mapping[str, object]) -> str:
     normalized = (
         str(values.get("LLM_PROVIDER", DEFAULT_LLM_PROVIDER) or "").strip().lower()
@@ -157,7 +164,12 @@ def identify_runtime_unresolved_keys(
     candidate_keys: tuple[str, ...],
 ) -> list[str]:
     unresolved: list[str] = []
+    paystack_activation_pending = _is_truthy(
+        values.get("PAYSTACK_ACTIVATION_PENDING", False)
+    )
     for key in candidate_keys:
+        if paystack_activation_pending and key in PAYSTACK_RUNTIME_KEY_NAMES:
+            continue
         value = str(values.get(key, "") or "").strip()
         if not value or contains_placeholder(value):
             unresolved.append(key)
@@ -172,6 +184,10 @@ def identify_runtime_unresolved_keys(
 
 def required_runtime_operator_input_keys(values: Mapping[str, object]) -> list[str]:
     required_keys = list(RUNTIME_VALIDATION_OPERATOR_INPUT_KEYS)
+    if _is_truthy(values.get("PAYSTACK_ACTIVATION_PENDING", False)):
+        required_keys = [
+            key for key in required_keys if key not in PAYSTACK_RUNTIME_KEY_NAMES
+        ]
     required_keys.append(selected_llm_provider_env_key(values))
     return sorted(set(required_keys))
 
@@ -188,7 +204,9 @@ def runtime_json_classification_errors(
     plain_keys: Iterable[str],
     secret_keys: Iterable[str],
 ) -> list[str]:
-    normalized_plain_keys = {str(key or "").strip() for key in plain_keys if str(key or "").strip()}
+    normalized_plain_keys = {
+        str(key or "").strip() for key in plain_keys if str(key or "").strip()
+    }
     normalized_secret_keys = {
         str(key or "").strip() for key in secret_keys if str(key or "").strip()
     }

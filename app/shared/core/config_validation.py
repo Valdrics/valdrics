@@ -221,6 +221,9 @@ def validate_billing_config(settings_obj: object, *, is_production: bool) -> Non
         raise ValueError("PAYSTACK_DEFAULT_CHECKOUT_CURRENCY must be one of: NGN, USD.")
 
     if is_production:
+        activation_pending = bool(
+            getattr(settings_obj, "PAYSTACK_ACTIVATION_PENDING", False)
+        )
         paystack_secret = str(
             getattr(settings_obj, "PAYSTACK_SECRET_KEY", "") or ""
         ).strip()
@@ -231,15 +234,30 @@ def validate_billing_config(settings_obj: object, *, is_production: bool) -> Non
             getattr(settings_obj, "ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION", False)
         )
 
-        if not paystack_secret:
+        if activation_pending:
+            if getattr(settings_obj, "PAYSTACK_ENABLE_USD_CHECKOUT", False):
+                raise ValueError(
+                    "PAYSTACK_ENABLE_USD_CHECKOUT must be false while Paystack activation is pending."
+                )
+            if paystack_secret:
+                require_no_managed_placeholder(
+                    paystack_secret, name="PAYSTACK_SECRET_KEY"
+                )
+            if paystack_public:
+                require_no_managed_placeholder(
+                    paystack_public, name="PAYSTACK_PUBLIC_KEY"
+                )
+        elif not paystack_secret:
             raise ValueError(
                 "PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production."
             )
-        if not paystack_public:
+        elif not paystack_public:
             raise ValueError("PAYSTACK_PUBLIC_KEY is required in production.")
-        require_no_managed_placeholder(paystack_secret, name="PAYSTACK_SECRET_KEY")
-        require_no_managed_placeholder(paystack_public, name="PAYSTACK_PUBLIC_KEY")
-        if allow_synthetic:
+        else:
+            require_no_managed_placeholder(paystack_secret, name="PAYSTACK_SECRET_KEY")
+            require_no_managed_placeholder(paystack_public, name="PAYSTACK_PUBLIC_KEY")
+
+        if not activation_pending and allow_synthetic:
             synthetic_validation_context = (
                 bool(getattr(settings_obj, "TESTING", False))
                 or bool(getattr(settings_obj, "PYTEST_CURRENT_TEST", None))
@@ -263,7 +281,7 @@ def validate_billing_config(settings_obj: object, *, is_production: bool) -> Non
                     "example_paystack_public_* when "
                     "ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION=true."
                 )
-        else:
+        elif not activation_pending:
             if not paystack_secret.startswith("sk_live_"):
                 raise ValueError(
                     "PAYSTACK_SECRET_KEY must be a live key (sk_live_...) in production."
@@ -272,6 +290,7 @@ def validate_billing_config(settings_obj: object, *, is_production: bool) -> Non
                 raise ValueError(
                     "PAYSTACK_PUBLIC_KEY must be a live key (pk_live_...) in production."
                 )
+
         if default_currency == "USD" and not getattr(
             settings_obj, "PAYSTACK_ENABLE_USD_CHECKOUT", False
         ):

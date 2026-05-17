@@ -17,7 +17,10 @@ from app.modules.billing.api.v1.billing import (
     update_pricing_plan,
     _extract_client_ip,
 )
-from app.modules.billing.api.v1.billing_models import ExchangeRateUpdate, PricingPlanUpdate
+from app.modules.billing.api.v1.billing_models import (
+    ExchangeRateUpdate,
+    PricingPlanUpdate,
+)
 from app.models.pricing import PricingPlan, ExchangeRate
 from app.modules.billing.domain.billing.paystack_billing import TenantSubscription
 from app.shared.core.pricing import PricingTier, TIER_CONFIG
@@ -84,6 +87,7 @@ async def test_create_checkout_success(
 ) -> None:
     mock_settings = mock_get_settings.return_value
     mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
+    mock_settings.PAYSTACK_ACTIVATION_PENDING = False
     mock_settings.FRONTEND_URL = "https://app.valdrics.io"
     mock_settings.CORS_ORIGINS = ["https://app.valdrics.io"]
     mock_settings.ENVIRONMENT = "development"
@@ -108,6 +112,33 @@ async def test_create_checkout_success(
 @pytest.mark.asyncio
 @patch("app.modules.billing.domain.billing.paystack_billing.BillingService")
 @patch("app.modules.billing.api.v1.billing.get_settings")
+async def test_create_checkout_fails_closed_while_paystack_activation_pending(
+    mock_get_settings: MagicMock,
+    mock_billing_service_class: MagicMock,
+    mock_db: AsyncMock,
+    mock_user: MagicMock,
+) -> None:
+    mock_settings = mock_get_settings.return_value
+    mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
+    mock_settings.PAYSTACK_ACTIVATION_PENDING = True
+
+    checkout_req = MagicMock()
+    checkout_req.tier = "starter"
+    checkout_req.billing_cycle = "monthly"
+    checkout_req.currency = "NGN"
+    checkout_req.callback_url = None
+
+    with pytest.raises(HTTPException) as exc:
+        await create_checkout(MagicMock(), checkout_req, mock_user, mock_db)
+
+    assert exc.value.status_code == 503
+    assert "activation is pending" in str(exc.value.detail)
+    mock_billing_service_class.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("app.modules.billing.domain.billing.paystack_billing.BillingService")
+@patch("app.modules.billing.api.v1.billing.get_settings")
 async def test_create_checkout_rejects_untrusted_callback(
     mock_get_settings: MagicMock,
     mock_billing_service_class: MagicMock,
@@ -116,6 +147,7 @@ async def test_create_checkout_rejects_untrusted_callback(
 ) -> None:
     mock_settings = mock_get_settings.return_value
     mock_settings.PAYSTACK_SECRET_KEY = "sk_test_123"
+    mock_settings.PAYSTACK_ACTIVATION_PENDING = False
     mock_settings.FRONTEND_URL = "https://app.valdrics.io"
     mock_settings.CORS_ORIGINS = ["https://app.valdrics.io"]
     mock_settings.ENVIRONMENT = "production"

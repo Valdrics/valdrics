@@ -79,6 +79,7 @@ class IntegrationSettings:
     # Paystack Billing (Nigeria Support)
     PAYSTACK_SECRET_KEY: str | None = None
     PAYSTACK_PUBLIC_KEY: str | None = None
+    PAYSTACK_ACTIVATION_PENDING: bool = False
     # Explicit offline-validation escape hatch for CI contract checks.
     # Never enable this in real staging/production deployments.
     ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION: bool = False

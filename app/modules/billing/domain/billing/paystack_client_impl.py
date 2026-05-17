@@ -15,6 +15,8 @@ class PaystackClient:
     BASE_URL = "https://api.paystack.co"
 
     def __init__(self) -> None:
+        if getattr(shared.settings, "PAYSTACK_ACTIVATION_PENDING", False) is True:
+            raise ValueError("Paystack activation is pending")
         if not shared.settings.PAYSTACK_SECRET_KEY:
             raise ValueError("PAYSTACK_SECRET_KEY not configured")
 

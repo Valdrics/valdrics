@@ -83,6 +83,9 @@ def test_generate_managed_runtime_env_generates_internal_secrets_and_reports_unr
                 "GROQ_API_KEY=",
                 "PAYSTACK_SECRET_KEY=",
                 "PAYSTACK_PUBLIC_KEY=",
+                "PAYSTACK_ACTIVATION_PENDING=false",
+                "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY=NGN",
+                "PAYSTACK_ENABLE_USD_CHECKOUT=false",
                 "TRUSTED_PROXY_CIDRS=[]",
             ]
         ),
@@ -113,8 +116,9 @@ def test_generate_managed_runtime_env_generates_internal_secrets_and_reports_unr
         "postgresql+asyncpg://REPLACE_WITH_DB_USER"
     )
     assert "AWS_ASSUME_ROLE_TRUST_PRINCIPAL_ARN" not in values
-    assert values["PAYSTACK_SECRET_KEY"].startswith("sk_live_")
-    assert values["PAYSTACK_PUBLIC_KEY"].startswith("pk_live_")
+    assert values["PAYSTACK_ACTIVATION_PENDING"] == "true"
+    assert values["PAYSTACK_SECRET_KEY"] == ""
+    assert values["PAYSTACK_PUBLIC_KEY"] == ""
     assert values["GROQ_API_KEY"] == "REPLACE_WITH_GROQ_API_KEY"
     assert "SENTRY_DSN" not in values
     assert "OTEL_EXPORTER_OTLP_ENDPOINT" not in values
@@ -171,6 +175,9 @@ def test_generate_managed_runtime_env_respects_overrides_and_is_shell_source_saf
                 "OPENAI_API_KEY=",
                 "PAYSTACK_SECRET_KEY=",
                 "PAYSTACK_PUBLIC_KEY=",
+                "PAYSTACK_ACTIVATION_PENDING=false",
+                "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY=NGN",
+                "PAYSTACK_ENABLE_USD_CHECKOUT=false",
                 "TRUSTED_PROXY_CIDRS=[]",
                 "CSRF_SECRET_KEY=",
                 "ENCRYPTION_KEY=",
@@ -276,6 +283,9 @@ def test_generate_managed_runtime_env_can_satisfy_strict_runtime_validator(
                 "GROQ_API_KEY=",
                 "PAYSTACK_SECRET_KEY=",
                 "PAYSTACK_PUBLIC_KEY=",
+                "PAYSTACK_ACTIVATION_PENDING=false",
+                "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY=NGN",
+                "PAYSTACK_ENABLE_USD_CHECKOUT=false",
                 "TRUSTED_PROXY_CIDRS=[]",
             ]
         ),
@@ -353,6 +363,9 @@ def test_generate_managed_runtime_env_preserves_existing_values_on_regeneration(
                 "OPENAI_API_KEY=",
                 "PAYSTACK_SECRET_KEY=",
                 "PAYSTACK_PUBLIC_KEY=",
+                "PAYSTACK_ACTIVATION_PENDING=false",
+                "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY=NGN",
+                "PAYSTACK_ENABLE_USD_CHECKOUT=false",
                 "TRUSTED_PROXY_CIDRS=[]",
             ]
         ),
@@ -504,6 +517,7 @@ def test_generate_managed_runtime_env_rejects_invalid_production_paystack_keys(
     output = tmp_path / "production.env"
     report_path = tmp_path / "production.report.json"
     _write(template, "API_URL=\nFRONTEND_URL=\nDATABASE_URL=\nTRUSTED_PROXY_CIDRS=[]\n")
+    _write(output, "PAYSTACK_ACTIVATION_PENDING=false\n")
 
     with pytest.raises(ValueError, match=message):
         generate_managed_runtime_env(
@@ -513,6 +527,41 @@ def test_generate_managed_runtime_env_rejects_invalid_production_paystack_keys(
             environment="production",
             **kwargs,
         )
+
+
+def test_generate_managed_runtime_env_infers_pending_paystack_activation(
+    tmp_path: Path,
+) -> None:
+    template = tmp_path / ".env.example"
+    output = tmp_path / "production.env"
+    report_path = tmp_path / "production.report.json"
+    _write(
+        template,
+        "\n".join(
+            [
+                "PAYSTACK_SECRET_KEY=",
+                "PAYSTACK_PUBLIC_KEY=",
+                "PAYSTACK_ACTIVATION_PENDING=false",
+                "TRUSTED_PROXY_CIDRS=[]",
+            ]
+        ),
+    )
+
+    report = generate_managed_runtime_env(
+        template_path=template,
+        output_path=output,
+        report_path=report_path,
+        environment="production",
+        paystack_secret_key="sk_test_activation_pending",
+        paystack_public_key="pk_test_activation_pending",
+    )
+    values = _parse_env(output)
+
+    assert values["PAYSTACK_ACTIVATION_PENDING"] == "true"
+    assert values["PAYSTACK_SECRET_KEY"] == ""
+    assert values["PAYSTACK_PUBLIC_KEY"] == ""
+    assert "PAYSTACK_SECRET_KEY" not in report["runtime_validation_blockers"]
+    assert "PAYSTACK_PUBLIC_KEY" not in report["runtime_validation_blockers"]
 
 
 def test_generate_managed_runtime_env_ignores_provider_specific_aws_contract_keys(

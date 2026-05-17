@@ -159,9 +159,7 @@ async def get_subscription(
         )
 
         result = await db.execute(
-            select(TenantSubscription).where(
-                TenantSubscription.tenant_id == tenant_id
-            )
+            select(TenantSubscription).where(TenantSubscription.tenant_id == tenant_id)
         )
         sub = result.scalar_one_or_none()
 
@@ -257,6 +255,11 @@ async def create_checkout(
 ) -> Dict[str, str]:
     """Initialize Paystack checkout session."""
     settings = _settings()
+    if getattr(settings, "PAYSTACK_ACTIVATION_PENDING", False) is True:
+        raise HTTPException(
+            503,
+            "Billing activation is pending. Start with the free workspace or contact sales.",
+        )
     if not settings.PAYSTACK_SECRET_KEY:
         raise HTTPException(503, "Billing not configured")
 

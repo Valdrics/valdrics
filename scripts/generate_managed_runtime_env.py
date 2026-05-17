@@ -239,17 +239,42 @@ def _normalize_paystack_key(
     field_name: str,
     environment: str,
     required_prefix: str,
+    require_live: bool = True,
 ) -> str | None:
     if value is None:
         return None
     normalized = str(value).strip()
     if not normalized:
         raise ValueError(f"{field_name} must be a non-empty string")
-    if environment == "production" and not normalized.startswith(required_prefix):
+    if (
+        require_live
+        and environment == "production"
+        and not normalized.startswith(required_prefix)
+    ):
         raise ValueError(
             f"{field_name} must be a live key ({required_prefix}...) in production."
         )
     return normalized
+
+
+def _is_live_paystack_key(value: str | None, *, required_prefix: str) -> bool:
+    normalized = str(value or "").strip()
+    return bool(
+        normalized
+        and normalized.startswith(required_prefix)
+        and PLACEHOLDER_PREFIX not in normalized
+    )
+
+
+def _parse_optional_bool(value: str | None, *, field_name: str) -> bool | None:
+    if value is None:
+        return None
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{field_name} must be a boolean value.")
 
 
 def _build_llm_overrides(provider: str, provider_api_key: str | None) -> dict[str, str]:
@@ -349,17 +374,42 @@ def _build_overrides(
         )
         or _default_frontend_url()
     )
+    raw_paystack_secret_key = paystack_secret_key or _existing_value(
+        existing_values, "PAYSTACK_SECRET_KEY"
+    )
+    raw_paystack_public_key = paystack_public_key or _existing_value(
+        existing_values, "PAYSTACK_PUBLIC_KEY"
+    )
+    explicit_paystack_activation_pending = _parse_optional_bool(
+        _existing_value(existing_values, "PAYSTACK_ACTIVATION_PENDING"),
+        field_name="PAYSTACK_ACTIVATION_PENDING",
+    )
+    paystack_live_keys_configured = _is_live_paystack_key(
+        raw_paystack_secret_key,
+        required_prefix="sk_live_",
+    ) and _is_live_paystack_key(
+        raw_paystack_public_key,
+        required_prefix="pk_live_",
+    )
+    paystack_activation_pending = (
+        explicit_paystack_activation_pending
+        if explicit_paystack_activation_pending is not None
+        else environment == "production" and not paystack_live_keys_configured
+    )
+
     normalized_paystack_secret_key = _normalize_paystack_key(
-        paystack_secret_key or _existing_value(existing_values, "PAYSTACK_SECRET_KEY"),
+        raw_paystack_secret_key,
         field_name="PAYSTACK_SECRET_KEY",
         environment=environment,
         required_prefix="sk_live_",
+        require_live=not paystack_activation_pending,
     )
     normalized_paystack_public_key = _normalize_paystack_key(
-        paystack_public_key or _existing_value(existing_values, "PAYSTACK_PUBLIC_KEY"),
+        raw_paystack_public_key,
         field_name="PAYSTACK_PUBLIC_KEY",
         environment=environment,
         required_prefix="pk_live_",
+        require_live=not paystack_activation_pending,
     )
     normalized_llm_provider = (
         str(
@@ -474,10 +524,29 @@ def _build_overrides(
         "ENFORCEMENT_EXPORT_SIGNING_SECRET": _existing_or_default(
             existing_values, "ENFORCEMENT_EXPORT_SIGNING_SECRET", _generate_hex(64)
         ),
-        "PAYSTACK_SECRET_KEY": normalized_paystack_secret_key
-        or _default_paystack_secret_key(),
-        "PAYSTACK_PUBLIC_KEY": normalized_paystack_public_key
-        or _default_paystack_public_key(),
+        "PAYSTACK_SECRET_KEY": (
+            normalized_paystack_secret_key
+            if not paystack_activation_pending
+            or _is_live_paystack_key(
+                normalized_paystack_secret_key,
+                required_prefix="sk_live_",
+            )
+            else ""
+        )
+        or ("" if paystack_activation_pending else _default_paystack_secret_key()),
+        "PAYSTACK_PUBLIC_KEY": (
+            normalized_paystack_public_key
+            if not paystack_activation_pending
+            or _is_live_paystack_key(
+                normalized_paystack_public_key,
+                required_prefix="pk_live_",
+            )
+            else ""
+        )
+        or ("" if paystack_activation_pending else _default_paystack_public_key()),
+        "PAYSTACK_ACTIVATION_PENDING": "true"
+        if paystack_activation_pending
+        else "false",
         "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY": "NGN",
         "PAYSTACK_ENABLE_USD_CHECKOUT": "false",
         "ALLOW_SYNTHETIC_BILLING_KEYS_FOR_VALIDATION": "false",

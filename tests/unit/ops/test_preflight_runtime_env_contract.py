@@ -21,6 +21,9 @@ def _write_template(path: Path) -> None:
                 "SUPABASE_JWT_SECRET=",
                 "PAYSTACK_SECRET_KEY=",
                 "PAYSTACK_PUBLIC_KEY=",
+                "PAYSTACK_ACTIVATION_PENDING=false",
+                "PAYSTACK_DEFAULT_CHECKOUT_CURRENCY=NGN",
+                "PAYSTACK_ENABLE_USD_CHECKOUT=false",
                 "GROQ_API_KEY=",
                 "TRUSTED_PROXY_CIDRS=[]",
                 "",
@@ -86,16 +89,42 @@ def test_preflight_runtime_env_contract_rejects_invalid_production_paystack_key(
 ) -> None:
     template = tmp_path / ".env.example"
     _write_template(template)
+    plain = _plain_payload()
+    plain["PAYSTACK_ACTIVATION_PENDING"] = "false"
     secret = _secret_payload()
     secret["PAYSTACK_SECRET_KEY"] = "sk_test_not_live"
 
     with pytest.raises(ValueError, match="PAYSTACK_SECRET_KEY must be a live key"):
         preflight_runtime_env_contract(
             environment="production",
-            plain=_plain_payload(),
+            plain=plain,
             secret=secret,
             template_path=template,
         )
+
+
+def test_preflight_runtime_env_contract_accepts_pending_paystack_activation(
+    tmp_path: Path,
+) -> None:
+    template = tmp_path / ".env.example"
+    _write_template(template)
+    plain = _plain_payload()
+    plain["PAYSTACK_ACTIVATION_PENDING"] = "true"
+    secret = _secret_payload()
+    secret["PAYSTACK_SECRET_KEY"] = "sk_test_activation_pending"
+    secret["PAYSTACK_PUBLIC_KEY"] = "pk_test_activation_pending"
+
+    report = preflight_runtime_env_contract(
+        environment="production",
+        plain=plain,
+        secret=secret,
+        template_path=template,
+    )
+
+    assert report["validation_ready"] is True
+    assert report["runtime_validation_blockers"] == []
+    assert "PAYSTACK_SECRET_KEY" not in report["required_operator_input_keys"]
+    assert "PAYSTACK_PUBLIC_KEY" not in report["required_operator_input_keys"]
 
 
 def test_preflight_runtime_env_contract_rejects_unresolved_secret_inputs(
@@ -139,9 +168,11 @@ def test_preflight_runtime_env_contract_cli_uses_github_annotation(
 ) -> None:
     template = tmp_path / ".env.example"
     _write_template(template)
+    plain = _plain_payload()
+    plain["PAYSTACK_ACTIVATION_PENDING"] = "false"
     secret = _secret_payload()
     secret["PAYSTACK_SECRET_KEY"] = "sk_test_not_live"
-    monkeypatch.setenv("RUNTIME_PLAIN_ENV_JSON", json.dumps(_plain_payload()))
+    monkeypatch.setenv("RUNTIME_PLAIN_ENV_JSON", json.dumps(plain))
     monkeypatch.setenv("RUNTIME_SECRET_ENV_JSON", json.dumps(secret))
 
     exit_code = main(
@@ -154,4 +185,7 @@ def test_preflight_runtime_env_contract_cli_uses_github_annotation(
     )
 
     assert exit_code == 1
-    assert "::error title=Managed runtime contract preflight failed::" in capsys.readouterr().out
+    assert (
+        "::error title=Managed runtime contract preflight failed::"
+        in capsys.readouterr().out
+    )
