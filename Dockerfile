@@ -42,9 +42,12 @@ WORKDIR /app
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
     curl \
+    libcap2 \
+    libsystemd0 \
     procps \
     openssl \
     libssl3t64 \
+    libudev1 \
     openssl-provider-legacy && \
     rm -rf /var/lib/apt/lists/* && \
     useradd --create-home --shell /bin/bash appuser && \
