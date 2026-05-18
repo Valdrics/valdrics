@@ -330,6 +330,8 @@ def test_release_unified_platform_workflow_promotes_one_digest_through_environme
     assert "Grant production Artifact Registry readers" in workflow
     assert "PRODUCTION_GCP_PROJECT_ID" in workflow
     assert "PRODUCTION_GCP_PROJECT_NUMBER" in workflow
+    assert "PRODUCTION_GCP_DEPLOYER_SERVICE_ACCOUNT" in workflow
+    assert "serviceAccount:${production_deployer_service_account}" in workflow
     assert "serverless-robot-prod.iam.gserviceaccount.com" in workflow
     assert "gcloud artifacts repositories add-iam-policy-binding" in workflow
     assert "terraform/state-backend" in workflow

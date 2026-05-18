@@ -362,6 +362,12 @@ Engine API can take a few minutes to propagate before load balancer resources
 accept creates. Cloudflare rate limiting defaults to 50 requests per 10 seconds
 with a 10-second mitigation timeout because this zone is only entitled to the
 10-second `http_ratelimit` window and mitigation timeout.
+When production promotes images from the staging Artifact Registry repository,
+the staging bootstrap grants `roles/artifactregistry.reader` to the production
+deployer, production runtime and batch service accounts, and the production
+Cloud Run service agent. Keep `PRODUCTION_GCP_DEPLOYER_SERVICE_ACCOUNT`,
+`PRODUCTION_GCP_PROJECT_ID`, and `PRODUCTION_GCP_PROJECT_NUMBER` repository
+variables aligned with the production GitHub environment secrets.
 Supabase projects are expected to exist before release. Terraform imports the
 project ref derived from `SUPABASE_URL` before planning, so an empty existing
 project is sufficient; Alembic owns table creation during the migration step.

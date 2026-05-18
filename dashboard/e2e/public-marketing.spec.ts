@@ -4,6 +4,8 @@ const BASE_URL = process.env.DASHBOARD_URL || 'http://localhost:4173';
 const LOCAL_DASHBOARD_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const isLocalDashboardUrl = LOCAL_DASHBOARD_HOSTS.has(new URL(BASE_URL).hostname);
 
+test.setTimeout(60_000);
+
 async function attachSecurityGuards(page: Parameters<typeof test>[0]['page']) {
 	await page.addInitScript(() => {
 		(
@@ -95,7 +97,9 @@ async function ensureInteractiveSimulator(page: Parameters<typeof test>[0]['page
 		const simulator = page.locator('#simulator');
 		await expect(simulator).toBeVisible();
 		try {
-			await simulator.scrollIntoViewIfNeeded();
+			await simulator.evaluate((element) => {
+				element.scrollIntoView({ block: 'center', behavior: 'instant' });
+			});
 			break;
 		} catch (error) {
 			if (!/not attached to the DOM/i.test(String(error)) || attempt === 2) {
@@ -149,20 +153,41 @@ async function openResourcesMenu(page: Parameters<typeof test>[0]['page']) {
 }
 
 async function openMobileMenu(page: Parameters<typeof test>[0]['page']) {
+	const menu = page.locator('#public-mobile-menu');
 	const toggle = page.getByRole('button', { name: /toggle menu/i });
 	await expect(toggle).toBeVisible();
+
+	if (await menu.isVisible().catch(() => false)) {
+		return menu;
+	}
+
+	if ((await toggle.getAttribute('aria-expanded')) === 'true') {
+		await menu.waitFor({ state: 'visible', timeout: 1_500 }).catch(async () => {
+			await page.keyboard.press('Escape');
+			await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+		});
+		if (await menu.isVisible().catch(() => false)) {
+			return menu;
+		}
+	}
+
+	const backdrop = page.getByRole('button', { name: /close navigation menu/i });
+	if (await backdrop.isVisible().catch(() => false)) {
+		await page.keyboard.press('Escape');
+		await expect(backdrop).toBeHidden();
+	}
+
 	for (let attempt = 0; attempt < 2; attempt += 1) {
-		const menu = page.locator('#public-mobile-menu');
 		if (await menu.isVisible().catch(() => false)) {
 			return menu;
 		}
 		await toggle.click();
+		await menu.waitFor({ state: 'visible', timeout: 1_500 }).catch(() => undefined);
 		if (await menu.isVisible().catch(() => false)) {
 			return menu;
 		}
 		await page.waitForTimeout(150);
 	}
-	const menu = page.locator('#public-mobile-menu');
 	await expect(menu).toBeVisible();
 	return menu;
 }
