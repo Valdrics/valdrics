@@ -2,8 +2,17 @@ import adapter from '@sveltejs/adapter-cloudflare';
 import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 
 const isDev = process.env.NODE_ENV !== 'production';
+const valdricsProductionOrigins = ['https://*.valdrics.com'];
+const scriptSrc = [
+	'self',
+	...valdricsProductionOrigins,
+	'https://*.supabase.co',
+	'https://challenges.cloudflare.com',
+	'https://static.cloudflareinsights.com'
+];
 const connectSrc = [
 	'self',
+	...valdricsProductionOrigins,
 	'https://*.supabase.co',
 	'https://*.valdrics.ai',
 	'https://cloudflareinsights.com',
@@ -29,12 +38,8 @@ const config = {
 			mode: 'nonce',
 			directives: {
 				'default-src': ['self'],
-				'script-src': [
-					'self',
-					'https://*.supabase.co',
-					'https://challenges.cloudflare.com',
-					'https://static.cloudflareinsights.com'
-				],
+				'script-src': scriptSrc,
+				'script-src-elem': scriptSrc,
 				'style-src': ['self'],
 				'style-src-attr': ['unsafe-hashes', 'sha256-S8qMpvofolR8Mpjy4kQvEm7m1q8clzU4dfDH0AmvZjo='],
 				'img-src': ['self', 'data:', 'https://*.supabase.co'],
