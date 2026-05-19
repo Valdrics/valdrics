@@ -3,10 +3,65 @@ import { expect, test } from '@playwright/test';
 const BASE_URL = process.env.DASHBOARD_URL || 'http://localhost:4173';
 const LOCAL_DASHBOARD_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
 const isLocalDashboardUrl = LOCAL_DASHBOARD_HOSTS.has(new URL(BASE_URL).hostname);
+const TRANSIENT_NAVIGATION_ERROR =
+	/ERR_SSL_BAD_RECORD_MAC_ALERT|ERR_HTTP2_PROTOCOL_ERROR|ERR_NETWORK_CHANGED|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED/i;
 
 test.setTimeout(120_000);
 
-async function attachSecurityGuards(page: Parameters<typeof test>[0]['page']) {
+type PublicPage = Parameters<typeof test>[0]['page'];
+type PublicGotoOptions = Parameters<PublicPage['goto']>[1];
+
+async function gotoPublic(page: PublicPage, url: string, options?: PublicGotoOptions) {
+	for (let attempt = 0; attempt < 3; attempt += 1) {
+		try {
+			return await page.goto(url, options);
+		} catch (error) {
+			if (!TRANSIENT_NAVIGATION_ERROR.test(String(error)) || attempt === 2) {
+				throw error;
+			}
+			await page.waitForTimeout(500 * (attempt + 1));
+		}
+	}
+}
+
+async function installTurnstileStub(page: PublicPage) {
+	await page.addInitScript(() => {
+		type TurnstileStub = {
+			render: (
+				container: string | HTMLElement,
+				options: { callback?: (token: string) => void }
+			) => string;
+			execute: () => void;
+			reset: () => void;
+			remove: () => void;
+		};
+
+		const testWindow = window as Window & {
+			__VALDRICS_TURNSTILE_SITE_KEY__?: string;
+			turnstile?: TurnstileStub;
+		};
+		let tokenCallback: ((token: string) => void) | undefined;
+
+		testWindow.__VALDRICS_TURNSTILE_SITE_KEY__ = 'e2e-turnstile-site-key';
+		testWindow.turnstile = {
+			render: (_container, options) => {
+				tokenCallback = options.callback;
+				return 'e2e-turnstile-widget';
+			},
+			execute: () => {
+				window.setTimeout(() => tokenCallback?.('e2e-turnstile-token'), 0);
+			},
+			reset: () => undefined,
+			remove: () => undefined
+		};
+	});
+}
+
+async function waitForPublicHydration(page: PublicPage) {
+	await expect(page.locator('.public-site-shell[data-public-hydrated="true"]')).toBeVisible();
+}
+
+async function attachSecurityGuards(page: PublicPage) {
 	await page.addInitScript(() => {
 		const isKnownPassiveCspReport = (event: SecurityPolicyViolationEvent) => {
 			const directive = event.effectiveDirective || event.violatedDirective;
@@ -101,21 +156,13 @@ async function attachSecurityGuards(page: Parameters<typeof test>[0]['page']) {
 	};
 }
 
-async function assertPublicRoute(
-	page: Parameters<typeof test>[0]['page'],
-	path: string,
-	heading: RegExp
-) {
-	await page.goto(`${BASE_URL}${path}`);
+async function assertPublicRoute(page: PublicPage, path: string, heading: RegExp) {
+	await gotoPublic(page, `${BASE_URL}${path}`);
 	await expect(page).toHaveURL(new RegExp(`${path.replace('/', '\\/')}(\\?.*)?$`));
 	await expect(page.getByRole('heading', { level: 1, name: heading })).toBeVisible();
 }
 
-async function assertHashDestination(
-	page: Parameters<typeof test>[0]['page'],
-	hash: string,
-	selector: string
-) {
+async function assertHashDestination(page: PublicPage, hash: string, selector: string) {
 	await expect
 		.poll(() => new URL(page.url()).hash, { message: `expected URL hash ${hash}` })
 		.toBe(hash);
@@ -123,7 +170,7 @@ async function assertHashDestination(
 }
 
 async function assertDownloadEndpoint(
-	page: Parameters<typeof test>[0]['page'],
+	page: PublicPage,
 	path: string,
 	expectedContentType?: RegExp
 ) {
@@ -134,13 +181,13 @@ async function assertDownloadEndpoint(
 	}
 }
 
-async function goToLanding(page: Parameters<typeof test>[0]['page']) {
-	await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
+async function goToLanding(page: PublicPage) {
+	await gotoPublic(page, BASE_URL, { waitUntil: 'domcontentloaded' });
 	await expect(page.locator('#hero')).toBeVisible();
-	await expect(page.locator('.public-site-shell[data-public-hydrated="true"]')).toBeVisible();
+	await waitForPublicHydration(page);
 }
 
-async function ensureInteractiveSimulator(page: Parameters<typeof test>[0]['page']) {
+async function ensureInteractiveSimulator(page: PublicPage) {
 	for (let attempt = 0; attempt < 3; attempt += 1) {
 		const simulator = page.locator('#simulator');
 		await expect(simulator).toBeVisible();
@@ -164,7 +211,7 @@ async function ensureInteractiveSimulator(page: Parameters<typeof test>[0]['page
 	return simulator;
 }
 
-async function ensureInteractivePlans(page: Parameters<typeof test>[0]['page']) {
+async function ensureInteractivePlans(page: PublicPage) {
 	await ensureInteractiveSimulator(page);
 	await page.evaluate(() => {
 		window.scrollTo({ top: document.body.scrollHeight, behavior: 'instant' });
@@ -174,15 +221,15 @@ async function ensureInteractivePlans(page: Parameters<typeof test>[0]['page']) 
 	return plans;
 }
 
-async function ensureInteractiveTrust(page: Parameters<typeof test>[0]['page']) {
+async function ensureInteractiveTrust(page: PublicPage) {
 	await ensureInteractivePlans(page);
 	const trust = page.locator('#trust');
 	await expect(trust.getByRole('link', { name: /open proof pack/i })).toBeVisible();
 	return trust;
 }
 
-async function openResourcesMenu(page: Parameters<typeof test>[0]['page']) {
-	await expect(page.locator('.public-site-shell[data-public-hydrated="true"]')).toBeVisible();
+async function openResourcesMenu(page: PublicPage) {
+	await waitForPublicHydration(page);
 	const button = page.locator('header').getByRole('button', { name: /^resources$/i });
 	await expect(button).toBeVisible();
 	for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -206,7 +253,7 @@ async function openResourcesMenu(page: Parameters<typeof test>[0]['page']) {
 	return menu;
 }
 
-async function openMobileMenu(page: Parameters<typeof test>[0]['page']) {
+async function openMobileMenu(page: PublicPage) {
 	const menu = page.locator('#public-mobile-menu');
 	const toggle = page.getByRole('button', { name: /toggle menu/i });
 	await expect(toggle).toBeVisible();
@@ -249,19 +296,19 @@ async function openMobileMenu(page: Parameters<typeof test>[0]['page']) {
 test.describe('Public marketing smoke (desktop)', () => {
 	test('emits canonical and robots metadata for public and auth routes', async ({ page }) => {
 		const security = await attachSecurityGuards(page);
-		await page.goto(BASE_URL, { waitUntil: 'domcontentloaded' });
-		await expect(page.locator('.public-site-shell[data-public-hydrated="true"]')).toBeVisible();
+		await gotoPublic(page, BASE_URL, { waitUntil: 'domcontentloaded' });
+		await waitForPublicHydration(page);
 		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', `${BASE_URL}/`);
 		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow');
 
-		await page.goto(`${BASE_URL}/pricing`, { waitUntil: 'domcontentloaded' });
+		await gotoPublic(page, `${BASE_URL}/pricing`, { waitUntil: 'domcontentloaded' });
 		await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
 			'href',
 			`${BASE_URL}/pricing`
 		);
 		await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'index,follow');
 
-		await page.goto(`${BASE_URL}/auth/login`, { waitUntil: 'domcontentloaded' });
+		await gotoPublic(page, `${BASE_URL}/auth/login`, { waitUntil: 'domcontentloaded' });
 		await expect(page.locator('meta[name="robots"]')).toHaveAttribute(
 			'content',
 			'noindex,nofollow'
@@ -288,7 +335,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 				description: /terms of service covering account responsibilities, billing, acceptable use/i
 			}
 		]) {
-			await page.goto(`${BASE_URL}${routeCase.path}`, { waitUntil: 'domcontentloaded' });
+			await gotoPublic(page, `${BASE_URL}${routeCase.path}`, { waitUntil: 'domcontentloaded' });
 			await expect(page.locator('link[rel="canonical"]')).toHaveAttribute(
 				'href',
 				`${BASE_URL}${routeCase.path}`
@@ -333,7 +380,9 @@ test.describe('Public marketing smoke (desktop)', () => {
 			.getAttribute('href');
 		expect(apiDocsHref || '').toMatch(/\/docs\/api$/);
 		if (apiDocsHref) {
-			await page.goto(new URL(apiDocsHref, BASE_URL).toString(), { waitUntil: 'domcontentloaded' });
+			await gotoPublic(page, new URL(apiDocsHref, BASE_URL).toString(), {
+				waitUntil: 'domcontentloaded'
+			});
 		}
 		await expect(page).toHaveURL(/\/docs\/api$/);
 		await expect(page.getByRole('heading', { level: 1, name: /api reference/i })).toBeVisible();
@@ -342,7 +391,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 		await expect(page).toHaveURL(/\/status$/);
 		await expect(page.getByRole('heading', { level: 1, name: /system status/i })).toBeVisible();
 
-		await page.goto(`${BASE_URL}/pricing`);
+		await gotoPublic(page, `${BASE_URL}/pricing`);
 		await page.waitForLoadState('networkidle');
 		await expect(
 			page.getByRole('heading', { level: 1, name: /pricing that stays simple/i })
@@ -407,7 +456,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 				.toBe('USD');
 		}
 
-		await page.goto(`${BASE_URL}/roi-planner`, { waitUntil: 'domcontentloaded' });
+		await gotoPublic(page, `${BASE_URL}/roi-planner`, { waitUntil: 'domcontentloaded' });
 		await expect(page).toHaveURL(/\/auth\/login$/);
 		await expect(page).toHaveTitle(/sign in/i);
 		await expect(page.getByRole('heading', { level: 1, name: /welcome back/i })).toBeVisible();
@@ -598,7 +647,9 @@ test.describe('Public marketing smoke (desktop)', () => {
 			const href = await link.getAttribute('href');
 			expect(href || '').toBeTruthy();
 			if (href) {
-				await page.goto(new URL(href, BASE_URL).toString(), { waitUntil: 'domcontentloaded' });
+				await gotoPublic(page, new URL(href, BASE_URL).toString(), {
+					waitUntil: 'domcontentloaded'
+				});
 			}
 			await assertPublicRoute(page, footerCase.path, footerCase.heading);
 		}
@@ -639,7 +690,7 @@ test.describe('Public marketing smoke (desktop)', () => {
 			/deployment and data residency review/i
 		);
 
-		await page.goto(`${BASE_URL}/enterprise`);
+		await gotoPublic(page, `${BASE_URL}/enterprise`);
 		await page
 			.getByRole('link', { name: /request enterprise briefing/i })
 			.first()
@@ -652,6 +703,8 @@ test.describe('Public marketing smoke (desktop)', () => {
 	test('talk-to-sales success flow submits one inquiry with marketing context', async ({
 		page
 	}) => {
+		await installTurnstileStub(page);
+
 		let capturedPayload: Record<string, unknown> | null = null;
 		await page.route('**/api/marketing/talk-to-sales', async (route) => {
 			capturedPayload = route.request().postDataJSON() as Record<string, unknown>;
@@ -662,9 +715,11 @@ test.describe('Public marketing smoke (desktop)', () => {
 			});
 		});
 
-		await page.goto(
+		await gotoPublic(
+			page,
 			`${BASE_URL}/talk-to-sales?utm_source=linkedin&utm_medium=paid&utm_campaign=q1`
 		);
+		await waitForPublicHydration(page);
 		await page.getByLabel(/name/i).fill('Buyer One');
 		await page.getByLabel(/work email/i).fill('buyer@example.com');
 		await page.getByLabel(/company/i).fill('Example Inc');
@@ -688,6 +743,8 @@ test.describe('Public marketing smoke (desktop)', () => {
 	});
 
 	test('talk-to-sales failure flow preserves inline error handling', async ({ page }) => {
+		await installTurnstileStub(page);
+
 		await page.route('**/api/marketing/talk-to-sales', async (route) => {
 			await route.fulfill({
 				status: 503,
@@ -696,7 +753,8 @@ test.describe('Public marketing smoke (desktop)', () => {
 			});
 		});
 
-		await page.goto(`${BASE_URL}/talk-to-sales`);
+		await gotoPublic(page, `${BASE_URL}/talk-to-sales`);
+		await waitForPublicHydration(page);
 		await page.getByLabel(/name/i).fill('Buyer One');
 		await page.getByLabel(/work email/i).fill('buyer@example.com');
 		await page.getByLabel(/company/i).fill('Example Inc');
