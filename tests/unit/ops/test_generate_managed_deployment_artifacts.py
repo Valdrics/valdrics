@@ -46,6 +46,7 @@ def _base_runtime_lines() -> list[str]:
         "SUPABASE_JWT_SECRET=ci-supabase-jwt-secret-32-chars-0000",
         "PAYSTACK_SECRET_KEY=sk_live_runtime_paystack_key",
         "PAYSTACK_PUBLIC_KEY=pk_live_runtime_paystack_key",
+        "PAYSTACK_ACTIVATION_PENDING=false",
         "TRUSTED_PROXY_CIDRS='[\"203.0.113.10/32\"]'",
         "ENCRYPTION_KEY=ci-encryption-key-32-chars-min-00000000",
         "KDF_SALT=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
@@ -141,6 +142,7 @@ def test_generate_managed_deployment_artifacts_outputs_unified_platform_bundle(
 
     assert secret_payload["DATABASE_URL"].startswith("postgresql+asyncpg://postgres:")
     assert secret_payload["OPENAI_API_KEY"] == "sk-openai-live-key"
+    assert "PAYSTACK_ACTIVATION_PENDING" not in secret_payload
     assert "INTERNAL_JOB_SECRET" not in secret_payload
     assert "WEB_CONCURRENCY" not in secret_payload
     assert "SUPABASE_URL" not in secret_payload
@@ -181,8 +183,11 @@ def test_generate_managed_deployment_artifacts_outputs_unified_platform_bundle(
     assert terraform_tfvars["supabase_project_ref"] == "example"
     assert terraform_tfvars["supabase_project_name"] == "valdrics"
     assert (
-        report["artifacts"]["operator_handoff_markdown"]
-        == operator_handoff.as_posix()
+        manifest["backend"]["runtime_plain_env"]["PAYSTACK_ACTIVATION_PENDING"]
+        == "false"
+    )
+    assert (
+        report["artifacts"]["operator_handoff_markdown"] == operator_handoff.as_posix()
     )
     assert (
         report["artifacts"]["technology_value_receipt_json"]
@@ -193,9 +198,62 @@ def test_generate_managed_deployment_artifacts_outputs_unified_platform_bundle(
     assert technology_value_receipt["data"]["subject"]["environment"] == "production"
     assert technology_value_receipt["data"]["evaluations"]["recommendation"] == "accept"
     verify_contract_and_receipts(
-        contract_path=Path("contracts/examples/unified-platform-deploy-production.yaml"),
+        contract_path=Path(
+            "contracts/examples/unified-platform-deploy-production.yaml"
+        ),
         receipt_paths=[output_dir / "technology-value-admission-receipt.json"],
     )
+
+
+def test_generate_managed_deployment_artifacts_allows_pending_paystack_activation(
+    tmp_path: Path,
+) -> None:
+    runtime_env = tmp_path / "production.env"
+    output_dir = tmp_path / "deploy" / "production"
+    lines = _base_runtime_lines()
+    replacements = {
+        "PAYSTACK_SECRET_KEY": "PAYSTACK_SECRET_KEY=",
+        "PAYSTACK_PUBLIC_KEY": "PAYSTACK_PUBLIC_KEY=",
+        "PAYSTACK_ACTIVATION_PENDING": "PAYSTACK_ACTIVATION_PENDING=true",
+    }
+    for index, line in enumerate(lines):
+        key = line.split("=", 1)[0]
+        if key in replacements:
+            lines[index] = replacements[key]
+    _write_env(runtime_env, lines)
+
+    report = generate_managed_deployment_artifacts(
+        environment="production",
+        runtime_env_file=runtime_env,
+        output_dir=output_dir,
+        release_tag="2026.04.10",
+        api_promotion_ref=(
+            "us-central1-docker.pkg.dev/valdrics-prod/valdrics-runtime/"
+            "valdrics-api@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        ),
+        batch_promotion_ref=(
+            "us-central1-docker.pkg.dev/valdrics-prod/valdrics-runtime/"
+            "valdrics-api@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ),
+        **_resolved_terraform_inputs(),
+    )
+    manifest = json.loads(
+        (output_dir / "unified-platform-manifest.json").read_text(encoding="utf-8")
+    )
+    secret_payload = json.loads(
+        (output_dir / "secret-manager-runtime-secrets.json").read_text(encoding="utf-8")
+    )
+
+    assert report["runtime_validation_blockers"] == []
+    assert report["ready_for_unified_platform"] is True
+    assert report["ready_for_release_promotion"] is True
+    assert (
+        manifest["backend"]["runtime_plain_env"]["PAYSTACK_ACTIVATION_PENDING"]
+        == "true"
+    )
+    assert "PAYSTACK_SECRET_KEY" not in secret_payload
+    assert "PAYSTACK_PUBLIC_KEY" not in secret_payload
+    assert "PAYSTACK_ACTIVATION_PENDING" not in secret_payload
 
 
 def test_generate_managed_deployment_artifacts_reports_placeholder_blockers_for_staging(

@@ -24,6 +24,7 @@ from scripts.env_generation_common import (
 )
 from scripts.managed_deployment_contract import (
     CLOUDFLARE_PAGES_PUBLIC_ENV_KEYS,
+    PAYSTACK_RUNTIME_KEY_NAMES,
     RUNTIME_BLOCKER_KEYS,
     SUPPORTED_ENVIRONMENTS,
     TERRAFORM_BASE_REQUIRED_INPUTS,
@@ -54,6 +55,7 @@ DEPLOYMENT_PLAIN_ENV_KEYS = (
     "PUBLIC_API_RATE_LIMITING_BACKEND",
     "RATELIMIT_ENABLED",
     "LLM_PROVIDER",
+    "PAYSTACK_ACTIVATION_PENDING",
     "EXPOSE_API_DOCUMENTATION_PUBLICLY",
     "SAAS_STRICT_INTEGRATIONS",
     "TRUST_PROXY_HEADERS",
@@ -225,9 +227,18 @@ def _has_minimum_length(value: str, *, minimum: int) -> bool:
     return len(candidate) >= minimum
 
 
+def _is_truthy(value: str | None) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _runtime_blockers(values: dict[str, str]) -> list[str]:
     blockers: list[str] = []
+    paystack_activation_pending = _is_truthy(
+        _string_value(values, "PAYSTACK_ACTIVATION_PENDING")
+    )
     for key in RUNTIME_BLOCKER_KEYS:
+        if paystack_activation_pending and key in PAYSTACK_RUNTIME_KEY_NAMES:
+            continue
         value = _string_value(values, key).strip()
         if not value or _contains_placeholder(value):
             blockers.append(key)

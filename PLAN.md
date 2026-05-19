@@ -83,15 +83,16 @@ Every major idea in this file is assigned one strategy label:
   Terraform state bootstrap, Artifact Registry reader grants, backend image
   publish, Cloud Run deployment, migrations, Cloudflare Pages deploy, and API
   liveness all pass.
-  The current engineering blocker is the final production dashboard readiness
-  gate. The `2026.05.18-paystack-pending-019bb41a` unified release deployed
-  production infrastructure and frontend assets, then failed the public browser
-  quality gate because production CSP blocked dashboard JavaScript chunks from
-  `https://app.valdrics.com/_app/immutable/...` under `script-src-elem`; the
-  same hydration failure prevented the talk-to-sales success/error UI from
-  rendering during smoke tests. The next engineering gate is to align the
-  production dashboard CSP, asset host, and custom-domain routing, then rerun
-  the full unified release lane to green.
+  The current engineering blocker is the final production release-readiness
+  contract. The `2026.05.19-smoke-52bf0d37` unified release deployed staging and
+  production, passed staging readiness, and passed the production public quality
+  gates (`public-marketing`, public a11y, public performance, and visual smoke).
+  The remaining failure is report drift for Paystack activation-pending mode:
+  the runtime report correctly treats `PAYSTACK_ACTIVATION_PENDING=true` as
+  non-blocking, while the deployment report still listed `PAYSTACK_SECRET_KEY`
+  and `PAYSTACK_PUBLIC_KEY` as runtime blockers. The next engineering gate is to
+  keep deployment artifacts aligned with the runtime Paystack-pending contract,
+  then rerun the full unified release lane to green.
   Paystack activation is tracked as an external commercial/account-review
   dependency, not the active engineering blocker. Until Paystack approves the
   account, the product should remain reviewable without requiring a successful
