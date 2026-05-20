@@ -18,7 +18,7 @@ def _write(path: Path, content: str) -> None:
 def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
     _write(
         tmp_path / "PLAN.md",
-        "Last reviewed: 2026-05-20\n"
+        "Last reviewed: 2026-05-21\n"
         "2026.05.19-paystack-pending-8ef0b893\n"
         "26131799197\n"
         "docs/evidence/phase1-unified-release-closure.md\n"
@@ -145,7 +145,7 @@ def test_verify_contracts_accepts_matching_docs(tmp_path: Path) -> None:
         "managed-release-blocker-summary-2026.05.19-paystack-pending-8ef0b893\n"
         "PAYSTACK_ACTIVATION_PENDING=true\n"
         "PAYSTACK_ACTIVATION_PENDING=false\n"
-        "Operator artifact review: pending manual sign-off\n"
+        "Operator artifact review: complete for release run `26131799197`\n"
         "Real-tenant production-use confirmation: pending manual sign-off\n",
     )
     _write(

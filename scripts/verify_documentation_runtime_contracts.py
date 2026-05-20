@@ -22,7 +22,7 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
     DocumentationContract(
         path="PLAN.md",
         required_phrases=(
-            "Last reviewed: 2026-05-20",
+            "Last reviewed: 2026-05-21",
             "2026.05.19-paystack-pending-8ef0b893",
             "26131799197",
             "docs/evidence/phase1-unified-release-closure.md",
@@ -395,7 +395,7 @@ DOCUMENTATION_CONTRACTS: tuple[DocumentationContract, ...] = (
             "managed-release-blocker-summary-2026.05.19-paystack-pending-8ef0b893",
             "PAYSTACK_ACTIVATION_PENDING=true",
             "PAYSTACK_ACTIVATION_PENDING=false",
-            "Operator artifact review: pending manual sign-off",
+            "Operator artifact review: complete for release run `26131799197`",
             "Real-tenant production-use confirmation: pending manual sign-off",
         ),
     ),
