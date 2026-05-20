@@ -439,6 +439,14 @@ def test_security_scan_workflow_fails_on_high_or_critical_infra_and_container_fi
     assert "--minimum-severity HIGH" in security_text
 
 
+def test_backend_runtime_image_explicitly_refreshes_tls_runtime_packages() -> None:
+    dockerfile_text = (REPO_ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+    assert "libgnutls30t64" in dockerfile_text
+    assert "libssl3t64" in dockerfile_text
+    assert "openssl-provider-legacy" in dockerfile_text
+
+
 def test_security_scan_workflow_keeps_scheduled_trufflehog_verified_only() -> None:
     security_text = (REPO_ROOT / ".github/workflows/security-scan.yml").read_text(
         encoding="utf-8"

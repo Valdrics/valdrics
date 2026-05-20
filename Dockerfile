@@ -37,12 +37,13 @@ FROM python:3.12-slim@sha256:804ddf3251a60bbf9c92e73b7566c40428d54d0e79d3428194e
 WORKDIR /app
 
 # Install only the probe/runtime tools required by shipped container contracts.
-# Explicitly refresh OpenSSL runtime packages so the final image does not inherit
+# Explicitly refresh TLS runtime packages so the final image does not inherit
 # stale vulnerable patch levels from the upstream base digest.
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
     curl \
     libcap2 \
+    libgnutls30t64 \
     libsystemd0 \
     procps \
     openssl \
